@@ -9,9 +9,11 @@
       1. (user)  Creates an SSH key  ~/.ssh/virtomir_dev_ed25519  (if missing)
       2. (user)  Downloads + SHA512-verifies the official Debian 13 "generic" cloud image (cached)
       3. (user)  Turns disk.raw into a fixed VHD (appends a VHD footer - no qemu-img needed)
-      4. (user)  Renders dev/hyperv/cloud-init/user-data.yaml and packs a NoCloud seed ISO (label "cidata")
-      5. (admin) Converts to dynamic VHDX, resizes, creates a Gen1 VM with nested virtualization,
-                 MAC spoofing, static memory; attaches the seed ISO; starts it; waits for its IP
+      4. (user)  Renders dev/hyperv/cloud-init/user-data.yaml + a static-IP network-config and packs
+                 a NoCloud seed ISO (label "cidata")
+      5. (admin) Ensures the internal switch "VirtoMir" + Windows NAT (192.168.77.0/24, host = .1),
+                 converts to dynamic VHDX, resizes, creates a Gen1 VM with nested virtualization,
+                 MAC spoofing, static MAC + memory; attaches the seed ISO; starts it
       6. (user)  Writes a "virtomir-dev" entry to ~/.ssh/config and waits for cloud-init to finish
       7. (user)  Prints KVM / libvirt validation results
 
@@ -29,7 +31,13 @@ param(
     [int]   $CpuCount   = 6,
     [int]   $MemoryGB   = 8,
     [int]   $DiskGB     = 100,
-    [string]$SwitchName = 'Default Switch',
+    # Dedicated internal switch + NAT: the VM keeps the same IP across Windows reboots
+    # (the Hyper-V "Default Switch" picks a new subnet on every boot).
+    [string]$SwitchName   = 'VirtoMir',
+    [string]$GatewayIP    = '192.168.77.1',
+    [string]$VMIP         = '192.168.77.10',
+    [int]   $PrefixLength = 24,
+    [string[]]$DnsServers = @('1.1.1.1', '8.8.8.8'),
     [string]$UserName   = 'onur',
     [string]$Password,
     [switch]$Force,
@@ -158,15 +166,42 @@ namespace VirtoMir {
     [VirtoMir.IsoWriter]::Write($IsoPath, $res.ImageStream, $res.BlockSize, $res.TotalBlocks)
 }
 
+# Idempotently creates an internal Hyper-V switch with a fixed host IP and a Windows NAT for its
+# subnet, so guests get stable addresses (no DHCP: guests use static IPs). Requires admin.
+function Initialize-VirtoMirNetwork([string]$SwitchName, [string]$GatewayIP, [int]$PrefixLength) {
+    $gw  = [Net.IPAddress]::Parse($GatewayIP).GetAddressBytes()
+    $net = for ($i = 0; $i -lt 4; $i++) {
+        $bits = [math]::Max(0, [math]::Min(8, $PrefixLength - 8 * $i))
+        $gw[$i] -band ((0xFF -shl (8 - $bits)) -band 0xFF)
+    }
+    $subnet = "$($net -join '.')/$PrefixLength"
+
+    $sw = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
+    if (-not $sw) {
+        Write-Step "Creating internal Hyper-V switch '$SwitchName'"
+        $sw = New-VMSwitch -Name $SwitchName -SwitchType Internal
+    }
+    if ($sw.SwitchType -ne 'Internal') { throw "Switch '$SwitchName' exists but is $($sw.SwitchType), expected Internal." }
+
+    $ifIndex = (Get-NetAdapter -Name "vEthernet ($SwitchName)" -ErrorAction Stop).ifIndex
+    if (-not (Get-NetIPAddress -InterfaceIndex $ifIndex -AddressFamily IPv4 -IPAddress $GatewayIP -ErrorAction SilentlyContinue)) {
+        Write-Step "Assigning $GatewayIP/$PrefixLength to vEthernet ($SwitchName)"
+        Get-NetIPAddress -InterfaceIndex $ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Remove-NetIPAddress -Confirm:$false
+        New-NetIPAddress -InterfaceIndex $ifIndex -IPAddress $GatewayIP -PrefixLength $PrefixLength | Out-Null
+    }
+    if (-not (Get-NetNat -ErrorAction SilentlyContinue | Where-Object { $_.InternalIPInterfaceAddressPrefix -eq $subnet })) {
+        Write-Step "Creating NAT '$SwitchName-NAT' for $subnet"
+        New-NetNat -Name "$SwitchName-NAT" -InternalIPInterfaceAddressPrefix $subnet | Out-Null
+    }
+}
+
 # =============================================================================
 # Stage 2 (elevated): Hyper-V operations
 # =============================================================================
 function Invoke-HyperVStage($S) {
     Import-Module Hyper-V
 
-    if (-not (Get-VMSwitch -Name $S.SwitchName -ErrorAction SilentlyContinue)) {
-        throw "Hyper-V switch '$($S.SwitchName)' not found. Available: $((Get-VMSwitch).Name -join ', ')"
-    }
+    Initialize-VirtoMirNetwork -SwitchName $S.SwitchName -GatewayIP $S.GatewayIP -PrefixLength $S.PrefixLength
 
     $existing = Get-VM -Name $S.VMName -ErrorAction SilentlyContinue
     if ($existing) {
@@ -194,7 +229,8 @@ function Invoke-HyperVStage($S) {
     Set-VM -VM $vm -ProcessorCount $S.CpuCount -StaticMemory -AutomaticCheckpointsEnabled $false `
            -AutomaticStopAction ShutDown -Notes 'VirtoMir dev host (Debian 13 + KVM/libvirt). Created by dev/hyperv/New-VirtoMirDevHost.ps1'
     Set-VMProcessor -VM $vm -ExposeVirtualizationExtensions $true
-    Get-VMNetworkAdapter -VM $vm | Set-VMNetworkAdapter -MacAddressSpoofing On
+    # Static MAC: the guest's netplan config matches on it.
+    Get-VMNetworkAdapter -VM $vm | Set-VMNetworkAdapter -MacAddressSpoofing On -StaticMacAddress $S.MacAddress
     $dvd = Get-VMDvdDrive -VM $vm
     if ($dvd) { Set-VMDvdDrive -VMDvdDrive $dvd -Path $iso }
     else      { Add-VMDvdDrive -VM $vm -ControllerNumber 1 -ControllerLocation 0 -Path $iso }
@@ -209,24 +245,9 @@ function Invoke-HyperVStage($S) {
         if (-not $isMember) { Add-LocalGroupMember -Group $grp -Member $S.User -ErrorAction Stop; Write-Info "Added $($S.User) to 'Hyper-V Administrators' (effective after next sign-in)." }
     } catch { Write-Info "Could not add user to Hyper-V Administrators: $($_.Exception.Message)" }
 
-    Write-Step 'Starting VM and waiting for its IP address (first boot installs packages; ~3-10 min)'
+    Write-Step "Starting VM (static IP $($S.VMIP); first boot installs packages, ~3-10 min)"
     Start-VM -VM $vm
-    $deadline = (Get-Date).AddMinutes(25)
-    $ip = $null
-    while ((Get-Date) -lt $deadline -and -not $ip) {
-        Start-Sleep -Seconds 5
-        $na = Get-VMNetworkAdapter -VM $vm
-        $ip = $na.IPAddresses | Where-Object { $_ -match '^\d{1,3}(\.\d{1,3}){3}$' } | Select-Object -First 1
-        if (-not $ip -and $na.MacAddress -and $na.MacAddress -ne '000000000000') {
-            $mac = $na.MacAddress -replace '(..)(?!$)', '$1-'
-            $nb = Get-NetNeighbor -AddressFamily IPv4 -LinkLayerAddress $mac -ErrorAction SilentlyContinue |
-                  Where-Object { $_.State -ne 'Unreachable' } | Select-Object -First 1
-            if ($nb) { $ip = $nb.IPAddress }
-        }
-    }
-    if (-not $ip) { throw 'Timed out waiting for the VM to report an IP address. Open Hyper-V Manager and check the VM console.' }
-    Write-Info "VM IP: $ip"
-    return $ip
+    return $S.VMIP
 }
 
 if ($Stage -eq 'hyperv') {
@@ -331,6 +352,25 @@ $userData = $userData.Replace('${USERNAME}', $UserName)
 $userData = $userData.Replace('${SSH_PUBKEY}', $pubKey)
 $userData = $userData.Replace('${PASSWORD}', $Password.Replace("'", "''"))
 Write-Utf8NoBomLf (Join-Path $seedDir 'user-data') $userData
+# Random locally-unique MAC in Hyper-V's 00:15:5D range; netplan matches on it.
+$macAddress = '00155D' + (-join (1..3 | ForEach-Object { '{0:X2}' -f (Get-Random -Maximum 256) }))
+$macColon   = ($macAddress -replace '(..)(?!$)', '$1:').ToLower()
+$networkConfig = @"
+version: 2
+ethernets:
+  eth0:
+    match:
+      macaddress: "$macColon"
+    set-name: eth0
+    dhcp4: false
+    addresses: [$VMIP/$PrefixLength]
+    routes:
+      - to: default
+        via: $GatewayIP
+    nameservers:
+      addresses: [$($DnsServers -join ', ')]
+"@
+Write-Utf8NoBomLf (Join-Path $seedDir 'network-config') $networkConfig
 Write-Utf8NoBomLf (Join-Path $seedDir 'meta-data') ("instance-id: {0}-{1}`nlocal-hostname: {0}`n" -f $VMName, (Get-Date -Format 'yyyyMMddHHmmss'))
 $seedIso = Join-Path $workDir "$VMName-seed.iso"
 New-SeedIso $seedDir $seedIso
@@ -343,7 +383,8 @@ $logFile    = Join-Path $workDir 'hyperv.log'
 Remove-Item $resultFile, $logFile -Force -ErrorAction SilentlyContinue
 @{
     VMName = $VMName; CpuCount = $CpuCount; MemoryGB = $MemoryGB; DiskGB = $DiskGB
-    SwitchName = $SwitchName; Force = [bool]$Force; User = "$env:USERDOMAIN\$env:USERNAME"
+    SwitchName = $SwitchName; GatewayIP = $GatewayIP; PrefixLength = $PrefixLength; VMIP = $VMIP; MacAddress = $macAddress
+    Force = [bool]$Force; User = "$env:USERDOMAIN\$env:USERNAME"
     FixedVhd = $fixedVhd; SeedIso = $seedIso; ResultFile = $resultFile; LogFile = $logFile
 } | ConvertTo-Json | Set-Content -Path $stateFile -Encoding UTF8
 
