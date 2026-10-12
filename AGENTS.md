@@ -46,15 +46,21 @@ scripts/             ← helper scripts (sync-ai-memory.ps1, dev-run.ps1)
 dev/hyperv/          ← one-command Hyper-V dev host (Debian 13 + KVM/libvirt)
 cmd/virtomird/       ← daemon entry point (Go, ADR-0006)
 internal/virt/       ← libvirt gateway: connection, reconnect, libvirt → VirtoMir types
-internal/api/        ← HTTP/JSON API, versioned under /api/v1
+internal/live/       ← 1 s sampling hub + 60 s backlog, fans snapshots out (SSE)
+internal/api/        ← HTTP/JSON API (/api/v1), SSE stream, serves the embedded UI
+web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embedded into virtomird
+  src/app.css        ← design tokens (colors, radii, motion) — use these, never hard-coded colors
+  src/lib/           ← api types, live store, components
 ```
 
 ## 5. Build, test, run
 
 ```powershell
-go test ./...                 # unit tests (run anywhere, no libvirt needed)
-./scripts/dev-run.ps1         # cross-compile, deploy to the dev host, (re)start as systemd unit virtomird-dev
-# then: http://192.168.77.10:8420/api/v1/domains  ·  logs: ssh virtomir-dev journalctl -u virtomird-dev -f
+go test ./...                 # Go unit tests (run anywhere, no libvirt needed)
+cd web; npm run check         # Svelte/TS type check
+./scripts/dev-run.ps1         # build UI + daemon, deploy to the dev host, (re)start systemd unit virtomird-dev
+# UI: http://192.168.77.10:8420/  ·  logs: ssh virtomir-dev journalctl -u virtomird-dev -f
+cd web; npm run dev           # hot-reload UI on Windows, proxies /api to the dev host
 ```
 
-Go is installed per-user at `%LOCALAPPDATA%\Programs\go` on Windows and at `/usr/local/go` on the dev host.
+Race tests need cgo → run them on the dev host. Go is installed per-user at `%LOCALAPPDATA%\Programs\go` on Windows and at `/usr/local/go` on the dev host.

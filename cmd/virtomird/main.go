@@ -14,7 +14,9 @@ import (
 	"time"
 
 	"github.com/onurbaydas/virtomir/internal/api"
+	"github.com/onurbaydas/virtomir/internal/live"
 	"github.com/onurbaydas/virtomir/internal/virt"
+	"github.com/onurbaydas/virtomir/web"
 )
 
 // version is set at build time: -ldflags "-X main.version=..."
@@ -45,9 +47,14 @@ func run(listen, socket string, log *slog.Logger) error {
 	client := virt.NewClient(socket, log)
 	defer client.Close()
 
+	hub := live.NewHub(client, time.Second, log)
+	hubDone := make(chan struct{})
+	go func() { hub.Run(ctx); close(hubDone) }()
+	defer func() { <-hubDone }()
+
 	srv := &http.Server{
 		Addr:              listen,
-		Handler:           api.NewServer(client, version, log).Handler(),
+		Handler:           api.NewServer(client, hub, web.Dist(), version, log).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

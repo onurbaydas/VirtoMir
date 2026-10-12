@@ -1,0 +1,131 @@
+/* VirtoMir design tokens + base styles. Components use only these variables. */
+
+:root {
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur: 220ms;
+
+  --sidebar-w: 248px;
+}
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0a0c10;
+  --bg-elev: #0e1116;
+  --surface: #12161c;
+  --surface-2: #171c24;
+  --surface-hover: #1c222b;
+  --border: #222934;
+  --border-strong: #2d3542;
+  --text: #e8ebf1;
+  --text-2: #a4acba;
+  --text-3: #687184;
+  --accent: #3ad1b6;
+  --accent-strong: #5fe3cb;
+  --accent-soft: rgba(58, 209, 182, 0.12);
+  --accent-contrast: #04130f;
+  --accent-2: #7c8cff;
+  --ok: #3fcf8e;
+  --warn: #f2b84b;
+  --danger: #f2666f;
+  --danger-soft: rgba(242, 102, 111, 0.12);
+  --info: #5aa9ff;
+  --idle: #5d6676;
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --skeleton: #1a2029;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f4f5f8;
+  --bg-elev: #fafbfc;
+  --surface: #ffffff;
+  --surface-2: #f2f4f7;
+  --surface-hover: #edf0f4;
+  --border: #e2e6ec;
+  --border-strong: #d0d6df;
+  --text: #0f141a;
+  --text-2: #4a5464;
+  --text-3: #8790a0;
+  --accent: #0e9f87;
+  --accent-strong: #0b8571;
+  --accent-soft: rgba(14, 159, 135, 0.1);
+  --accent-contrast: #ffffff;
+  --accent-2: #5563f0;
+  --ok: #1d9b62;
+  --warn: #c58810;
+  --danger: #d93f4c;
+  --danger-soft: rgba(217, 63, 76, 0.09);
+  --info: #2f7fe0;
+  --idle: #9aa2b1;
+  --shadow-pop: 0 12px 32px rgba(15, 20, 26, 0.12), 0 2px 6px rgba(15, 20, 26, 0.06);
+  --skeleton: #e9ecf1;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

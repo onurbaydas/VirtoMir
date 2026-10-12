@@ -18,9 +18,13 @@ desktop.ini
 !.vscode/extensions.json
 !.vscode/settings.json
 
-# --- Build outputs / deps (stack TBD) ---
+# --- Build outputs / deps ---
 node_modules/
 dist/
+# web/dist is embedded into virtomird; keep only the placeholder so `go build` works on a fresh clone
+!web/dist/
+web/dist/*
+!web/dist/.gitkeep
 build/
 bin/
 out/

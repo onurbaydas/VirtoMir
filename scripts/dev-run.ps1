@@ -26,6 +26,22 @@ $go = Get-Command go -ErrorAction SilentlyContinue
 $goExe = if ($go) { $go.Source } else { Join-Path $env:LOCALAPPDATA 'Programs\go\bin\go.exe' }
 if (-not (Test-Path $goExe)) { throw 'Go not found. Install it or add it to PATH.' }
 
+$npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+$npmCmd = if ($npm) { $npm.Source } else { Join-Path $env:LOCALAPPDATA 'Programs\nodejs\npm.cmd' }
+if (-not (Test-Path $npmCmd)) { throw 'Node.js/npm not found. Install it or add it to PATH.' }
+$env:Path = "$(Split-Path $npmCmd);$env:Path"   # npm scripts need node on PATH
+
+Write-Host '==> Building web UI' -ForegroundColor Cyan
+try {
+    Push-Location (Join-Path $repoRoot 'web')
+    if (-not (Test-Path 'node_modules')) {
+        & $npmCmd ci --no-fund --no-audit
+        if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+    }
+    & $npmCmd run build --silent
+    if ($LASTEXITCODE -ne 0) { throw 'web build failed' }
+} finally { Pop-Location }
+
 $rev = (git -C $repoRoot rev-parse --short HEAD).Trim()
 if (git -C $repoRoot status --porcelain) { $rev += '-dirty' }
 
