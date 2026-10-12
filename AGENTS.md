@@ -42,8 +42,19 @@ README.md            ← public-facing project README
   context/           ← vision, decisions, open questions, environment
   sessions/          ← per-session summaries + redacted raw transcripts
   local/             ← gitignored: secrets, machine-specific notes
-scripts/             ← helper scripts (e.g. sync-ai-memory.ps1)
+scripts/             ← helper scripts (sync-ai-memory.ps1, dev-run.ps1)
 dev/hyperv/          ← one-command Hyper-V dev host (Debian 13 + KVM/libvirt)
+cmd/virtomird/       ← daemon entry point (Go, ADR-0006)
+internal/virt/       ← libvirt gateway: connection, reconnect, libvirt → VirtoMir types
+internal/api/        ← HTTP/JSON API, versioned under /api/v1
 ```
 
-Source code layout will be added here once the tech stack is decided (see `open-questions.md`).
+## 5. Build, test, run
+
+```powershell
+go test ./...                 # unit tests (run anywhere, no libvirt needed)
+./scripts/dev-run.ps1         # cross-compile, deploy to the dev host, (re)start as systemd unit virtomird-dev
+# then: http://192.168.77.10:8420/api/v1/domains  ·  logs: ssh virtomir-dev journalctl -u virtomird-dev -f
+```
+
+Go is installed per-user at `%LOCALAPPDATA%\Programs\go` on Windows and at `/usr/local/go` on the dev host.
