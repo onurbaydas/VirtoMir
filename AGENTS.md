@@ -43,6 +43,7 @@ README.md            ← public-facing project README
   sessions/          ← per-session summaries + redacted raw transcripts
   local/             ← gitignored: secrets, machine-specific notes
 scripts/             ← helper scripts (e.g. sync-ai-memory.ps1)
+dev/hyperv/          ← one-command Hyper-V dev host (Debian 13 + KVM/libvirt)
 ```
 
 Source code layout will be added here once the tech stack is decided (see `open-questions.md`).

@@ -1,0 +1,84 @@
+#cloud-config
+# =============================================================================
+# VirtoMir dev host — Debian 13 (trixie) + KVM / QEMU / libvirt
+# Runs as a nested-virtualization guest on Hyper-V.
+#
+# This is a TEMPLATE. New-VirtoMirDevHost.ps1 replaces the ${...} tokens and
+# packs the result into a NoCloud seed ISO (volume label "cidata").
+# Never put real secrets in this file — they are injected at build time.
+# =============================================================================
+
+hostname: ${HOSTNAME}
+fqdn: ${HOSTNAME}
+manage_etc_hosts: true
+timezone: Europe/Istanbul
+# Locale + TR keyboard are configured in runcmd: the generic image lacks the
+# `locales` / `console-setup` packages when cc_locale / cc_keyboard run.
+
+users:
+  - name: ${USERNAME}
+    gecos: VirtoMir Developer
+    groups: [sudo, adm, systemd-journal]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: false
+    ssh_authorized_keys:
+      - ${SSH_PUBKEY}
+
+chpasswd:
+  expire: false
+  users:
+    - name: ${USERNAME}
+      password: '${PASSWORD}'
+      type: text
+
+ssh_pwauth: true
+
+package_update: true
+package_upgrade: false   # image is recent; keeps first boot fast. Run `sudo apt full-upgrade` any time.
+
+packages:
+  # Hyper-V guest integration (KVP lets Windows see the VM's IP address)
+  - hyperv-daemons
+  # mDNS -> reachable as <hostname>.local from Windows
+  - avahi-daemon
+  # Locale + console keymap (configured in runcmd)
+  - locales
+  - console-setup
+  # Virtualization stack under test
+  - qemu-system-x86
+  - qemu-utils
+  - libvirt-daemon-system
+  - libvirt-clients
+  - libvirt-dev
+  - virtinst
+  - ovmf
+  - swtpm
+  - swtpm-tools
+  - dnsmasq-base
+  - bridge-utils
+  - cloud-image-utils
+  # Developer basics
+  - git
+  - curl
+  - wget
+  - jq
+  - htop
+  - tmux
+  - build-essential
+  - pkg-config
+
+runcmd:
+  - sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+  - locale-gen
+  - update-locale LANG=en_US.UTF-8
+  - sed -i 's/^XKBLAYOUT=.*/XKBLAYOUT="tr"/' /etc/default/keyboard
+  - setupcon --force || true
+  - usermod -aG libvirt,kvm ${USERNAME}
+  - systemctl enable --now libvirtd
+  - virsh -c qemu:///system net-autostart default || true
+  - virsh -c qemu:///system net-start default || true
+  - sh -c 'virt-host-validate qemu > /var/log/virtomir-host-validate.log 2>&1 || true'
+  - touch /var/lib/virtomir-devhost-ready
+
+final_message: "VirtoMir dev host is ready after $UPTIME seconds."
