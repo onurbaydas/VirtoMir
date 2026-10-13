@@ -127,7 +127,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 				return
 			}
 		}
-		if id.Role < need {
+		if id.Role < need && !s.selfService(id, r.Method, path) {
 			s.writeJSON(w, http.StatusForbidden, map[string]string{
 				"error": "your role (" + id.Role.String() + ") may not do this; it needs " + need.String(),
 			})

@@ -26,6 +26,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/history"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/live"
+	"github.com/onurbaydas/virtomir/internal/quota"
 	"github.com/onurbaydas/virtomir/internal/schedule"
 	"github.com/onurbaydas/virtomir/internal/virt"
 	"github.com/onurbaydas/virtomir/web"
@@ -147,6 +148,11 @@ func run(c config, log *slog.Logger) error {
 	} else {
 		opts.ConfigHistory = ch
 		go sweepConfig(ctx, ch)
+	}
+	if q, err := quota.Open(filepath.Join(c.stateDir, "quotas.json")); err != nil {
+		log.Warn("quotas", "err", err)
+	} else {
+		opts.Quotas = q
 	}
 	apiServer := api.NewServer(opts)
 	go syncCluster(ctx, apiServer)

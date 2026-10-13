@@ -40,6 +40,7 @@
       live.start()
       alerts.start()
       cluster.start()
+      void session.loadQuota()
     } else {
       live.stop()
       alerts.stop()

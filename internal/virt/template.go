@@ -26,9 +26,11 @@ type vmMeta struct {
 	XMLName    xml.Name `xml:"vm"`
 	Template   bool     `xml:"template,attr,omitempty"`
 	LinkedFrom string   `xml:"linked-from,attr,omitempty"`
+	// Owner is who created the machine through VirtoMir (quotas, ADR-0022).
+	Owner string `xml:"owner,attr,omitempty"`
 }
 
-func (m vmMeta) empty() bool { return !m.Template && m.LinkedFrom == "" }
+func (m vmMeta) empty() bool { return !m.Template && m.LinkedFrom == "" && m.Owner == "" }
 
 // metaCache spares the 1-second domain list a metadata RPC per machine. Entries VirtoMir
 // writes itself are updated immediately; changes made elsewhere (virsh) show up within metaTTL.
@@ -63,7 +65,21 @@ func (c *Client) meta(l *libvirt.Libvirt, d libvirt.Domain) vmMeta {
 
 func (c *Client) addMeta(l *libvirt.Libvirt, d libvirt.Domain, s *Domain) {
 	m := c.meta(l, d)
-	s.Template, s.LinkedFrom = m.Template, m.LinkedFrom
+	s.Template, s.LinkedFrom, s.Owner = m.Template, m.LinkedFrom, m.Owner
+}
+
+// SetOwner records who created a machine (kept in its <metadata>).
+func (c *Client) SetOwner(uuid, owner string) error {
+	l, d, err := c.lookup(uuid)
+	if err != nil {
+		return err
+	}
+	m, err := readMeta(l, d)
+	if err != nil {
+		return err
+	}
+	m.Owner = owner
+	return c.writeMeta(l, d, m)
 }
 
 func (c *Client) remember(uuid string, v vmMeta) {

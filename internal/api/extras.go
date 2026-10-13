@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/history"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
@@ -52,6 +53,21 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 	var set virt.Settings
 	if !s.decode(w, r, &set) {
 		return
+	}
+	if identity(r).Role < auth.Admin { // an owner growing their machine stays within the quota
+		var vcpus int
+		var mem uint64
+		if doms, err := s.backend.ListDomains(); err == nil {
+			for _, d := range doms {
+				if strings.EqualFold(d.UUID, r.PathValue("uuid")) {
+					vcpus, mem = d.VCPUs, d.MaxMemoryKiB>>10
+				}
+			}
+		}
+		addCPU, addMem := int(set.MaxVCPUs)-vcpus, int64(set.MemoryMiB)-int64(mem)
+		if (addCPU > 0 || addMem > 0) && !s.checkQuota(w, r, 0, max(addCPU, 0), uint64(max(addMem, 0))) {
+			return
+		}
 	}
 	res, err := s.backend.SaveSettings(r.PathValue("uuid"), set)
 	if err != nil {

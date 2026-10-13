@@ -1,6 +1,6 @@
 // Who is signed in. Any 401 from the API flips the app to the sign-in page.
 
-import { api, setUnauthorizedHandler, type Role, type Session } from './api'
+import { api, setUnauthorizedHandler, type Domain, type MyQuota, type Role, type Session } from './api'
 
 const RANK: Record<Role, number> = { viewer: 1, operator: 2, admin: 3 }
 
@@ -10,6 +10,29 @@ class SessionStore {
   /** Signed in, or sign-in disabled (development mode). */
   ready = $derived(this.info !== null && (this.info.mode === 'none' || !!this.info.user))
   role = $derived<Role>(this.info?.role ?? (this.info?.mode === 'none' ? 'admin' : 'viewer'))
+  /** The user's quota (ADR-0022): operators with one may create and manage their own machines. */
+  quota = $state<MyQuota | null>(null)
+  /** May create machines: admins, and operators with a quota. */
+  canCreate = $derived(this.can('admin') || (this.role === 'operator' && !!this.quota?.rule))
+
+  /** May change settings, rename and delete d: admins, or the operator who owns it. */
+  canManage(d: Pick<Domain, 'owner'> | null | undefined): boolean {
+    return this.can('admin') || (this.canCreate && !!d?.owner && d.owner === this.info?.user)
+  }
+
+  /** Tooltip when canManage is false. */
+  whyManage(d: Pick<Domain, 'owner'> | null | undefined): string {
+    if (this.canManage(d)) return ''
+    return this.canCreate ? 'Only its owner or an admin may change this machine.' : this.why('admin')
+  }
+
+  async loadQuota() {
+    try {
+      this.quota = await api.myQuota()
+    } catch {
+      this.quota = null
+    }
+  }
 
   /** Whether the signed-in user's role includes `need`. */
   can(need: Role): boolean {

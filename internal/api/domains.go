@@ -45,11 +45,15 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &spec) {
 		return
 	}
+	if !s.checkQuota(w, r, 1, max(spec.VCPUs, 1), max(spec.MemoryMiB, 1024)) {
+		return
+	}
 	res, err := s.backend.CreateDomain(spec)
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
+	s.recordOwner(r, res.UUID)
 	s.done(w, http.StatusCreated, res)
 }
 

@@ -137,6 +137,8 @@ type Domain struct {
 	Template bool `json:"template,omitempty"`
 	// LinkedFrom is the template whose disks this machine's disks are overlays on.
 	LinkedFrom string `json:"linkedFrom,omitempty"`
+	// Owner created the machine through VirtoMir; it counts against their quota.
+	Owner string `json:"owner,omitempty"`
 }
 
 func (c *Client) ListDomains() ([]Domain, error) {

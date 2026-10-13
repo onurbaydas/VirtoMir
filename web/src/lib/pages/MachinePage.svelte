@@ -91,7 +91,7 @@
     if (!detail) return []
     const admin = session.why('admin') || undefined
     const items: MenuItem[] = [
-      { label: 'Rename…', icon: Pencil, run: () => (dlg = 'rename'), disabled: admin },
+      { label: 'Rename…', icon: Pencil, run: () => (dlg = 'rename'), disabled: session.whyManage(dom) || undefined },
       { label: 'Clone…', icon: CopyPlus, run: () => (dlg = 'clone'), disabled: admin },
     ]
     if (cluster.clustered && detail.persistent)
@@ -109,7 +109,7 @@
         run: () => void setAutostart(!(liveDom?.autostart ?? detail!.autostart)),
         disabled: admin,
       })
-    items.push({ label: 'Delete…', icon: Trash, run: () => (dlg = 'delete'), disabled: admin })
+    items.push({ label: 'Delete…', icon: Trash, run: () => (dlg = 'delete'), disabled: session.whyManage(dom) || undefined })
     return items
   })
 

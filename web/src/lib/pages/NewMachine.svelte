@@ -187,7 +187,7 @@
     <span class="t-label"><LayoutTemplate size={15} /> Start from a template — ready in seconds</span>
     <div class="t-list">
       {#each templates as t (t.uuid)}
-        <button type="button" class="t-card" disabled={!session.can('admin')} onclick={() => openDeploy(t)}>
+        <button type="button" class="t-card" disabled={!session.canCreate} onclick={() => openDeploy(t)}>
           <strong>{t.name}</strong>
           <span>{t.vcpus} vCPU · {formatKiB(t.maxMemoryKiB)}</span>
         </button>
@@ -412,8 +412,11 @@
     </dl>
     <label class="ui-switch"><input type="checkbox" bind:checked={start} /> Start it right away</label>
     {#if error}<div class="ui-error-box">{error}</div>{/if}
-    {#if !session.can('admin')}<p class="error">{session.why('admin')}</p>{/if}
-    <button class="ui-btn primary create" disabled={!canCreate || busy || !session.can('admin')}>
+    {#if !session.canCreate}<p class="error">{session.why('admin')} Operators can create machines when an admin gives them a quota.</p>{/if}
+    {#if session.quota?.rule && session.quota.used}
+      <p class="hint">Your quota: {session.quota.used.machines} of {session.quota.rule.machines} machines, {session.quota.used.vcpus} of {session.quota.rule.vcpus} vCPUs, {session.quota.used.memoryMiB} of {session.quota.rule.memoryMiB} MiB in use.</p>
+    {/if}
+    <button class="ui-btn primary create" disabled={!canCreate || busy || !session.canCreate}>
       <Rocket size={15} />
       {busy ? 'Creating…' : start ? 'Create and start' : 'Create'}
     </button>
