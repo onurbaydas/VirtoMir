@@ -632,6 +632,37 @@ export interface HostHardware {
   usb: HostUSB[]
 }
 
+export interface GroupRoles {
+  admin: string[]
+  operator: string[]
+  viewer: string[]
+}
+
+export interface SigninConfig {
+  ldap: {
+    enabled: boolean
+    url: string
+    startTLS: boolean
+    insecureSkipVerify: boolean
+    bindDN: string
+    bindPassword?: string
+    userBase: string
+    userFilter: string
+    groupAttr: string
+    roles: GroupRoles
+  }
+  oidc: {
+    enabled: boolean
+    label: string
+    issuer: string
+    clientId: string
+    clientSecret?: string
+    usernameClaim: string
+    groupsClaim: string
+    roles: GroupRoles
+  }
+}
+
 export interface QuotaRule {
   kind: 'user' | 'group'
   name: string
@@ -746,6 +777,9 @@ export const api = {
   setAutostart: (uuid: string, enabled: boolean) => request<void>('PUT', `${domainPath(uuid)}/autostart`, { enabled }),
   rename: (uuid: string, name: string) => request<void>('POST', `${domainPath(uuid)}/rename`, { name }),
   hostDevices: () => request<HostHardware>('GET', '/api/v1/host/devices'),
+  authMethods: () => request<{ ldap: boolean; oidc: boolean; oidcLabel?: string }>('GET', '/api/v1/auth/methods'),
+  signinConfig: () => request<{ config: SigninConfig; redirectUrl: string }>('GET', '/api/v1/signin-config'),
+  saveSigninConfig: (c: SigninConfig) => request<{ config: SigninConfig; redirectUrl: string }>('PUT', '/api/v1/signin-config', c),
   quotas: async () => (await request<{ rules: QuotaRule[] }>('GET', '/api/v1/quotas')).rules,
   saveQuotas: async (rules: QuotaRule[], host?: string) =>
     (await request<{ rules: QuotaRule[] }>('PUT', at(host, '/api/v1/quotas'), { rules })).rules,

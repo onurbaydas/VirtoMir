@@ -46,6 +46,8 @@ type Manager struct {
 	authn  Authenticator
 	roleOf func(user string) Role
 	now    func() time.Time
+	// ext: LDAP and OpenID Connect (nil: local accounts only).
+	ext *External
 
 	mu       sync.Mutex
 	sessions map[string]*session
@@ -59,6 +61,12 @@ func New(authn Authenticator, roleOf func(string) Role) *Manager {
 		sessions: map[string]*session{}, failures: map[string][]time.Time{},
 	}
 }
+
+// SetExternal adds LDAP / OpenID Connect sign-in (local accounts keep working first).
+func (m *Manager) SetExternal(e *External) { m.ext = e }
+
+// External is the external sign-in configuration (nil when not set up).
+func (m *Manager) External() *External { return m.ext }
 
 // Login rate limit: after MaxFailures failed attempts from one address within
 // FailureWindow, further attempts are refused until the oldest one ages out.
@@ -79,23 +87,46 @@ func (m *Manager) Login(ctx context.Context, remote, name, password string) (str
 	if name == "" || password == "" {
 		return "", ErrBadCredentials
 	}
-	if err := m.authn.Authenticate(ctx, name, password); err != nil {
+	id := Identity{Name: name}
+	// Local accounts first (an admin can always get in), then LDAP.
+	if err := m.authn.Authenticate(ctx, name, password); err == nil && !IsExternal(name) {
+		id.Role = m.roleOf(name)
+	} else if m.ext != nil {
+		ext, lerr := m.ext.loginLDAP(ctx, name, password)
+		if lerr != nil {
+			m.fail(ip)
+			if errors.Is(lerr, ErrBadCredentials) || errors.Is(err, ErrBadCredentials) {
+				return "", ErrBadCredentials
+			}
+			return "", lerr
+		}
+		id = ext
+	} else {
 		m.fail(ip)
-		if errors.Is(err, ErrBadCredentials) {
+		if errors.Is(err, ErrBadCredentials) || err == nil {
 			return "", ErrBadCredentials
 		}
 		return "", err
 	}
-	role := m.roleOf(name)
-	if role == NoAccess {
+	if id.Role == NoAccess {
 		m.fail(ip)
+		return "", ErrNotAllowed
+	}
+	m.mu.Lock()
+	delete(m.failures, ip)
+	m.mu.Unlock()
+	return m.NewSession(id)
+}
+
+// NewSession starts a session for someone already authenticated (OpenID Connect).
+func (m *Manager) NewSession(id Identity) (string, error) {
+	if id.Role == NoAccess {
 		return "", ErrNotAllowed
 	}
 	token := newToken()
 	now := m.now()
 	m.mu.Lock()
-	m.sessions[token] = &session{user: name, role: role, created: now, lastSeen: now}
-	delete(m.failures, ip)
+	m.sessions[token] = &session{user: id.Name, role: id.Role, created: now, lastSeen: now}
 	m.mu.Unlock()
 	return token, nil
 }
@@ -117,8 +148,17 @@ func (m *Manager) User(token string) (Identity, bool) {
 	return Identity{Name: s.user, Role: s.role}, true
 }
 
-// RoleOf is the user's current role (group memberships are re-read).
-func (m *Manager) RoleOf(user string) Role { return m.roleOf(user) }
+// RoleOf is the user's current role: Linux groups are re-read; LDAP/SSO users keep the role
+// of their last sign-in.
+func (m *Manager) RoleOf(user string) Role {
+	if IsExternal(user) {
+		if m.ext == nil {
+			return NoAccess
+		}
+		return m.ext.RoleOf(user)
+	}
+	return m.roleOf(user)
+}
 
 // Valid reports whether the session still exists, without refreshing it (for long streams).
 func (m *Manager) Valid(token string) bool {

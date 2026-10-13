@@ -128,6 +128,8 @@ type Server struct {
 
 	confighist   *confighist.Store
 	quotas       *quota.Store
+	oidc         oidcFlows
+	oidcClient   *http.Client // nil: default (tests use a client trusting their provider)
 	groupsOf     func(string) []string
 	cluster      *cluster.Store
 	fingerprint  string
@@ -177,6 +179,7 @@ func (s *Server) Handler() http.Handler {
 	s.importRoutes(mux)
 	s.hostdevRoutes(mux)
 	s.quotaRoutes(mux)
+	s.externalAuthRoutes(mux)
 
 	// GET-only fallbacks, so a wrong method on a real endpoint still gets 405.
 	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {

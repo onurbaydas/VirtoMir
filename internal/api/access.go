@@ -36,8 +36,8 @@ func requiredRole(method, path string) auth.Role {
 		return auth.NoAccess // host-to-host protocol; the handlers check the peer or the join secret
 	case strings.HasPrefix(path, "/api/v1/tokens"):
 		return auth.Viewer // everyone manages their own tokens (handlers check ownership)
-	case path == "/api/v1/activity":
-		return auth.Admin
+	case path == "/api/v1/activity", path == "/api/v1/signin-config", path == "/api/v1/quotas":
+		return auth.Admin // who may sign in and who may create what is the admins' business
 	case strings.Contains(path, "/console/"):
 		return auth.Operator // a console is control over the machine
 	case method == http.MethodGet || method == http.MethodHead:
