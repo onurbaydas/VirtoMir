@@ -141,6 +141,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/version", s.getVersion)
 	mux.HandleFunc("GET /api/v1/host", s.getHost)
 	mux.HandleFunc("GET /api/v1/stream", s.stream)
+	mux.HandleFunc("GET /api/v1/summary", s.summary)
 	mux.HandleFunc("GET /api/v1/jobs", s.listJobs)
 	mux.HandleFunc("GET /api/v1/jobs/{id}", s.getJob)
 
@@ -258,6 +259,19 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// summary is the newest live snapshot as one JSON answer: what the cluster overview polls
+// from every member instead of keeping a stream open to each.
+func (s *Server) summary(w http.ResponseWriter, _ *http.Request) {
+	backlog, _, unsubscribe := s.live.Subscribe()
+	unsubscribe()
+	if len(backlog) == 0 {
+		s.writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no sample yet; try again in a second"})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(backlog[len(backlog)-1])
 }
 
 func appendEvent(dst, data []byte) []byte {

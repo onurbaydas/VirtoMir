@@ -74,6 +74,18 @@ class Router {
     this.#sync()
   }
 
+  /** Href of a page on a given member (null: the host serving the UI), whichever is shown. */
+  hostHref(id: string | null, path: string): string {
+    return withHost(id, path)
+  }
+
+  /** Opens a page on a given member (null: the host serving the UI). */
+  go(id: string | null, path: string) {
+    history.pushState(null, '', withHost(id, path))
+    this.#sync()
+    window.scrollTo({ top: 0 })
+  }
+
   navigate(href: string, opts: { replace?: boolean } = {}) {
     const url = new URL(href, location.href)
     url.pathname = this.scoped(url.pathname)
