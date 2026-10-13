@@ -4,6 +4,7 @@
   import CircleCheck from '@lucide/svelte/icons/circle-check'
   import CircleX from '@lucide/svelte/icons/circle-x'
   import KeyRound from '@lucide/svelte/icons/key-round'
+  import Download from '@lucide/svelte/icons/download'
   import { api, errorText, type ActivityEntry } from '../api'
   import { describe } from '../activity'
   import { live } from '../live.svelte'
@@ -74,6 +75,22 @@
   }
   let users = $derived([...new Set((entries ?? []).map((e) => e.user))].sort())
 
+  // Audit export: what is listed (all hosts in a cluster), as CSV with a sentence per row.
+  function exportCSV() {
+    const q = (s: string) => (/[",\n]/.test(s) ? '"' + s.replaceAll('"', '""') + '"' : s)
+    const rows = [['time', 'host', 'user', 'token', 'what', 'method', 'path', 'status', 'error', 'remote']]
+    for (const e of entries ?? []) {
+      const d = describe(e, names)
+      rows.push([e.time, e.hostName ?? '', e.user, e.token ?? '', d.before + (d.machineName ?? '') + d.after, e.method, e.path, String(e.status), e.error ?? '', e.remote ?? ''])
+    }
+    const blob = new Blob([rows.map((r) => r.map(q).join(',')).join('\n') + '\n'], { type: 'text/csv' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `virtomir-activity-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
   const when = (t: string) => new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' })
   // Group by day so long lists stay readable.
   let days = $derived.by(() => {
@@ -101,6 +118,7 @@
     </select>
     <label class="ui-switch"><input type="checkbox" bind:checked={failedOnly} /> Failed only</label>
     <button class="ui-btn ghost" onclick={load} title="Reload"><RefreshCw size={15} /></button>
+    <button class="ui-btn" disabled={!entries?.length} onclick={exportCSV} title="Download what is listed as a CSV file"><Download size={15} /> Export</button>
   </div>
 </header>
 

@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -298,5 +299,22 @@ func (s *Server) listActivity(w http.ResponseWriter, r *http.Request) {
 		limit = 200
 	}
 	f := activity.Filter{User: q.Get("user"), Target: q.Get("target"), Failed: q.Get("failed") == "true"}
-	s.writeJSON(w, http.StatusOK, map[string]any{"entries": s.activity.List(limit, f)})
+	entries := s.activity.List(limit, f)
+	if q.Get("format") == "csv" {
+		writeActivityCSV(w, entries)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
+// writeActivityCSV is the audit export: one row per change, oldest last like the list.
+func writeActivityCSV(w http.ResponseWriter, entries []activity.Entry) {
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=virtomir-activity.csv")
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"time", "user", "token", "remote", "method", "path", "status", "error"})
+	for _, e := range entries {
+		_ = cw.Write([]string{e.Time.UTC().Format(time.RFC3339), e.User, e.Token, e.Remote, e.Method, e.Path, strconv.Itoa(e.Status), e.Error})
+	}
+	cw.Flush()
 }

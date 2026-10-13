@@ -610,7 +610,7 @@ export const api = {
   alerts: async (host?: string) => (await request<{ alerts: Alert[] }>('GET', at(host, '/api/v1/alerts'))).alerts,
   ackAlert: (id: string, host?: string) => request<void>('POST', at(host, `/api/v1/alerts/${enc(id)}/ack`)),
   alertConfig: () => request<AlertConfig>('GET', '/api/v1/alerts/config'),
-  saveAlertConfig: (c: AlertConfig) => request<AlertConfig>('PUT', '/api/v1/alerts/config', c),
+  saveAlertConfig: (c: AlertConfig, host?: string) => request<AlertConfig>('PUT', at(host, '/api/v1/alerts/config'), c),
   testChannel: (ch: AlertChannel) => request<void>('POST', '/api/v1/alerts/test', ch),
 
   backups: async (domain?: string, host?: string) =>
@@ -620,7 +620,8 @@ export const api = {
   restoreBackup: (id: string, name: string, pool: string, host?: string) =>
     request<Job>('POST', at(host, '/api/v1/backups/restore'), { id, name, pool }),
   backupSettings: () => request<{ backupDir: string }>('GET', '/api/v1/backups/settings'),
-  saveBackupSettings: (backupDir: string) => request<{ backupDir: string }>('PUT', '/api/v1/backups/settings', { backupDir }),
+  saveBackupSettings: (backupDir: string, host?: string) =>
+    request<{ backupDir: string }>('PUT', at(host, '/api/v1/backups/settings'), { backupDir }),
   schedules: async (domain?: string) =>
     (await request<{ schedules: ScheduleInfo[] }>('GET', `/api/v1/schedules${domain ? `?domain=${enc(domain)}` : ''}`)).schedules,
   saveSchedule: (s: ScheduleInfo) => request<ScheduleInfo>('PUT', '/api/v1/schedules', s),

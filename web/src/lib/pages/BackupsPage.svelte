@@ -16,6 +16,7 @@
   let backups = $state<HostBackup[] | null>(null)
   let dir = $state('')
   let newDir = $state('')
+  let dirEverywhere = $state(false)
   let error = $state('')
 
   async function load() {
@@ -65,9 +66,22 @@
 
   async function saveDir() {
     try {
-      const r = await api.saveBackupSettings(newDir.trim())
-      dir = r.backupDir
-      toasts.push({ kind: 'info', title: 'Backup location saved', detail: 'New backups go there; existing ones stay where they are.' })
+      const target = newDir.trim()
+      if (cluster.clustered && dirEverywhere) {
+        const res = await cluster.everywhere((h) => api.saveBackupSettings(target, h))
+        const failed = res.filter((r) => r.error)
+        if (failed.length === res.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
+        dir = target
+        toasts.push({
+          kind: failed.length ? 'warn' : 'info',
+          title: failed.length ? `Saved on ${res.length - failed.length} of ${res.length} hosts` : 'Backup location saved on every host',
+          detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') || 'New backups go there; existing ones stay where they are.',
+        })
+      } else {
+        const r = await api.saveBackupSettings(target)
+        dir = r.backupDir
+        toasts.push({ kind: 'info', title: 'Backup location saved', detail: 'New backups go there; existing ones stay where they are.' })
+      }
       await load()
     } catch (e) {
       toasts.push({ kind: 'error', title: 'Not saved', detail: errorText(e) })
@@ -91,8 +105,11 @@
     {#if session.can('admin')}
       <div class="loc-edit">
         <input class="ui-input mono" bind:value={newDir} aria-label="Backup location" />
-        <button class="ui-btn" disabled={!newDir.trim() || newDir.trim() === dir} onclick={saveDir}>Save</button>
+        <button class="ui-btn" disabled={!newDir.trim() || (newDir.trim() === dir && !(cluster.clustered && dirEverywhere))} onclick={saveDir}>Save</button>
       </div>
+      {#if cluster.clustered}
+        <label class="everywhere"><input type="checkbox" bind:checked={dirEverywhere} /> Use this location on every host (e.g. each host's own folder on a shared NFS mount)</label>
+      {/if}
       <span class="hint">Ideally another disk or an NFS mount — a backup on the same disk does not survive that disk.</span>
     {:else}
       <span class="mono">{dir}</span>
@@ -144,6 +161,13 @@
 {/if}
 
 <style>
+  .everywhere {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--text-2);
+  }
   .host-chip {
     margin-right: 6px;
     padding: 1px 8px;
