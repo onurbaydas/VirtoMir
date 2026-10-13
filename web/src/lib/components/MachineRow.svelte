@@ -1,5 +1,6 @@
 <script lang="ts">
   import Monitor from '@lucide/svelte/icons/monitor'
+  import LayoutTemplate from '@lucide/svelte/icons/layout-template'
   import type { Domain } from '../api'
   import { ACTIONS, isActive, live } from '../live.svelte'
   import { formatKiB, formatPercent, plural } from '../format'
@@ -25,10 +26,10 @@
     {#if onselect}
       <input class="sel" type="checkbox" checked={selected} aria-label="Select {d.name}" onchange={(e) => onselect(e.currentTarget.checked)} />
     {/if}
-    <span class="avatar" class:on={active}><Monitor size={16} /></span>
+    <span class="avatar" class:on={active} title={d.template ? 'Template' : undefined}>{#if d.template}<LayoutTemplate size={16} />{:else}<Monitor size={16} />{/if}</span>
     <div class="titles">
       <a class="title" href={machineHref(d.uuid)} onclick={router.link}>{d.name}</a>
-      <span class="uuid mono" title={d.uuid}>{d.uuid.slice(0, 8)}{#if !d.persistent} · transient{/if}{#if d.autostart} · autostart{/if}</span>
+      <span class="uuid mono" title={d.uuid}>{d.uuid.slice(0, 8)}{#if !d.persistent} · transient{/if}{#if d.autostart} · autostart{/if}{#if d.template} · template{:else if d.linkedFrom} · linked clone{/if}</span>
     </div>
   </div>
 

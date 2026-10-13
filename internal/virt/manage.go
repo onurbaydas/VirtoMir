@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/digitalocean/go-libvirt"
@@ -110,6 +111,9 @@ func (c *Client) Delete(uuid string, removeStorage bool) (DeleteResult, error) {
 	if isOn(sum.State) || sum.State == StatePaused {
 		return res, refusedf("Stop %s before deleting it.", d.Name)
 	}
+	if clones := c.linkedClones(l, uuid); len(clones) > 0 {
+		return res, refusedf("%s is the template of linked clones that read its disks: %s. Delete them first.", d.Name, strings.Join(clones, ", "))
+	}
 	var disks []string
 	if removeStorage {
 		x, err := c.parseDomain(l, d, true)
@@ -176,18 +180,38 @@ func (c *Client) diskUsers(l *libvirt.Libvirt) map[string][]string {
 	if err != nil {
 		return out
 	}
+	// Linked clones read their template's disks; libvirt only shows that chain while they run.
+	ownDisks := map[string][]string{}
+	linked := map[string][]string{}
 	for _, d := range doms {
 		x, err := c.parseDomain(l, d, false)
 		if err != nil || x.Devices == nil {
 			continue
 		}
+		if t := c.meta(l, d).LinkedFrom; t != "" {
+			linked[strings.ToLower(t)] = append(linked[strings.ToLower(t)], d.Name)
+		}
 		for _, v := range x.Devices.Disks {
+			if v.Device == "" || v.Device == "disk" {
+				if src, _ := diskSource(v.Source); src != "" {
+					ownDisks[formatUUID(d.UUID)] = append(ownDisks[formatUUID(d.UUID)], src)
+				}
+			}
 			if src, _ := diskSource(v.Source); src != "" {
 				out[src] = append(out[src], d.Name)
 			}
 			if v.BackingStore != nil {
 				if src, _ := diskSource(v.BackingStore.Source); src != "" {
 					out[src] = append(out[src], d.Name+" (as backing image)")
+				}
+			}
+		}
+	}
+	for t, clones := range linked {
+		for _, src := range ownDisks[t] {
+			for _, name := range clones {
+				if !slices.Contains(out[src], name+" (as backing image)") {
+					out[src] = append(out[src], name+" (as backing image)")
 				}
 			}
 		}

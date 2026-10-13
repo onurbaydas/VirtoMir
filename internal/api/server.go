@@ -137,6 +137,7 @@ func (s *Server) Handler() http.Handler {
 	s.consoleRoutes(mux)
 	s.alertRoutes(mux)
 	s.backupRoutes(mux)
+	s.templateRoutes(mux)
 
 	// GET-only fallbacks, so a wrong method on a real endpoint still gets 405.
 	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {

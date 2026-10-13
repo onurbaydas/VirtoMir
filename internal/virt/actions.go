@@ -65,6 +65,9 @@ func (c *Client) DomainAction(uuid string, action Action) error {
 
 	switch action {
 	case ActionStart:
+		if err := c.guardTemplate(l, d, "start"); err != nil {
+			return err
+		}
 		err = l.DomainCreate(d)
 	case ActionShutdown:
 		err = l.DomainShutdown(d)

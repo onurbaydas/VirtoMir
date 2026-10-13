@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | 'resize' | null
+  export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | 'resize' | 'template' | null
 </script>
 
 <script lang="ts">
@@ -100,6 +100,14 @@
       onclose()
     })
 
+  const makeTemplate = () =>
+    run(async () => {
+      await api.setTemplate(detail.uuid, true)
+      toasts.push({ kind: 'info', title: `${detail.name} is now a template`, detail: 'Use "New machine" to create machines from it.' })
+      onchange()
+      onclose()
+    })
+
   const clone = () =>
     run(async () => {
       const job = await api.clone(detail.uuid, newName)
@@ -189,6 +197,28 @@
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={onclose}>Cancel</button>
     <button class="ui-btn primary" form="rename" disabled={busy || !nameOK || newName === detail.name || active}>Rename</button>
+  {/snippet}
+</Dialog>
+
+<Dialog open={which === 'template'} title="Make {detail.name} a template" subtitle="A master copy that new machines are made from" {onclose}>
+  <div class="form">
+    <ul class="facts">
+      <li>It will not start anymore: its <b>Start</b> button becomes <b>New machine</b>.</li>
+      <li>New machines can be <b>linked clones</b> (ready in seconds, store only their own changes) or full copies.</li>
+      <li>You can turn it back into a normal machine as long as no linked clone depends on it.</li>
+    </ul>
+    <div class="prep">
+      <span class="prep-title">Before you do: make the system anonymous, then shut it down</span>
+      <span>Otherwise every copy shares its identity (machine ID, SSH host keys).</span>
+      <span>Linux: <code class="mono">sudo cloud-init clean --logs --machine-id</code> — or <code class="mono">sudo truncate -s0 /etc/machine-id</code> without cloud-init.</span>
+      <span>Windows: <code class="mono">sysprep /generalize /oobe /shutdown</code></span>
+    </div>
+    {#if active}<div class="ui-error-box">Shut {detail.name} down first.</div>{/if}
+    {#if error}<div class="ui-error-box">{error}</div>{/if}
+  </div>
+  {#snippet footer()}
+    <button class="ui-btn ghost" onclick={onclose}>Cancel</button>
+    <button class="ui-btn primary" disabled={busy || active} onclick={makeTemplate}>Make template</button>
   {/snippet}
 </Dialog>
 
@@ -378,6 +408,22 @@
     margin: 0;
     color: var(--text-2);
     font-size: 13.5px;
+  }
+  .prep {
+    display: grid;
+    gap: 4px;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: 12.5px;
+  }
+  .prep-title {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .prep code {
+    user-select: all;
   }
   .facts {
     margin: 0;

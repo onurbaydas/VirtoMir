@@ -9,6 +9,7 @@
   import Sidebar from './lib/components/Sidebar.svelte'
   import ConnectionBanner from './lib/components/ConnectionBanner.svelte'
   import Toasts from './lib/components/Toasts.svelte'
+  import DeployDialog from './lib/components/DeployDialog.svelte'
   import Overview from './lib/pages/Overview.svelte'
   import MachinePage from './lib/pages/MachinePage.svelte'
   import NewMachine from './lib/pages/NewMachine.svelte'
@@ -83,6 +84,7 @@
   </div>
 {/if}
 
+<DeployDialog />
 <Toasts />
 
 <style>
