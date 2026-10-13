@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -353,22 +354,57 @@ func (c *Client) SetPoolAutostart(name string, on bool) error {
 // PoolSpec describes a new directory pool.
 type PoolSpec struct {
 	Name string `json:"name"`
-	Path string `json:"path"`
+	Path string `json:"path"` // directory, or where an NFS share is mounted
+	// Type "dir" (default) or "netfs": an NFS share (Host:Export) mounted at Path. The
+	// same NFS pool on every host is what live migration without copying disks needs.
+	Type   string `json:"type,omitempty"`
+	Host   string `json:"host,omitempty"`
+	Export string `json:"export,omitempty"`
 }
 
-// CreatePool defines, builds (creates the directory), starts and autostarts a directory pool.
-func (c *Client) CreatePool(spec PoolSpec) error {
+var nfsHostRE = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$|^[[0-9a-fA-F:]+]$`)
+
+// poolXML builds the libvirt definition for a pool spec.
+func poolXML(spec PoolSpec) (libvirtxml.StoragePool, error) {
 	if err := checkName("Pool", spec.Name); err != nil {
-		return err
+		return libvirtxml.StoragePool{}, err
 	}
 	if !strings.HasPrefix(spec.Path, "/") || strings.Contains(spec.Path, "..") {
-		return invalidf("The path must be absolute, e.g. /srv/vm-images.")
+		return libvirtxml.StoragePool{}, invalidf("The path must be absolute, e.g. /srv/vm-images.")
+	}
+	x := libvirtxml.StoragePool{Type: "dir", Name: spec.Name, Target: &libvirtxml.StoragePoolTarget{Path: spec.Path}}
+	switch spec.Type {
+	case "", "dir":
+	case "netfs":
+		if !nfsHostRE.MatchString(spec.Host) {
+			return x, invalidf("Enter the NFS server as a host name or IP address, e.g. 192.168.1.20.")
+		}
+		if !strings.HasPrefix(spec.Export, "/") || strings.Contains(spec.Export, "..") {
+			return x, invalidf("The export is the shared directory on the server, e.g. /srv/vms.")
+		}
+		x.Type = "netfs"
+		x.Source = &libvirtxml.StoragePoolSource{
+			Host:   []libvirtxml.StoragePoolSourceHost{{Name: spec.Host}},
+			Dir:    &libvirtxml.StoragePoolSourceDir{Path: spec.Export},
+			Format: &libvirtxml.StoragePoolSourceFormat{Type: "nfs"},
+		}
+	default:
+		return x, invalidf("Unknown pool type %q (dir or netfs).", spec.Type)
+	}
+	return x, nil
+}
+
+// CreatePool defines, builds (creates the directory or mount point), starts (mounts) and
+// autostarts a pool.
+func (c *Client) CreatePool(spec PoolSpec) error {
+	x, err := poolXML(spec)
+	if err != nil {
+		return err
 	}
 	l, err := c.conn()
 	if err != nil {
 		return err
 	}
-	x := libvirtxml.StoragePool{Type: "dir", Name: spec.Name, Target: &libvirtxml.StoragePoolTarget{Path: spec.Path}}
 	doc, err := x.Marshal()
 	if err != nil {
 		return err
@@ -386,7 +422,7 @@ func (c *Client) CreatePool(spec PoolSpec) error {
 		return classify(err)
 	}
 	_ = l.StoragePoolSetAutostart(p, 1)
-	c.log.Info("pool created", "pool", spec.Name, "path", spec.Path)
+	c.log.Info("pool created", "pool", spec.Name, "type", x.Type, "path", spec.Path)
 	return nil
 }
 

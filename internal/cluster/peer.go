@@ -218,6 +218,8 @@ func do(c *http.Client, req *http.Request, out any) error {
 func reachError(u *url.URL, err error) error {
 	var ne net.Error
 	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return fmt.Errorf("%s took too long to answer; the operation may still finish there", u.Host)
 	case strings.Contains(err.Error(), "fingerprint"):
 		return fmt.Errorf("%s presented a different certificate than expected (was it reinstalled?): %w", u.Host, err)
 	case errors.As(err, &ne) && ne.Timeout():

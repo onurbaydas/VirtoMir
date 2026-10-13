@@ -13,6 +13,7 @@ import (
 
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/cluster"
+	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
 // Cluster routes (ADR-0020). /api/v1/cluster/peer/* is the node-to-node protocol: hello and
@@ -22,6 +23,7 @@ func (s *Server) clusterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/cluster/invite", s.invite)
 	mux.HandleFunc("POST /api/v1/cluster/join", s.join)
 	mux.HandleFunc("DELETE /api/v1/cluster/members/{id}", s.removeMember)
+	mux.HandleFunc("POST /api/v1/cluster/pools", s.createClusterPool)
 
 	mux.HandleFunc("GET /api/v1/cluster/peer/hello", s.peerHello)
 	mux.HandleFunc("POST /api/v1/cluster/peer/join", s.peerJoin)
@@ -137,6 +139,56 @@ func (s *Server) removeMember(w http.ResponseWriter, r *http.Request) {
 	// Everyone who was a member learns who is left; a list without them makes them standalone.
 	s.push(before, cluster.MemberList{Version: version, Members: removeNode(before, id)})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// HostResult is the outcome of one step of a cluster-wide action on one member.
+type HostResult struct {
+	Host  string `json:"host"`
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+// createClusterPool creates the same storage pool on every member (typically one NFS share,
+// so machines can be live-migrated without copying their disks). Each host reports its
+// own result; hosts where it worked keep the pool.
+func (s *Server) createClusterPool(w http.ResponseWriter, r *http.Request) {
+	if s.noCluster(w) {
+		return
+	}
+	var spec virt.PoolSpec
+	if !s.decode(w, r, &spec) {
+		return
+	}
+	id := identity(r)
+	members, _ := s.cluster.Members()
+	if len(members) == 0 {
+		members = []cluster.Node{s.cluster.Self("")}
+	}
+	results := make([]HostResult, len(members))
+	var wg sync.WaitGroup
+	for i, n := range members {
+		results[i].Host = n.Name
+		wg.Add(1)
+		go func(res *HostResult, n cluster.Node) {
+			defer wg.Done()
+			var err error
+			if n.ID == s.cluster.SelfID() {
+				err = s.backend.CreatePool(spec)
+			} else {
+				// Mounting an unreachable NFS server takes libvirt a few minutes to give up.
+				ctx, cancel := context.WithTimeout(r.Context(), 4*time.Minute)
+				defer cancel()
+				err = s.peer(n).As(id.Name, id.Role.String(), id.Token).Call(ctx, http.MethodPost, "/api/v1/storage/pools", spec, nil)
+			}
+			res.OK = err == nil
+			if err != nil {
+				res.Error = err.Error()
+			}
+		}(&results[i], n)
+	}
+	wg.Wait()
+	s.live.Refresh()
+	s.writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
 func removeNode(nodes []cluster.Node, id string) []cluster.Node {
