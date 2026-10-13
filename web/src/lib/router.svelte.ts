@@ -1,11 +1,22 @@
 // Tiny history-API router. virtomird serves index.html for unknown paths, so deep links
-// and reloads work. Routes: "/" overview, "/machines/<uuid>" machine page.
+// and reloads work. Routes: "/" overview, "/machines/<uuid>[#tab]" machine page,
+// "/machines/new" wizard, "/storage[#pool]", "/networks".
 
-export type Route = { name: 'overview' } | { name: 'machine'; uuid: string; tab: string } | { name: 'not-found' }
+export type Route =
+  | { name: 'overview' }
+  | { name: 'machine'; uuid: string; tab: string }
+  | { name: 'new' }
+  | { name: 'storage'; pool: string }
+  | { name: 'networks' }
+  | { name: 'not-found' }
 
 function parse(path: string, hash: string): Route {
-  if (path === '/' || path === '') return { name: 'overview' }
-  const m = /^\/machines\/([0-9a-fA-F-]{36})\/?$/.exec(path)
+  path = path.replace(/\/+$/, '') || '/'
+  if (path === '/') return { name: 'overview' }
+  if (path === '/machines/new') return { name: 'new' }
+  if (path === '/storage') return { name: 'storage', pool: decodeURIComponent(hash.replace(/^#/, '')) }
+  if (path === '/networks') return { name: 'networks' }
+  const m = /^\/machines\/([0-9a-fA-F-]{36})$/.exec(path)
   if (m) return { name: 'machine', uuid: m[1].toLowerCase(), tab: hash.replace(/^#/, '') }
   return { name: 'not-found' }
 }

@@ -3,6 +3,7 @@
   import MonitorOff from '@lucide/svelte/icons/monitor-off'
   import { isActive, live } from '../live.svelte'
   import MachineRow from './MachineRow.svelte'
+  import { router } from '../router.svelte'
 
   type Filter = 'all' | 'running' | 'stopped'
   let filter = $state<Filter>('all')
@@ -68,7 +69,8 @@
         <MonitorOff size={28} strokeWidth={1.5} />
         {#if counts.all === 0}
           <strong>No virtual machines on this host yet</strong>
-          <span>Machines created with virt-manager or virsh appear here instantly.</span>
+          <span>Create one here, or with virt-manager or virsh — it appears instantly.</span>
+          <a class="ui-btn primary new" href="/machines/new" onclick={router.link}>New machine</a>
         {:else}
           <strong>Nothing matches</strong>
           <button class="link" onclick={() => ((filter = 'all'), (query = ''))}>Show all machines</button>
@@ -213,6 +215,9 @@
     margin-top: 6px;
     color: var(--text);
     font-weight: 600;
+  }
+  .new {
+    margin-top: 10px;
   }
   .link {
     border: 0;

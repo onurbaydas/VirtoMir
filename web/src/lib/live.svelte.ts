@@ -69,6 +69,8 @@ class Live {
 
   readonly hostCpu = emptySeries()
   readonly hostMem = emptySeries()
+  /** Host physical disk/network throughput (bytes/s); null where unknown. */
+  readonly hostIO: IOSeries = { diskRead: emptySeries(), diskWrite: emptySeries(), netRx: emptySeries(), netTx: emptySeries() }
   readonly #domCpu = new Map<string, Series>()
   readonly #domIO = new Map<string, IOSeries>()
 
@@ -92,6 +94,12 @@ class Live {
       this.#domIO.set(uuid, s)
     }
     return s
+  }
+
+  stop() {
+    this.#es?.close()
+    this.#es = null
+    this.streamOpen = false
   }
 
   start() {
@@ -129,6 +137,11 @@ class Live {
     if (s.connected) {
       push(this.hostCpu, s.host.cpuPercent)
       push(this.hostMem, s.host.memTotalKiB ? (s.host.memUsedKiB / s.host.memTotalKiB) * 100 : null)
+      const io = s.host.io
+      push(this.hostIO.diskRead, io ? io.diskReadBps : null)
+      push(this.hostIO.diskWrite, io ? io.diskWriteBps : null)
+      push(this.hostIO.netRx, io ? io.netRxBps : null)
+      push(this.hostIO.netTx, io ? io.netTxBps : null)
     } else {
       push(this.hostCpu, null)
       push(this.hostMem, null)

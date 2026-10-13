@@ -96,9 +96,9 @@ type Device struct {
 	AllocationBytes uint64   `json:"allocationBytes,omitempty"`
 	Addresses       []string `json:"addresses,omitempty"`
 
-	// Keys for enrichment; not shown.
-	target string
-	mac    string
+	// Identify the device for actions: a disk's guest device name, an adapter's MAC.
+	Target string `json:"target,omitempty"`
+	MAC    string `json:"mac,omitempty"`
 }
 
 type Prop struct {
@@ -354,7 +354,7 @@ func diskDevice(v libvirtxml.DomainDisk) Device {
 	if v.Target != nil {
 		target, bus = v.Target.Dev, v.Target.Bus
 	}
-	dev.target = target
+	dev.Target = target
 	switch kind {
 	case "cdrom":
 		dev.Title = "CD/DVD drive"
@@ -481,7 +481,7 @@ func interfaceDevice(v libvirtxml.DomainInterface) Device {
 	if v.Model != nil {
 		model = v.Model.Type
 	}
-	dev.mac = mac
+	dev.MAC = mac
 
 	var conn, connTech string
 	if s := v.Source; s != nil {

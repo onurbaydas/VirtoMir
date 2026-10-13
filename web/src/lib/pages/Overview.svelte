@@ -7,6 +7,9 @@
   import StatCard from '../components/StatCard.svelte'
   import Sparkline from '../components/Sparkline.svelte'
   import MachineList from '../components/MachineList.svelte'
+  import IOChart from '../components/IOChart.svelte'
+  import Plus from '@lucide/svelte/icons/plus'
+  import { router } from '../router.svelte'
 
   let snap = $derived(live.snapshot)
   let host = $derived(live.host)
@@ -43,9 +46,12 @@
       </div>
     {/if}
   </div>
-  {#if live.streamOpen && snap?.connected}
-    <span class="live" title="Updated every second"><span class="live-dot"></span>Live</span>
-  {/if}
+  <div class="head-right">
+    {#if live.streamOpen && snap?.connected}
+      <span class="live" title="Updated every second"><span class="live-dot"></span>Live</span>
+    {/if}
+    <a class="ui-btn primary" href="/machines/new" onclick={router.link}><Plus size={15} /> New machine</a>
+  </div>
 </header>
 
 <section class="stats">
@@ -88,9 +94,47 @@
   </StatCard>
 </section>
 
+{#if snap?.host.io || live.hostIO.diskRead.some((v) => v !== null)}
+  <section class="ui-panel hostio">
+    <IOChart
+      title="Host disks"
+      a={{ label: 'Read', data: live.hostIO.diskRead, color: '--accent' }}
+      b={{ label: 'Write', data: live.hostIO.diskWrite, color: '--accent-2' }}
+      tick={live.tick}
+      height={90}
+      floor={1024 * 1024}
+    />
+    <IOChart
+      title="Host network"
+      a={{ label: 'Receive', data: live.hostIO.netRx, color: '--accent' }}
+      b={{ label: 'Send', data: live.hostIO.netTx, color: '--accent-2' }}
+      tick={live.tick}
+      height={90}
+      floor={128 * 1024}
+    />
+  </section>
+{/if}
+
 <MachineList />
 
 <style>
+  .head-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .hostio {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 900px) {
+    .hostio {
+      grid-template-columns: 1fr;
+    }
+  }
   .stats {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

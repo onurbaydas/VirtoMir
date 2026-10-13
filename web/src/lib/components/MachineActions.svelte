@@ -3,13 +3,13 @@
   import type { Domain } from '../api'
   import { ACTIONS, live } from '../live.svelte'
   import { menuItems, primaryAction } from '../machine'
-  import ActionMenu from './ActionMenu.svelte'
+  import ActionMenu, { type MenuItem } from './ActionMenu.svelte'
 
-  let { d, size = 'md' }: { d: Domain; size?: 'md' | 'lg' } = $props()
+  let { d, size = 'md', extra = [] }: { d: Domain; size?: 'md' | 'lg'; extra?: MenuItem[] } = $props()
 
   let pending = $derived(live.pending[d.uuid])
   let primary = $derived(primaryAction(d))
-  let menu = $derived(menuItems(d))
+  let menu = $derived([...menuItems(d), ...extra])
 </script>
 
 <div class="actions {size}">

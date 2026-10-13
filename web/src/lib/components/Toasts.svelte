@@ -12,7 +12,7 @@
   {#each toasts.items as t (t.id)}
     <div class="toast {t.kind}" in:fly={{ y: 12, duration: 220 }} out:fly={{ x: 24, duration: 160 }} animate:flip={{ duration: 200 }}>
       <span class="icon">
-        {#if t.kind === 'error'}<CircleAlert size={17} />{:else if t.kind === 'warn'}<TriangleAlert size={17} />{:else}<Check size={17} />{/if}
+        {#if t.sticky}<span class="spin"></span>{:else if t.kind === 'error'}<CircleAlert size={17} />{:else if t.kind === 'warn'}<TriangleAlert size={17} />{:else}<Check size={17} />{/if}
       </span>
       <div class="body">
         <strong>{t.title}</strong>
@@ -64,6 +64,21 @@
   .icon {
     color: var(--c);
     padding-top: 1px;
+  }
+  .spin {
+    display: block;
+    width: 15px;
+    height: 15px;
+    margin: 1px;
+    border: 2px solid var(--info);
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   .body {
     display: flex;

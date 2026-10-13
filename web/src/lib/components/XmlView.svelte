@@ -2,6 +2,8 @@
   import Copy from '@lucide/svelte/icons/copy'
   import Download from '@lucide/svelte/icons/download'
   import RefreshCw from '@lucide/svelte/icons/refresh-cw'
+  import Pencil from '@lucide/svelte/icons/pencil'
+  import XmlEditor from './XmlEditor.svelte'
   import { api, ApiError } from '../api'
   import { copy } from '../machine'
   import { highlightXML } from '../xml'
@@ -14,8 +16,12 @@
     persistent: boolean
     /** Changes when the machine changes state, so the XML is refetched. */
     version: string
+    /** Called after the definition was saved. */
+    onsaved?: () => void
   }
-  let { uuid, name, active, persistent, version }: Props = $props()
+  let { uuid, name, active, persistent, version, onsaved }: Props = $props()
+
+  let editing = $state(false)
 
   let which = $state<'live' | 'next'>('live')
   let xml = $state<string | null>(null)
@@ -57,6 +63,20 @@
 </script>
 
 <section class="xml">
+  {#if editing}
+    <XmlEditor
+      {uuid}
+      {active}
+      onclose={(saved) => {
+        editing = false
+        if (saved) {
+          which = active ? 'next' : 'live'
+          void load()
+          onsaved?.()
+        }
+      }}
+    />
+  {:else}
   <header class="bar">
     {#if active && persistent}
       <div class="seg" role="radiogroup" aria-label="Which configuration">
@@ -76,6 +96,9 @@
     </button>
     <button class="tool" onclick={() => xml && copy(xml, 'XML')} disabled={!xml}><Copy size={14} /> Copy</button>
     <button class="tool" onclick={download} disabled={!xml}><Download size={14} /> Download</button>
+    {#if persistent || !active}
+      <button class="tool edit" onclick={() => (editing = true)}><Pencil size={14} /> Edit</button>
+    {/if}
   </header>
 
   {#if error}
@@ -94,7 +117,10 @@
       </ol>
     </div>
   {/if}
-  <p class="hint">Read-only for now. Editing with form ↔ XML sync is coming next.</p>
+  <p class="hint">
+    {persistent || !active ? 'Edit changes the saved definition, validated by libvirt.' : 'Transient machines have no saved definition to edit.'}
+  </p>
+  {/if}
 </section>
 
 <style>
@@ -164,6 +190,10 @@
   .tool:disabled {
     opacity: 0.5;
     cursor: default;
+  }
+  .tool.edit {
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+    color: var(--accent);
   }
   .tool span {
     display: grid;

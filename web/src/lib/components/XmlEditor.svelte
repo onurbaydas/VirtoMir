@@ -1,0 +1,225 @@
+<script lang="ts">
+  // Edits the persistent (next-boot) definition. The browser checks that the XML is
+  // well-formed while typing; libvirt validates it against its schema on save.
+  import Save from '@lucide/svelte/icons/save'
+  import Undo2 from '@lucide/svelte/icons/undo-2'
+  import TriangleAlert from '@lucide/svelte/icons/triangle-alert'
+  import { api, errorText } from '../api'
+  import { toasts } from '../toast.svelte'
+
+  interface Props {
+    uuid: string
+    active: boolean
+    onclose: (saved: boolean) => void
+  }
+  let { uuid, active, onclose }: Props = $props()
+
+  let original = $state<string | null>(null)
+  let text = $state('')
+  let loadErr = $state('')
+  let saveErr = $state('')
+  let saving = $state(false)
+  let ta = $state<HTMLTextAreaElement>()
+  let gutter = $state<HTMLDivElement>()
+
+  $effect(() => {
+    void api
+      .domainXML(uuid, true)
+      .then((x) => {
+        original = x
+        text = x
+      })
+      .catch((e) => (loadErr = errorText(e)))
+  })
+
+  let dirty = $derived(original !== null && text !== original)
+  let lineCount = $derived(text.split('\n').length)
+
+  // Well-formedness check (cheap, instant). Schema problems come back from libvirt on save.
+  let parseError = $derived.by(() => {
+    if (!text.trim()) return 'The XML is empty.'
+    const doc = new DOMParser().parseFromString(text, 'application/xml')
+    const err = doc.querySelector('parsererror')
+    if (err) return (err.textContent ?? 'Not well-formed XML').split('\n').find((l) => l.trim())?.trim() ?? 'Not well-formed XML'
+    if (doc.documentElement.nodeName !== 'domain') return 'The root element must be <domain>.'
+    return ''
+  })
+
+  async function save() {
+    saving = true
+    saveErr = ''
+    try {
+      const res = await api.saveXML(uuid, text)
+      toasts.push({
+        kind: 'info',
+        title: 'Configuration saved',
+        detail: res.appliesOnNextBoot ? 'The machine is running: changes take effect at its next boot.' : undefined,
+      })
+      onclose(true)
+    } catch (e) {
+      saveErr = errorText(e)
+    } finally {
+      saving = false
+    }
+  }
+
+  function cancel() {
+    if (dirty && !confirm('Discard your changes to the XML?')) return
+    onclose(false)
+  }
+
+  function onKey(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault()
+      if (dirty && !parseError && !saving) void save()
+    }
+    // Tab inserts two spaces instead of leaving the editor.
+    if (e.key === 'Tab' && !e.shiftKey && ta) {
+      e.preventDefault()
+      const { selectionStart: s, selectionEnd: end } = ta
+      text = text.slice(0, s) + '  ' + text.slice(end)
+      requestAnimationFrame(() => ta && (ta.selectionStart = ta.selectionEnd = s + 2))
+    }
+  }
+</script>
+
+<div class="editor">
+  <div class="note" class:warn={active}>
+    <TriangleAlert size={15} />
+    <span>
+      {#if active}
+        Editing the configuration for the <b>next boot</b>. The running machine keeps its current setup until it is restarted.
+      {:else}
+        Every libvirt setting can be changed here — including ones that stop the machine from booting. A snapshot first is a good idea.
+      {/if}
+    </span>
+  </div>
+
+  {#if loadErr}
+    <div class="err">{loadErr}</div>
+  {:else if original === null}
+    <p class="muted">Loading…</p>
+  {:else}
+    <div class="area mono">
+      <div class="gutter" bind:this={gutter} aria-hidden="true">
+        {#each { length: lineCount } as _, i (i)}<span>{i + 1}</span>{/each}
+      </div>
+      <textarea
+        bind:this={ta}
+        bind:value={text}
+        spellcheck="false"
+        autocapitalize="off"
+        autocomplete="off"
+        aria-label="Domain XML"
+        aria-invalid={!!parseError}
+        onscroll={() => gutter && ta && (gutter.scrollTop = ta.scrollTop)}
+        onkeydown={onKey}
+      ></textarea>
+    </div>
+  {/if}
+
+  <footer>
+    <span class="status" class:bad={!!parseError}>
+      {#if parseError}{parseError}{:else if dirty}Unsaved changes · Ctrl+S to save{:else}No changes{/if}
+    </span>
+    <button class="ui-btn ghost" onclick={() => (text = original ?? '')} disabled={!dirty || saving}><Undo2 size={14} /> Reset</button>
+    <button class="ui-btn ghost" onclick={cancel} disabled={saving}>Cancel</button>
+    <button class="ui-btn primary" onclick={save} disabled={!dirty || !!parseError || saving}>
+      <Save size={14} /> {saving ? 'Saving…' : 'Save'}
+    </button>
+  </footer>
+  {#if saveErr}<div class="err" role="alert"><b>libvirt refused the change:</b> {saveErr}</div>{/if}
+</div>
+
+<style>
+  .editor {
+    display: flex;
+    flex-direction: column;
+  }
+  .note {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--info) 7%, var(--surface));
+    color: var(--info);
+    font-size: 13px;
+  }
+  .note.warn {
+    background: color-mix(in srgb, var(--warn) 9%, var(--surface));
+    color: var(--warn);
+  }
+  .note span {
+    color: var(--text-2);
+  }
+  .note b {
+    color: var(--text);
+  }
+  .area {
+    display: flex;
+    height: min(70vh, 720px);
+    background: var(--bg-elev);
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+  .gutter {
+    flex: none;
+    width: 52px;
+    padding: 10px 14px 10px 0;
+    overflow: hidden;
+    color: var(--text-3);
+    text-align: right;
+    user-select: none;
+    opacity: 0.7;
+  }
+  .gutter span {
+    display: block;
+  }
+  textarea {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 16px 10px 0;
+    border: 0;
+    outline: none;
+    resize: none;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    line-height: inherit;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 2;
+  }
+  footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+  }
+  .status {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-3);
+    font-size: 12.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .status.bad {
+    color: var(--danger);
+  }
+  .err {
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    background: var(--danger-soft);
+    color: var(--text);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+  .muted {
+    padding: 16px;
+    color: var(--text-3);
+  }
+</style>

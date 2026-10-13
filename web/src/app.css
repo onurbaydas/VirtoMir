@@ -98,7 +98,9 @@ button {
   color: inherit;
 }
 
-input {
+input,
+select,
+textarea {
   font: inherit;
   color: inherit;
 }
@@ -125,6 +127,7 @@ input {
 
 .page-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
@@ -171,6 +174,179 @@ input {
   50% {
     opacity: 0.35;
   }
+}
+
+/* Shared controls. Components may style their own, but forms and dialogs use these. */
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast),
+    border-color var(--dur-fast),
+    opacity var(--dur-fast);
+}
+.ui-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--text-3);
+}
+.ui-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ui-btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-contrast);
+}
+.ui-btn.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+.ui-btn.danger {
+  background: var(--danger);
+  border-color: transparent;
+  color: #fff;
+}
+.ui-btn.danger-soft {
+  background: var(--danger-soft);
+  border-color: transparent;
+  color: var(--danger);
+}
+.ui-btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-2);
+}
+.ui-btn.ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+  border-color: transparent;
+}
+.ui-btn.sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+.ui-btn.busy {
+  cursor: progress;
+}
+
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ui-field > .label {
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.ui-field > .hint {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.ui-field > .error {
+  color: var(--danger);
+  font-size: 12px;
+}
+.ui-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13.5px;
+  outline: none;
+  transition: border-color var(--dur-fast);
+}
+select.ui-input {
+  padding-right: 28px;
+}
+.ui-input:focus {
+  border-color: var(--accent);
+}
+.ui-input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+textarea.ui-input {
+  height: auto;
+  padding: 9px 11px;
+  resize: vertical;
+}
+
+/* Toggle switch: <label class="ui-switch"><input type="checkbox" /> Text</label> */
+.ui-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  cursor: pointer;
+  user-select: none;
+}
+.ui-switch input {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 18px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--border-strong);
+  cursor: pointer;
+  transition: background var(--dur-fast);
+}
+.ui-switch input::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform var(--dur) var(--ease-out);
+}
+.ui-switch input:checked {
+  background: var(--accent);
+}
+.ui-switch input:checked::after {
+  transform: translateX(14px);
+}
+.ui-switch input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ui-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.ui-error-box {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 @media (prefers-reduced-motion: reduce) {

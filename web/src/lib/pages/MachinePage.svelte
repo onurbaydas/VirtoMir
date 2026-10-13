@@ -21,6 +21,19 @@
   import DeviceCard from '../components/DeviceCard.svelte'
   import XmlView from '../components/XmlView.svelte'
   import PerformancePanel from '../components/PerformancePanel.svelte'
+  import SnapshotsPanel from '../components/SnapshotsPanel.svelte'
+  import ConfirmButton from '../components/ConfirmButton.svelte'
+  import ManageDialogs, { type ManageDialog } from '../components/ManageDialogs.svelte'
+  import type { MenuItem } from '../components/ActionMenu.svelte'
+  import Pencil from '@lucide/svelte/icons/pencil'
+  import CopyPlus from '@lucide/svelte/icons/copy-plus'
+  import Power from '@lucide/svelte/icons/power'
+  import Trash from '@lucide/svelte/icons/trash'
+  import Plus from '@lucide/svelte/icons/plus'
+  import Unplug from '@lucide/svelte/icons/unplug'
+  import Disc from '@lucide/svelte/icons/disc'
+  import { errorText } from '../api'
+  import { toasts } from '../toast.svelte'
 
   let { uuid }: { uuid: string } = $props()
 
@@ -54,12 +67,48 @@
     return () => clearInterval(t)
   })
 
-  type Tab = 'overview' | 'hardware' | 'xml'
+  type Tab = 'overview' | 'hardware' | 'snapshots' | 'xml'
+  const TABS: Tab[] = ['overview', 'hardware', 'snapshots', 'xml']
   let tab = $derived<Tab>(
-    router.route.name === 'machine' && (router.route.tab === 'hardware' || router.route.tab === 'xml')
-      ? router.route.tab
-      : 'overview',
+    router.route.name === 'machine' && TABS.includes(router.route.tab as Tab) ? (router.route.tab as Tab) : 'overview',
   )
+
+  // ---- Management ---------------------------------------------------------------------
+  let dlg = $state<ManageDialog>(null)
+  let mediaDrive = $state<Device | undefined>()
+
+  let manageItems = $derived.by((): MenuItem[] => {
+    if (!detail) return []
+    const items: MenuItem[] = [
+      { label: 'Rename…', icon: Pencil, run: () => (dlg = 'rename') },
+      { label: 'Clone…', icon: CopyPlus, run: () => (dlg = 'clone') },
+    ]
+    if (detail.persistent)
+      items.push({
+        label: liveDom?.autostart ?? detail.autostart ? 'Don’t start with the host' : 'Start with the host',
+        icon: Power,
+        run: () => void setAutostart(!(liveDom?.autostart ?? detail!.autostart)),
+      })
+    items.push({ label: 'Delete…', icon: Trash, run: () => (dlg = 'delete') })
+    return items
+  })
+
+  async function setAutostart(on: boolean) {
+    try {
+      await api.setAutostart(uuid, on)
+      toasts.push({ kind: 'info', title: on ? 'Starts with the host' : 'No longer starts with the host' })
+      await load()
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'Autostart not changed', detail: errorText(e) })
+    }
+  }
+
+  async function detachDevice(d: Device) {
+    if (d.kind === 'interface') await api.detach(uuid, { kind: 'interface', mac: d.mac })
+    else await api.detach(uuid, { kind: 'disk', target: d.target })
+    toasts.push({ kind: 'info', title: `${d.title} removed`, detail: d.kind === 'disk' ? 'The disk image stays in its pool.' : undefined })
+    await load()
+  }
   const setTab = (t: Tab) => router.navigate(`/machines/${uuid}${t === 'overview' ? '' : '#' + t}`, { replace: true })
 
   // ---- Overview cards -------------------------------------------------------------
@@ -240,7 +289,7 @@
       {#if live.streamOpen && live.snapshot?.connected && active}
         <span class="live" title="Updated every second"><span class="live-dot"></span>Live</span>
       {/if}
-      {#if !gone && liveDom}<MachineActions d={liveDom} size="lg" />{/if}
+      {#if !gone && liveDom}<MachineActions d={liveDom} size="lg" extra={manageItems} />{/if}
     </div>
   </header>
 
@@ -298,6 +347,9 @@
     <button role="tab" aria-selected={tab === 'hardware'} class:on={tab === 'hardware'} onclick={() => setTab('hardware')}>
       Hardware <span class="count num">{detail.devices.length}</span>
     </button>
+    <button role="tab" aria-selected={tab === 'snapshots'} class:on={tab === 'snapshots'} onclick={() => setTab('snapshots')}>
+      Snapshots
+    </button>
     <button role="tab" aria-selected={tab === 'xml'} class:on={tab === 'xml'} onclick={() => setTab('xml')}>XML</button>
   </div>
 
@@ -337,12 +389,32 @@
     </div>
   {:else if tab === 'hardware'}
     <div class="hw" role="tabpanel">
+      <div class="hw-tools">
+        <button class="ui-btn sm" onclick={() => (dlg = 'disk')}><Plus size={14} /> Add storage</button>
+        <button class="ui-btn sm" onclick={() => (dlg = 'nic')}><Plus size={14} /> Add network adapter</button>
+        <span class="hw-hint">{active ? 'Changes are hot-plugged and kept for the next boot.' : 'Other devices: edit the XML.'}</span>
+      </div>
       {#each grouped as g (g.key)}
         {#if !g.advanced || showAdvanced}
           <section class="group">
             <h2>{g.label} <span class="count num">{g.devices.length}</span></h2>
             <div class="devices">
-              {#each g.devices as d, i (d.title + i)}<DeviceCard device={d} />{/each}
+              {#each g.devices as d, i (d.title + i)}
+                <DeviceCard device={d}>
+                  {#snippet actions()}
+                    {#if d.kind === 'cdrom' || d.kind === 'floppy'}
+                      <button class="ui-btn sm" onclick={() => ((mediaDrive = d), (dlg = 'media'))}>
+                        <Disc size={14} /> {d.summary?.endsWith('Empty') ? 'Insert media…' : 'Change media…'}
+                      </button>
+                    {/if}
+                    {#if (d.kind === 'disk' || d.kind === 'cdrom') && d.target}
+                      <ConfirmButton label="Remove" confirm="Detach from machine?" icon={Unplug} failure="Could not remove {d.title}" run={() => detachDevice(d)} />
+                    {:else if d.kind === 'interface' && d.mac}
+                      <ConfirmButton label="Remove" confirm="Unplug this adapter?" icon={Unplug} failure="Could not remove {d.title}" run={() => detachDevice(d)} />
+                    {/if}
+                  {/snippet}
+                </DeviceCard>
+              {/each}
             </div>
           </section>
         {/if}
@@ -358,11 +430,17 @@
         <div class="state-msg"><strong>No devices defined</strong></div>
       {/if}
     </div>
+  {:else if tab === 'snapshots'}
+    <div role="tabpanel">
+      <SnapshotsPanel {uuid} {active} onchange={load} />
+    </div>
   {:else}
     <div role="tabpanel">
-      <XmlView {uuid} name={dom.name} {active} persistent={dom.persistent} version={stateKey} />
+      <XmlView {uuid} name={dom.name} {active} persistent={dom.persistent} version={stateKey} onsaved={load} />
     </div>
   {/if}
+
+  <ManageDialogs which={dlg} {detail} drive={mediaDrive} {active} onclose={() => (dlg = null)} onchange={load} />
 {/if}
 
 <style>
@@ -554,6 +632,17 @@
   .hw {
     display: grid;
     gap: 22px;
+  }
+  .hw-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: -8px;
+  }
+  .hw-hint {
+    color: var(--text-3);
+    font-size: 12.5px;
   }
   .devices {
     display: grid;

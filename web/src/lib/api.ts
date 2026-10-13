@@ -90,6 +90,9 @@ export interface Device {
   capacityBytes?: number
   allocationBytes?: number
   addresses?: string[]
+  /** Disk: guest device name (vda); adapter: MAC. Used to act on the device. */
+  target?: string
+  mac?: string
 }
 
 /** GET /api/v1/domains/{uuid}: the machine page model. Mirrors virt.DomainDetail. */
@@ -145,7 +148,13 @@ export interface Snapshot {
   /** false: virtomird is up but cannot reach libvirt. */
   connected: boolean
   error?: string
-  host: { cpuPercent: number; memTotalKiB: number; memUsedKiB: number }
+  host: {
+    cpuPercent: number
+    memTotalKiB: number
+    memUsedKiB: number
+    /** Physical disk/network throughput (Linux hosts, from the second sample on). */
+    io?: { diskReadBps: number; diskWriteBps: number; netRxBps: number; netTxBps: number }
+  }
   domains: Domain[]
 }
 
@@ -158,10 +167,29 @@ export class ApiError extends Error {
   }
 }
 
-async function send(method: string, path: string, accept = 'application/json'): Promise<Response> {
+/** Called on every 401 so the app can show the sign-in page (set by the session store). */
+let onUnauthorized: () => void = () => {}
+export function setUnauthorizedHandler(f: () => void) {
+  onUnauthorized = f
+}
+
+interface SendOpts {
+  accept?: string
+  json?: unknown
+  body?: BodyInit
+  contentType?: string
+}
+
+async function send(method: string, path: string, opts: SendOpts = {}): Promise<Response> {
+  const headers: Record<string, string> = { Accept: opts.accept ?? 'application/json' }
+  let body = opts.body
+  if (opts.json !== undefined) {
+    headers['Content-Type'] = 'application/json'
+    body = JSON.stringify(opts.json)
+  } else if (opts.contentType) headers['Content-Type'] = opts.contentType
   let res: Response
   try {
-    res = await fetch(path, { method, headers: { Accept: accept } })
+    res = await fetch(path, { method, headers, body })
   } catch {
     throw new ApiError('VirtoMir is not reachable', 0)
   }
@@ -172,25 +200,232 @@ async function send(method: string, path: string, accept = 'application/json'): 
     } catch {
       /* non-JSON error body */
     }
+    if (res.status === 401 && !path.startsWith('/api/v1/auth/')) onUnauthorized()
     throw new ApiError(msg, res.status)
   }
   return res
 }
 
-async function request<T>(method: string, path: string): Promise<T> {
-  const res = await send(method, path)
-  return (res.status === 204 || res.status === 202 ? undefined : await res.json()) as T
+async function request<T>(method: string, path: string, json?: unknown): Promise<T> {
+  const res = await send(method, path, { json })
+  const text = res.status === 204 ? '' : await res.text()
+  return (text ? JSON.parse(text) : undefined) as T
 }
 
-const domainPath = (uuid: string) => `/api/v1/domains/${encodeURIComponent(uuid)}`
+const enc = encodeURIComponent
+const domainPath = (uuid: string) => `/api/v1/domains/${enc(uuid)}`
+const poolPath = (pool: string) => `/api/v1/storage/pools/${enc(pool)}`
+const netPath = (name: string) => `/api/v1/networks/${enc(name)}`
+
+// ---- Management API types (mirror internal/virt) ------------------------------------
+
+export interface Session {
+  mode: 'pam' | 'none'
+  user?: string
+}
+
+export interface Job {
+  id: string
+  kind: string
+  title: string
+  state: 'running' | 'succeeded' | 'failed'
+  message?: string
+  result?: string
+  started: string
+  finished?: string
+}
+
+export interface DefineResult {
+  appliesOnNextBoot: boolean
+}
+
+export interface DeleteResult {
+  removedVolumes: string[]
+  keptVolumes: { path: string; reason: string }[]
+}
+
+export interface DiskSpec {
+  device?: 'disk' | 'cdrom'
+  bus?: string
+  path?: string
+  pool?: string
+  volume?: string
+  sizeGiB?: number
+  format?: 'qcow2' | 'raw'
+}
+
+export interface NICSpec {
+  network?: string
+  bridge?: string
+  model?: string
+  mac?: string
+}
+
+export interface CreateSpec {
+  name: string
+  os: 'linux' | 'windows' | 'other'
+  vcpus: number
+  memoryMiB: number
+  firmware: 'uefi' | 'bios'
+  secureBoot: boolean
+  tpm: boolean
+  pool: string
+  diskGiB: number
+  diskPath?: string
+  iso?: string
+  network?: NICSpec
+  start: boolean
+}
+
+export interface SnapshotInfo {
+  name: string
+  description?: string
+  parent?: string
+  state: string
+  created: number
+  current: boolean
+  memory: boolean
+  location: 'internal' | 'external'
+}
+
+export interface Pool {
+  name: string
+  uuid: string
+  type: string
+  path?: string
+  active: boolean
+  autostart: boolean
+  capacityBytes: number
+  allocationBytes: number
+  availableBytes: number
+  volumes: number
+}
+
+export interface Volume {
+  name: string
+  path: string
+  type: string
+  format: string
+  capacityBytes: number
+  allocationBytes: number
+  backing?: string
+  usedBy: string[]
+}
+
+export interface VNetwork {
+  name: string
+  uuid: string
+  active: boolean
+  autostart: boolean
+  persistent: boolean
+  mode: string
+  bridge?: string
+  subnet?: string
+  dhcpStart?: string
+  dhcpEnd?: string
+  domain?: string
+  usedBy: string[]
+}
+
+export interface NetworkSpec {
+  name: string
+  mode: 'nat' | 'route' | 'isolated' | 'bridge'
+  subnet?: string
+  dhcp: boolean
+  bridge?: string
+}
+
+export interface Lease {
+  mac: string
+  ip: string
+  hostname?: string
+  expires: number
+  machine?: string
+}
 
 export const api = {
+  streamURL: '/api/v1/stream',
   host: () => request<HostInfo>('GET', '/api/v1/host'),
+
+  session: () => request<Session>('GET', '/api/v1/auth/session'),
+  login: (user: string, password: string) => request<Session>('POST', '/api/v1/auth/login', { user, password }),
+  logout: () => request<void>('POST', '/api/v1/auth/logout'),
+
+  job: (id: string) => request<Job>('GET', `/api/v1/jobs/${enc(id)}`),
+
+  // Machines
   domain: (uuid: string) => request<DomainDetail>('GET', domainPath(uuid)),
   /** inactive: the persistent config used on next boot instead of the live one. */
   domainXML: async (uuid: string, inactive = false) =>
-    (await send('GET', `${domainPath(uuid)}/xml${inactive ? '?inactive=true' : ''}`, 'application/xml')).text(),
-  action: (uuid: string, action: Action) =>
-    request<void>('POST', `/api/v1/domains/${encodeURIComponent(uuid)}/actions/${action}`),
-  streamURL: '/api/v1/stream',
+    (await send('GET', `${domainPath(uuid)}/xml${inactive ? '?inactive=true' : ''}`, { accept: 'application/xml' })).text(),
+  saveXML: async (uuid: string, xml: string): Promise<DefineResult> =>
+    (await send('PUT', `${domainPath(uuid)}/xml`, { body: xml, contentType: 'application/xml' })).json(),
+  action: (uuid: string, action: Action) => request<void>('POST', `${domainPath(uuid)}/actions/${action}`),
+  create: (spec: CreateSpec) => request<{ uuid: string; startError?: string }>('POST', '/api/v1/domains', spec),
+  setAutostart: (uuid: string, enabled: boolean) => request<void>('PUT', `${domainPath(uuid)}/autostart`, { enabled }),
+  rename: (uuid: string, name: string) => request<void>('POST', `${domainPath(uuid)}/rename`, { name }),
+  clone: (uuid: string, name: string) => request<Job>('POST', `${domainPath(uuid)}/clone`, { name }),
+  remove: (uuid: string, removeStorage: boolean) =>
+    request<DeleteResult>('DELETE', `${domainPath(uuid)}${removeStorage ? '?storage=remove' : ''}`),
+
+  changeMedia: (uuid: string, target: string, source: string) =>
+    request<void>('PUT', `${domainPath(uuid)}/media`, { target, source }),
+  attachDisk: (uuid: string, spec: DiskSpec) => request<{ target: string }>('POST', `${domainPath(uuid)}/disks`, spec),
+  attachNIC: (uuid: string, spec: NICSpec) => request<void>('POST', `${domainPath(uuid)}/interfaces`, spec),
+  detach: (uuid: string, ref: { kind: 'disk' | 'interface'; target?: string; mac?: string }) =>
+    request<void>('POST', `${domainPath(uuid)}/devices/detach`, ref),
+
+  snapshots: async (uuid: string) =>
+    (await request<{ snapshots: SnapshotInfo[] }>('GET', `${domainPath(uuid)}/snapshots`)).snapshots,
+  createSnapshot: (uuid: string, name: string, description: string) =>
+    request<{ name: string }>('POST', `${domainPath(uuid)}/snapshots`, { name, description }),
+  revertSnapshot: (uuid: string, name: string) => request<void>('POST', `${domainPath(uuid)}/snapshots/${enc(name)}/revert`),
+  deleteSnapshot: (uuid: string, name: string) => request<void>('DELETE', `${domainPath(uuid)}/snapshots/${enc(name)}`),
+
+  // Storage
+  pools: async () => (await request<{ pools: Pool[] }>('GET', '/api/v1/storage/pools')).pools,
+  createPool: (name: string, path: string) => request<void>('POST', '/api/v1/storage/pools', { name, path }),
+  deletePool: (name: string) => request<void>('DELETE', poolPath(name)),
+  poolAction: (name: string, action: 'start' | 'stop' | 'refresh') => request<void>('POST', `${poolPath(name)}/actions/${action}`),
+  poolAutostart: (name: string, enabled: boolean) => request<void>('PUT', `${poolPath(name)}/autostart`, { enabled }),
+  volumes: async (pool: string) => (await request<{ volumes: Volume[] }>('GET', `${poolPath(pool)}/volumes`)).volumes,
+  createVolume: (pool: string, name: string, sizeGiB: number, format: 'qcow2' | 'raw') =>
+    request<Volume>('POST', `${poolPath(pool)}/volumes`, { name, sizeGiB, format }),
+  deleteVolume: (pool: string, name: string) => request<void>('DELETE', `${poolPath(pool)}/volumes/${enc(name)}`),
+  /** Uploads with progress (fetch cannot report upload progress). */
+  upload: (pool: string, file: File, name: string, onProgress: (fraction: number) => void, signal?: AbortSignal) =>
+    new Promise<Volume>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${poolPath(pool)}/upload?name=${enc(name)}`)
+      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) return resolve(JSON.parse(xhr.responseText))
+        let msg = xhr.statusText
+        try {
+          msg = JSON.parse(xhr.responseText).error ?? msg
+        } catch {
+          /* non-JSON error body */
+        }
+        if (xhr.status === 401) onUnauthorized()
+        reject(new ApiError(msg, xhr.status))
+      }
+      xhr.onerror = () => reject(new ApiError('Upload failed: VirtoMir is not reachable', 0))
+      xhr.onabort = () => reject(new ApiError('Upload cancelled', 0))
+      signal?.addEventListener('abort', () => xhr.abort())
+      xhr.send(file)
+    }),
+
+  // Networks
+  networks: async () => (await request<{ networks: VNetwork[] }>('GET', '/api/v1/networks')).networks,
+  createNetwork: (spec: NetworkSpec) => request<void>('POST', '/api/v1/networks', spec),
+  deleteNetwork: (name: string) => request<void>('DELETE', netPath(name)),
+  networkAction: (name: string, action: 'start' | 'stop') => request<void>('POST', `${netPath(name)}/actions/${action}`),
+  networkAutostart: (name: string, enabled: boolean) => request<void>('PUT', `${netPath(name)}/autostart`, { enabled }),
+  leases: async (name: string) => (await request<{ leases: Lease[] }>('GET', `${netPath(name)}/leases`)).leases,
+}
+
+/** Human message for any error thrown by api calls. */
+export function errorText(e: unknown): string {
+  const s = e instanceof ApiError ? e.message : String(e)
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }

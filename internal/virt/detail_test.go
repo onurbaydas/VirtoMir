@@ -83,7 +83,7 @@ func TestBuildDetailDevices(t *testing.T) {
 	d := loadDetail(t, "testdata/debian-uefi.xml")
 
 	disk := findDevice(t, d, "Disk vda")
-	if disk.Group != GroupStorage || disk.Summary != "VirtIO · QCOW2 · debian-uefi.qcow2" || disk.Boot != 2 || disk.target != "vda" {
+	if disk.Group != GroupStorage || disk.Summary != "VirtIO · QCOW2 · debian-uefi.qcow2" || disk.Boot != 2 || disk.Target != "vda" {
 		t.Errorf("disk = %+v", disk)
 	}
 	if prop(disk, "Backing image") != "/var/lib/libvirt/images/debian-13-base.qcow2" || prop(disk, "Cache mode") != "none" {
@@ -99,7 +99,7 @@ func TestBuildDetailDevices(t *testing.T) {
 	}
 
 	nic := findDevice(t, d, "Network adapter")
-	if nic.mac != "52:54:00:ab:cd:ef" || nic.Summary != "Virtual network default · VirtIO" || prop(nic, "Host interface") != "vnet2" {
+	if nic.MAC != "52:54:00:ab:cd:ef" || nic.Summary != "Virtual network default · VirtIO" || prop(nic, "Host interface") != "vnet2" {
 		t.Errorf("nic = %+v", nic)
 	}
 

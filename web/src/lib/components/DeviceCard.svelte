@@ -79,7 +79,9 @@
   import { formatBytes } from '../format'
   import PropList from './PropList.svelte'
 
-  let { device: d }: { device: Device } = $props()
+  import type { Snippet } from 'svelte'
+
+  let { device: d, actions }: { device: Device; actions?: Snippet } = $props()
   let open = $state(false)
 
   let Icon = $derived(iconFor(d))
@@ -124,6 +126,7 @@
       {:else}
         <p class="none">No further settings. The XML tab shows the full definition.</p>
       {/if}
+      {#if actions}<div class="actions">{@render actions()}</div>{/if}
     </div>
   {/if}
 </article>
@@ -232,6 +235,14 @@
     padding: 4px 14px 10px 58px;
     border-top: 1px solid var(--border);
     animation: reveal var(--dur) var(--ease-out);
+  }
+  .actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    margin-top: 6px;
+    border-top: 1px solid var(--border);
   }
   .none {
     margin: 8px 0 4px;

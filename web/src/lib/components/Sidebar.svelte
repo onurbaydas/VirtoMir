@@ -4,6 +4,12 @@
   import Sun from '@lucide/svelte/icons/sun'
   import Moon from '@lucide/svelte/icons/moon'
   import MonitorCog from '@lucide/svelte/icons/monitor-cog'
+  import HardDrive from '@lucide/svelte/icons/hard-drive'
+  import Network from '@lucide/svelte/icons/network'
+  import Plus from '@lucide/svelte/icons/plus'
+  import LogOut from '@lucide/svelte/icons/log-out'
+  import UserRound from '@lucide/svelte/icons/user-round'
+  import { session } from '../session.svelte'
   import { isActive, live } from '../live.svelte'
   import { machineHref, router } from '../router.svelte'
   import { theme, type ThemePref } from '../theme.svelte'
@@ -21,6 +27,12 @@
     pending: 'Connecting…',
   }
 
+  const NAV = [
+    { name: 'overview', href: '/', label: 'Overview', icon: LayoutDashboard },
+    { name: 'storage', href: '/storage', label: 'Storage', icon: HardDrive },
+    { name: 'networks', href: '/networks', label: 'Networks', icon: Network },
+  ] as const
+
   let domains = $derived(live.snapshot?.domains ?? [])
   let current = $derived(router.route.name === 'machine' ? router.route.uuid : null)
 
@@ -30,6 +42,16 @@
     { key: 'dark', icon: Moon, label: 'Dark' },
   ]
 </script>
+
+<header class="mobile">
+  <a class="m-brand" href="/" onclick={router.link}><img src="/favicon.svg" alt="VirtoMir" width="24" height="24" /></a>
+  <nav class="m-nav" aria-label="Main">
+    {#each NAV as n (n.name)}
+      <a class:active={router.route.name === n.name} href={n.href} onclick={router.link}>{n.label}</a>
+    {/each}
+    <a class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} aria-label="New machine"><Plus size={16} /></a>
+  </nav>
+</header>
 
 <aside>
   <div class="brand">
@@ -49,19 +71,27 @@
         <span class="host-status {status}"><span class="dot"></span>{STATUS_TEXT[status]}</span>
       </div>
     </div>
-    <a
-      class="nav-item"
-      class:active={router.route.name === 'overview'}
-      href="/"
-      aria-current={router.route.name === 'overview' ? 'page' : undefined}
-      onclick={router.link}
-    >
-      <LayoutDashboard size={16} />
-      Overview
-    </a>
+    {#each NAV as n (n.name)}
+      {@const Icon = n.icon}
+      <a
+        class="nav-item"
+        class:active={router.route.name === n.name}
+        href={n.href}
+        aria-current={router.route.name === n.name ? 'page' : undefined}
+        onclick={router.link}
+      >
+        <Icon size={16} />
+        {n.label}
+      </a>
+    {/each}
 
+    <div class="section machines-head">
+      Machines
+      <a class="add" class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} title="New machine" aria-label="New machine">
+        <Plus size={14} />
+      </a>
+    </div>
     {#if domains.length}
-      <div class="section machines-head">Machines</div>
       <div class="machines">
         {#each domains as d (d.uuid)}
           <a
@@ -85,6 +115,13 @@
     {/if}
   </nav>
 
+  {#if session.info?.user}
+    <div class="user">
+      <span class="avatar"><UserRound size={14} /></span>
+      <span class="uname">{session.info.user}</span>
+      <button class="logout" title="Sign out" aria-label="Sign out" onclick={() => session.logout()}><LogOut size={15} /></button>
+    </div>
+  {/if}
   <footer>
     <div class="themes" role="radiogroup" aria-label="Theme">
       {#each THEMES as t (t.key)}
@@ -213,14 +250,73 @@
     background: var(--accent-soft);
     color: var(--accent);
   }
-  nav {
+  aside nav {
     display: flex;
     flex-direction: column;
     min-height: 0;
     flex: 1;
   }
   .machines-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     margin-top: 18px;
+  }
+  .add {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    color: var(--text-3);
+  }
+  .add:hover,
+  .add.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .user {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 6px;
+    margin-bottom: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .user .avatar {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--text-2);
+  }
+  .uname {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .logout {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+  }
+  .logout:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+  .mobile {
+    display: none;
   }
   .machines {
     display: flex;
@@ -302,6 +398,41 @@
   @media (max-width: 900px) {
     aside {
       display: none;
+    }
+    .mobile {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: var(--bg-elev);
+      border-bottom: 1px solid var(--border);
+    }
+    .m-brand {
+      display: grid;
+    }
+    .m-nav {
+      display: flex;
+      gap: 2px;
+      overflow-x: auto;
+    }
+    .m-nav a {
+      display: grid;
+      place-items: center;
+      height: 30px;
+      padding: 0 10px;
+      border-radius: 7px;
+      color: var(--text-2);
+      font-size: 13px;
+      font-weight: 500;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .m-nav a.active {
+      background: var(--accent-soft);
+      color: var(--accent);
     }
   }
 </style>

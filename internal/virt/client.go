@@ -203,13 +203,13 @@ func (c *Client) DomainDetail(uuid string) (DomainDetail, error) {
 	}
 	for i := range detail.Devices {
 		dev := &detail.Devices[i]
-		if dev.target != "" && (dev.Kind == "disk" || dev.Kind == "cdrom") {
-			if alloc, capacity, _, err := l.DomainGetBlockInfo(d, dev.target, 0); err == nil {
+		if dev.Target != "" && (dev.Kind == "disk" || dev.Kind == "cdrom") {
+			if alloc, capacity, _, err := l.DomainGetBlockInfo(d, dev.Target, 0); err == nil {
 				dev.CapacityBytes, dev.AllocationBytes = capacity, alloc
 			}
 		}
-		if dev.mac != "" {
-			dev.Addresses = addrs[dev.mac]
+		if dev.MAC != "" {
+			dev.Addresses = addrs[dev.MAC]
 		}
 	}
 	return detail, nil
