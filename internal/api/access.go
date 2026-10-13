@@ -153,8 +153,14 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Anything changed outside VirtoMir since the last look is recorded as such first,
+		// so this user's version shows only this user's change.
+		s.captureConfig(path, "")
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
+		if rec.status < 400 {
+			s.captureConfig(path, id.Name)
+		}
 		s.record(activity.Entry{
 			User: id.Name, Token: id.Token, Remote: r.RemoteAddr, Method: r.Method, Path: path,
 			Status: rec.status, Error: rec.errorMessage(),

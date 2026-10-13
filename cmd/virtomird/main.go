@@ -22,6 +22,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/api"
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/cluster"
+	"github.com/onurbaydas/virtomir/internal/confighist"
 	"github.com/onurbaydas/virtomir/internal/history"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/live"
@@ -140,6 +141,12 @@ func run(c config, log *slog.Logger) error {
 	}
 	if err := setupCluster(c, tlsConf, &opts); err != nil {
 		log.Warn("cluster", "err", err)
+	}
+	if ch, err := confighist.Open(filepath.Join(c.stateDir, "config-history"), client, log); err != nil {
+		log.Warn("configuration history", "err", err)
+	} else {
+		opts.ConfigHistory = ch
+		go sweepConfig(ctx, ch)
 	}
 	apiServer := api.NewServer(opts)
 	go syncCluster(ctx, apiServer)
@@ -264,6 +271,20 @@ func syncCluster(ctx context.Context, s *api.Server) {
 			return
 		case <-t.C:
 			s.SyncMembers(ctx)
+		}
+	}
+}
+
+// sweepConfig notices definition changes made outside VirtoMir (virsh, other tools).
+func sweepConfig(ctx context.Context, ch *confighist.Store) {
+	t := time.NewTicker(20 * time.Second)
+	defer t.Stop()
+	for {
+		ch.Sweep()
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
 		}
 	}
 }

@@ -553,6 +553,15 @@ export interface PoolSpec {
   export?: string
 }
 
+export interface ConfigVersion {
+  id: string
+  time: string
+  /** Who changed it through VirtoMir; empty for changes made outside (virsh, other tools). */
+  user?: string
+  source: 'virtomir' | 'outside' | 'first seen'
+  size: number
+}
+
 export interface ClusterMember {
   id: string
   name: string
@@ -643,6 +652,12 @@ export const api = {
   deploy: (uuid: string, spec: DeploySpec) => request<Job>('POST', `${domainPath(uuid)}/deploy`, spec),
   setAutostart: (uuid: string, enabled: boolean) => request<void>('PUT', `${domainPath(uuid)}/autostart`, { enabled }),
   rename: (uuid: string, name: string) => request<void>('POST', `${domainPath(uuid)}/rename`, { name }),
+  configVersions: async (uuid: string) =>
+    (await request<{ versions: ConfigVersion[] }>('GET', `${domainPath(uuid)}/config-history`)).versions,
+  configVersion: async (uuid: string, id: string) =>
+    (await request<{ xml: string }>('GET', `${domainPath(uuid)}/config-history/${enc(id)}`)).xml,
+  revertConfig: (uuid: string, id: string) =>
+    request<{ appliesOnNextBoot: boolean }>('POST', `${domainPath(uuid)}/config-history/${enc(id)}/revert`),
   clone: (uuid: string, name: string) => request<Job>('POST', `${domainPath(uuid)}/clone`, { name }),
   /** Moves a machine to another cluster member: copied when stopped, live-migrated when running. */
   move: (uuid: string, host: string, pool: string) => request<Job>('POST', `${domainPath(uuid)}/move`, { host, pool }),
