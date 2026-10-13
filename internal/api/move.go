@@ -77,13 +77,17 @@ func (s *Server) moveDomain(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "choose another host of this cluster"})
 		return
 	}
+	id := identity(r)
+	peer := s.peer(node).As(id.Name, id.Role.String(), id.Token)
+	if s.running(r.PathValue("uuid")) {
+		s.migrateLive(w, r, peer)
+		return
+	}
 	plan, err := m.PlanMove(r.PathValue("uuid"))
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	id := identity(r)
-	peer := s.peer(node).As(id.Name, id.Role.String(), id.Token)
 	// Check the target now, so the user gets the answer right away rather than in a job.
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	poolPath, err := checkMoveTarget(ctx, peer, plan, b.Pool)
@@ -94,6 +98,46 @@ func (s *Server) moveDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	job := s.jobs.Start("move", "Move "+plan.Name+" to "+node.Name, func(ctx context.Context, report func(string)) (string, error) {
 		res, err := s.runMove(ctx, peer, plan, b.Pool, poolPath, report)
+		s.live.Refresh()
+		return res, err
+	})
+	s.writeJSON(w, http.StatusAccepted, job)
+}
+
+// running reports whether a machine is on (live migration) rather than stopped (copy).
+func (s *Server) running(uuid string) bool {
+	doms, err := s.backend.ListDomains()
+	if err != nil {
+		return false
+	}
+	for _, d := range doms {
+		if strings.EqualFold(d.UUID, uuid) {
+			return d.State != virt.StateShutoff && d.State != virt.StateCrashed
+		}
+	}
+	return false
+}
+
+// migrateLive starts a live migration to the member behind p after checking the target.
+func (s *Server) migrateLive(w http.ResponseWriter, r *http.Request, p *cluster.Peer) {
+	m, ok := s.migrator(w, r, false)
+	if !ok {
+		return
+	}
+	src, err := m.PlanMigration(r.PathValue("uuid"))
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	plan, err := planMigration(ctx, p, src)
+	cancel()
+	if err != nil {
+		s.writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	job := s.jobs.Start("migrate", "Migrate "+src.Name+" to "+p.Node.Name, func(ctx context.Context, report func(string)) (string, error) {
+		res, err := s.runMigration(ctx, m, p, plan, report)
 		s.live.Refresh()
 		return res, err
 	})
