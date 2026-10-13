@@ -20,6 +20,7 @@
   import PropList from '../components/PropList.svelte'
   import DeviceCard from '../components/DeviceCard.svelte'
   import XmlView from '../components/XmlView.svelte'
+  import PerformancePanel from '../components/PerformancePanel.svelte'
 
   let { uuid }: { uuid: string } = $props()
 
@@ -260,7 +261,13 @@
       icon={MemoryStick}
       value={formatKiB(memCurrent).split(' ')[0]}
       unit={formatKiB(memCurrent).split(' ')[1] + (memCurrent !== memMax ? ` of ${formatKiB(memMax)}` : '')}
-      sub={memCurrent !== memMax ? 'Balloon is holding memory back' : detail.memory.balloon ? 'Balloon can return memory to the host' : 'Fixed size'}
+      sub={liveDom?.guestMemTotalKiB
+        ? `Guest uses ${formatKiB(liveDom.guestMemUsedKiB ?? 0)} (${formatPercent(((liveDom.guestMemUsedKiB ?? 0) / liveDom.guestMemTotalKiB) * 100)} %)`
+        : memCurrent !== memMax
+          ? 'Balloon is holding memory back'
+          : detail.memory.balloon
+            ? 'Balloon can return memory to the host'
+            : 'Fixed size'}
     />
     <StatCard
       label="Storage"
@@ -295,6 +302,7 @@
   </div>
 
   {#if tab === 'overview'}
+    {#if liveDom}<PerformancePanel d={liveDom} devices={detail.devices} />{/if}
     <div class="grid" role="tabpanel">
       <section class="panel">
         <h2>System</h2>

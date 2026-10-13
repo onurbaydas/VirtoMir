@@ -16,6 +16,17 @@ function push(s: Series, v: number | null) {
   s.push(v)
 }
 
+export interface IOSeries {
+  diskRead: Series
+  diskWrite: Series
+  netRx: Series
+  netTx: Series
+}
+
+function sum<T>(xs: T[] | undefined, f: (x: T) => number): number {
+  return (xs ?? []).reduce((n, x) => n + f(x), 0)
+}
+
 /** Labels for actions: button text and the in-progress text. */
 export const ACTIONS: Record<Action, { label: string; progress: string }> = {
   start: { label: 'Start', progress: 'Starting…' },
@@ -59,6 +70,7 @@ class Live {
   readonly hostCpu = emptySeries()
   readonly hostMem = emptySeries()
   readonly #domCpu = new Map<string, Series>()
+  readonly #domIO = new Map<string, IOSeries>()
 
   #es: EventSource | null = null
   #lastTime = 0
@@ -68,6 +80,16 @@ class Live {
     if (!s) {
       s = emptySeries()
       this.#domCpu.set(uuid, s)
+    }
+    return s
+  }
+
+  /** Disk and network throughput history (bytes/s, summed over devices). */
+  domainIO(uuid: string): IOSeries {
+    let s = this.#domIO.get(uuid)
+    if (!s) {
+      s = { diskRead: emptySeries(), diskWrite: emptySeries(), netRx: emptySeries(), netTx: emptySeries() }
+      this.#domIO.set(uuid, s)
     }
     return s
   }
@@ -116,8 +138,16 @@ class Live {
     for (const d of s.domains) {
       seen.add(d.uuid)
       push(this.domainCpu(d.uuid), isActive(d.state) ? d.cpuPercent : null)
+      const io = this.domainIO(d.uuid)
+      const on = isActive(d.state) && d.disks !== undefined
+      push(io.diskRead, on ? sum(d.disks, (x) => x.readBps) : null)
+      push(io.diskWrite, on ? sum(d.disks, (x) => x.writeBps) : null)
+      const netOn = isActive(d.state) && d.nets !== undefined
+      push(io.netRx, netOn ? sum(d.nets, (x) => x.rxBps) : null)
+      push(io.netTx, netOn ? sum(d.nets, (x) => x.txBps) : null)
     }
     for (const id of this.#domCpu.keys()) if (!seen.has(id)) this.#domCpu.delete(id)
+    for (const id of this.#domIO.keys()) if (!seen.has(id)) this.#domIO.delete(id)
 
     this.#settlePending(s.domains)
     this.tick++

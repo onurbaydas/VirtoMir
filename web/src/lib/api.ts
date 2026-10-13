@@ -40,6 +40,35 @@ export interface Domain {
   autostart: boolean
   /** Share of the domain's own vCPUs in use (0–100). */
   cpuPercent: number
+  /** Running machines, from libvirt bulk stats (absent on the first sample). */
+  vcpuPercent?: number[]
+  disks?: DiskLive[]
+  nets?: NetLive[]
+  /** Reported by the guest's balloon driver; absent when it does not report. */
+  guestMemUsedKiB?: number
+  guestMemTotalKiB?: number
+  /** Host memory the QEMU process actually uses. */
+  hostRssKiB?: number
+}
+
+export interface DiskLive {
+  name: string
+  readBps: number
+  writeBps: number
+  readIops: number
+  writeIops: number
+  readLatencyMs?: number
+  writeLatencyMs?: number
+}
+
+export interface NetLive {
+  name: string
+  rxBps: number
+  txBps: number
+  rxPps: number
+  txPps: number
+  /** Dropped + errored packets per second. */
+  problemsPs?: number
 }
 
 export interface Prop {

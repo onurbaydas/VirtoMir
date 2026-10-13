@@ -18,6 +18,27 @@ export function formatBytes(b: number): string {
   return b < 1024 ? `${b} B` : formatKiB(Math.round(b / 1024))
 }
 
+/** Throughput, binary units like the rest of VirtoMir: 1536 → "1.5 KiB/s". */
+export function formatBps(b: number): string {
+  if (b < 1024) return `${Math.round(b)} B/s`
+  const units = ['KiB', 'MiB', 'GiB', 'TiB']
+  let v = b / 1024
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${v < 10 ? trim(v, 1) : Math.round(v)} ${units[i]}/s`
+}
+
+/** Small rates (IOPS, packets/s): one decimal below 10, whole numbers above. */
+export function formatRate(n: number): string {
+  if (n === 0) return '0'
+  if (n < 10) return trim(n, 1)
+  if (n < 10_000) return Math.round(n).toString()
+  return `${trim(n / 1000, 1)}k`
+}
+
 /** Below 10 % one decimal ("3.4 %"), otherwise whole numbers ("42 %"). */
 export function formatPercent(p: number): string {
   return p < 10 ? p.toFixed(1) : Math.round(p).toString()
