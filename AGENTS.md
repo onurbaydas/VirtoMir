@@ -47,12 +47,16 @@ dev/hyperv/          ← one-command Hyper-V dev host (Debian 13 + KVM/libvirt)
 cmd/virtomird/       ← daemon entry point (Go, ADR-0006)
 internal/virt/       ← libvirt gateway: connection, reconnect, libvirt → VirtoMir types
                        detail.go: domain XML (libvirtxml) → machine page model, fixtures in testdata/
-internal/live/       ← 1 s sampling hub + 60 s backlog, fans snapshots out (SSE)
-internal/api/        ← HTTP/JSON API (/api/v1), SSE stream, serves the embedded UI
+                       manage/devices/snapshots/storage/networks/create.go: the management operations (ADR-0011)
+internal/live/       ← 1 s sampling hub + 60 s backlog, per-VM bulk stats, host /proc I/O (SSE)
+internal/api/        ← HTTP/JSON API (/api/v1), sign-in guard, SSE stream, serves the embedded UI
+internal/auth/       ← PAM (build tag `pam`), sessions, lockout, self-signed TLS (ADR-0010)
+internal/jobs/       ← background jobs (clone) the UI polls
+packaging/           ← /etc/pam.d/virtomir, systemd unit
 web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embedded into virtomird
   src/app.css        ← design tokens (colors, radii, motion) — use these, never hard-coded colors
-  src/lib/           ← api types, live store, router, components
-  src/lib/pages/     ← Overview, MachinePage (/machines/<uuid>[#hardware|#xml]), NotFound
+  src/lib/           ← api client, live/session stores, router, components (Dialog, ConfirmButton, …)
+  src/lib/pages/     ← Overview, MachinePage (#hardware|#snapshots|#xml), NewMachine, Storage, Networks, Login
 ```
 
 ## 5. Build, test, run
@@ -60,8 +64,9 @@ web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embed
 ```powershell
 go test ./...                 # Go unit tests (run anywhere, no libvirt needed)
 cd web; npm run check         # Svelte/TS type check
-./scripts/dev-run.ps1         # build UI + daemon, deploy to the dev host, (re)start systemd unit virtomird-dev
-# UI: http://192.168.77.10:8420/  ·  logs: ssh virtomir-dev journalctl -u virtomird-dev -f
+./scripts/dev-run.ps1         # build UI + daemon, deploy, run WITHOUT sign-in over http (-auth none -tls off)
+./scripts/dev-run.ps1 -Pam    # build on the dev host with PAM, run with sign-in + self-signed TLS
+# UI: http(s)://192.168.77.10:8420/  ·  logs: ssh virtomir-dev journalctl -u virtomird-dev -f
 cd web; npm run dev           # hot-reload UI on Windows, proxies /api to the dev host
 ```
 

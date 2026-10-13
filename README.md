@@ -9,7 +9,7 @@ VirtoMir is a modern web control panel for **KVM / QEMU / libvirt** that aims to
 
 It installs on top of the Linux host you already have — no dedicated distribution required.
 
-> 🚧 **Status:** early design phase. Nothing to install yet.
+> 🚧 **Status:** pre-alpha, under active development. Not ready for production hosts yet.
 
 ## Why?
 
