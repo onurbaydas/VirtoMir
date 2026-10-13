@@ -79,15 +79,31 @@
     if (view !== 'alerts' && !cfg) void loadCfg()
   })
   let dirty = $derived(!!cfg && JSON.stringify(cfg) !== saved)
+  /** Save the rules and channels on every cluster host, not just the one shown. */
+  let everywhere = $state(true)
+
   async function saveCfg() {
     if (!cfg) return
     saving = true
     cfgErr = ''
     try {
-      const c = await api.saveAlertConfig($state.snapshot(cfg))
-      cfg = c
-      saved = JSON.stringify(c)
-      toasts.push({ kind: 'info', title: 'Alert settings saved' })
+      const snap = $state.snapshot(cfg)
+      if (cluster.clustered && everywhere) {
+        const res = await cluster.everywhere((h) => api.saveAlertConfig(snap, h))
+        const failed = res.filter((r) => r.error)
+        if (failed.length === res.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
+        saved = JSON.stringify(snap)
+        toasts.push({
+          kind: failed.length ? 'warn' : 'info',
+          title: failed.length ? `Saved on ${res.length - failed.length} of ${res.length} hosts` : 'Alert settings saved on every host',
+          detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') || undefined,
+        })
+      } else {
+        const c = await api.saveAlertConfig(snap)
+        cfg = c
+        saved = JSON.stringify(c)
+        toasts.push({ kind: 'info', title: 'Alert settings saved' })
+      }
     } catch (e) {
       cfgErr = errorText(e)
     } finally {
@@ -334,6 +350,9 @@
 {#if view !== 'alerts' && cfg}
   <footer class="ui-panel bar">
     <span class="status">{cfgErr || (dirty ? 'Unsaved changes' : 'Everything is saved')}</span>
+    {#if cluster.clustered}
+      <label class="everywhere"><input type="checkbox" bind:checked={everywhere} /> Same on every host</label>
+    {/if}
     <button class="ui-btn ghost" disabled={!dirty || saving} onclick={() => (cfg = JSON.parse(saved))}>Reset</button>
     <button class="ui-btn primary" disabled={!dirty || saving} onclick={saveCfg}><Save size={14} /> {saving ? 'Saving…' : 'Save'}</button>
   </footer>
@@ -377,6 +396,13 @@
 </Dialog>
 
 <style>
+  .everywhere {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-2);
+  }
   .host-chip {
     padding: 1px 8px;
     border-radius: 999px;

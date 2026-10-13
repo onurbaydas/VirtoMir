@@ -34,6 +34,29 @@ class ClusterStore {
     }
   }
 
+  /**
+   * Runs fn on every reachable member (e.g. the same setting everywhere) and says per host
+   * whether it worked. On a standalone host it runs once, for this host.
+   */
+  async everywhere(fn: (host: string | undefined) => Promise<unknown>): Promise<{ host: string; error?: string }[]> {
+    if (!this.clustered) {
+      await fn(undefined)
+      return [{ host: this.current?.name ?? 'this host' }]
+    }
+    return Promise.all(
+      this.members
+        .filter((m) => m.reachable)
+        .map(async (m) => {
+          try {
+            await fn(m.id)
+            return { host: m.name }
+          } catch (e) {
+            return { host: m.name, error: e instanceof Error ? e.message : String(e) }
+          }
+        }),
+    )
+  }
+
   /** Shows the pages for member id (the serving host drops the /hosts prefix). */
   open(id: string) {
     const m = this.members.find((x) => x.id === id)

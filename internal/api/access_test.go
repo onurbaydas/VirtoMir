@@ -142,3 +142,17 @@ func TestAPITokens(t *testing.T) {
 		t.Errorf("revoked token: %d", rec.Code)
 	}
 }
+
+func TestActivityCSV(t *testing.T) {
+	h, _, _ := rbacServer(t)
+	admin := signIn(t, h, "onur")
+	do(h, "POST", "/api/v1/domains/u1/actions/start", "", admin)
+	rec := do(h, "GET", "/api/v1/activity?format=csv", "", admin)
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/csv") {
+		t.Fatalf("csv: %d %s", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	if !strings.HasPrefix(body, "time,user,token,remote,method,path,status,error\n") || !strings.Contains(body, ",onur,,") || !strings.Contains(body, "/api/v1/domains/u1/actions/start") {
+		t.Errorf("csv body:\n%s", body)
+	}
+}
