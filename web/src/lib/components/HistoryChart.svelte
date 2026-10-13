@@ -13,6 +13,8 @@
     /** CSS custom property, e.g. "--accent". */
     color: string
     dashed?: boolean
+    /** Cluster member to read this line from (default: the host being shown). */
+    host?: string
   }
   interface Props {
     title: string
@@ -31,12 +33,30 @@
   const fmt = (v: number | null | undefined) =>
     v === null || v === undefined ? '—' : unit === 'percent' ? `${formatPercent(v)} %` : formatBps(v)
 
+  /** Series key inside data: lines from other cluster members are kept apart. */
+  const id = (l: Line) => (l.host ? `${l.host}|${l.key}` : l.key)
+
   async function load() {
     try {
-      data = await api.history(
-        lines.map((l) => l.key),
-        range,
+      // One request per host; their buckets are aligned to the first answer's time axis.
+      const hosts = [...new Set(lines.map((l) => l.host))]
+      const parts = await Promise.all(
+        hosts.map(async (h) => ({ h, r: await api.history(lines.filter((l) => l.host === h).map((l) => l.key), range, h) })),
       )
+      const base = parts[0].r
+      const len = Object.values(base.series)[0]?.length ?? 0
+      const series: Record<string, (number | null)[]> = {}
+      for (const { h, r } of parts) {
+        const shift = Math.round((r.start - base.start) / base.step)
+        for (const [k, vals] of Object.entries(r.series)) {
+          const out = Array<number | null>(len).fill(null)
+          vals.forEach((v, i) => {
+            if (i + shift >= 0 && i + shift < len) out[i + shift] = v
+          })
+          series[h ? `${h}|${k}` : k] = out
+        }
+      }
+      data = { start: base.start, step: base.step, series }
       error = ''
     } catch (e) {
       error = errorText(e)
@@ -44,7 +64,7 @@
   }
   $effect(() => {
     void range
-    void lines.map((l) => l.key).join()
+    void lines.map(id).join()
     void load()
     const every = { '1h': 30_000, '6h': 30_000, '24h': 60_000, '7d': 300_000, '30d': 900_000 }[range]
     const t = setInterval(load, every)
@@ -53,7 +73,7 @@
 
   let stats = $derived.by(() =>
     lines.map((l) => {
-      const vals = (data?.series[l.key] ?? []).filter((v): v is number => v !== null)
+      const vals = (data?.series[id(l)] ?? []).filter((v): v is number => v !== null)
       return vals.length
         ? { avg: vals.reduce((a, b) => a + b, 0) / vals.length, max: Math.max(...vals), any: true }
         : { avg: 0, max: 0, any: false }
@@ -69,8 +89,8 @@
     void theme.resolved
     if (!el || !data) return
     const d = data
-    const xs = Array.from({ length: d.series[lines[0].key]?.length ?? 0 }, (_, i) => d.start + i * d.step)
-    const ys = lines.map((l) => d.series[l.key] ?? xs.map(() => null))
+    const xs = Array.from({ length: d.series[id(lines[0])]?.length ?? 0 }, (_, i) => d.start + i * d.step)
+    const ys = lines.map((l) => d.series[id(l)] ?? xs.map(() => null))
     const [grid, text] = [css('--border'), css('--text-3')]
     const font = '10.5px ' + css('--font-mono')
     const opts: uPlot.Options = {
@@ -154,7 +174,7 @@
   <header>
     <span class="title">{title}</span>
     <span class="legend">
-      {#each lines as l, i (l.key)}
+      {#each lines as l, i (id(l))}
         <span class="key" class:dashed={l.dashed} style:--c="var({l.color})">
           <i></i>{l.label}
           <b class="mono">{hover ? fmt(hover.vals[i]) : stats[i]?.any ? `avg ${fmt(stats[i].avg)} · max ${fmt(stats[i].max)}` : '—'}</b>
