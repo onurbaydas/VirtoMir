@@ -23,6 +23,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/history"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/live"
+	"github.com/onurbaydas/virtomir/internal/schedule"
 	"github.com/onurbaydas/virtomir/internal/virt"
 	"github.com/onurbaydas/virtomir/web"
 )
@@ -111,6 +112,14 @@ func run(c config, log *slog.Logger) error {
 		log.Warn("alerts", "err", err)
 	}
 	watchAlerts(ctx, hub, alertEngine, client)
+
+	jobManager := jobs.New(ctx)
+	scheduler, err := schedule.Open(filepath.Join(c.stateDir, "schedules.json"), filepath.Join(c.stateDir, "backups"),
+		scheduleRunner{client}, jobStarter(jobManager), log)
+	if err != nil {
+		log.Warn("schedules", "err", err)
+	}
+	go scheduler.Run(ctx)
 	hubDone := make(chan struct{})
 	go func() { hub.Run(ctx); close(hubDone) }()
 	defer func() { <-hubDone }()
@@ -118,7 +127,7 @@ func run(c config, log *slog.Logger) error {
 	srv := &http.Server{
 		Addr: c.listen,
 		Handler: api.NewServer(api.Options{
-			Backend: client, Live: hub, Jobs: jobs.New(ctx), Auth: authMgr,
+			Backend: client, Live: hub, Jobs: jobManager, Auth: authMgr, Schedules: scheduler,
 			UI: web.Dist(), Version: version, Log: log, History: hist, Tokens: tokens, Activity: acts, Alerts: alertEngine,
 		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,

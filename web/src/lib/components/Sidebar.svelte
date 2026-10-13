@@ -11,6 +11,7 @@
   import UserRound from '@lucide/svelte/icons/user-round'
   import ClockArrowUp from '@lucide/svelte/icons/clock-arrow-up'
   import Bell from '@lucide/svelte/icons/bell'
+  import Archive from '@lucide/svelte/icons/archive'
   import { alerts } from '../alerts.svelte'
   import { session } from '../session.svelte'
   import { isActive, live } from '../live.svelte'
@@ -34,6 +35,7 @@
     { name: 'overview', href: '/', label: 'Overview', icon: LayoutDashboard, role: 'viewer' },
     { name: 'storage', href: '/storage', label: 'Storage', icon: HardDrive, role: 'viewer' },
     { name: 'networks', href: '/networks', label: 'Networks', icon: Network, role: 'viewer' },
+    { name: 'backups', href: '/backups', label: 'Backups', icon: Archive, role: 'viewer' },
     { name: 'alerts', href: '/alerts', label: 'Alerts', icon: Bell, role: 'viewer' },
     { name: 'activity', href: '/activity', label: 'Activity', icon: ClockArrowUp, role: 'admin' },
   ] as const

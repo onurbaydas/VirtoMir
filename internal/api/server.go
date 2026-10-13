@@ -16,6 +16,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/alerts"
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/jobs"
+	"github.com/onurbaydas/virtomir/internal/schedule"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
@@ -90,22 +91,24 @@ type Options struct {
 	// Tokens nil: no API tokens. Activity nil: changes are only logged, not kept.
 	Tokens   *auth.Tokens
 	Activity *activity.Log
-	// Alerts nil: no alert engine.
-	Alerts *alerts.Engine
+	// Alerts nil: no alert engine. Schedules nil: no schedules and no backups.
+	Alerts    *alerts.Engine
+	Schedules *schedule.Scheduler
 }
 
 type Server struct {
-	backend  Backend
-	live     Live
-	jobs     *jobs.Manager
-	auth     *auth.Manager
-	ui       fs.FS
-	version  string
-	log      *slog.Logger
-	history  HistoryQuerier
-	tokens   *auth.Tokens
-	activity *activity.Log
-	alerts   *alerts.Engine
+	backend   Backend
+	live      Live
+	jobs      *jobs.Manager
+	auth      *auth.Manager
+	ui        fs.FS
+	version   string
+	log       *slog.Logger
+	history   HistoryQuerier
+	tokens    *auth.Tokens
+	activity  *activity.Log
+	alerts    *alerts.Engine
+	schedules *schedule.Scheduler
 }
 
 func NewServer(o Options) *Server {
@@ -113,7 +116,7 @@ func NewServer(o Options) *Server {
 		o.Jobs = jobs.New(context.Background())
 	}
 	return &Server{backend: o.Backend, live: o.Live, jobs: o.Jobs, auth: o.Auth, ui: o.UI, version: o.Version, log: o.Log,
-		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts}
+		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts, schedules: o.Schedules}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -133,6 +136,7 @@ func (s *Server) Handler() http.Handler {
 	s.accessRoutes(mux)
 	s.consoleRoutes(mux)
 	s.alertRoutes(mux)
+	s.backupRoutes(mux)
 
 	// GET-only fallbacks, so a wrong method on a real endpoint still gets 405.
 	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {

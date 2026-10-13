@@ -10,6 +10,7 @@ export type Route =
   | { name: 'networks' }
   | { name: 'activity' }
   | { name: 'alerts'; tab: string }
+  | { name: 'backups' }
   | { name: 'account' }
   | { name: 'console'; uuid: string }
   | { name: 'not-found' }
@@ -22,6 +23,7 @@ function parse(path: string, hash: string): Route {
   if (path === '/networks') return { name: 'networks' }
   if (path === '/activity') return { name: 'activity' }
   if (path === '/alerts') return { name: 'alerts', tab: hash.replace(/^#/, '') }
+  if (path === '/backups') return { name: 'backups' }
   if (path === '/account') return { name: 'account' }
   const c = /^\/console\/([0-9a-fA-F-]{36})$/.exec(path)
   if (c) return { name: 'console', uuid: c[1].toLowerCase() }

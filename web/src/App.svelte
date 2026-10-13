@@ -5,6 +5,7 @@
   import { session } from './lib/session.svelte'
   import { alerts } from './lib/alerts.svelte'
   import AlertsPage from './lib/pages/AlertsPage.svelte'
+  import BackupsPage from './lib/pages/BackupsPage.svelte'
   import Sidebar from './lib/components/Sidebar.svelte'
   import ConnectionBanner from './lib/components/ConnectionBanner.svelte'
   import Toasts from './lib/components/Toasts.svelte'
@@ -67,6 +68,8 @@
         <StoragePage pool={route.pool} />
       {:else if route.name === 'networks'}
         <NetworksPage />
+      {:else if route.name === 'backups'}
+        <BackupsPage />
       {:else if route.name === 'alerts'}
         <AlertsPage tab={route.tab} />
       {:else if route.name === 'activity'}

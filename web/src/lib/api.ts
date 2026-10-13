@@ -292,6 +292,34 @@ export interface AlertConfig {
   smtp: SMTPConfig
 }
 
+export interface BackupInfo {
+  id: string
+  domain: string
+  domainUuid: string
+  created: string
+  live: boolean
+  automatic: boolean
+  disks: { target: string; file: string; source: string; sizeBytes: number }[]
+  sizeBytes: number
+  durationSec: number
+}
+
+export interface ScheduleInfo {
+  id: string
+  kind: 'snapshot' | 'backup'
+  domain: string
+  enabled: boolean
+  every: 'hours' | 'daily' | 'weekly'
+  hours?: number
+  at?: string
+  weekday?: number
+  keep: number
+  lastRun?: string
+  lastError?: string
+  lastResult?: string
+  nextRun?: string
+}
+
 export interface ActivityEntry {
   time: string
   user: string
@@ -504,6 +532,19 @@ export const api = {
   alertConfig: () => request<AlertConfig>('GET', '/api/v1/alerts/config'),
   saveAlertConfig: (c: AlertConfig) => request<AlertConfig>('PUT', '/api/v1/alerts/config', c),
   testChannel: (ch: AlertChannel) => request<void>('POST', '/api/v1/alerts/test', ch),
+
+  backups: async (domain?: string) =>
+    request<{ backups: BackupInfo[]; dir: string }>('GET', `/api/v1/backups${domain ? `?domain=${enc(domain)}` : ''}`),
+  backupNow: (uuid: string) => request<Job>('POST', `${domainPath(uuid)}/backup`),
+  deleteBackup: (id: string) => request<void>('DELETE', `/api/v1/backups?id=${enc(id)}`),
+  restoreBackup: (id: string, name: string, pool: string) => request<Job>('POST', '/api/v1/backups/restore', { id, name, pool }),
+  backupSettings: () => request<{ backupDir: string }>('GET', '/api/v1/backups/settings'),
+  saveBackupSettings: (backupDir: string) => request<{ backupDir: string }>('PUT', '/api/v1/backups/settings', { backupDir }),
+  schedules: async (domain?: string) =>
+    (await request<{ schedules: ScheduleInfo[] }>('GET', `/api/v1/schedules${domain ? `?domain=${enc(domain)}` : ''}`)).schedules,
+  saveSchedule: (s: ScheduleInfo) => request<ScheduleInfo>('PUT', '/api/v1/schedules', s),
+  deleteSchedule: (id: string) => request<void>('DELETE', `/api/v1/schedules/${enc(id)}`),
+  runSchedule: (id: string) => request<void>('POST', `/api/v1/schedules/${enc(id)}/run`),
 
   job: (id: string) => request<Job>('GET', `/api/v1/jobs/${enc(id)}`),
 

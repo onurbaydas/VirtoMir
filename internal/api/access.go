@@ -59,6 +59,8 @@ func operatorWrite(method, path string) bool {
 		return true
 	case len(parts) == 4 && parts[1] == "snapshots" && parts[3] == "revert" && method == http.MethodPost:
 		return true
+	case len(parts) == 2 && parts[1] == "backup" && method == http.MethodPost:
+		return true
 	}
 	return false
 }
