@@ -51,7 +51,10 @@ $env:Path = "$(Split-Path $npmCmd);$env:Path"   # npm scripts need node on PATH
 Write-Host '==> Building web UI' -ForegroundColor Cyan
 try {
     Push-Location (Join-Path $repoRoot 'web')
-    if (-not (Test-Path 'node_modules')) {
+    # Reinstall when package-lock.json changed since the last install (e.g. after a pull).
+    $installed = 'node_modules\.package-lock.json'
+    if (-not (Test-Path $installed) -or
+        (Get-Item 'package-lock.json').LastWriteTime -gt (Get-Item $installed).LastWriteTime) {
         & $npmCmd ci --no-fund --no-audit
         if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
     }
@@ -79,7 +82,7 @@ if ($Pam) {
     if ($LASTEXITCODE -ne 0) { throw 'scp failed' }
     $build = @"
 set -e
-command -v gcc >/dev/null && dpkg -s libpam0g-dev >/dev/null 2>&1 || sudo apt-get install -y -qq gcc libpam0g-dev
+command -v gcc >/dev/null && dpkg -s libpam0g-dev >/dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gcc libpam0g-dev
 rm -rf ~/virtomir/src && mkdir -p ~/virtomir/src && tar -xf ~/virtomir/src.tar -C ~/virtomir/src
 cd ~/virtomir/src
 CGO_ENABLED=1 /usr/local/go/bin/go build -tags pam -trimpath -ldflags "-s -w -X main.version=$rev-pam" -o ~/virtomir/virtomird.new ./cmd/virtomird

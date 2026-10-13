@@ -173,7 +173,18 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, a
 
 	if isOn(sum.State) || sum.State == StatePaused {
 		b.Live = true
-		if err := c.liveBackup(ctx, l, d, dest, b.Disks, report); err != nil {
+		// QEMU writes the copy itself, as its own unprivileged user.
+		uid, gid, ok := qemuOwner(l, d)
+		if ok {
+			if err := letQEMUWrite(dir, dest, uid, gid); err != nil {
+				return fail(err)
+			}
+		}
+		err := c.liveBackup(ctx, l, d, dest, b.Disks, report)
+		if ok {
+			reclaim(dest)
+		}
+		if err != nil {
 			return fail(err)
 		}
 	} else {
@@ -268,6 +279,79 @@ func (c *Client) liveBackup(ctx context.Context, l *libvirt.Libvirt, d libvirt.D
 		return errors.New(msg)
 	}
 	return nil
+}
+
+// qemuOwner is the user and group the machine's QEMU process runs as (libvirt's DAC label,
+// e.g. "+64055:+64055"). ok is false when QEMU runs as root or the label is unknown.
+func qemuOwner(l *libvirt.Libvirt, d libvirt.Domain) (uid, gid int, ok bool) {
+	raw, err := l.DomainGetXMLDesc(d, 0)
+	if err != nil {
+		return 0, 0, false
+	}
+	var x libvirtxml.Domain
+	if x.Unmarshal(raw) != nil {
+		return 0, 0, false
+	}
+	for _, s := range x.SecLabel {
+		if s.Model == "dac" {
+			return parseDACLabel(s.Label)
+		}
+	}
+	return 0, 0, false
+}
+
+func parseDACLabel(label string) (uid, gid int, ok bool) {
+	u, g, found := strings.Cut(label, ":")
+	if !found {
+		return 0, 0, false
+	}
+	if _, err := fmt.Sscanf(strings.TrimPrefix(u, "+")+" "+strings.TrimPrefix(g, "+"), "%d %d", &uid, &gid); err != nil {
+		return 0, 0, false
+	}
+	return uid, gid, uid != 0
+}
+
+// letQEMUWrite hands the backup folder to QEMU's user for the duration of a live backup.
+// The folders above it inside the backup location only get the pass-through bit (o+x, no
+// listing); folders above the backup location are not touched; if QEMU cannot pass one of
+// them, the user is told which and how to fix it.
+func letQEMUWrite(dir BackupDir, dest string, uid, gid int) error {
+	root := filepath.Clean(string(dir))
+	for p := filepath.Dir(dest); ; p = filepath.Dir(p) {
+		st, err := os.Stat(p)
+		if err != nil {
+			return err
+		}
+		if !canPass(st, uid, gid) {
+			inside := p == root || strings.HasPrefix(p, root+string(filepath.Separator))
+			if !inside {
+				return refusedf("QEMU (user %d) cannot reach the backup location because it may not pass through %s. "+
+					"Allow it with: chmod o+x %s", uid, p, p)
+			}
+			if err := os.Chmod(p, st.Mode().Perm()|0o001); err != nil {
+				return err
+			}
+		}
+		if parent := filepath.Dir(p); parent == p {
+			break
+		}
+	}
+	if err := os.Chown(dest, uid, gid); err != nil {
+		return fmt.Errorf("prepare backup folder: %w", err)
+	}
+	return os.Chmod(dest, 0o700)
+}
+
+// reclaim gives the backup folder and its files back to root, readable only by root's group.
+func reclaim(dest string) {
+	_ = os.Chown(dest, 0, 0)
+	_ = os.Chmod(dest, 0o750)
+	entries, _ := os.ReadDir(dest)
+	for _, e := range entries {
+		p := filepath.Join(dest, e.Name())
+		_ = os.Chown(p, 0, 0)
+		_ = os.Chmod(p, 0o640)
+	}
 }
 
 func xmlEscape(s string) string {

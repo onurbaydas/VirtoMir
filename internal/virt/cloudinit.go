@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kdomanski/iso9660" // BSD-2-Clause
+	"libvirt.org/go/libvirtxml"
 )
 
 // CloudInit configures a cloud image on first boot (NoCloud datasource): user, password
@@ -110,6 +111,12 @@ func (ci *CloudInit) metaData() string {
 	id := make([]byte, 8)
 	_, _ = rand.Read(id)
 	return fmt.Sprintf("instance-id: %s\nlocal-hostname: %s\n", "virtomir-"+hex.EncodeToString(id), q(ci.Hostname))
+}
+
+// isSeedISO reports whether disk is a cloud-init seed made by VirtoMir (<machine>-cidata.iso).
+func isSeedISO(disk libvirtxml.DomainDisk) bool {
+	return disk.Device == "cdrom" && disk.Source != nil && disk.Source.File != nil &&
+		strings.HasSuffix(disk.Source.File.File, "-cidata.iso")
 }
 
 // seedISO builds the NoCloud seed image: an ISO 9660 volume labelled "cidata" holding
