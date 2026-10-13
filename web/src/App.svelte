@@ -45,6 +45,16 @@
     }
   })
 
+  // Once it is known that this host is in a cluster, alerts come from every member: start
+  // over so the ones already open there are not announced as new.
+  let wasClustered = false
+  $effect(() => {
+    const c = cluster.clustered
+    if (c === wasClustered) return
+    wasClustered = c
+    if (session.ready) alerts.reset()
+  })
+
   // Another cluster member: start the live view and alerts over for it.
   let shownHost = router.host
   $effect(() => {

@@ -55,6 +55,17 @@ const RULES: Rule[] = [
   { method: 'PUT', re: /^\/api\/v1\/networks\/([^/]+)\/autostart$/, text: 'changed autostart of network $1' },
   { method: 'POST', re: /^\/api\/v1\/networks\/([^/]+)\/dhcp-hosts$/, text: 'reserved an address on $1' },
   { method: 'DELETE', re: /^\/api\/v1\/networks\/([^/]+)\/dhcp-hosts\/([^/]+)$/, text: 'removed the reservation for $2 on $1' },
+  { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/move$/, text: 'moved {vm} to another host' },
+  { method: 'POST', re: /^\/api\/v1\/domains\/import$/, text: 'received a machine from another host' },
+  { method: 'POST', re: /^\/api\/v1\/migrate\/check$/, text: 'checked this host for an incoming live migration' },
+  { method: 'POST', re: /^\/api\/v1\/migrate\/prepare$/, text: 'prepared this host for a live migration' },
+  { method: 'POST', re: /^\/api\/v1\/migrate\/finish$/, text: 'finished a live migration onto this host' },
+  { method: 'POST', re: /^\/api\/v1\/cluster\/invite$/, text: 'created a cluster join code' },
+  { method: 'POST', re: /^\/api\/v1\/cluster\/join$/, text: 'joined this host to a cluster' },
+  { method: 'DELETE', re: /^\/api\/v1\/cluster\/members\/([^/]+)$/, text: 'removed a host from the cluster' },
+  { method: 'POST', re: /^\/api\/v1\/cluster\/pools$/, text: 'created a storage pool on every host' },
+  { method: 'POST', re: /^\/api\/v1\/cluster\/peer\/join$/, text: 'admitted a new host to the cluster' },
+  { method: 'PUT', re: /^\/api\/v1\/cluster\/peer\/members$/, text: 'updated the cluster member list' },
   { method: 'POST', re: /^\/api\/v1\/tokens$/, text: 'created an API token' },
   { method: 'DELETE', re: /^\/api\/v1\/tokens\/([^/]+)$/, text: 'revoked an API token' },
 ]
@@ -72,9 +83,11 @@ export interface Described {
 
 /** "started web-1" for an entry; names maps machine UUIDs to names. */
 export function describe(e: ActivityEntry, names: Map<string, string>): Described {
+  // Requests forwarded to another cluster member are logged with the member prefix.
+  const path = e.path.replace(/^\/api\/v1\/hosts\/[0-9a-f]{16}\//, '/api/v1/')
   for (const r of RULES) {
     if (r.method !== e.method) continue
-    const m = r.re.exec(e.path)
+    const m = r.re.exec(path)
     if (!m) continue
     const groups = m.slice(1).map(decodeURIComponent)
     const machine = r.text.includes('{vm}') ? groups[0] : undefined
@@ -86,5 +99,5 @@ export function describe(e: ActivityEntry, names: Map<string, string>): Describe
     const [before, after = ''] = text.split('{vm}')
     return { before, after, machine, machineName: names.get(machine) ?? `a deleted machine (${machine.slice(0, 8)})` }
   }
-  return { before: `${e.method} ${e.path}`, after: '' }
+  return { before: `${e.method} ${path}`, after: '' }
 }

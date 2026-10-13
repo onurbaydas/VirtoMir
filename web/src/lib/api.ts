@@ -201,6 +201,9 @@ export function onHost(id: string, path: string): string {
   return '/api/v1/hosts/' + id + path.slice('/api/v1'.length)
 }
 
+/** path on member host when given (cluster-wide views), else on the member being shown. */
+const at = (host: string | undefined, path: string) => (host ? onHost(host, path) : path)
+
 /** WebSocket URL for an API path on the member being shown. */
 export function wsURL(path: string): string {
   return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${scoped(path)}`
@@ -593,26 +596,27 @@ export const api = {
   createToken: (name: string, role: Role, ttlDays: number) =>
     request<{ token: ApiToken; secret: string }>('POST', '/api/v1/tokens', { name, role, ttlDays }),
   revokeToken: (id: string) => request<void>('DELETE', `/api/v1/tokens/${enc(id)}`),
-  activity: async (q: { user?: string; target?: string; failed?: boolean; limit?: number } = {}) => {
+  activity: async (q: { user?: string; target?: string; failed?: boolean; limit?: number } = {}, host?: string) => {
     const p = new URLSearchParams()
     if (q.user) p.set('user', q.user)
     if (q.target) p.set('target', q.target)
     if (q.failed) p.set('failed', 'true')
     p.set('limit', String(q.limit ?? 300))
-    return (await request<{ entries: ActivityEntry[] }>('GET', `/api/v1/activity?${p}`)).entries
+    return (await request<{ entries: ActivityEntry[] }>('GET', at(host, `/api/v1/activity?${p}`))).entries
   },
 
-  alerts: async () => (await request<{ alerts: Alert[] }>('GET', '/api/v1/alerts')).alerts,
-  ackAlert: (id: string) => request<void>('POST', `/api/v1/alerts/${enc(id)}/ack`),
+  alerts: async (host?: string) => (await request<{ alerts: Alert[] }>('GET', at(host, '/api/v1/alerts'))).alerts,
+  ackAlert: (id: string, host?: string) => request<void>('POST', at(host, `/api/v1/alerts/${enc(id)}/ack`)),
   alertConfig: () => request<AlertConfig>('GET', '/api/v1/alerts/config'),
   saveAlertConfig: (c: AlertConfig) => request<AlertConfig>('PUT', '/api/v1/alerts/config', c),
   testChannel: (ch: AlertChannel) => request<void>('POST', '/api/v1/alerts/test', ch),
 
-  backups: async (domain?: string) =>
-    request<{ backups: BackupInfo[]; dir: string }>('GET', `/api/v1/backups${domain ? `?domain=${enc(domain)}` : ''}`),
+  backups: async (domain?: string, host?: string) =>
+    request<{ backups: BackupInfo[]; dir: string }>('GET', at(host, `/api/v1/backups${domain ? `?domain=${enc(domain)}` : ''}`)),
   backupNow: (uuid: string) => request<Job>('POST', `${domainPath(uuid)}/backup`),
-  deleteBackup: (id: string) => request<void>('DELETE', `/api/v1/backups?id=${enc(id)}`),
-  restoreBackup: (id: string, name: string, pool: string) => request<Job>('POST', '/api/v1/backups/restore', { id, name, pool }),
+  deleteBackup: (id: string, host?: string) => request<void>('DELETE', at(host, `/api/v1/backups?id=${enc(id)}`)),
+  restoreBackup: (id: string, name: string, pool: string, host?: string) =>
+    request<Job>('POST', at(host, '/api/v1/backups/restore'), { id, name, pool }),
   backupSettings: () => request<{ backupDir: string }>('GET', '/api/v1/backups/settings'),
   saveBackupSettings: (backupDir: string) => request<{ backupDir: string }>('PUT', '/api/v1/backups/settings', { backupDir }),
   schedules: async (domain?: string) =>
@@ -621,7 +625,7 @@ export const api = {
   deleteSchedule: (id: string) => request<void>('DELETE', `/api/v1/schedules/${enc(id)}`),
   runSchedule: (id: string) => request<void>('POST', `/api/v1/schedules/${enc(id)}/run`),
 
-  job: (id: string) => request<Job>('GET', `/api/v1/jobs/${enc(id)}`),
+  job: (id: string, host?: string) => request<Job>('GET', at(host, `/api/v1/jobs/${enc(id)}`)),
 
   // Machines
   domain: (uuid: string) => request<DomainDetail>('GET', domainPath(uuid)),
@@ -640,7 +644,7 @@ export const api = {
   /** Moves a machine to another cluster member: copied when stopped, live-migrated when running. */
   move: (uuid: string, host: string, pool: string) => request<Job>('POST', `${domainPath(uuid)}/move`, { host, pool }),
   /** Storage pools of a given member. */
-  poolsOn: async (host: string) => (await request<{ pools: Pool[] }>('GET', onHost(host, '/api/v1/storage/pools'))).pools,
+  poolsOn: async (host: string | undefined) => (await request<{ pools: Pool[] }>('GET', at(host, '/api/v1/storage/pools'))).pools,
   remove: (uuid: string, removeStorage: boolean) =>
     request<DeleteResult>('DELETE', `${domainPath(uuid)}${removeStorage ? '?storage=remove' : ''}`),
 

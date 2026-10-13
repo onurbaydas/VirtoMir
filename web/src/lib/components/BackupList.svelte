@@ -9,11 +9,13 @@
   import { track } from '../jobs'
   import { machineHref, router } from '../router.svelte'
   import { session } from '../session.svelte'
+  import { cluster } from '../cluster.svelte'
   import { toasts } from '../toast.svelte'
   import Dialog from './Dialog.svelte'
   import ConfirmButton from './ConfirmButton.svelte'
 
-  let { backups, onchange }: { backups: BackupInfo[]; onchange: () => void } = $props()
+  /** host: the cluster member the backups are on, when it is not necessarily the one shown. */
+  let { backups, onchange, host }: { backups: BackupInfo[]; onchange: () => void; host?: string } = $props()
 
   const when = (s: string) => new Date(s).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
   const took = (s: number) => (s < 60 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`)
@@ -29,7 +31,7 @@
     name = `${b.domain}-restored`
     error = ''
     try {
-      pools = (await api.pools()).filter((p) => p.active && p.type === 'dir')
+      pools = (await (host ? api.poolsOn(host) : api.pools())).filter((p) => p.active && p.type === 'dir')
       if (!pools.some((p) => p.name === pool) && pools[0]) pool = pools[0].name
     } catch (e) {
       error = errorText(e)
@@ -39,9 +41,14 @@
     e.preventDefault()
     if (!restoring) return
     try {
-      const job = await api.restoreBackup(restoring.id, name, pool)
+      const job = await api.restoreBackup(restoring.id, name, pool, host)
       restoring = null
-      track(job, { success: `${name} restored`, onSuccess: (j) => j.result && router.navigate(machineHref(j.result)) })
+      const m = host ? cluster.members.find((x) => x.id === host) : undefined
+      track(job, {
+        success: `${name} restored`,
+        host,
+        onSuccess: (j) => j.result && (m ? router.go(m.self ? null : m.id, `/machines/${j.result}`) : router.navigate(machineHref(j.result))),
+      })
     } catch (err) {
       error = errorText(err)
     }
@@ -71,7 +78,7 @@
         title={session.why('admin')}
         failure="Could not delete the backup"
         run={async () => {
-          await api.deleteBackup(b.id)
+          await api.deleteBackup(b.id, host)
           toasts.push({ kind: 'info', title: 'Backup deleted' })
           onchange()
         }}
