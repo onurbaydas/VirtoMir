@@ -34,6 +34,13 @@
   let diskGiB = $state(20)
   let pool = $state('default')
   let iso = $state('')
+  // Where the system comes from: an installer ISO, a ready cloud image, or an existing disk.
+  let source = $state<'iso' | 'cloud' | 'disk'>('iso')
+  let baseImage = $state('')
+  let existingDisk = $state('')
+  let ciUser = $state('admin')
+  let ciPassword = $state('')
+  let ciKeys = $state('')
   let netChoice = $state('network:default') // "network:<name>" | "bridge" | "none"
   let bridge = $state('br0')
   let firmware = $state<'uefi' | 'bios'>('uefi')
@@ -60,6 +67,8 @@
 
   let pools = $state<Pool[]>([])
   let isos = $state<{ pool: string; vol: Volume }[]>([])
+  /** Unused disk images: candidates for cloud images and "use existing disk". */
+  let images = $state<{ pool: string; vol: Volume }[]>([])
   let networks = $state<VNetwork[]>([])
   let loadErr = $state('')
 
@@ -73,16 +82,20 @@
         if (!networks.some((x) => x.name === 'default')) netChoice = networks[0] ? `network:${networks[0].name}` : 'none'
         const lists = await Promise.all(pools.map(async (p) => ({ p: p.name, v: await api.volumes(p.name).catch(() => []) })))
         isos = lists.flatMap(({ p, v }) => v.filter((x) => x.format === 'iso').map((vol) => ({ pool: p, vol })))
+        images = lists.flatMap(({ p, v }) =>
+          v.filter((x) => x.format !== 'iso' && x.usedBy.length === 0 && !x.name.endsWith('-cidata.iso')).map((vol) => ({ pool: p, vol })),
+        )
       } catch (e) {
         loadErr = errorText(e)
       }
     })()
   })
 
-  // Suggest a name from the ISO ("debian-13.1.0-amd64-netinst.iso" → "debian-13").
+  // Suggest a name from the image ("debian-13.1.0-amd64-netinst.iso" → "debian-13").
   $effect(() => {
-    if (nameTouched || !iso) return
-    const base = iso.split('/').pop() ?? ''
+    const from = source === 'iso' ? iso : source === 'cloud' ? baseImage : existingDisk
+    if (nameTouched || !from) return
+    const base = from.split('/').pop() ?? ''
     const m = /^([a-z]+)[-_]?(\d+)?/i.exec(base)
     if (m) name = uniqueName(m[2] ? `${m[1]}-${m[2]}`.toLowerCase() : m[1].toLowerCase())
   })
@@ -96,8 +109,19 @@
   let diskTooBig = $derived(!!selectedPool && withDisk && diskGiB * 2 ** 30 > selectedPool.availableBytes)
   let nameValid = $derived(/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(name))
   let nameTaken = $derived((live.snapshot?.domains ?? []).some((d) => d.name === name))
-  let bootable = $derived(withDisk || !!iso)
-  let canCreate = $derived(nameValid && !nameTaken && bootable && vcpus >= 1 && memGiB > 0)
+  let baseCapGiB = $derived(Math.ceil((images.find((i) => i.vol.path === baseImage)?.vol.capacityBytes ?? 0) / 2 ** 30))
+  let keys = $derived(ciKeys.split('\n').map((k) => k.trim()).filter(Boolean))
+  let ciProblem = $derived(
+    source !== 'cloud'
+      ? ''
+      : !/^[a-z_][a-z0-9_-]{0,31}$/.test(ciUser)
+        ? 'User name: lowercase letters, digits, "_" or "-".'
+        : !ciPassword && keys.length === 0
+          ? 'Set a password or an SSH key to be able to sign in.'
+          : '',
+  )
+  let bootable = $derived(source === 'iso' ? withDisk || !!iso : source === 'cloud' ? !!baseImage : !!existingDisk)
+  let canCreate = $derived(nameValid && !nameTaken && bootable && !ciProblem && vcpus >= 1 && memGiB > 0)
 
   let busy = $state(false)
   let error = $state('')
@@ -116,8 +140,11 @@
       secureBoot: firmware === 'uefi' && secureBoot,
       tpm,
       pool,
-      diskGiB: withDisk ? diskGiB : 0,
-      iso: iso || undefined,
+      diskGiB: source === 'cloud' ? Math.max(diskGiB, baseCapGiB) : source === 'iso' && withDisk ? diskGiB : 0,
+      iso: source === 'iso' ? iso || undefined : undefined,
+      baseImage: source === 'cloud' ? baseImage : undefined,
+      diskPath: source === 'disk' ? existingDisk : undefined,
+      cloudInit: source === 'cloud' ? { user: ciUser, password: ciPassword || undefined, sshKeys: keys } : undefined,
       network: netChoice.startsWith('network:')
         ? { network: netChoice.slice(8) }
         : netChoice === 'bridge'
@@ -179,20 +206,70 @@
     </section>
 
     <section class="ui-panel step">
-      <h2><span class="n">2</span> <Disc size={16} /> Installation media</h2>
-      <label class="ui-field">
-        <span class="label">Boot from</span>
-        <select class="ui-input" bind:value={iso}>
-          <option value="">No installation media</option>
-          {#each isos as i (i.vol.path)}
-            <option value={i.vol.path}>{i.vol.name} — {i.pool}, {formatBytes(i.vol.capacityBytes)}</option>
-          {/each}
-        </select>
-        <span class="hint">
-          {#if isos.length === 0}No ISO images found.{/if}
-          <a href="/storage" onclick={router.link}>Upload an ISO</a> in Storage.
-        </span>
-      </label>
+      <h2><span class="n">2</span> <Disc size={16} /> Source</h2>
+      <div class="seg" role="radiogroup" aria-label="Where the system comes from">
+        <label class:on={source === 'iso'}><input type="radio" bind:group={source} value="iso" /> Install from ISO</label>
+        <label class:on={source === 'cloud'}><input type="radio" bind:group={source} value="cloud" /> Cloud image</label>
+        <label class:on={source === 'disk'}><input type="radio" bind:group={source} value="disk" /> Existing disk</label>
+      </div>
+      {#if source === 'iso'}
+        <label class="ui-field">
+          <span class="label">Boot from</span>
+          <select class="ui-input" bind:value={iso}>
+            <option value="">No installation media</option>
+            {#each isos as i (i.vol.path)}
+              <option value={i.vol.path}>{i.vol.name} — {i.pool}, {formatBytes(i.vol.capacityBytes)}</option>
+            {/each}
+          </select>
+          <span class="hint">
+            {#if isos.length === 0}No ISO images found.{/if}
+            <a href="/storage" onclick={router.link}>Upload an ISO</a> in Storage.
+          </span>
+        </label>
+      {:else if source === 'cloud'}
+        <label class="ui-field">
+          <span class="label">Cloud image</span>
+          <select class="ui-input" bind:value={baseImage}>
+            <option value="" disabled>Choose an image…</option>
+            {#each images as i (i.vol.path)}
+              <option value={i.vol.path}>{i.vol.name} — {i.pool}, {formatBytes(i.vol.capacityBytes)}</option>
+            {/each}
+          </select>
+          <span class="hint">
+            A ready-to-boot image (e.g. debian-13-generic-amd64.qcow2, ubuntu noble-server-cloudimg-amd64.img). It is copied, so the original stays clean.
+            <a href="/storage" onclick={router.link}>Upload one</a> in Storage.
+          </span>
+        </label>
+        <div class="ci">
+          <div class="two">
+            <label class="ui-field">
+              <span class="label">User</span>
+              <input class="ui-input mono" bind:value={ciUser} autocapitalize="off" spellcheck="false" />
+            </label>
+            <label class="ui-field">
+              <span class="label">Password</span>
+              <input class="ui-input" type="password" bind:value={ciPassword} autocomplete="new-password" placeholder="optional with an SSH key" />
+            </label>
+          </div>
+          <label class="ui-field">
+            <span class="label">SSH public keys (one per line)</span>
+            <textarea class="ui-input mono" rows="2" bind:value={ciKeys} placeholder="ssh-ed25519 AAAA… you@laptop" spellcheck="false"></textarea>
+            <span class="hint">cloud-init creates the user with sudo, sets the hostname to the machine name and installs the QEMU guest agent.</span>
+          </label>
+          {#if ciProblem}<p class="error">{ciProblem}</p>{/if}
+        </div>
+      {:else}
+        <label class="ui-field">
+          <span class="label">Disk image</span>
+          <select class="ui-input" bind:value={existingDisk}>
+            <option value="" disabled>Choose an unused volume…</option>
+            {#each images as i (i.vol.path)}
+              <option value={i.vol.path}>{i.vol.name} — {i.pool}, {formatBytes(i.vol.capacityBytes)}</option>
+            {/each}
+          </select>
+          <span class="hint">The machine boots this image directly (not a copy) — e.g. a disk imported from another host.</span>
+        </label>
+      {/if}
     </section>
 
     <section class="ui-panel step">
@@ -215,8 +292,26 @@
 
     <section class="ui-panel step">
       <h2><span class="n">4</span> <HardDrive size={16} /> Disk</h2>
+      {#if source === 'disk'}
+        <p class="hint">Uses the selected disk image as it is.</p>
+      {:else if source === 'cloud'}
+        <div class="two">
+          <label class="ui-field">
+            <span class="label">Grow to (GiB)</span>
+            <input class="ui-input" type="number" min={baseCapGiB || 1} max="65536" bind:value={diskGiB} />
+            <span class="hint">The image is {baseCapGiB || '?'} GiB; cloud-init grows the file system on first boot.</span>
+          </label>
+          <label class="ui-field">
+            <span class="label">Storage pool</span>
+            <select class="ui-input" bind:value={pool}>
+              {#each pools as p (p.name)}<option value={p.name}>{p.name} — {formatBytes(p.availableBytes)} free</option>{/each}
+            </select>
+          </label>
+        </div>
+      {:else}
       <label class="ui-switch"><input type="checkbox" bind:checked={withDisk} /> Create a new disk</label>
-      {#if withDisk}
+      {/if}
+      {#if source === 'iso' && withDisk}
         <div class="two">
           <label class="ui-field">
             <span class="label">Size (GiB)</span>
@@ -234,7 +329,7 @@
             </select>
           </label>
         </div>
-      {:else if !iso}
+      {:else if source === 'iso' && !iso}
         <p class="error">Without a disk the machine needs installation media to boot from.</p>
       {/if}
     </section>
@@ -289,9 +384,10 @@
     <dl>
       <dt>Name</dt><dd>{name || '—'}</dd>
       <dt>System</dt><dd>{OSES.find((o) => o.key === os)?.label}</dd>
-      <dt>Boot from</dt><dd class="mono small">{iso ? iso.split('/').pop() : withDisk ? 'Disk' : '—'}</dd>
+      <dt>Source</dt><dd class="mono small">{(source === 'iso' ? iso : source === 'cloud' ? baseImage : existingDisk).split('/').pop() || (source === 'iso' && withDisk ? 'Empty disk' : '—')}</dd>
       <dt>CPU / RAM</dt><dd>{vcpus} vCPU · {memGiB} GiB</dd>
-      <dt>Disk</dt><dd>{withDisk ? `${diskGiB} GiB in ${pool}` : 'None'}</dd>
+      <dt>Disk</dt><dd>{source === 'disk' ? 'Existing image' : source === 'cloud' ? `${Math.max(diskGiB, baseCapGiB)} GiB copy in ${pool}` : withDisk ? `${diskGiB} GiB in ${pool}` : 'None'}</dd>
+      {#if source === 'cloud'}<dt>Sign-in</dt><dd class="mono small">{ciUser}{ciPassword ? ' · password' : ''}{keys.length ? ` · ${keys.length} key${keys.length > 1 ? 's' : ''}` : ''}</dd>{/if}
       <dt>Network</dt><dd>{netChoice.startsWith('network:') ? netChoice.slice(8) : netChoice === 'bridge' ? bridge : 'None'}</dd>
       <dt>Firmware</dt><dd>{firmware === 'uefi' ? 'UEFI' : 'BIOS'}{secureBoot && firmware === 'uefi' ? ', Secure Boot' : ''}{tpm ? ', TPM' : ''}</dd>
     </dl>
@@ -436,6 +532,45 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
+  }
+  .seg {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    background: var(--surface-2);
+  }
+  .seg label {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    height: 32px;
+    border-radius: 7px;
+    color: var(--text-2);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .seg input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .seg label.on {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  }
+  .seg label:focus-within {
+    outline: 2px solid var(--accent);
+  }
+  .ci {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius);
   }
   .adv {
     display: flex;

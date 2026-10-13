@@ -5,6 +5,7 @@
   import Square from '@lucide/svelte/icons/square'
   import Trash from '@lucide/svelte/icons/trash'
   import ChevronDown from '@lucide/svelte/icons/chevron-down'
+  import Pin from '@lucide/svelte/icons/pin'
   import { api, errorText, type Lease, type NetworkSpec, type VNetwork } from '../api'
   import { toasts } from '../toast.svelte'
   import Dialog from '../components/Dialog.svelte'
@@ -98,6 +99,38 @@
     }
   }
 
+  // ---- Reservations -------------------------------------------------------------------
+  let resNet = $state<VNetwork | null>(null)
+  let resMAC = $state('')
+  let resIP = $state('')
+  let resName = $state('')
+  let resErr = $state('')
+  let resBusy = $state(false)
+  function openReserve(n: VNetwork, l?: Lease) {
+    resNet = n
+    resMAC = l?.mac ?? ''
+    resIP = l?.ip.split('/')[0] ?? ''
+    resName = l?.machine ?? l?.hostname ?? ''
+    resErr = ''
+  }
+  async function reserve(e: SubmitEvent) {
+    e.preventDefault()
+    if (!resNet) return
+    resBusy = true
+    resErr = ''
+    try {
+      await api.addDHCPHost(resNet.name, { mac: resMAC.trim(), ip: resIP.trim(), name: resName.trim() || undefined })
+      toasts.push({ kind: 'info', title: `${resIP} reserved`, detail: 'The machine gets it the next time it renews its lease (or reboots).' })
+      resNet = null
+      await load()
+    } catch (err) {
+      resErr = errorText(err)
+    } finally {
+      resBusy = false
+    }
+  }
+  const reserved = (n: VNetwork, mac: string) => n.dhcpHosts?.some((h) => h.mac === mac)
+
   const expires = (s: number) => {
     const m = Math.round((s * 1000 - Date.now()) / 60000)
     return m <= 0 ? 'expired' : m < 60 ? `${m} min` : `${Math.round(m / 60)} h`
@@ -183,6 +216,37 @@
 
             {#if n.dhcpStart}
               <div class="block">
+                <div class="block-head">
+                  <h3>Reserved addresses</h3>
+                  <button class="ui-btn sm ghost" onclick={() => openReserve(n)}><Pin size={14} /> Reserve an address</button>
+                </div>
+                {#if !n.dhcpHosts?.length}
+                  <p class="muted">None. Reserve one so a machine always gets the same IP.</p>
+                {:else}
+                  <div class="leases" role="table">
+                    {#each n.dhcpHosts as h (h.mac)}
+                      <div class="lease" role="row">
+                        <span class="mono" role="cell">{h.ip}</span>
+                        <span role="cell">{h.name ?? '—'}</span>
+                        <span class="mono muted" role="cell">{h.mac}</span>
+                        <span role="cell">
+                          <ConfirmButton
+                            label="Remove"
+                            confirm="Remove?"
+                            failure="Could not remove the reservation"
+                            run={async () => {
+                              await api.deleteDHCPHost(n.name, h.mac)
+                              await load()
+                            }}
+                          />
+                        </span>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+
+              <div class="block">
                 <h3>DHCP leases</h3>
                 {#if !n.active}
                   <p class="muted">Start the network to see leases.</p>
@@ -199,7 +263,12 @@
                         <span class="mono" role="cell">{l.ip}</span>
                         <span role="cell">{l.machine ?? l.hostname ?? '—'}</span>
                         <span class="mono muted" role="cell">{l.mac}</span>
-                        <span class="muted" role="cell" title="Lease expires in">{expires(l.expires)}</span>
+                        <span class="muted" role="cell" title="Lease expires in">
+                          {#if reserved(n, l.mac)}<span class="pinned"><Pin size={12} /> fixed</span>{:else}
+                            {expires(l.expires)}
+                            <button class="pin" title="Always give this machine this address" onclick={() => openReserve(n, l)}><Pin size={13} /></button>
+                          {/if}
+                        </span>
                       </div>
                     {/each}
                   </div>
@@ -212,6 +281,31 @@
     {/each}
   </div>
 {/if}
+
+<Dialog open={resNet !== null} title="Reserve an address on {resNet?.name ?? ''}" onclose={() => (resNet = null)}>
+  <form id="res-form" class="form" onsubmit={reserve}>
+    <label class="ui-field">
+      <span class="label">MAC address of the machine's adapter</span>
+      <input class="ui-input mono" bind:value={resMAC} placeholder="52:54:00:12:34:56" required />
+    </label>
+    <div class="two-col">
+      <label class="ui-field">
+        <span class="label">IP address</span>
+        <input class="ui-input mono" bind:value={resIP} placeholder={resNet?.subnet?.replace(/\.\d+\/\d+$/, '.50')} required />
+      </label>
+      <label class="ui-field">
+        <span class="label">Host name (optional)</span>
+        <input class="ui-input" bind:value={resName} />
+      </label>
+    </div>
+    <span class="hint">Must be inside {resNet?.subnet ?? 'the subnet'}; addresses outside the DHCP range ({resNet?.dhcpStart} – {resNet?.dhcpEnd}) avoid clashes.</span>
+    {#if resErr}<div class="ui-error-box">{resErr}</div>{/if}
+  </form>
+  {#snippet footer()}
+    <button class="ui-btn ghost" onclick={() => (resNet = null)}>Cancel</button>
+    <button class="ui-btn primary" form="res-form" disabled={resBusy}>{resBusy ? 'Saving…' : 'Reserve'}</button>
+  {/snippet}
+</Dialog>
 
 <Dialog open={dlg} title="New network" onclose={() => (dlg = false)} width={520}>
   <form id="net-form" class="form" onsubmit={create}>
@@ -367,9 +461,47 @@
   .leases {
     display: grid;
   }
+  .block-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .block-head h3 {
+    margin: 0;
+  }
+  .pin {
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    margin-left: 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+    vertical-align: middle;
+  }
+  .pin:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .pinned {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--accent);
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
   .lease {
     display: grid;
-    grid-template-columns: 150px minmax(0, 1fr) 150px 70px;
+    grid-template-columns: 150px minmax(0, 1fr) 150px 110px;
+    align-items: center;
     gap: 12px;
     padding: 6px 0;
     border-top: 1px solid var(--border);

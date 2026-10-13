@@ -1,7 +1,6 @@
 package api
 
 import (
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -35,20 +34,18 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, v)
 }
 
-// previewSettings returns the XML the form would save, so the UI can show the change.
+// previewSettings returns the definition before and after the form's change.
 func (s *Server) previewSettings(w http.ResponseWriter, r *http.Request) {
 	var set virt.Settings
 	if !s.decode(w, r, &set) {
 		return
 	}
-	x, err := s.backend.PreviewSettings(r.PathValue("uuid"), set)
+	p, err := s.backend.PreviewSettings(r.PathValue("uuid"), set)
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	_, _ = io.WriteString(w, x)
+	s.writeJSON(w, http.StatusOK, p)
 }
 
 func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {

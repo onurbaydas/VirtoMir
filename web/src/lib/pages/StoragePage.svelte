@@ -8,6 +8,7 @@
   import Square from '@lucide/svelte/icons/square'
   import Trash from '@lucide/svelte/icons/trash'
   import Disc from '@lucide/svelte/icons/disc'
+  import Maximize2 from '@lucide/svelte/icons/maximize-2'
   import { api, errorText, type Pool, type Volume } from '../api'
   import { formatBytes, plural } from '../format'
   import { router } from '../router.svelte'
@@ -102,6 +103,33 @@
       vErr = errorText(err)
     } finally {
       vBusy = false
+    }
+  }
+
+  // ---- Grow -----------------------------------------------------------------------
+  let growVol = $state<Volume | null>(null)
+  let growGiB = $state(0)
+  let growErr = $state('')
+  let growBusy = $state(false)
+  function openGrow(v: Volume) {
+    growVol = v
+    growGiB = Math.ceil(v.capacityBytes / 2 ** 30) + 10
+    growErr = ''
+  }
+  async function grow(e: SubmitEvent) {
+    e.preventDefault()
+    if (!current || !growVol) return
+    growBusy = true
+    growErr = ''
+    try {
+      await api.resizeVolume(current.name, growVol.name, growGiB)
+      toasts.push({ kind: 'info', title: `${growVol.name} is now ${growGiB} GiB` })
+      growVol = null
+      await refresh()
+    } catch (err) {
+      growErr = errorText(err)
+    } finally {
+      growBusy = false
     }
   }
 
@@ -284,6 +312,9 @@
                 {#if v.usedBy.length}{v.usedBy.join(', ')}{:else}<span class="muted">—</span>{/if}
               </span>
               <span role="cell" class="act">
+                {#if v.format !== 'iso' && v.usedBy.length === 0}
+                  <button class="ui-btn sm ghost" onclick={() => openGrow(v)} title="Make this volume bigger"><Maximize2 size={14} /> Grow</button>
+                {/if}
                 <ConfirmButton
                   label="Delete"
                   confirm="Delete for good?"
@@ -330,6 +361,21 @@
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={() => (volDlg = false)}>Cancel</button>
     <button class="ui-btn primary" form="vol-form" disabled={vBusy}>{vBusy ? 'Creating…' : 'Create volume'}</button>
+  {/snippet}
+</Dialog>
+
+<Dialog open={growVol !== null} title="Grow {growVol?.name ?? ''}" onclose={() => (growVol = null)}>
+  <form id="grow-form" class="form" onsubmit={grow}>
+    <label class="ui-field">
+      <span class="label">New size (GiB)</span>
+      <input class="ui-input" type="number" min={Math.floor((growVol?.capacityBytes ?? 0) / 2 ** 30) + 1} max="65536" bind:value={growGiB} />
+      <span class="hint">Currently {formatBytes(growVol?.capacityBytes ?? 0)}. Volumes can only grow. Disks attached to a machine are grown from its Hardware tab.</span>
+    </label>
+    {#if growErr}<div class="ui-error-box">{growErr}</div>{/if}
+  </form>
+  {#snippet footer()}
+    <button class="ui-btn ghost" onclick={() => (growVol = null)}>Cancel</button>
+    <button class="ui-btn primary" form="grow-form" disabled={growBusy}>{growBusy ? 'Growing…' : 'Grow'}</button>
   {/snippet}
 </Dialog>
 
@@ -482,7 +528,7 @@
   }
   .row {
     display: grid;
-    grid-template-columns: minmax(200px, 2fr) 110px 150px minmax(120px, 1fr) 150px;
+    grid-template-columns: minmax(200px, 2fr) 110px 150px minmax(120px, 1fr) 220px;
     gap: 14px;
     align-items: center;
     min-height: 52px;
@@ -529,6 +575,7 @@
   .act {
     display: flex;
     justify-content: flex-end;
+    gap: 4px;
   }
   .muted {
     color: var(--text-3);

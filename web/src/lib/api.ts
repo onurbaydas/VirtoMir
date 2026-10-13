@@ -272,9 +272,64 @@ export interface CreateSpec {
   pool: string
   diskGiB: number
   diskPath?: string
+  /** Cloud image to copy and grow to diskGiB. */
+  baseImage?: string
+  cloudInit?: CloudInit
   iso?: string
   network?: NICSpec
   start: boolean
+}
+
+export interface CloudInit {
+  hostname?: string
+  user: string
+  password?: string
+  sshKeys?: string[]
+  packages?: string[]
+  userData?: string
+}
+
+/** The machine settings form; mirrors virt.Settings. */
+export interface Settings {
+  title: string
+  description: string
+  vcpus: number
+  maxVcpus: number
+  cpuMode: 'host-passthrough' | 'host-model' | 'maximum' | 'custom'
+  cpuModel?: string
+  sockets: number
+  cores: number
+  threads: number
+  memoryMiB: number
+  currentMemoryMiB: number
+  bootOrder: string[]
+  bootMenu: boolean
+  firmware: 'uefi' | 'bios'
+  secureBoot: boolean
+}
+
+export interface SettingsView extends Settings {
+  bootDevices: { key: string; label: string }[]
+  hotplugMemoryMiB?: number
+}
+
+export interface SaveResult extends DefineResult {
+  appliedLive: string[]
+  liveErrors: string[]
+}
+
+export interface DHCPHost {
+  mac: string
+  ip: string
+  name?: string
+}
+
+export type HistoryRange = '1h' | '6h' | '24h' | '7d' | '30d'
+
+export interface HistoryResult {
+  start: number
+  step: number
+  series: Record<string, (number | null)[]>
 }
 
 export interface SnapshotInfo {
@@ -325,6 +380,7 @@ export interface VNetwork {
   dhcpEnd?: string
   domain?: string
   usedBy: string[]
+  dhcpHosts: DHCPHost[]
 }
 
 export interface NetworkSpec {
@@ -382,6 +438,16 @@ export const api = {
   revertSnapshot: (uuid: string, name: string) => request<void>('POST', `${domainPath(uuid)}/snapshots/${enc(name)}/revert`),
   deleteSnapshot: (uuid: string, name: string) => request<void>('DELETE', `${domainPath(uuid)}/snapshots/${enc(name)}`),
 
+  settings: (uuid: string) => request<SettingsView>('GET', `${domainPath(uuid)}/settings`),
+  previewSettings: (uuid: string, s: Settings) =>
+    request<{ before: string; after: string }>('POST', `${domainPath(uuid)}/settings/preview`, s),
+  saveSettings: (uuid: string, s: Settings) => request<SaveResult>('PUT', `${domainPath(uuid)}/settings`, s),
+  resizeDisk: (uuid: string, target: string, sizeGiB: number) =>
+    request<void>('POST', `${domainPath(uuid)}/disks/${enc(target)}/resize`, { sizeGiB }),
+
+  history: (series: string[], range: HistoryRange) =>
+    request<HistoryResult>('GET', `/api/v1/history?range=${range}&series=${series.map(enc).join(',')}`),
+
   // Storage
   pools: async () => (await request<{ pools: Pool[] }>('GET', '/api/v1/storage/pools')).pools,
   createPool: (name: string, path: string) => request<void>('POST', '/api/v1/storage/pools', { name, path }),
@@ -391,6 +457,8 @@ export const api = {
   volumes: async (pool: string) => (await request<{ volumes: Volume[] }>('GET', `${poolPath(pool)}/volumes`)).volumes,
   createVolume: (pool: string, name: string, sizeGiB: number, format: 'qcow2' | 'raw') =>
     request<Volume>('POST', `${poolPath(pool)}/volumes`, { name, sizeGiB, format }),
+  resizeVolume: (pool: string, name: string, sizeGiB: number) =>
+    request<void>('POST', `${poolPath(pool)}/volumes/${enc(name)}/resize`, { sizeGiB }),
   deleteVolume: (pool: string, name: string) => request<void>('DELETE', `${poolPath(pool)}/volumes/${enc(name)}`),
   /** Uploads with progress (fetch cannot report upload progress). */
   upload: (pool: string, file: File, name: string, onProgress: (fraction: number) => void, signal?: AbortSignal) =>
@@ -421,6 +489,8 @@ export const api = {
   deleteNetwork: (name: string) => request<void>('DELETE', netPath(name)),
   networkAction: (name: string, action: 'start' | 'stop') => request<void>('POST', `${netPath(name)}/actions/${action}`),
   networkAutostart: (name: string, enabled: boolean) => request<void>('PUT', `${netPath(name)}/autostart`, { enabled }),
+  addDHCPHost: (name: string, h: DHCPHost) => request<void>('POST', `${netPath(name)}/dhcp-hosts`, h),
+  deleteDHCPHost: (name: string, mac: string) => request<void>('DELETE', `${netPath(name)}/dhcp-hosts/${enc(mac)}`),
   leases: async (name: string) => (await request<{ leases: Lease[] }>('GET', `${netPath(name)}/leases`)).leases,
 }
 

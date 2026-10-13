@@ -8,7 +8,7 @@
   import Sparkline from './Sparkline.svelte'
   import MachineActions from './MachineActions.svelte'
 
-  let { d }: { d: Domain } = $props()
+  let { d, selected = false, onselect }: { d: Domain; selected?: boolean; onselect?: (on: boolean) => void } = $props()
 
   let pending = $derived(live.pending[d.uuid])
   let active = $derived(isActive(d.state))
@@ -20,8 +20,11 @@
   )
 </script>
 
-<div class="row" class:off={!active && d.state !== 'paused'} role="row">
+<div class="row" class:off={!active && d.state !== 'paused'} class:selected role="row">
   <div class="name" role="cell">
+    {#if onselect}
+      <input class="sel" type="checkbox" checked={selected} aria-label="Select {d.name}" onchange={(e) => onselect(e.currentTarget.checked)} />
+    {/if}
     <span class="avatar" class:on={active}><Monitor size={16} /></span>
     <div class="titles">
       <a class="title" href={machineHref(d.uuid)} onclick={router.link}>{d.name}</a>
@@ -60,6 +63,19 @@
   }
   .row:hover {
     background: var(--surface-hover);
+  }
+  .row.selected {
+    background: var(--accent-soft);
+  }
+  .sel {
+    position: relative;
+    z-index: 1; /* above the name link's click area */
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
   }
   .name {
     display: flex;

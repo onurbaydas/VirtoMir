@@ -342,20 +342,39 @@ func (c *Client) GetSettings(uuid string) (SettingsView, error) {
 	return settingsFromXML(x), nil
 }
 
-// PreviewSettings returns the XML the settings would produce, without saving.
-func (c *Client) PreviewSettings(uuid string, s Settings) (string, error) {
+// Preview is the definition before and after a settings change, both serialized the same
+// way so a line diff shows only real changes (libvirt and libvirtxml quote differently).
+type Preview struct {
+	Before string `json:"before"`
+	After  string `json:"after"`
+}
+
+// PreviewSettings returns what saving the settings would change, without saving.
+func (c *Client) PreviewSettings(uuid string, s Settings) (Preview, error) {
 	l, d, err := c.lookup(uuid)
 	if err != nil {
-		return "", err
+		return Preview{}, err
 	}
 	x, err := c.parseDomain(l, d, true)
 	if err != nil {
-		return "", err
+		return Preview{}, err
+	}
+	return previewSettings(x, s)
+}
+
+func previewSettings(x *libvirtxml.Domain, s Settings) (Preview, error) {
+	before, err := x.Marshal()
+	if err != nil {
+		return Preview{}, err
 	}
 	if err := applySettings(x, s); err != nil {
-		return "", err
+		return Preview{}, err
 	}
-	return x.Marshal()
+	after, err := x.Marshal()
+	if err != nil {
+		return Preview{}, err
+	}
+	return Preview{Before: before, After: after}, nil
 }
 
 // SaveSettings writes the settings to the definition. On a running machine, active vCPUs
