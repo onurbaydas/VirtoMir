@@ -541,6 +541,15 @@ export interface Lease {
   machine?: string
 }
 
+export interface PoolSpec {
+  name: string
+  path: string
+  /** dir (default) or netfs: an NFS share host:export mounted at path. */
+  type?: 'dir' | 'netfs'
+  host?: string
+  export?: string
+}
+
 export interface ClusterMember {
   id: string
   name: string
@@ -661,7 +670,10 @@ export const api = {
 
   // Storage
   pools: async () => (await request<{ pools: Pool[] }>('GET', '/api/v1/storage/pools')).pools,
-  createPool: (name: string, path: string) => request<void>('POST', '/api/v1/storage/pools', { name, path }),
+  createPool: (spec: PoolSpec) => request<void>('POST', '/api/v1/storage/pools', spec),
+  /** The same pool on every cluster member; each host reports its own result. */
+  createClusterPool: async (spec: PoolSpec) =>
+    (await request<{ results: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/cluster/pools', spec)).results,
   deletePool: (name: string) => request<void>('DELETE', poolPath(name)),
   poolAction: (name: string, action: 'start' | 'stop' | 'refresh') => request<void>('POST', `${poolPath(name)}/actions/${action}`),
   poolAutostart: (name: string, enabled: boolean) => request<void>('PUT', `${poolPath(name)}/autostart`, { enabled }),

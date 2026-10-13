@@ -10,7 +10,8 @@
   import Trash from '@lucide/svelte/icons/trash'
   import Disc from '@lucide/svelte/icons/disc'
   import Maximize2 from '@lucide/svelte/icons/maximize-2'
-  import { api, errorText, type Pool, type Volume } from '../api'
+  import { api, errorText, type Pool, type PoolSpec, type Volume } from '../api'
+  import { cluster } from '../cluster.svelte'
   import { formatBytes, plural } from '../format'
   import { router } from '../router.svelte'
   import { toasts } from '../toast.svelte'
@@ -157,14 +158,30 @@
   let poolDlg = $state(false)
   let pName = $state('')
   let pPath = $state('')
+  let pType = $state<'dir' | 'netfs'>('dir')
+  let pHost = $state('')
+  let pExport = $state('')
+  let pEverywhere = $state(true)
   let pBusy = $state(false)
   let pErr = $state('')
   async function createPool(e: SubmitEvent) {
     e.preventDefault()
     pBusy = true
     pErr = ''
+    const spec: PoolSpec = { name: pName, path: pPath, ...(pType === 'netfs' ? { type: 'netfs', host: pHost.trim(), export: pExport.trim() } : {}) }
     try {
-      await api.createPool(pName, pPath)
+      if (cluster.clustered && pEverywhere) {
+        const res = await api.createClusterPool(spec)
+        const failed = res.filter((r) => !r.ok)
+        if (failed.length === res.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
+        toasts.push({
+          kind: failed.length ? 'warn' : 'info',
+          title: failed.length ? `${pName} created on ${res.length - failed.length} of ${res.length} hosts` : `${pName} created on every host`,
+          detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') || undefined,
+        })
+      } else {
+        await api.createPool(spec)
+      }
       poolDlg = false
       await loadPools()
       router.navigate(`/storage#${encodeURIComponent(pName)}`, { replace: true })
@@ -380,17 +397,39 @@
   {/snippet}
 </Dialog>
 
-<Dialog open={poolDlg} title="New storage pool" subtitle="A directory on this host for disk images and ISOs" onclose={() => (poolDlg = false)}>
+<Dialog open={poolDlg} title="New storage pool" subtitle="Where disk images and ISOs live" onclose={() => (poolDlg = false)}>
   <form id="pool-form" class="form" onsubmit={createPool}>
+    <div class="seg" role="radiogroup" aria-label="Kind of storage">
+      <button type="button" role="radio" aria-checked={pType === 'dir'} class:on={pType === 'dir'} onclick={() => (pType = 'dir')}>Directory on the host</button>
+      <button type="button" role="radio" aria-checked={pType === 'netfs'} class:on={pType === 'netfs'} onclick={() => (pType = 'netfs')}>NFS share</button>
+    </div>
     <label class="ui-field">
       <span class="label">Name</span>
-      <input class="ui-input" bind:value={pName} placeholder="fast-ssd" required pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" />
+      <input class="ui-input" bind:value={pName} placeholder={pType === 'netfs' ? 'shared' : 'fast-ssd'} required pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" />
     </label>
+    {#if pType === 'netfs'}
+      <div class="row2">
+        <label class="ui-field">
+          <span class="label">NFS server</span>
+          <input class="ui-input mono" bind:value={pHost} placeholder="192.168.1.20" required />
+        </label>
+        <label class="ui-field">
+          <span class="label">Export</span>
+          <input class="ui-input mono" bind:value={pExport} placeholder="/srv/vms" required />
+        </label>
+      </div>
+    {/if}
     <label class="ui-field">
-      <span class="label">Directory</span>
-      <input class="ui-input mono" bind:value={pPath} placeholder="/srv/vm-images" required />
-      <span class="hint">Created if it does not exist. The pool starts now and on every boot.</span>
+      <span class="label">{pType === 'netfs' ? 'Mount at' : 'Directory'}</span>
+      <input class="ui-input mono" bind:value={pPath} placeholder={pType === 'netfs' ? '/var/lib/libvirt/shared' : '/srv/vm-images'} required />
+      <span class="hint">{pType === 'netfs' ? 'Mounted now and on every boot (the host needs the NFS client, e.g. nfs-common).' : 'Created if it does not exist. The pool starts now and on every boot.'}</span>
     </label>
+    {#if cluster.clustered}
+      <label class="check">
+        <input type="checkbox" bind:checked={pEverywhere} />
+        <span>Create it on every host of the cluster{pType === 'netfs' ? ' — machines on it can then move between hosts without copying their disks' : ''}</span>
+      </label>
+    {/if}
     {#if pErr}<div class="ui-error-box">{pErr}</div>{/if}
   </form>
   {#snippet footer()}
@@ -400,6 +439,44 @@
 </Dialog>
 
 <style>
+  .seg {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border-radius: var(--radius);
+    background: var(--surface-2);
+  }
+  .seg button {
+    flex: 1;
+    height: 32px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-2);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .seg button.on {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  }
+  .row2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .check {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-2);
+  }
+  .check input {
+    margin-top: 3px;
+  }
   .lead {
     margin: 0;
     color: var(--text-3);
