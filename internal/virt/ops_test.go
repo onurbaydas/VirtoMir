@@ -2,6 +2,7 @@ package virt
 
 import (
 	"errors"
+	"fmt"
 	"net/netip"
 	"slices"
 	"strings"
@@ -224,5 +225,32 @@ func TestBuildDomainWindows(t *testing.T) {
 		if !strings.Contains(doc, must) {
 			t.Errorf("windows XML lacks %s", must)
 		}
+	}
+}
+
+// Regression: libvirt reads a missing controller index as 0, so every PCI controller must
+// carry its own, with pcie-root at 0.
+func TestBuildDomainControllerIndexes(t *testing.T) {
+	s := CreateSpec{Name: "web", VCPUs: 1, MemoryMiB: 512, DiskGiB: 1}
+	if err := s.normalize(); err != nil {
+		t.Fatal(err)
+	}
+	x := buildDomain(s, "/pool/web.qcow2", "qcow2", "")
+	seen := map[string]bool{}
+	for _, c := range x.Devices.Controllers {
+		if c.Index == nil {
+			t.Fatalf("%s controller %s without index", c.Type, c.Model)
+		}
+		key := fmt.Sprintf("%s/%d", c.Type, *c.Index)
+		if seen[key] {
+			t.Errorf("duplicate controller %s", key)
+		}
+		seen[key] = true
+		if c.Type == "pci" && *c.Index == 0 && c.Model != "pcie-root" {
+			t.Errorf("pci index 0 is %s, want pcie-root", c.Model)
+		}
+	}
+	if !seen["pci/0"] || !seen["pci/8"] {
+		t.Errorf("controllers: %v", seen)
 	}
 }
