@@ -3,12 +3,13 @@
 import { api, type Job } from './api'
 import { toasts } from './toast.svelte'
 
-export function track(job: Job, opts: { success: string; onSuccess?: (j: Job) => void }) {
+/** host: the cluster member the job runs on, when it is not the one being shown. */
+export function track(job: Job, opts: { success: string; onSuccess?: (j: Job) => void; host?: string }) {
   const id = toasts.push({ kind: 'info', title: job.title, detail: 'Working…', sticky: true })
   const poll = async () => {
     let j: Job
     try {
-      j = await api.job(job.id)
+      j = await api.job(job.id, opts.host)
     } catch {
       setTimeout(poll, 3000)
       return

@@ -9,15 +9,43 @@
   import { live } from '../live.svelte'
   import { machineHref, router } from '../router.svelte'
   import { session } from '../session.svelte'
+  import { cluster } from '../cluster.svelte'
 
-  let entries = $state<ActivityEntry[] | null>(null)
+  /** An entry and, in a cluster, the host it was recorded on. */
+  type Entry = ActivityEntry & { hostId?: string; hostName?: string }
+
+  let entries = $state<Entry[] | null>(null)
+  /** Machine names (and their host) of other members, for readable sentences. */
+  let remoteNames = $state(new Map<string, string>())
+  let machineHost = $state(new Map<string, string>())
   let error = $state('')
   let failedOnly = $state(false)
   let user = $state('')
 
   async function load() {
     try {
-      entries = await api.activity({ failed: failedOnly, user: user || undefined })
+      const q = { failed: failedOnly, user: user || undefined }
+      if (!cluster.clustered) {
+        entries = await api.activity(q)
+      } else {
+        // Every host logs what was done on it; show them as one timeline.
+        const parts = await Promise.all(
+          cluster.members
+            .filter((m) => m.reachable)
+            .map(async (m) => {
+              const [list, sum] = await Promise.all([api.activity(q, m.id), api.summary(m.id).catch(() => null)])
+              return { m, list, doms: sum?.domains ?? [] }
+            }),
+        )
+        const names = new Map<string, string>()
+        const hosts = new Map<string, string>()
+        for (const { m, doms } of parts) for (const d of doms) (names.set(d.uuid, d.name), hosts.set(d.uuid, m.id))
+        remoteNames = names
+        machineHost = hosts
+        entries = parts
+          .flatMap(({ m, list }) => list.map((e) => ({ ...e, hostId: m.id, hostName: m.name })))
+          .sort((a, b) => Date.parse(b.time) - Date.parse(a.time))
+      }
       error = ''
     } catch (e) {
       error = errorText(e)
@@ -26,20 +54,34 @@
   $effect(() => {
     void failedOnly
     void user
+    void cluster.clustered
     void load()
   })
 
-  let names = $derived(new Map((live.snapshot?.domains ?? []).map((d) => [d.uuid, d.name])))
+  let names = $derived(cluster.clustered ? remoteNames : new Map((live.snapshot?.domains ?? []).map((d) => [d.uuid, d.name])))
+  // A machine link opens the page on the host the machine is on now.
+  function machineLink(uuid: string) {
+    const id = machineHost.get(uuid)
+    const m = cluster.members.find((x) => x.id === id)
+    return { href: m ? router.hostHref(m.self ? null : m.id, `/machines/${uuid}`) : machineHref(uuid), host: m ? (m.self ? null : m.id) : undefined }
+  }
+  function open(e: MouseEvent, uuid: string) {
+    const l = machineLink(uuid)
+    if (l.host === undefined) return router.link(e)
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    e.preventDefault()
+    router.go(l.host, `/machines/${uuid}`)
+  }
   let users = $derived([...new Set((entries ?? []).map((e) => e.user))].sort())
 
   const when = (t: string) => new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' })
   // Group by day so long lists stay readable.
   let days = $derived.by(() => {
-    const out: { day: string; items: ActivityEntry[] }[] = []
+    const out: { day: string; items: Entry[] }[] = []
     for (const e of entries ?? []) {
       const day = new Date(e.time).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
       if (out.at(-1)?.day !== day) out.push({ day, items: [] })
-      out.at(-1)!.items.push(e)
+      out.at(-1)!.items.push(e as Entry)
     }
     return out
   })
@@ -50,7 +92,7 @@
 <header class="page-head">
   <div>
     <h1>Activity</h1>
-    <p class="lead">Who changed what, when — every change and sign-in, including refused ones.</p>
+    <p class="lead">Who changed what, when — every change and sign-in, including refused ones{cluster.clustered ? ', on every host' : ''}.</p>
   </div>
   <div class="tools">
     <select class="ui-input" bind:value={user} aria-label="Filter by user">
@@ -86,8 +128,9 @@
             <span class="icon">{#if ok}<CircleCheck size={16} />{:else}<CircleX size={16} />{/if}</span>
             <div class="what">
               <span class="sentence">
+                {#if e.hostName}<span class="host-chip">{e.hostName}</span>{/if}
                 <b>{e.user || 'someone'}</b>
-                {info.before}{#if info.machine}{#if names.has(info.machine)}<a href={machineHref(info.machine)} onclick={router.link}>{info.machineName}</a>{:else}<span class="gone">{info.machineName}</span>{/if}{/if}{info.after}
+                {info.before}{#if info.machine}{#if names.has(info.machine)}<a href={machineLink(info.machine).href} onclick={(ev) => open(ev, info.machine!)}>{info.machineName}</a>{:else}<span class="gone">{info.machineName}</span>{/if}{/if}{info.after}
                 {#if e.token}<span class="tok" title="Through the API token “{e.token}”"><KeyRound size={12} /> {e.token}</span>{/if}
               </span>
               {#if e.error}<span class="err">{e.error}</span>{/if}
@@ -101,6 +144,15 @@
 {/if}
 
 <style>
+  .host-chip {
+    margin-right: 4px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 600;
+  }
   .lead {
     margin: 0;
     color: var(--text-3);

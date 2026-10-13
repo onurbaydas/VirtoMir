@@ -8,7 +8,8 @@
   import Save from '@lucide/svelte/icons/save'
   import Pencil from '@lucide/svelte/icons/pencil'
   import { api, errorText, type Alert, type AlertChannel, type AlertConfig, type AlertKind, type AlertRule } from '../api'
-  import { alerts } from '../alerts.svelte'
+  import { alerts, type HostAlert } from '../alerts.svelte'
+  import { cluster } from '../cluster.svelte'
   import { live } from '../live.svelte'
   import { machineHref, router } from '../router.svelte'
   import { session } from '../session.svelte'
@@ -25,9 +26,9 @@
   })
   let resolved = $derived(alerts.list.filter((a) => a.resolved))
 
-  async function ack(a: Alert) {
+  async function ack(a: HostAlert) {
     try {
-      await api.ackAlert(a.id)
+      await api.ackAlert(a.id, a.hostId)
       await alerts.refresh()
     } catch (e) {
       toasts.push({ kind: 'error', title: 'Could not acknowledge', detail: errorText(e) })
@@ -42,6 +43,20 @@
     return m < 1 ? '<1 min' : m < 60 ? `${m} min` : `${Math.round(m / 60)} h`
   }
   const when = (s: string) => new Date(s).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+  // In a cluster an alert belongs to a member: links open that member's page.
+  const memberOf = (a: HostAlert) => cluster.members.find((m) => m.id === a.hostId)
+  const hostOf = (a: HostAlert) => {
+    const m = memberOf(a)
+    return !m || m.self ? null : m.id
+  }
+  const hrefOn = (a: HostAlert, path: string) => (a.hostId ? router.hostHref(hostOf(a), path) : router.scoped(path))
+  function goOn(e: MouseEvent, a: HostAlert, path: string) {
+    if (!a.hostId) return router.link(e)
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    e.preventDefault()
+    router.go(hostOf(a), path)
+  }
+
   const isVM = (a: Alert) => !!a.subjectId && /^[0-9a-f-]{36}$/.test(a.subjectId)
 
   // ---- Config -----------------------------------------------------------------------------
@@ -144,7 +159,13 @@
 <header class="page-head">
   <div>
     <h1>Alerts</h1>
-    <p class="lead">VirtoMir watches the host and its machines and tells you when something needs attention.</p>
+    <p class="lead">
+      {#if cluster.clustered}
+        Every host watches itself and its machines; this list shows all hosts.{#if view !== 'alerts'} Rules and notifications below are those of <b>{cluster.current?.name}</b> — switch host in the sidebar to change another one's.{/if}
+      {:else}
+        VirtoMir watches the host and its machines and tells you when something needs attention.
+      {/if}
+    </p>
   </div>
 </header>
 
@@ -167,16 +188,17 @@
     </div>
   {:else}
     <section class="list">
-      {#each alerts.active as a (a.id)}
+      {#each alerts.active as a (a.key)}
         <article class="alert ui-panel {a.severity}" class:acked={!!a.ackedBy}>
           <span class="sev"><BellRing size={16} /></span>
           <div class="body">
             <div class="top">
               <span class="badge {a.severity}">{a.severity}</span>
+              {#if a.hostName}<span class="host-chip" title="Host">{a.hostName}</span>{/if}
               {#if isVM(a)}
-                <a href={machineHref(a.subjectId!)} onclick={router.link} class="subj">{a.subject}</a>
+                <a href={hrefOn(a, `/machines/${a.subjectId}`)} onclick={(e) => goOn(e, a, `/machines/${a.subjectId}`)} class="subj">{a.subject}</a>
               {:else if a.kind === 'pool.free'}
-                <a href="/storage#{a.subjectId}" onclick={router.link} class="subj">{a.subject}</a>
+                <a href={hrefOn(a, `/storage#${a.subjectId}`)} onclick={(e) => goOn(e, a, `/storage#${a.subjectId}`)} class="subj">{a.subject}</a>
               {:else}
                 <span class="subj">{a.subject}</span>
               {/if}
@@ -198,9 +220,10 @@
   {#if resolved.length}
     <h2 class="sub">Recently resolved</h2>
     <div class="ui-panel history">
-      {#each resolved.slice(0, 50) as a (a.id)}
+      {#each resolved.slice(0, 50) as a (a.key)}
         <div class="h-row">
           <span class="badge {a.severity} small">{a.severity}</span>
+          {#if a.hostName}<span class="host-chip">{a.hostName}</span>{/if}
           <span class="h-msg">{a.message}</span>
           <span class="h-meta">{when(a.started)} · lasted {lasted(a)}</span>
         </div>
@@ -354,6 +377,14 @@
 </Dialog>
 
 <style>
+  .host-chip {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 600;
+  }
   .lead {
     margin: 0;
     color: var(--text-3);

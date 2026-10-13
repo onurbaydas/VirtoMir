@@ -9,7 +9,11 @@
   import { toasts } from '../toast.svelte'
   import BackupList from '../components/BackupList.svelte'
 
-  let backups = $state<BackupInfo[] | null>(null)
+  import { cluster } from '../cluster.svelte'
+
+  /** A backup and, in a cluster, the host it is stored on. */
+  type HostBackup = BackupInfo & { hostId?: string; hostName?: string }
+  let backups = $state<HostBackup[] | null>(null)
   let dir = $state('')
   let newDir = $state('')
   let error = $state('')
@@ -17,8 +21,18 @@
   async function load() {
     try {
       const r = await api.backups()
-      backups = r.backups
       dir = r.dir
+      if (!cluster.clustered) {
+        backups = r.backups
+      } else {
+        // Each host keeps its own backups; list them all, grouped by host and machine.
+        const parts = await Promise.all(
+          cluster.members
+            .filter((m) => m.reachable)
+            .map(async (m) => (await api.backups(undefined, m.id).catch(() => ({ backups: [] }))).backups.map((b) => ({ ...b, hostId: m.id, hostName: m.name }))),
+        )
+        backups = parts.flat()
+      }
       if (!newDir) newDir = r.dir
       error = ''
     } catch (e) {
@@ -26,13 +40,25 @@
     }
   }
   $effect(() => {
+    void cluster.clustered
     void load()
   })
 
   let groups = $derived.by(() => {
-    const m = new Map<string, BackupInfo[]>()
-    for (const b of backups ?? []) m.set(b.domainUuid, [...(m.get(b.domainUuid) ?? []), b])
-    return [...m.entries()].map(([uuid, list]) => ({ uuid, name: list[0].domain, list, size: list.reduce((n, b) => n + b.sizeBytes, 0) }))
+    const m = new Map<string, HostBackup[]>()
+    for (const b of backups ?? []) {
+      const key = `${b.hostId ?? ''}/${b.domainUuid}`
+      m.set(key, [...(m.get(key) ?? []), b])
+    }
+    return [...m.entries()].map(([key, list]) => ({
+      key,
+      uuid: list[0].domainUuid,
+      name: list[0].domain,
+      hostId: list[0].hostId,
+      hostName: list[0].hostName,
+      list,
+      size: list.reduce((n, b) => n + b.sizeBytes, 0),
+    }))
   })
   let total = $derived((backups ?? []).reduce((n, b) => n + b.sizeBytes, 0))
   let exists = (uuid: string) => live.snapshot?.domains.some((d) => d.uuid === uuid)
@@ -61,7 +87,7 @@
 <section class="ui-panel card loc">
   <FolderCog size={18} />
   <div class="loc-text">
-    <span class="label">Backup location</span>
+    <span class="label">Backup location{cluster.clustered && cluster.current ? ` on ${cluster.current.name}` : ""}</span>
     {#if session.can('admin')}
       <div class="loc-edit">
         <input class="ui-input mono" bind:value={newDir} aria-label="Backup location" />
@@ -89,22 +115,44 @@
     <span>Open a machine, go to Backups and press "Back up now" — or turn on automatic backups.</span>
   </div>
 {:else}
-  {#each groups as g (g.uuid)}
+  {#each groups as g (g.key)}
+    {@const member = cluster.members.find((m) => m.id === g.hostId)}
     <section class="ui-panel card">
       <header class="g-head">
-        {#if exists(g.uuid)}
+        {#if member}
+          <span>
+            <span class="host-chip">{member.name}</span>
+            <a
+              href={router.hostHref(member.self ? null : member.id, `/machines/${g.uuid}#backups`)}
+              onclick={(e) => {
+                if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+                e.preventDefault()
+                router.go(member.self ? null : member.id, `/machines/${g.uuid}#backups`)
+              }}>{g.name}</a
+            >
+          </span>
+        {:else if exists(g.uuid)}
           <a href={machineHref(g.uuid, 'backups')} onclick={router.link}>{g.name}</a>
         {:else}
           <span>{g.name} <span class="gone">(machine deleted)</span></span>
         {/if}
         <span class="hint">{g.list.length} · {formatBytes(g.size)}</span>
       </header>
-      <BackupList backups={g.list} onchange={load} />
+      <BackupList backups={g.list} onchange={load} host={g.hostId} />
     </section>
   {/each}
 {/if}
 
 <style>
+  .host-chip {
+    margin-right: 6px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 600;
+  }
   .lead {
     margin: 0;
     color: var(--text-3);
