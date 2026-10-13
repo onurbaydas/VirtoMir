@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: System packages (PAM headers for the pam build tag)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libpam0g-dev shellcheck
+
+      - name: Web UI
+        working-directory: web
+        run: |
+          npm ci --no-fund --no-audit
+          npm run check
+          npm run build
+
+      - name: Go vet
+        run: |
+          go vet ./...
+          go vet -tags pam ./...
+
+      - name: Go test (race)
+        run: go test -race ./...
+
+      - name: Build with PAM
+        run: CGO_ENABLED=1 go build -tags pam -o /tmp/virtomird ./cmd/virtomird
+
+      - name: Shell scripts
+        run: shellcheck -s sh scripts/install.sh scripts/build-release.sh
