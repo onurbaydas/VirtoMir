@@ -61,7 +61,7 @@ type Backend interface {
 	NetworkLeases(name string) ([]virt.Lease, error)
 
 	GetSettings(uuid string) (virt.SettingsView, error)
-	PreviewSettings(uuid string, s virt.Settings) (string, error)
+	PreviewSettings(uuid string, s virt.Settings) (virt.Preview, error)
 	SaveSettings(uuid string, s virt.Settings) (virt.SaveResult, error)
 	ResizeDisk(uuid, target string, sizeGiB uint64) error
 	ResizeVolume(pool, name string, sizeGiB uint64) error

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | null
+  export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | 'resize' | null
 </script>
 
 <script lang="ts">
@@ -42,6 +42,7 @@
   let nicChoice = $state('')
   let nicModel = $state('virtio')
   let bridge = $state('br0')
+  let growGiB = $state(0)
 
   $effect(() => {
     if (!which) return
@@ -52,6 +53,7 @@
     diskMode = 'new'
     existing = ''
     isoPath = ''
+    growGiB = drive?.capacityBytes ? Math.ceil(drive.capacityBytes / 2 ** 30) + 10 : 20
     if (which === 'disk' || which === 'media') {
       void (async () => {
         try {
@@ -154,6 +156,20 @@
       if (!drive?.target) return
       await api.changeMedia(detail.uuid, drive.target, source)
       toasts.push({ kind: 'info', title: source ? `Inserted ${source.split('/').pop()}` : `Ejected ${drive.title}` })
+      onchange()
+      onclose()
+    })
+
+  let currentGiB = $derived(drive?.capacityBytes ? drive.capacityBytes / 2 ** 30 : 0)
+  const grow = () =>
+    run(async () => {
+      if (!drive?.target) return
+      await api.resizeDisk(detail.uuid, drive.target, growGiB)
+      toasts.push({
+        kind: 'info',
+        title: `${drive.title} is now ${growGiB} GiB`,
+        detail: 'Grow the partition and file system inside the guest to use the space (e.g. growpart + resize2fs, or Disk Management on Windows).',
+      })
       onchange()
       onclose()
     })
@@ -308,6 +324,21 @@
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={onclose}>Cancel</button>
     <button class="ui-btn primary" form="nic" disabled={busy || !nicChoice}>{busy ? 'Adding…' : 'Add adapter'}</button>
+  {/snippet}
+</Dialog>
+
+<Dialog open={which === 'resize'} title="Grow {drive?.title ?? 'disk'}" subtitle={drive?.summary} {onclose}>
+  <form id="grow" class="form" onsubmit={(e) => (e.preventDefault(), grow())}>
+    <label class="ui-field">
+      <span class="label">New size (GiB)</span>
+      <input class="ui-input" type="number" min={Math.floor(currentGiB) + 1} max="65536" bind:value={growGiB} />
+      <span class="hint">Currently {currentGiB ? `${currentGiB.toFixed(1)} GiB` : 'unknown'}. Disks can only grow — shrinking would destroy data.{active ? ' The running machine sees the new size immediately.' : ''}</span>
+    </label>
+    {#if error}<div class="ui-error-box">{error}</div>{/if}
+  </form>
+  {#snippet footer()}
+    <button class="ui-btn ghost" onclick={onclose}>Cancel</button>
+    <button class="ui-btn primary" form="grow" disabled={busy || growGiB <= currentGiB}>{busy ? 'Growing…' : 'Grow disk'}</button>
   {/snippet}
 </Dialog>
 

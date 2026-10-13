@@ -8,9 +8,13 @@
   import Sparkline from '../components/Sparkline.svelte'
   import MachineList from '../components/MachineList.svelte'
   import IOChart from '../components/IOChart.svelte'
+  import HistoryChart from '../components/HistoryChart.svelte'
+  import RangeTabs, { type Range } from '../components/RangeTabs.svelte'
+  import type { HistoryRange } from '../api'
   import Plus from '@lucide/svelte/icons/plus'
   import { router } from '../router.svelte'
 
+  let histRange = $state<Range>('24h')
   let snap = $derived(live.snapshot)
   let host = $derived(live.host)
   let loading = $derived(!snap || !snap.connected || !host)
@@ -117,11 +121,73 @@
 
 <MachineList />
 
+<section class="ui-panel history">
+  <header class="h-head">
+    <h2>Host history</h2>
+    <RangeTabs bind:value={histRange} live={false} />
+  </header>
+  <div class="h-grid">
+    <HistoryChart
+      title="CPU and memory"
+      unit="percent"
+      range={histRange as HistoryRange}
+      lines={[
+        { key: 'host.cpu', label: 'CPU', color: '--accent' },
+        { key: 'host.mem', label: 'Memory', color: '--accent-2', dashed: true },
+      ]}
+    />
+    <HistoryChart
+      title="Disks"
+      unit="bps"
+      range={histRange as HistoryRange}
+      lines={[
+        { key: 'host.disk.read', label: 'Read', color: '--accent' },
+        { key: 'host.disk.write', label: 'Write', color: '--accent-2', dashed: true },
+      ]}
+    />
+    <HistoryChart
+      title="Network"
+      unit="bps"
+      range={histRange as HistoryRange}
+      lines={[
+        { key: 'host.net.rx', label: 'Receive', color: '--accent' },
+        { key: 'host.net.tx', label: 'Send', color: '--accent-2', dashed: true },
+      ]}
+    />
+  </div>
+</section>
+
 <style>
   .head-right {
     display: flex;
     align-items: center;
     gap: 12px;
+  }
+  .history {
+    margin-top: 20px;
+    padding: 14px 18px 18px;
+  }
+  .h-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .h-head h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .h-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
+  }
+  @media (max-width: 1100px) {
+    .h-grid {
+      grid-template-columns: 1fr;
+    }
   }
   .hostio {
     display: grid;

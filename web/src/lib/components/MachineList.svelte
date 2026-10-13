@@ -3,6 +3,11 @@
   import MonitorOff from '@lucide/svelte/icons/monitor-off'
   import { isActive, live } from '../live.svelte'
   import MachineRow from './MachineRow.svelte'
+  import ConfirmButton from './ConfirmButton.svelte'
+  import Play from '@lucide/svelte/icons/play'
+  import Power from '@lucide/svelte/icons/power'
+  import Zap from '@lucide/svelte/icons/zap'
+  import type { Action, Domain } from '../api'
   import { router } from '../router.svelte'
 
   type Filter = 'all' | 'running' | 'stopped'
@@ -25,6 +30,28 @@
     }),
   )
   let loading = $derived(live.snapshot === null)
+
+  // ---- Bulk actions ---------------------------------------------------------------------
+  let selected = $state<Set<string>>(new Set())
+  // Forget machines that disappeared.
+  let picked = $derived(domains.filter((d) => selected.has(d.uuid)))
+  let allShown = $derived(shown.length > 0 && shown.every((d) => selected.has(d.uuid)))
+  function select(uuid: string, on: boolean) {
+    const next = new Set(selected)
+    if (on) next.add(uuid)
+    else next.delete(uuid)
+    selected = next
+  }
+  function selectAll(on: boolean) {
+    selected = on ? new Set(shown.map((d) => d.uuid)) : new Set()
+  }
+  const canStart = (d: Domain) => d.state === 'shutoff' || d.state === 'crashed'
+  const canStop = (d: Domain) => isActive(d.state)
+  const canKill = (d: Domain) => isActive(d.state) || d.state === 'paused'
+  function bulk(action: Action, ok: (d: Domain) => boolean) {
+    for (const d of picked.filter(ok)) void live.act(d, action)
+    selected = new Set()
+  }
 </script>
 
 <section class="panel">
@@ -50,9 +77,35 @@
     {/if}
   </header>
 
+  {#if picked.length}
+    <div class="bulk" role="toolbar" aria-label="Actions for selected machines">
+      <strong>{picked.length} selected</strong>
+      <button class="ui-btn sm" disabled={!picked.some(canStart)} onclick={() => bulk('start', canStart)}>
+        <Play size={14} /> Start {picked.filter(canStart).length || ''}
+      </button>
+      <button class="ui-btn sm" disabled={!picked.some(canStop)} onclick={() => bulk('shutdown', canStop)}>
+        <Power size={14} /> Shut down {picked.filter(canStop).length || ''}
+      </button>
+      <ConfirmButton
+        label="Force off {picked.filter(canKill).length || ''}"
+        confirm="Cut power to {picked.filter(canKill).length}?"
+        icon={Zap}
+        disabled={!picked.some(canKill)}
+        run={() => bulk('force-off', canKill)}
+      />
+      <span class="spacer"></span>
+      <button class="ui-btn sm ghost" onclick={() => (selected = new Set())}>Clear</button>
+    </div>
+  {/if}
+
   <div class="table" role="table" aria-label="Virtual machines">
     <div class="colhead" role="row">
-      <span role="columnheader">Name</span>
+      <span role="columnheader" class="name-h">
+        {#if shown.length}
+          <input type="checkbox" checked={allShown} aria-label="Select all shown machines" onchange={(e) => selectAll(e.currentTarget.checked)} />
+        {/if}
+        Name
+      </span>
       <span role="columnheader">State</span>
       <span role="columnheader">CPUs</span>
       <span role="columnheader">Memory</span>
@@ -78,7 +131,7 @@
       </div>
     {:else}
       {#each shown as d (d.uuid)}
-        <MachineRow {d} />
+        <MachineRow {d} selected={selected.has(d.uuid)} onselect={(on) => select(d.uuid, on)} />
       {/each}
     {/if}
   </div>
@@ -163,6 +216,40 @@
     background: transparent;
     outline: none;
     font-size: 13.5px;
+  }
+  .bulk {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--accent-soft);
+    animation: slide var(--dur) var(--ease-out);
+  }
+  .bulk strong {
+    margin-right: 6px;
+    font-size: 13px;
+  }
+  .spacer {
+    flex: 1;
+  }
+  @keyframes slide {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+  .name-h {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .name-h input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--accent);
   }
   .colhead {
     display: grid;

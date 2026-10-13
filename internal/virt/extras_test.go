@@ -221,3 +221,27 @@ func TestReservationChecks(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviewOnlyShowsRealChanges(t *testing.T) {
+	x := fixture(t)
+	s := settingsFromXML(x).Settings
+	p, err := previewSettings(fixture(t), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Before != p.After {
+		t.Error("an unchanged form must not change the XML")
+	}
+	s.VCPUs = 3
+	p, _ = previewSettings(fixture(t), s)
+	changed := 0
+	b, a := strings.Split(p.Before, "\n"), strings.Split(p.After, "\n")
+	for i := range min(len(a), len(b)) {
+		if a[i] != b[i] {
+			changed++
+		}
+	}
+	if changed != 1 || len(a) != len(b) {
+		t.Errorf("changing vCPUs changed %d lines (want 1)", changed)
+	}
+}

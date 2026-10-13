@@ -6,10 +6,14 @@
   import { isActive, live } from '../live.svelte'
   import { formatBps, formatKiB, formatPercent, formatRate } from '../format'
   import IOChart from './IOChart.svelte'
+  import HistoryChart from './HistoryChart.svelte'
+  import RangeTabs, { type Range } from './RangeTabs.svelte'
 
   let { d, devices }: { d: Domain; devices: Device[] } = $props()
 
   let active = $derived(isActive(d.state))
+  let range = $state<Range>('live')
+  const vm = (m: string) => `vm.${d.uuid}.${m}`
   let io = $derived(live.domainIO(d.uuid))
 
   // Friendly names: "vda" → "Disk vda", "vnet2" → the adapter that uses it.
@@ -27,11 +31,46 @@
 <section class="perf">
   <header class="head">
     <h2><Activity size={15} /> Performance</h2>
-    {#if active}<span class="hint">last 60 s · updated every second</span>{/if}
+    <span class="right">
+      {#if range === 'live' && active}<span class="hint">updated every second</span>{/if}
+      <RangeTabs bind:value={range} />
+    </span>
   </header>
 
-  {#if !active}
-    <p class="off">Live performance data appears while the machine is running.</p>
+  {#if range !== 'live'}
+    <div class="charts">
+      <div class="full">
+      <HistoryChart
+        title="CPU and memory"
+        unit="percent"
+        {range}
+        lines={[
+          { key: vm('cpu'), label: 'CPU', color: '--accent' },
+          { key: vm('mem'), label: 'Guest memory', color: '--accent-2', dashed: true },
+        ]}
+      />
+      </div>
+      <HistoryChart
+        title="Disk"
+        unit="bps"
+        {range}
+        lines={[
+          { key: vm('disk.read'), label: 'Read', color: '--accent' },
+          { key: vm('disk.write'), label: 'Write', color: '--accent-2', dashed: true },
+        ]}
+      />
+      <HistoryChart
+        title="Network"
+        unit="bps"
+        {range}
+        lines={[
+          { key: vm('net.rx'), label: 'Receive', color: '--accent' },
+          { key: vm('net.tx'), label: 'Send', color: '--accent-2', dashed: true },
+        ]}
+      />
+    </div>
+  {:else if !active}
+    <p class="off">Live data appears while the machine is running. Pick a range above to see its history.</p>
   {:else}
     <div class="charts">
       <IOChart
@@ -144,6 +183,14 @@
   .hint {
     color: var(--text-3);
     font-size: 12px;
+  }
+  .full {
+    grid-column: 1 / -1;
+  }
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
   .off {
     margin: 0;

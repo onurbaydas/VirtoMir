@@ -22,6 +22,8 @@
   import XmlView from '../components/XmlView.svelte'
   import PerformancePanel from '../components/PerformancePanel.svelte'
   import SnapshotsPanel from '../components/SnapshotsPanel.svelte'
+  import SettingsPanel from '../components/SettingsPanel.svelte'
+  import Maximize2 from '@lucide/svelte/icons/maximize-2'
   import ConfirmButton from '../components/ConfirmButton.svelte'
   import ManageDialogs, { type ManageDialog } from '../components/ManageDialogs.svelte'
   import type { MenuItem } from '../components/ActionMenu.svelte'
@@ -67,8 +69,8 @@
     return () => clearInterval(t)
   })
 
-  type Tab = 'overview' | 'hardware' | 'snapshots' | 'xml'
-  const TABS: Tab[] = ['overview', 'hardware', 'snapshots', 'xml']
+  type Tab = 'overview' | 'settings' | 'hardware' | 'snapshots' | 'xml'
+  const TABS: Tab[] = ['overview', 'settings', 'hardware', 'snapshots', 'xml']
   let tab = $derived<Tab>(
     router.route.name === 'machine' && TABS.includes(router.route.tab as Tab) ? (router.route.tab as Tab) : 'overview',
   )
@@ -344,6 +346,9 @@
     <button role="tab" aria-selected={tab === 'overview'} class:on={tab === 'overview'} onclick={() => setTab('overview')}>
       Overview
     </button>
+    <button role="tab" aria-selected={tab === 'settings'} class:on={tab === 'settings'} onclick={() => setTab('settings')}>
+      Settings
+    </button>
     <button role="tab" aria-selected={tab === 'hardware'} class:on={tab === 'hardware'} onclick={() => setTab('hardware')}>
       Hardware <span class="count num">{detail.devices.length}</span>
     </button>
@@ -407,6 +412,9 @@
                         <Disc size={14} /> {d.summary?.endsWith('Empty') ? 'Insert media…' : 'Change media…'}
                       </button>
                     {/if}
+                    {#if d.kind === 'disk' && d.target}
+                      <button class="ui-btn sm" onclick={() => ((mediaDrive = d), (dlg = 'resize'))}><Maximize2 size={14} /> Grow…</button>
+                    {/if}
                     {#if (d.kind === 'disk' || d.kind === 'cdrom') && d.target}
                       <ConfirmButton label="Remove" confirm="Detach from machine?" icon={Unplug} failure="Could not remove {d.title}" run={() => detachDevice(d)} />
                     {:else if d.kind === 'interface' && d.mac}
@@ -429,6 +437,10 @@
       {#if detail.devices.length === 0}
         <div class="state-msg"><strong>No devices defined</strong></div>
       {/if}
+    </div>
+  {:else if tab === 'settings'}
+    <div role="tabpanel">
+      <SettingsPanel {uuid} {active} onsaved={load} />
     </div>
   {:else if tab === 'snapshots'}
     <div role="tabpanel">
