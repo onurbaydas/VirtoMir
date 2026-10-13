@@ -10,6 +10,8 @@
   import LogOut from '@lucide/svelte/icons/log-out'
   import UserRound from '@lucide/svelte/icons/user-round'
   import ClockArrowUp from '@lucide/svelte/icons/clock-arrow-up'
+  import Bell from '@lucide/svelte/icons/bell'
+  import { alerts } from '../alerts.svelte'
   import { session } from '../session.svelte'
   import { isActive, live } from '../live.svelte'
   import { machineHref, router } from '../router.svelte'
@@ -32,6 +34,7 @@
     { name: 'overview', href: '/', label: 'Overview', icon: LayoutDashboard, role: 'viewer' },
     { name: 'storage', href: '/storage', label: 'Storage', icon: HardDrive, role: 'viewer' },
     { name: 'networks', href: '/networks', label: 'Networks', icon: Network, role: 'viewer' },
+    { name: 'alerts', href: '/alerts', label: 'Alerts', icon: Bell, role: 'viewer' },
     { name: 'activity', href: '/activity', label: 'Activity', icon: ClockArrowUp, role: 'admin' },
   ] as const
   let NAV = $derived(ALL_NAV.filter((n) => session.can(n.role)))
@@ -85,6 +88,9 @@
       >
         <Icon size={16} />
         {n.label}
+        {#if n.name === 'alerts' && alerts.open > 0}
+          <span class="badge" class:crit={alerts.critical} title="{alerts.open} unacknowledged">{alerts.open}</span>
+        {/if}
       </a>
     {/each}
 
@@ -264,6 +270,23 @@
     flex-direction: column;
     min-height: 0;
     flex: 1;
+  }
+  .badge {
+    margin-left: auto;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--warn);
+    color: #1a1204;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+  }
+  .badge.crit {
+    background: var(--danger);
+    color: #fff;
   }
   .machines-head {
     display: flex;

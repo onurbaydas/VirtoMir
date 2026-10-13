@@ -9,6 +9,7 @@ export type Route =
   | { name: 'storage'; pool: string }
   | { name: 'networks' }
   | { name: 'activity' }
+  | { name: 'alerts'; tab: string }
   | { name: 'account' }
   | { name: 'console'; uuid: string }
   | { name: 'not-found' }
@@ -20,6 +21,7 @@ function parse(path: string, hash: string): Route {
   if (path === '/storage') return { name: 'storage', pool: decodeURIComponent(hash.replace(/^#/, '')) }
   if (path === '/networks') return { name: 'networks' }
   if (path === '/activity') return { name: 'activity' }
+  if (path === '/alerts') return { name: 'alerts', tab: hash.replace(/^#/, '') }
   if (path === '/account') return { name: 'account' }
   const c = /^\/console\/([0-9a-fA-F-]{36})$/.exec(path)
   if (c) return { name: 'console', uuid: c[1].toLowerCase() }
