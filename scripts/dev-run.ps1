@@ -15,16 +15,24 @@
     the daemon runs without sign-in over plain HTTP (fast inner loop).
     The dev unit runs as onur, not root, so PAM can only verify onur's own password.
 
+.PARAMETER AsRoot
+    Run the dev daemon as root (state in /var/lib/virtomir-dev) like a real install. Needed
+    to test backups: as onur it can neither read the disk images nor let QEMU write into
+    onur's home.
+
 .EXAMPLE
     ./scripts/dev-run.ps1
 .EXAMPLE
     ./scripts/dev-run.ps1 -Pam
+.EXAMPLE
+    ./scripts/dev-run.ps1 -AsRoot
 #>
 [CmdletBinding()]
 param(
     [string]$SshHost = 'virtomir-dev',
     [string]$Listen  = '0.0.0.0:8420',
-    [switch]$Pam
+    [switch]$Pam,
+    [switch]$AsRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -102,13 +110,20 @@ sudo install -m 0644 packaging/virtomir.pam /etc/pam.d/virtomir
     $scheme = 'https'
 }
 
+if ($AsRoot) {
+    $flags = $flags -replace '-state-dir \S+', '-state-dir /var/lib/virtomir-dev'
+    $runAs = ''
+} else {
+    $runAs = '-p User=$(id -un)' # expanded by bash on the dev host
+}
+
 $remote = @"
 set -e
 mv ~/virtomir/virtomird.new ~/virtomir/virtomird
 chmod +x ~/virtomir/virtomird
 sudo systemctl stop virtomird-dev 2>/dev/null || true
 sudo systemctl reset-failed virtomird-dev 2>/dev/null || true
-sudo systemd-run --quiet --unit=virtomird-dev -p User=`$(id -un) `$HOME/virtomir/virtomird $flags
+sudo systemd-run --quiet --unit=virtomird-dev $runAs `$HOME/virtomir/virtomird $flags
 sleep 1
 systemctl is-active virtomird-dev
 "@

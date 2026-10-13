@@ -8,6 +8,7 @@
   import { api, errorText, type SnapshotInfo } from '../api'
   import { toasts } from '../toast.svelte'
   import ConfirmButton from './ConfirmButton.svelte'
+  import { router } from '../router.svelte'
 
   let { uuid, active, onchange }: { uuid: string; active: boolean; onchange: () => void } = $props()
 
@@ -87,6 +88,7 @@
       ? 'The machine keeps running. Its memory is saved too, so reverting brings it back exactly as it is now.'
       : 'Saves the disks as they are now.'}
     Snapshots of qcow2 disks are stored inside the image.
+    <a href="#backups" onclick={(e) => (e.preventDefault(), router.navigate(location.pathname + '#backups', { replace: true }))}>Take them automatically →</a>
   </p>
 
   {#if error}
@@ -162,6 +164,10 @@
     margin: 8px 0 14px;
     color: var(--text-3);
     font-size: 12.5px;
+  }
+  .hint a {
+    color: var(--accent);
+    text-decoration: none;
   }
   .muted,
   .empty {
