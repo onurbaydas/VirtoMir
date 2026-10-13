@@ -330,7 +330,7 @@ func setSeed(x *libvirtxml.Domain, seed string) {
 	}
 	for i := range x.Devices.Disks {
 		disk := &x.Devices.Disks[i]
-		if disk.Device == "cdrom" && disk.Source != nil && disk.Source.File != nil && strings.HasSuffix(disk.Source.File.File, "-cidata.iso") {
+		if isSeedISO(*disk) {
 			disk.Source.File.File = seed
 			return
 		}

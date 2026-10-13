@@ -165,7 +165,11 @@ func webhook(ch Channel, ev Event) error {
 		body, _ = json.Marshal(map[string]string{"content": ev.Text()})
 	case "ntfy":
 		// ntfy.sh: plain text body, metadata in headers.
-		body, contentType = []byte(ev.Alert.Message), "text/plain; charset=utf-8"
+		msg := ev.Alert.Message
+		if ev.Type == ResolvedEvent {
+			msg = "Resolved — " + msg // the message still describes the firing value
+		}
+		body, contentType = []byte(msg), "text/plain; charset=utf-8"
 		headers.Set("Title", fmt.Sprintf("VirtoMir: %s %s", ev.Alert.Subject, ev.Type))
 		prio := map[Severity]string{Warning: "default", Critical: "urgent"}[ev.Alert.Severity]
 		if ev.Type != Firing {

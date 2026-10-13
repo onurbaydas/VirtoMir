@@ -152,14 +152,19 @@ func (c *Client) Delete(uuid string, removeStorage bool) (DeleteResult, error) {
 	return res, nil
 }
 
-// deletableDisks are the machine's own writable disks. CD-ROMs, floppies, read-only and
-// shared disks (and backing images) belong to someone else.
+// deletableDisks are the machine's own writable disks plus the cloud-init seed VirtoMir made
+// for it. Other CD-ROMs, floppies, read-only and shared disks (and backing images) belong to
+// someone else.
 func deletableDisks(x *libvirtxml.Domain) []string {
 	var out []string
 	if x.Devices == nil {
 		return out
 	}
 	for _, v := range x.Devices.Disks {
+		if isSeedISO(v) {
+			out = append(out, v.Source.File.File)
+			continue
+		}
 		if (v.Device != "" && v.Device != "disk") || v.ReadOnly != nil || v.Shareable != nil || v.Source == nil {
 			continue
 		}

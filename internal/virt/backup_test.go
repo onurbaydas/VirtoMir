@@ -95,3 +95,22 @@ func TestBackupDisks(t *testing.T) {
 		t.Error("xml escape")
 	}
 }
+
+func TestParseDACLabel(t *testing.T) {
+	for _, tc := range []struct {
+		in       string
+		uid, gid int
+		ok       bool
+	}{
+		{"+64055:+64055", 64055, 64055, true},
+		{"107:992", 107, 992, true},
+		{"+0:+0", 0, 0, false}, // QEMU as root needs nothing
+		{"libvirt-qemu:kvm", 0, 0, false},
+		{"", 0, 0, false},
+	} {
+		uid, gid, ok := parseDACLabel(tc.in)
+		if uid != tc.uid || gid != tc.gid || ok != tc.ok {
+			t.Errorf("parseDACLabel(%q) = %d, %d, %v; want %d, %d, %v", tc.in, uid, gid, ok, tc.uid, tc.gid, tc.ok)
+		}
+	}
+}

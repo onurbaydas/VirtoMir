@@ -55,6 +55,12 @@ func TestDeletableDisks(t *testing.T) {
 	if got := deletableDisks(x); !slices.Equal(got, []string{"/var/lib/libvirt/images/debian-uefi.qcow2"}) {
 		t.Errorf("deletable = %q", got)
 	}
+	// The cloud-init seed VirtoMir made for the machine goes with it.
+	setSeed(x, "/var/lib/libvirt/images/web1-cidata.iso")
+	want := []string{"/var/lib/libvirt/images/debian-uefi.qcow2", "/var/lib/libvirt/images/web1-cidata.iso"}
+	if got := deletableDisks(x); !slices.Equal(got, want) {
+		t.Errorf("deletable with seed = %q", got)
+	}
 }
 
 func TestDiskNames(t *testing.T) {

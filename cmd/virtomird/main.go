@@ -73,6 +73,12 @@ func run(c config, log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Like systemd's StateDirectory=: 0755, so QEMU can pass through to the default backup
+	// location. Secrets below it (tls/, tokens) have their own restrictive modes.
+	if err := os.MkdirAll(c.stateDir, 0o755); err != nil {
+		return fmt.Errorf("state directory: %w", err)
+	}
+
 	authMgr, err := setupAuth(c, log)
 	if err != nil {
 		return err

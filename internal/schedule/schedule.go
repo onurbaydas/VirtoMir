@@ -338,7 +338,7 @@ func (s *Scheduler) RunNow(id string) error {
 func (s *Scheduler) execute(ctx context.Context, sc Schedule, dir string, report func(string)) (string, error) {
 	switch sc.Kind {
 	case Snapshots:
-		name := AutoPrefix + s.now().Format("20060102-1504")
+		name := AutoPrefix + s.now().Format("20060102-150405") // seconds: "Run now" twice a minute must not collide
 		report("Taking snapshot " + name + "…")
 		if err := s.runner.Snapshot(sc.Domain, name, "Taken by a VirtoMir schedule"); err != nil {
 			return "", err
