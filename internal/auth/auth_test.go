@@ -19,7 +19,12 @@ func (f fakeAuthn) Authenticate(_ context.Context, u, p string) error {
 
 func newTestManager() (*Manager, *time.Time) {
 	now := time.Unix(1_000_000, 0)
-	m := New(fakeAuthn{"onur": "secret", "guest": "guest"}, func(u string) bool { return u == "onur" })
+	m := New(fakeAuthn{"onur": "secret", "guest": "guest"}, func(u string) Role {
+		if u == "onur" {
+			return Admin
+		}
+		return NoAccess
+	})
 	m.now = func() time.Time { return now }
 	return m, &now
 }
@@ -30,7 +35,7 @@ func TestLoginAndSession(t *testing.T) {
 	if err != nil || len(tok) != 64 {
 		t.Fatalf("login: %q %v", tok, err)
 	}
-	if u, ok := m.User(tok); !ok || u != "onur" {
+	if u, ok := m.User(tok); !ok || u.Name != "onur" || u.Role != Admin {
 		t.Fatalf("user = %q %v", u, ok)
 	}
 	// Activity keeps the session alive past the idle timeout…
@@ -108,7 +113,7 @@ func TestCookie(t *testing.T) {
 	}
 	req := httptest.NewRequest("GET", "/", nil)
 	req.AddCookie(c)
-	if Token(req) != "tok" {
+	if SessionToken(req) != "tok" {
 		t.Error("token not read back")
 	}
 }

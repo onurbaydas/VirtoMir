@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { session } from '../session.svelte'
   import Cpu from '@lucide/svelte/icons/cpu'
   import MemoryStick from '@lucide/svelte/icons/memory-stick'
   import Boxes from '@lucide/svelte/icons/boxes'
@@ -54,7 +55,7 @@
     {#if live.streamOpen && snap?.connected}
       <span class="live" title="Updated every second"><span class="live-dot"></span>Live</span>
     {/if}
-    <a class="ui-btn primary" href="/machines/new" onclick={router.link}><Plus size={15} /> New machine</a>
+    {#if session.can('admin')}<a class="ui-btn primary" href="/machines/new" onclick={router.link}><Plus size={15} /> New machine</a>{/if}
   </div>
 </header>
 

@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/onurbaydas/virtomir/internal/activity"
 	"github.com/onurbaydas/virtomir/internal/auth"
 )
 
@@ -14,8 +15,9 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 
 type sessionInfo struct {
 	// Mode "pam": sign-in required; "none": development mode without sign-in.
-	Mode string `json:"mode"`
-	User string `json:"user,omitempty"`
+	Mode string    `json:"mode"`
+	User string    `json:"user,omitempty"`
+	Role auth.Role `json:"role,omitempty"`
 }
 
 func (s *Server) mode() string {
@@ -27,20 +29,20 @@ func (s *Server) mode() string {
 
 func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 	if s.auth == nil {
-		s.writeJSON(w, http.StatusOK, sessionInfo{Mode: "none"})
+		s.writeJSON(w, http.StatusOK, sessionInfo{Mode: "none", Role: auth.Admin})
 		return
 	}
-	u, ok := s.auth.User(auth.Token(r))
+	u, ok := s.auth.User(auth.SessionToken(r))
 	if !ok {
 		s.writeJSON(w, http.StatusUnauthorized, sessionInfo{Mode: s.mode()})
 		return
 	}
-	s.writeJSON(w, http.StatusOK, sessionInfo{Mode: s.mode(), User: u})
+	s.writeJSON(w, http.StatusOK, sessionInfo{Mode: s.mode(), User: u.Name, Role: u.Role})
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	if s.auth == nil {
-		s.writeJSON(w, http.StatusOK, sessionInfo{Mode: "none"})
+		s.writeJSON(w, http.StatusOK, sessionInfo{Mode: "none", Role: auth.Admin})
 		return
 	}
 	var body struct {
@@ -53,17 +55,23 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	token, err := s.auth.Login(r.Context(), r.RemoteAddr, body.User, body.Password)
 	if err != nil {
 		s.log.Warn("sign-in failed", "user", body.User, "remote", r.RemoteAddr, "err", err)
+		s.recordSignIn(body.User, r.RemoteAddr, http.StatusUnauthorized, err.Error())
 		s.writeError(w, err)
 		return
 	}
-	s.log.Info("signed in", "user", body.User, "remote", r.RemoteAddr)
+	s.recordSignIn(body.User, r.RemoteAddr, http.StatusOK, "")
 	auth.SetCookie(w, r, token)
-	s.writeJSON(w, http.StatusOK, sessionInfo{Mode: s.mode(), User: body.User})
+	u, _ := s.auth.User(token)
+	s.writeJSON(w, http.StatusOK, sessionInfo{Mode: s.mode(), User: u.Name, Role: u.Role})
+}
+
+func (s *Server) recordSignIn(user, remote string, status int, errMsg string) {
+	s.record(activity.Entry{User: user, Remote: remote, Method: "POST", Path: "/api/v1/auth/login", Status: status, Error: errMsg})
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if s.auth != nil {
-		s.auth.Logout(auth.Token(r))
+		s.auth.Logout(auth.SessionToken(r))
 	}
 	auth.ClearCookie(w, r)
 	w.WriteHeader(http.StatusNoContent)

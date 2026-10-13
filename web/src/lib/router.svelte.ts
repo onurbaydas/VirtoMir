@@ -8,6 +8,8 @@ export type Route =
   | { name: 'new' }
   | { name: 'storage'; pool: string }
   | { name: 'networks' }
+  | { name: 'activity' }
+  | { name: 'account' }
   | { name: 'not-found' }
 
 function parse(path: string, hash: string): Route {
@@ -16,6 +18,8 @@ function parse(path: string, hash: string): Route {
   if (path === '/machines/new') return { name: 'new' }
   if (path === '/storage') return { name: 'storage', pool: decodeURIComponent(hash.replace(/^#/, '')) }
   if (path === '/networks') return { name: 'networks' }
+  if (path === '/activity') return { name: 'activity' }
+  if (path === '/account') return { name: 'account' }
   const m = /^\/machines\/([0-9a-fA-F-]{36})$/.exec(path)
   if (m) return { name: 'machine', uuid: m[1].toLowerCase(), tab: hash.replace(/^#/, '') }
   return { name: 'not-found' }

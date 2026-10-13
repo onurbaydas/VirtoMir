@@ -10,9 +10,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/activity"
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/virt"
@@ -86,24 +86,30 @@ type Options struct {
 	Log     *slog.Logger
 	// History nil: no metric history (GET /api/v1/history answers 404).
 	History HistoryQuerier
+	// Tokens nil: no API tokens. Activity nil: changes are only logged, not kept.
+	Tokens   *auth.Tokens
+	Activity *activity.Log
 }
 
 type Server struct {
-	backend Backend
-	live    Live
-	jobs    *jobs.Manager
-	auth    *auth.Manager
-	ui      fs.FS
-	version string
-	log     *slog.Logger
-	history HistoryQuerier
+	backend  Backend
+	live     Live
+	jobs     *jobs.Manager
+	auth     *auth.Manager
+	ui       fs.FS
+	version  string
+	log      *slog.Logger
+	history  HistoryQuerier
+	tokens   *auth.Tokens
+	activity *activity.Log
 }
 
 func NewServer(o Options) *Server {
 	if o.Jobs == nil {
 		o.Jobs = jobs.New(context.Background())
 	}
-	return &Server{backend: o.Backend, live: o.Live, jobs: o.Jobs, auth: o.Auth, ui: o.UI, version: o.Version, log: o.Log, history: o.History}
+	return &Server{backend: o.Backend, live: o.Live, jobs: o.Jobs, auth: o.Auth, ui: o.UI, version: o.Version, log: o.Log,
+		history: o.History, tokens: o.Tokens, activity: o.Activity}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -120,6 +126,7 @@ func (s *Server) Handler() http.Handler {
 	s.storageRoutes(mux)
 	s.networkRoutes(mux)
 	s.extraRoutes(mux)
+	s.accessRoutes(mux)
 
 	// GET-only fallbacks, so a wrong method on a real endpoint still gets 405.
 	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {
@@ -129,40 +136,6 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("GET /", spaHandler(s.ui))
 	}
 	return s.guard(mux)
-}
-
-type ctxKey int
-
-const userKey ctxKey = 0
-
-// guard enforces sign-in on the API, rejects cross-site writes and logs every change
-// together with the user who made it.
-func (s *Server) guard(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		unsafe := r.Method != http.MethodGet && r.Method != http.MethodHead
-		if unsafe && !sameOrigin(r) {
-			s.writeJSON(w, http.StatusForbidden, map[string]string{"error": "cross-site request refused"})
-			return
-		}
-		user := ""
-		if s.auth != nil && strings.HasPrefix(r.URL.Path, "/api/") && !publicPath(r.URL.Path) {
-			u, ok := s.auth.User(auth.Token(r))
-			if !ok {
-				s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in required"})
-				return
-			}
-			user = u
-			r = r.WithContext(context.WithValue(r.Context(), userKey, u))
-		}
-		if unsafe && strings.HasPrefix(r.URL.Path, "/api/v1/") && !strings.HasPrefix(r.URL.Path, "/api/v1/auth/") {
-			s.log.Info("api change", "user", user, "method", r.Method, "path", r.URL.Path)
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func publicPath(p string) bool {
-	return p == "/api/v1/version" || strings.HasPrefix(p, "/api/v1/auth/")
 }
 
 // sameOrigin: browsers send Origin (or Sec-Fetch-Site) with every cross-site write;
@@ -217,7 +190,7 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no") // don't let reverse proxies buffer the stream
 
-	token := auth.Token(r)
+	token := auth.SessionToken(r)
 	backlog, snaps, unsubscribe := s.live.Subscribe()
 	defer unsubscribe()
 	heartbeat := time.NewTicker(15 * time.Second)

@@ -48,14 +48,24 @@ func (f *fakeBackend) ListNetworks() ([]virt.VNetwork, error) {
 type stubAuthn struct{}
 
 func (stubAuthn) Authenticate(_ context.Context, u, p string) error {
-	if u == "onur" && p == "pw" {
+	if (u == "onur" || u == "op" || u == "view") && p == "pw" {
 		return nil
 	}
 	return auth.ErrBadCredentials
 }
 
 func authServer(b Backend) http.Handler {
-	m := auth.New(stubAuthn{}, func(string) bool { return true })
+	m := auth.New(stubAuthn{}, func(u string) auth.Role {
+		switch u {
+		case "onur":
+			return auth.Admin
+		case "op":
+			return auth.Operator
+		case "view":
+			return auth.Viewer
+		}
+		return auth.NoAccess
+	})
 	return NewServer(Options{Backend: b, Live: &fakeLive{}, Auth: m, Version: "t", Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Handler()
 }
 

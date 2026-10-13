@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { session } from '../session.svelte'
   import Network from '@lucide/svelte/icons/network'
   import Plus from '@lucide/svelte/icons/plus'
   import Play from '@lucide/svelte/icons/play'
@@ -144,7 +145,7 @@
     <h1>Networks</h1>
     <p class="lead">Virtual networks connect machines to each other, to the host and to the outside world.</p>
   </div>
-  <button class="ui-btn primary" onclick={openNew}><Plus size={15} /> New network</button>
+  <button class="ui-btn primary" disabled={!session.can('admin')} title={session.why('admin')} onclick={openNew}><Plus size={15} /> New network</button>
 </header>
 
 {#if error}
@@ -175,7 +176,7 @@
         {#if open === n.name}
           <div class="body">
             <p class="hint">{MODE[n.mode]?.hint ?? ''}</p>
-            <div class="controls">
+            <div class="controls" inert={!session.can('admin')} title={session.why('admin')}>
               <label class="ui-switch small">
                 <input type="checkbox" checked={n.autostart} disabled={!n.persistent} onchange={(e) => autostart(n, e.currentTarget.checked)} />
                 Start with the host
@@ -218,7 +219,7 @@
               <div class="block">
                 <div class="block-head">
                   <h3>Reserved addresses</h3>
-                  <button class="ui-btn sm ghost" onclick={() => openReserve(n)}><Pin size={14} /> Reserve an address</button>
+                  <button class="ui-btn sm ghost" inert={!session.can('admin')} onclick={() => openReserve(n)}><Pin size={14} /> Reserve an address</button>
                 </div>
                 {#if !n.dhcpHosts?.length}
                   <p class="muted">None. Reserve one so a machine always gets the same IP.</p>
@@ -229,7 +230,7 @@
                         <span class="mono" role="cell">{h.ip}</span>
                         <span role="cell">{h.name ?? '—'}</span>
                         <span class="mono muted" role="cell">{h.mac}</span>
-                        <span role="cell">
+                        <span role="cell" inert={!session.can('admin')}>
                           <ConfirmButton
                             label="Remove"
                             confirm="Remove?"
@@ -266,7 +267,7 @@
                         <span class="muted" role="cell" title="Lease expires in">
                           {#if reserved(n, l.mac)}<span class="pinned"><Pin size={12} /> fixed</span>{:else}
                             {expires(l.expires)}
-                            <button class="pin" title="Always give this machine this address" onclick={() => openReserve(n, l)}><Pin size={13} /></button>
+                            {#if session.can('admin')}<button class="pin" title="Always give this machine this address" onclick={() => openReserve(n, l)}><Pin size={13} /></button>{/if}
                           {/if}
                         </span>
                       </div>

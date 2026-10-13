@@ -333,6 +333,11 @@ textarea.ui-input {
   cursor: not-allowed;
 }
 
+/* Controls the role does not allow: visible, but inert and dimmed. */
+[inert] {
+  opacity: 0.45;
+}
+
 .ui-panel {
   background: var(--surface);
   border: 1px solid var(--border);

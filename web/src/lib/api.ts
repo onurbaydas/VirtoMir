@@ -219,9 +219,33 @@ const netPath = (name: string) => `/api/v1/networks/${enc(name)}`
 
 // ---- Management API types (mirror internal/virt) ------------------------------------
 
+export type Role = 'viewer' | 'operator' | 'admin'
+
 export interface Session {
   mode: 'pam' | 'none'
   user?: string
+  role?: Role
+}
+
+export interface ApiToken {
+  id: string
+  name: string
+  owner: string
+  role: Role
+  created: string
+  expires?: string
+  lastUsed?: string
+}
+
+export interface ActivityEntry {
+  time: string
+  user: string
+  token?: string
+  remote?: string
+  method: string
+  path: string
+  status: number
+  error?: string
 }
 
 export interface Job {
@@ -406,6 +430,19 @@ export const api = {
   session: () => request<Session>('GET', '/api/v1/auth/session'),
   login: (user: string, password: string) => request<Session>('POST', '/api/v1/auth/login', { user, password }),
   logout: () => request<void>('POST', '/api/v1/auth/logout'),
+
+  tokens: async (all = false) => (await request<{ tokens: ApiToken[] }>('GET', `/api/v1/tokens${all ? '?all=true' : ''}`)).tokens,
+  createToken: (name: string, role: Role, ttlDays: number) =>
+    request<{ token: ApiToken; secret: string }>('POST', '/api/v1/tokens', { name, role, ttlDays }),
+  revokeToken: (id: string) => request<void>('DELETE', `/api/v1/tokens/${enc(id)}`),
+  activity: async (q: { user?: string; target?: string; failed?: boolean; limit?: number } = {}) => {
+    const p = new URLSearchParams()
+    if (q.user) p.set('user', q.user)
+    if (q.target) p.set('target', q.target)
+    if (q.failed) p.set('failed', 'true')
+    p.set('limit', String(q.limit ?? 300))
+    return (await request<{ entries: ActivityEntry[] }>('GET', `/api/v1/activity?${p}`)).entries
+  },
 
   job: (id: string) => request<Job>('GET', `/api/v1/jobs/${enc(id)}`),
 

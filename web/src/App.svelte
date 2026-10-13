@@ -12,6 +12,8 @@
   import StoragePage from './lib/pages/StoragePage.svelte'
   import NetworksPage from './lib/pages/NetworksPage.svelte'
   import NotFound from './lib/pages/NotFound.svelte'
+  import ActivityPage from './lib/pages/ActivityPage.svelte'
+  import AccountPage from './lib/pages/AccountPage.svelte'
   import Login from './lib/pages/Login.svelte'
 
   let version = $state('')
@@ -55,6 +57,10 @@
         <StoragePage pool={route.pool} />
       {:else if route.name === 'networks'}
         <NetworksPage />
+      {:else if route.name === 'activity'}
+        <ActivityPage />
+      {:else if route.name === 'account'}
+        <AccountPage />
       {:else}
         <NotFound />
       {/if}

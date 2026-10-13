@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { session } from '../session.svelte'
   import HardDrive from '@lucide/svelte/icons/hard-drive'
   import Plus from '@lucide/svelte/icons/plus'
   import Upload from '@lucide/svelte/icons/upload'
@@ -185,7 +186,7 @@
     <h1>Storage</h1>
     <p class="lead">Disk images and installation media live in storage pools, usually directories on this host.</p>
   </div>
-  <button class="ui-btn" onclick={() => ((pName = ''), (pPath = ''), (pErr = ''), (poolDlg = true))}>
+  <button class="ui-btn" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((pName = ''), (pPath = ''), (pErr = ''), (poolDlg = true))}>
     <FolderPlus size={15} /> New pool
   </button>
 </header>
@@ -230,11 +231,11 @@
           <h2>{current.name}</h2>
           <span class="chip mono">{current.type}</span>
           <label class="ui-switch small" title="Start this pool when the host boots">
-            <input type="checkbox" checked={current.autostart} onchange={(e) => toggleAutostart(current!, e.currentTarget.checked)} />
+            <input type="checkbox" checked={current.autostart} disabled={!session.can('admin')} onchange={(e) => toggleAutostart(current!, e.currentTarget.checked)} />
             Autostart
           </label>
         </div>
-        <div class="v-actions">
+        <div class="v-actions" inert={!session.can('admin')} title={session.why('admin')}>
           {#if current.active}
             <button class="ui-btn sm ghost" onclick={() => poolAction(current!, 'refresh')} title="Rescan the directory for files added outside VirtoMir">
               <RefreshCw size={14} /> Rescan
@@ -311,7 +312,7 @@
               <span role="cell" class="used">
                 {#if v.usedBy.length}{v.usedBy.join(', ')}{:else}<span class="muted">—</span>{/if}
               </span>
-              <span role="cell" class="act">
+              <span role="cell" class="act" inert={!session.can('admin')}>
                 {#if v.format !== 'iso' && v.usedBy.length === 0}
                   <button class="ui-btn sm ghost" onclick={() => openGrow(v)} title="Make this volume bigger"><Maximize2 size={14} /> Grow</button>
                 {/if}

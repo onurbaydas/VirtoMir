@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { session } from '../session.svelte'
   import ArrowLeft from '@lucide/svelte/icons/arrow-left'
   import Disc from '@lucide/svelte/icons/disc'
   import Cpu from '@lucide/svelte/icons/cpu'
@@ -393,7 +394,8 @@
     </dl>
     <label class="ui-switch"><input type="checkbox" bind:checked={start} /> Start it right away</label>
     {#if error}<div class="ui-error-box">{error}</div>{/if}
-    <button class="ui-btn primary create" disabled={!canCreate || busy}>
+    {#if !session.can('admin')}<p class="error">{session.why('admin')}</p>{/if}
+    <button class="ui-btn primary create" disabled={!canCreate || busy || !session.can('admin')}>
       <Rocket size={15} />
       {busy ? 'Creating…' : start ? 'Create and start' : 'Create'}
     </button>
