@@ -18,8 +18,9 @@ All project memory lives in the repo under [`.ai/`](.ai/README.md) so that **any
 1. [`.ai/context/vision.md`](.ai/context/vision.md) — what we build and the non-negotiable product principles
 2. [`.ai/context/decisions.md`](.ai/context/decisions.md) — decision log (ADR style). **Never contradict an `Accepted` decision silently**; propose a new one instead.
 3. [`.ai/context/open-questions.md`](.ai/context/open-questions.md) — things not decided yet
-4. [`.ai/context/environment.md`](.ai/context/environment.md) — dev / test environment
-5. [`.ai/sessions/`](.ai/sessions/) — newest session summaries first; read at least the latest one
+4. [`.ai/context/roadmap.md`](.ai/context/roadmap.md) — phases A → B → C and where we are
+5. [`.ai/context/environment.md`](.ai/context/environment.md) — dev / test environment
+6. [`.ai/sessions/`](.ai/sessions/) — newest session summaries first; read at least the latest one
 
 ## 3. Working rules for agents
 
