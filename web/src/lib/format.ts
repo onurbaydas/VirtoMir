@@ -14,6 +14,10 @@ export function formatKiB(kib: number): string {
   return `${kib} KiB`
 }
 
+export function formatBytes(b: number): string {
+  return b < 1024 ? `${b} B` : formatKiB(Math.round(b / 1024))
+}
+
 /** Below 10 % one decimal ("3.4 %"), otherwise whole numbers ("42 %"). */
 export function formatPercent(p: number): string {
   return p < 10 ? p.toFixed(1) : Math.round(p).toString()

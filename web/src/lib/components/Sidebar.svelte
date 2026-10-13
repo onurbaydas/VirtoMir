@@ -4,7 +4,8 @@
   import Sun from '@lucide/svelte/icons/sun'
   import Moon from '@lucide/svelte/icons/moon'
   import MonitorCog from '@lucide/svelte/icons/monitor-cog'
-  import { live } from '../live.svelte'
+  import { isActive, live } from '../live.svelte'
+  import { machineHref, router } from '../router.svelte'
   import { theme, type ThemePref } from '../theme.svelte'
 
   let { version }: { version: string } = $props()
@@ -19,6 +20,9 @@
     down: 'VirtoMir unreachable',
     pending: 'Connecting…',
   }
+
+  let domains = $derived(live.snapshot?.domains ?? [])
+  let current = $derived(router.route.name === 'machine' ? router.route.uuid : null)
 
   const THEMES: { key: ThemePref; icon: typeof Sun; label: string }[] = [
     { key: 'light', icon: Sun, label: 'Light' },
@@ -45,10 +49,40 @@
         <span class="host-status {status}"><span class="dot"></span>{STATUS_TEXT[status]}</span>
       </div>
     </div>
-    <a class="nav-item active" href="/" aria-current="page">
+    <a
+      class="nav-item"
+      class:active={router.route.name === 'overview'}
+      href="/"
+      aria-current={router.route.name === 'overview' ? 'page' : undefined}
+      onclick={router.link}
+    >
       <LayoutDashboard size={16} />
       Overview
     </a>
+
+    {#if domains.length}
+      <div class="section machines-head">Machines</div>
+      <div class="machines">
+        {#each domains as d (d.uuid)}
+          <a
+            class="nav-item machine"
+            class:active={current === d.uuid}
+            href={machineHref(d.uuid)}
+            aria-current={current === d.uuid ? 'page' : undefined}
+            onclick={router.link}
+            title="{d.name}: {d.state}"
+          >
+            <span
+              class="mdot"
+              class:on={isActive(d.state)}
+              class:paused={d.state === 'paused'}
+              class:crashed={d.state === 'crashed'}
+            ></span>
+            <span class="mname">{d.name}</span>
+          </a>
+        {/each}
+      </div>
+    {/if}
   </nav>
 
   <footer>
@@ -179,8 +213,56 @@
     background: var(--accent-soft);
     color: var(--accent);
   }
+  nav {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+  }
+  .machines-head {
+    margin-top: 18px;
+  }
+  .machines {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow-y: auto;
+    min-height: 0;
+    margin: 0 -4px;
+    padding: 0 4px 12px;
+  }
+  .machine {
+    height: 32px;
+    font-size: 13px;
+  }
+  .mdot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    margin: 0 4px;
+    border-radius: 50%;
+    border: 1.5px solid var(--idle);
+  }
+  .mdot.on {
+    background: var(--ok);
+    border-color: var(--ok);
+  }
+  .mdot.paused {
+    background: var(--warn);
+    border-color: var(--warn);
+  }
+  .mdot.crashed {
+    background: var(--danger);
+    border-color: var(--danger);
+  }
+  .mname {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   footer {
     margin-top: auto;
+    padding-top: 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
