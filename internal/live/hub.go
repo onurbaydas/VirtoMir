@@ -18,6 +18,7 @@ import (
 type Source interface {
 	ListDomains() ([]virt.Domain, error)
 	HostStats() (virt.HostStats, error)
+	DomainStats() ([]virt.DomainStats, error)
 	LifecycleEvents(ctx context.Context) (<-chan string, error)
 }
 
@@ -31,6 +32,15 @@ type DomainLive struct {
 	virt.Domain
 	// Share of the domain's own vCPUs in use: 100 = every vCPU fully busy.
 	CPUPercent float64 `json:"cpuPercent"`
+	// Per vCPU, 100 = that vCPU fully busy. Running domains only, from the second sample on.
+	VCPUPercent []float64  `json:"vcpuPercent,omitempty"`
+	Disks       []DiskLive `json:"disks,omitempty"`
+	Nets        []NetLive  `json:"nets,omitempty"`
+	// What the guest itself reports via the balloon driver; 0 when it does not.
+	GuestMemUsedKiB  uint64 `json:"guestMemUsedKiB,omitempty"`
+	GuestMemTotalKiB uint64 `json:"guestMemTotalKiB,omitempty"`
+	// Host memory actually used by the QEMU process.
+	HostRSSKiB uint64 `json:"hostRssKiB,omitempty"`
 }
 
 type Snapshot struct {
@@ -59,6 +69,7 @@ type Hub struct {
 	prevHost   virt.HostStats
 	prevHostOK bool
 	prevDom    map[string]cpuSample
+	prevStats  map[string]statsSample
 
 	mu      sync.Mutex
 	backlog [][]byte // oldest first, at most Backlog entries
@@ -68,12 +79,13 @@ type Hub struct {
 
 func NewHub(src Source, interval time.Duration, log *slog.Logger) *Hub {
 	return &Hub{
-		src:      src,
-		interval: interval,
-		log:      log,
-		refresh:  make(chan struct{}, 1),
-		prevDom:  map[string]cpuSample{},
-		subs:     map[chan []byte]struct{}{},
+		src:       src,
+		interval:  interval,
+		log:       log,
+		refresh:   make(chan struct{}, 1),
+		prevDom:   map[string]cpuSample{},
+		prevStats: map[string]statsSample{},
+		subs:      map[chan []byte]struct{}{},
 	}
 }
 
@@ -153,12 +165,20 @@ func (h *Hub) sample(now time.Time) {
 		if doms, err = h.src.ListDomains(); err == nil {
 			snap.Host = h.hostLive(hs)
 			snap.Domains = h.domainsLive(doms, now)
+			// Extras: a failing bulk-stats call must not take the basic view down.
+			if stats, serr := h.src.DomainStats(); serr == nil {
+				h.applyStats(snap.Domains, stats, now)
+			} else {
+				h.log.Debug("domain stats unavailable", "err", serr)
+				clear(h.prevStats)
+			}
 		}
 	}
 	if err != nil {
 		snap.Connected, snap.Error = false, err.Error()
 		h.prevHostOK = false
 		clear(h.prevDom)
+		clear(h.prevStats)
 	}
 
 	b, err := json.Marshal(snap)
