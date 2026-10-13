@@ -12,6 +12,8 @@
   import ClockArrowUp from '@lucide/svelte/icons/clock-arrow-up'
   import Bell from '@lucide/svelte/icons/bell'
   import Archive from '@lucide/svelte/icons/archive'
+  import Boxes from '@lucide/svelte/icons/boxes'
+  import { cluster } from '../cluster.svelte'
   import { alerts } from '../alerts.svelte'
   import { session } from '../session.svelte'
   import { isActive, live } from '../live.svelte'
@@ -39,7 +41,13 @@
     { name: 'alerts', href: '/alerts', label: 'Alerts', icon: Bell, role: 'viewer' },
     { name: 'activity', href: '/activity', label: 'Activity', icon: ClockArrowUp, role: 'admin' },
   ] as const
-  let NAV = $derived(ALL_NAV.filter((n) => session.can(n.role)))
+  // Cluster: admins always (that is where hosts are added), others once there is one.
+  let NAV = $derived([
+    ...ALL_NAV.filter((n) => session.can(n.role)),
+    ...(session.can('admin') || cluster.clustered
+      ? [{ name: 'cluster', href: '/cluster', label: 'Cluster', icon: Boxes, role: 'viewer' } as const]
+      : []),
+  ])
 
   let domains = $derived(live.snapshot?.domains ?? [])
   let current = $derived(router.route.name === 'machine' ? router.route.uuid : null)
@@ -55,7 +63,7 @@
   <a class="m-brand" href="/" onclick={router.link}><img src="/favicon.svg" alt="VirtoMir" width="24" height="24" /></a>
   <nav class="m-nav" aria-label="Main">
     {#each NAV as n (n.name)}
-      <a class:active={router.route.name === n.name} href={n.href} onclick={router.link}>{n.label}</a>
+      <a class:active={router.route.name === n.name} href={router.scoped(n.href)} onclick={router.link}>{n.label}</a>
     {/each}
     <a class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} aria-label="New machine"><Plus size={16} /></a>
   </nav>
@@ -71,20 +79,37 @@
   </div>
 
   <nav>
-    <div class="section">Host</div>
+    <div class="section">{cluster.clustered ? 'Hosts' : 'Host'}</div>
     <div class="host">
       <span class="host-icon"><Server size={16} /></span>
       <div class="host-text">
-        <span class="host-name">{live.host?.hostname ?? '…'}</span>
+        <span class="host-name">{(cluster.clustered ? cluster.current?.name : null) ?? live.host?.hostname ?? '…'}</span>
         <span class="host-status {status}"><span class="dot"></span>{STATUS_TEXT[status]}</span>
       </div>
     </div>
+    {#if cluster.clustered}
+      <div class="hosts" role="radiogroup" aria-label="Shown host">
+        {#each cluster.members.filter((m) => m.id !== cluster.current?.id) as m (m.id)}
+          <button
+            class="nav-item other-host"
+            role="radio"
+            aria-checked="false"
+            disabled={!m.reachable}
+            title={m.reachable ? `Show ${m.name}` : (m.error ?? 'Not reachable')}
+            onclick={() => cluster.open(m.id)}
+          >
+            <span class="mdot" class:on={m.reachable} class:crashed={!m.reachable}></span>
+            <span class="mname">{m.name}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
     {#each NAV as n (n.name)}
       {@const Icon = n.icon}
       <a
         class="nav-item"
         class:active={router.route.name === n.name}
-        href={n.href}
+        href={router.scoped(n.href)}
         aria-current={router.route.name === n.name ? 'page' : undefined}
         onclick={router.link}
       >
@@ -247,6 +272,24 @@
   }
   .host-status.down .dot {
     background: var(--danger);
+  }
+  .hosts {
+    display: flex;
+    flex-direction: column;
+    margin: -2px 0 8px;
+  }
+  .other-host {
+    height: 30px;
+    border: none;
+    background: none;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .other-host:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
   .nav-item {
     display: flex;

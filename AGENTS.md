@@ -56,6 +56,8 @@ internal/auth/       ← PAM (build tag `pam`), sessions, lockout, self-signed T
 internal/activity/   ← who did what: -state-dir/activity.jsonl (ADR-0015)
 internal/alerts/     ← alert rules on live snapshots, webhook/e-mail channels (ADR-0017)
 internal/schedule/   ← automatic snapshots/backups with retention (ADR-0018)
+internal/cluster/    ← multi-host (ADR-0020): member list, join codes, pinned peer HTTPS + peer keys;
+                       forwarding of /api/v1/hosts/<id>/… lives in internal/api/cluster.go
 internal/jobs/       ← background jobs (clone, backup, restore, deploy) the UI polls
 internal/history/    ← metric history rings, saved to -state-dir/history.gob (ADR-0013)
 packaging/           ← /etc/pam.d/virtomir, systemd unit

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { wsURL } from '../api'
   // Graphical console: noVNC over virtomird's WebSocket bridge to the machine's local VNC
   // server. Designed around the usual console pain points:
   //  - keyboard layouts: QEMU's extended key events send physical key positions, so the
@@ -76,8 +77,7 @@
     message = ''
     const { default: RFB } = await import('@novnc/novnc')
     if (destroyed) return
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const url = `${proto}://${location.host}/api/v1/domains/${encodeURIComponent(uuid)}/console/vnc`
+    const url = wsURL(`/api/v1/domains/${encodeURIComponent(uuid)}/console/vnc`)
     const r = new RFB(screen, url, { shared: true, wsProtocols: ['binary'], credentials: password ? { password } : undefined })
     rfb = r
     r.background = 'var(--bg)'

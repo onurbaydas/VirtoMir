@@ -10,11 +10,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/onurbaydas/virtomir/internal/activity"
 	"github.com/onurbaydas/virtomir/internal/alerts"
 	"github.com/onurbaydas/virtomir/internal/auth"
+	"github.com/onurbaydas/virtomir/internal/cluster"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/schedule"
 	"github.com/onurbaydas/virtomir/internal/virt"
@@ -94,6 +96,12 @@ type Options struct {
 	// Alerts nil: no alert engine. Schedules nil: no schedules and no backups.
 	Alerts    *alerts.Engine
 	Schedules *schedule.Scheduler
+	// Cluster nil: this host cannot join others (no TLS). Fingerprint is this host's TLS
+	// certificate, HostName how members call it, ListenPort where it listens (ADR-0020).
+	Cluster     *cluster.Store
+	Fingerprint string
+	HostName    string
+	ListenPort  string
 }
 
 type Server struct {
@@ -109,6 +117,13 @@ type Server struct {
 	activity  *activity.Log
 	alerts    *alerts.Engine
 	schedules *schedule.Scheduler
+
+	cluster      *cluster.Store
+	fingerprint  string
+	hostName     string
+	listenPort   string
+	transportsMu sync.Mutex
+	transports   map[string]http.RoundTripper // pinned, per member certificate
 }
 
 func NewServer(o Options) *Server {
@@ -116,7 +131,8 @@ func NewServer(o Options) *Server {
 		o.Jobs = jobs.New(context.Background())
 	}
 	return &Server{backend: o.Backend, live: o.Live, jobs: o.Jobs, auth: o.Auth, ui: o.UI, version: o.Version, log: o.Log,
-		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts, schedules: o.Schedules}
+		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts, schedules: o.Schedules,
+		cluster: o.Cluster, fingerprint: o.Fingerprint, hostName: o.HostName, listenPort: o.ListenPort}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -138,6 +154,7 @@ func (s *Server) Handler() http.Handler {
 	s.alertRoutes(mux)
 	s.backupRoutes(mux)
 	s.templateRoutes(mux)
+	s.clusterRoutes(mux)
 
 	// GET-only fallbacks, so a wrong method on a real endpoint still gets 405.
 	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {
@@ -202,6 +219,10 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no") // don't let reverse proxies buffer the stream
 
 	token := auth.SessionToken(r)
+	// Only browser sessions expire here; tokens are checked per request, forwarded streams by
+	// the member that forwards them.
+	id := identity(r)
+	session := s.auth != nil && id.Token == "" && id.Via == ""
 	backlog, snaps, unsubscribe := s.live.Subscribe()
 	defer unsubscribe()
 	heartbeat := time.NewTicker(15 * time.Second)
@@ -225,7 +246,7 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 			}
 			chunk = appendEvent(nil, b)
 		case <-heartbeat.C:
-			if s.auth != nil && !s.auth.Valid(token) {
+			if session && !s.auth.Valid(token) {
 				return // signed out or expired: the browser reconnects and gets 401
 			}
 			chunk = []byte(": keep-alive\n\n")

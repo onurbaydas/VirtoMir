@@ -102,9 +102,23 @@ class Live {
     this.streamOpen = false
   }
 
+  /** Starts over on another cluster member: nothing of the previous host's data is kept. */
+  restart() {
+    this.stop()
+    this.snapshot = null
+    this.host = null
+    this.pending = {}
+    this.#lastTime = 0
+    for (const s of [this.hostCpu, this.hostMem, ...Object.values(this.hostIO)]) s.fill(null)
+    this.#domCpu.clear()
+    this.#domIO.clear()
+    this.tick++
+    this.start()
+  }
+
   start() {
     if (this.#es) return
-    const es = new EventSource(api.streamURL)
+    const es = new EventSource(api.streamURL())
     this.#es = es
     es.onopen = () => {
       this.streamOpen = true

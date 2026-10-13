@@ -118,7 +118,7 @@ func (s *Server) consoleSerial(w http.ResponseWriter, r *http.Request) {
 // watchSession ends a long console connection when the browser session expires or the
 // user signs out (token connections live as long as the token is valid).
 func (s *Server) watchSession(ctx context.Context, cancel context.CancelFunc, r *http.Request) {
-	if s.auth == nil || identity(r).Token != "" {
+	if id := identity(r); s.auth == nil || id.Token != "" || id.Via != "" {
 		return
 	}
 	token := auth.SessionToken(r)

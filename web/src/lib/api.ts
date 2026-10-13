@@ -1,5 +1,7 @@
 // Types + calls for the virtomird API (/api/v1). Mirrors internal/virt and internal/live.
 
+import { router } from './router.svelte'
+
 export type DomainState =
   | 'unknown'
   | 'running'
@@ -184,7 +186,23 @@ interface SendOpts {
   contentType?: string
 }
 
+/** API paths that are always about the host serving the UI: sign-in, cluster, tokens. */
+const LOCAL = ['/api/v1/auth/', '/api/v1/cluster', '/api/v1/version', '/api/v1/tokens']
+
+/** Points an API path at the member being shown (ADR-0020): /api/v1/x → /api/v1/hosts/<id>/x. */
+export function scoped(path: string): string {
+  const host = router.host
+  if (!host || LOCAL.some((p) => path.startsWith(p))) return path
+  return '/api/v1/hosts/' + host + path.slice('/api/v1'.length)
+}
+
+/** WebSocket URL for an API path on the member being shown. */
+export function wsURL(path: string): string {
+  return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${scoped(path)}`
+}
+
 async function send(method: string, path: string, opts: SendOpts = {}): Promise<Response> {
+  path = scoped(path)
   const headers: Record<string, string> = { Accept: opts.accept ?? 'application/json' }
   let body = opts.body
   if (opts.json !== undefined) {
@@ -518,8 +536,37 @@ export interface Lease {
   machine?: string
 }
 
+export interface ClusterMember {
+  id: string
+  name: string
+  address: string
+  fingerprint: string
+  self: boolean
+  reachable: boolean
+  version?: string
+  error?: string
+}
+
+export interface ClusterInfo {
+  /** false: this host runs without TLS and cannot join others. */
+  enabled: boolean
+  selfId?: string
+  members: ClusterMember[]
+}
+
+export interface Invite {
+  code: string
+  address: string
+  expires: string
+}
+
 export const api = {
-  streamURL: '/api/v1/stream',
+  streamURL: () => scoped('/api/v1/stream'),
+
+  cluster: () => request<ClusterInfo>('GET', '/api/v1/cluster'),
+  invite: () => request<Invite>('POST', '/api/v1/cluster/invite'),
+  join: (code: string) => request<void>('POST', '/api/v1/cluster/join', { code }),
+  removeMember: (id: string) => request<void>('DELETE', `/api/v1/cluster/members/${enc(id)}`),
   host: () => request<HostInfo>('GET', '/api/v1/host'),
 
   session: () => request<Session>('GET', '/api/v1/auth/session'),
@@ -617,7 +664,7 @@ export const api = {
   upload: (pool: string, file: File, name: string, onProgress: (fraction: number) => void, signal?: AbortSignal) =>
     new Promise<Volume>((resolve, reject) => {
       const xhr = new XMLHttpRequest()
-      xhr.open('POST', `${poolPath(pool)}/upload?name=${enc(name)}`)
+      xhr.open('POST', scoped(`${poolPath(pool)}/upload?name=${enc(name)}`))
       xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) return resolve(JSON.parse(xhr.responseText))

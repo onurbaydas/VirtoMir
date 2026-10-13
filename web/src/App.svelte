@@ -4,6 +4,8 @@
   import { router } from './lib/router.svelte'
   import { session } from './lib/session.svelte'
   import { alerts } from './lib/alerts.svelte'
+  import { cluster } from './lib/cluster.svelte'
+  import ClusterPage from './lib/pages/ClusterPage.svelte'
   import AlertsPage from './lib/pages/AlertsPage.svelte'
   import BackupsPage from './lib/pages/BackupsPage.svelte'
   import Sidebar from './lib/components/Sidebar.svelte'
@@ -35,10 +37,23 @@
     if (session.ready) {
       live.start()
       alerts.start()
+      cluster.start()
     } else {
       live.stop()
       alerts.stop()
+      cluster.stop()
     }
+  })
+
+  // Another cluster member: start the live view and alerts over for it.
+  let shownHost = router.host
+  $effect(() => {
+    const h = router.host
+    if (h === shownHost) return
+    shownHost = h
+    if (!session.ready) return
+    live.restart()
+    alerts.reset()
   })
 
   let route = $derived(router.route)
@@ -77,6 +92,8 @@
         <ActivityPage />
       {:else if route.name === 'account'}
         <AccountPage />
+      {:else if route.name === 'cluster'}
+        <ClusterPage />
       {:else}
         <NotFound />
       {/if}
