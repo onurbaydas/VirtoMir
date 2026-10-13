@@ -4,6 +4,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,8 @@ import (
 type Backend interface {
 	HostInfo() (virt.HostInfo, error)
 	ListDomains() ([]virt.Domain, error)
+	DomainDetail(uuid string) (virt.DomainDetail, error)
+	DomainXML(uuid string, inactive bool) (string, error)
 	DomainAction(uuid string, action virt.Action) error
 }
 
@@ -43,6 +46,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/version", s.getVersion)
 	mux.HandleFunc("GET /api/v1/host", s.getHost)
 	mux.HandleFunc("GET /api/v1/domains", s.listDomains)
+	mux.HandleFunc("GET /api/v1/domains/{uuid}", s.getDomain)
+	mux.HandleFunc("GET /api/v1/domains/{uuid}/xml", s.getDomainXML)
 	mux.HandleFunc("POST /api/v1/domains/{uuid}/actions/{action}", s.domainAction)
 	mux.HandleFunc("GET /api/v1/stream", s.stream)
 	// GET-only fallbacks, so a wrong method on a real endpoint still gets 405.
@@ -79,6 +84,28 @@ func (s *Server) listDomains(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, map[string]any{"domains": doms})
+}
+
+func (s *Server) getDomain(w http.ResponseWriter, r *http.Request) {
+	d, err := s.backend.DomainDetail(r.PathValue("uuid"))
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, d)
+}
+
+// getDomainXML returns the raw domain XML; ?inactive=true selects the next-boot config.
+func (s *Server) getDomainXML(w http.ResponseWriter, r *http.Request) {
+	inactive := r.URL.Query().Get("inactive") == "true"
+	x, err := s.backend.DomainXML(r.PathValue("uuid"), inactive)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = io.WriteString(w, x)
 }
 
 func (s *Server) domainAction(w http.ResponseWriter, r *http.Request) {

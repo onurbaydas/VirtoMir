@@ -18,14 +18,24 @@ import (
 )
 
 type fakeBackend struct {
-	host       virt.HostInfo
-	domains    []virt.Domain
-	err        error
-	lastAction virt.Action
+	host         virt.HostInfo
+	domains      []virt.Domain
+	detail       virt.DomainDetail
+	xml          string
+	err          error
+	lastAction   virt.Action
+	lastInactive bool
 }
 
 func (f *fakeBackend) HostInfo() (virt.HostInfo, error)    { return f.host, f.err }
 func (f *fakeBackend) ListDomains() ([]virt.Domain, error) { return f.domains, f.err }
+func (f *fakeBackend) DomainDetail(string) (virt.DomainDetail, error) {
+	return f.detail, f.err
+}
+func (f *fakeBackend) DomainXML(_ string, inactive bool) (string, error) {
+	f.lastInactive = inactive
+	return f.xml, f.err
+}
 func (f *fakeBackend) DomainAction(_ string, a virt.Action) error {
 	f.lastAction = a
 	return f.err
@@ -96,6 +106,47 @@ func TestErrorMapping(t *testing.T) {
 		if body["error"] != c.err.Error() {
 			t.Errorf("error = %q", body["error"])
 		}
+	}
+}
+
+func TestGetDomain(t *testing.T) {
+	b := &fakeBackend{detail: virt.DomainDetail{
+		Domain:  virt.Domain{UUID: "u1", Name: "web"},
+		Devices: []virt.Device{{Kind: "disk", Title: "Disk vda", Props: []virt.Prop{{Label: "Bus", Value: "VirtIO", Tech: "target@bus"}}}},
+	}}
+	rec := serve(t, b, http.MethodGet, "/api/v1/domains/u1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var body struct {
+		Name    string
+		Devices []struct{ Kind, Title string }
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Name != "web" || len(body.Devices) != 1 || body.Devices[0].Title != "Disk vda" {
+		t.Errorf("unexpected body: %s", rec.Body)
+	}
+
+	rec = serve(t, &fakeBackend{err: fmt.Errorf("%w: gone", virt.ErrNotFound)}, http.MethodGet, "/api/v1/domains/u1")
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("missing domain: status = %d", rec.Code)
+	}
+}
+
+func TestGetDomainXML(t *testing.T) {
+	b := &fakeBackend{xml: "<domain type='kvm'/>"}
+	rec := serve(t, b, http.MethodGet, "/api/v1/domains/u1/xml?inactive=true")
+	if rec.Code != http.StatusOK || rec.Body.String() != b.xml || !b.lastInactive {
+		t.Errorf("status=%d body=%q inactive=%v", rec.Code, rec.Body, b.lastInactive)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/xml") {
+		t.Errorf("content type %q", ct)
+	}
+	serve(t, b, http.MethodGet, "/api/v1/domains/u1/xml")
+	if b.lastInactive {
+		t.Error("live XML expected without ?inactive=true")
 	}
 }
 

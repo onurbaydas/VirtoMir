@@ -62,19 +62,28 @@ func parseUUID(s string) (libvirt.UUID, error) {
 	return u, nil
 }
 
-// DomainAction runs a lifecycle action on the domain with the given UUID.
-func (c *Client) DomainAction(uuid string, action Action) error {
+// lookup resolves a UUID string to a domain on a live connection.
+func (c *Client) lookup(uuid string) (*libvirt.Libvirt, libvirt.Domain, error) {
 	u, err := parseUUID(uuid)
 	if err != nil {
-		return err
+		return nil, libvirt.Domain{}, err
 	}
 	l, err := c.conn()
 	if err != nil {
-		return err
+		return nil, libvirt.Domain{}, err
 	}
 	d, err := l.DomainLookupByUUID(u)
 	if err != nil {
-		return classify(err)
+		return nil, libvirt.Domain{}, classify(err)
+	}
+	return l, d, nil
+}
+
+// DomainAction runs a lifecycle action on the domain with the given UUID.
+func (c *Client) DomainAction(uuid string, action Action) error {
+	l, d, err := c.lookup(uuid)
+	if err != nil {
+		return err
 	}
 
 	switch action {

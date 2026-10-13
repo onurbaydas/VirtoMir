@@ -6,11 +6,13 @@ package virt
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/digitalocean/go-libvirt"
 	"github.com/digitalocean/go-libvirt/socket/dialers"
+	"libvirt.org/go/libvirtxml"
 )
 
 // DefaultSocket is the system libvirtd (or virtproxyd) UNIX socket.
@@ -143,32 +145,125 @@ func (c *Client) ListDomains() ([]Domain, error) {
 
 	out := make([]Domain, 0, len(doms))
 	for _, d := range doms {
-		state, maxMem, mem, vcpus, cpuTime, err := l.DomainGetInfo(d)
+		s, err := summary(l, d)
 		if err != nil {
 			// The domain may have been undefined between list and query; skip it.
 			c.log.Debug("skipping domain", "name", d.Name, "err", err)
 			continue
 		}
-		persistent, err := l.DomainIsPersistent(d)
-		if err != nil {
-			continue
-		}
-		autostart, err := l.DomainGetAutostart(d)
-		if err != nil {
-			continue
-		}
-		out = append(out, Domain{
-			UUID:         formatUUID(d.UUID),
-			Name:         d.Name,
-			ID:           max(int(d.ID), 0),
-			State:        domainStateFrom(libvirt.DomainState(state)),
-			VCPUs:        int(vcpus),
-			MemoryKiB:    mem,
-			MaxMemoryKiB: maxMem,
-			CPUTimeNs:    cpuTime,
-			Persistent:   persistent == 1,
-			Autostart:    autostart == 1,
-		})
+		out = append(out, s)
 	}
 	return out, nil
+}
+
+// DomainXML returns the domain definition. inactive selects the persistent config the
+// domain gets on its next boot instead of the live one. Secrets (e.g. VNC passwords)
+// are never included.
+func (c *Client) DomainXML(uuid string, inactive bool) (string, error) {
+	l, d, err := c.lookup(uuid)
+	if err != nil {
+		return "", err
+	}
+	var flags libvirt.DomainXMLFlags
+	if inactive {
+		flags |= libvirt.DomainXMLInactive
+	}
+	x, err := l.DomainGetXMLDesc(d, flags)
+	if err != nil {
+		return "", classify(err)
+	}
+	return x, nil
+}
+
+// DomainDetail returns the machine page model: summary, parsed XML, disk sizes and,
+// for running machines, the guest IP addresses libvirt knows about.
+func (c *Client) DomainDetail(uuid string) (DomainDetail, error) {
+	l, d, err := c.lookup(uuid)
+	if err != nil {
+		return DomainDetail{}, err
+	}
+	sum, err := summary(l, d)
+	if err != nil {
+		return DomainDetail{}, classify(err)
+	}
+	raw, err := l.DomainGetXMLDesc(d, 0)
+	if err != nil {
+		return DomainDetail{}, classify(err)
+	}
+	var x libvirtxml.Domain
+	if err := x.Unmarshal(raw); err != nil {
+		return DomainDetail{}, fmt.Errorf("parse domain XML: %w", err)
+	}
+	detail := buildDetail(sum, &x)
+
+	// Best effort: sizes and addresses are extras, never a reason to fail the page.
+	addrs := map[string][]string{}
+	if sum.State == StateRunning || sum.State == StateBlocked || sum.State == StatePaused {
+		addrs = c.guestAddresses(l, d)
+	}
+	for i := range detail.Devices {
+		dev := &detail.Devices[i]
+		if dev.target != "" && (dev.Kind == "disk" || dev.Kind == "cdrom") {
+			if alloc, capacity, _, err := l.DomainGetBlockInfo(d, dev.target, 0); err == nil {
+				dev.CapacityBytes, dev.AllocationBytes = capacity, alloc
+			}
+		}
+		if dev.mac != "" {
+			dev.Addresses = addrs[dev.mac]
+		}
+	}
+	return detail, nil
+}
+
+// guestAddresses maps MAC → "addr/prefix" from DHCP leases, falling back to the host ARP table
+// (bridged guests). The guest agent is not asked: it can stall when the agent is missing.
+func (c *Client) guestAddresses(l *libvirt.Libvirt, d libvirt.Domain) map[string][]string {
+	out := map[string][]string{}
+	for _, src := range []libvirt.DomainInterfaceAddressesSource{libvirt.DomainInterfaceAddressesSrcLease, libvirt.DomainInterfaceAddressesSrcArp} {
+		ifaces, err := l.DomainInterfaceAddresses(d, uint32(src), 0)
+		if err != nil {
+			c.log.Debug("interface addresses", "domain", d.Name, "source", src, "err", err)
+			continue
+		}
+		for _, ifc := range ifaces {
+			if len(ifc.Hwaddr) == 0 {
+				continue
+			}
+			mac := strings.ToLower(ifc.Hwaddr[0])
+			for _, a := range ifc.Addrs {
+				out[mac] = append(out[mac], fmt.Sprintf("%s/%d", a.Addr, a.Prefix))
+			}
+		}
+		if len(out) > 0 {
+			break
+		}
+	}
+	return out
+}
+
+func summary(l *libvirt.Libvirt, d libvirt.Domain) (Domain, error) {
+	state, maxMem, mem, vcpus, cpuTime, err := l.DomainGetInfo(d)
+	if err != nil {
+		return Domain{}, err
+	}
+	persistent, err := l.DomainIsPersistent(d)
+	if err != nil {
+		return Domain{}, err
+	}
+	autostart, err := l.DomainGetAutostart(d)
+	if err != nil {
+		return Domain{}, err
+	}
+	return Domain{
+		UUID:         formatUUID(d.UUID),
+		Name:         d.Name,
+		ID:           max(int(d.ID), 0),
+		State:        domainStateFrom(libvirt.DomainState(state)),
+		VCPUs:        int(vcpus),
+		MemoryKiB:    mem,
+		MaxMemoryKiB: maxMem,
+		CPUTimeNs:    cpuTime,
+		Persistent:   persistent == 1,
+		Autostart:    autostart == 1,
+	}, nil
 }
