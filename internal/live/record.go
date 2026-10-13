@@ -10,6 +10,10 @@ type Recorder interface {
 // SetRecorder makes the hub feed every connected sample into r. Call before Run.
 func (h *Hub) SetRecorder(r Recorder) { h.rec = r }
 
+// AddObserver calls f with every snapshot (connected or not), on the sampling goroutine:
+// f must be quick. Call before Run.
+func (h *Hub) AddObserver(f func(Snapshot)) { h.observers = append(h.observers, f) }
+
 // Series names. Machines are keyed by UUID so history survives a rename.
 const (
 	SeriesHostCPU       = "host.cpu"
@@ -25,6 +29,9 @@ const (
 func VMSeries(uuid, metric string) string { return "vm." + uuid + "." + metric }
 
 func (h *Hub) record(s *Snapshot, now time.Time) {
+	for _, f := range h.observers {
+		f(*s)
+	}
 	if h.rec == nil || !s.Connected {
 		return
 	}

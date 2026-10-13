@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/onurbaydas/virtomir/internal/activity"
+	"github.com/onurbaydas/virtomir/internal/alerts"
 	"github.com/onurbaydas/virtomir/internal/api"
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/history"
@@ -105,6 +106,11 @@ func run(c config, log *slog.Logger) error {
 
 	hub := live.NewHub(client, time.Second, log)
 	hub.SetRecorder(hist)
+	alertEngine, err := alerts.Open(filepath.Join(c.stateDir, "alerts.json"), log)
+	if err != nil {
+		log.Warn("alerts", "err", err)
+	}
+	watchAlerts(ctx, hub, alertEngine, client)
 	hubDone := make(chan struct{})
 	go func() { hub.Run(ctx); close(hubDone) }()
 	defer func() { <-hubDone }()
@@ -113,7 +119,7 @@ func run(c config, log *slog.Logger) error {
 		Addr: c.listen,
 		Handler: api.NewServer(api.Options{
 			Backend: client, Live: hub, Jobs: jobs.New(ctx), Auth: authMgr,
-			UI: web.Dist(), Version: version, Log: log, History: hist, Tokens: tokens, Activity: acts,
+			UI: web.Dist(), Version: version, Log: log, History: hist, Tokens: tokens, Activity: acts, Alerts: alertEngine,
 		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		TLSConfig:         tlsConf,

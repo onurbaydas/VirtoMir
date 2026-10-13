@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/onurbaydas/virtomir/internal/activity"
+	"github.com/onurbaydas/virtomir/internal/alerts"
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/virt"
@@ -89,6 +90,8 @@ type Options struct {
 	// Tokens nil: no API tokens. Activity nil: changes are only logged, not kept.
 	Tokens   *auth.Tokens
 	Activity *activity.Log
+	// Alerts nil: no alert engine.
+	Alerts *alerts.Engine
 }
 
 type Server struct {
@@ -102,6 +105,7 @@ type Server struct {
 	history  HistoryQuerier
 	tokens   *auth.Tokens
 	activity *activity.Log
+	alerts   *alerts.Engine
 }
 
 func NewServer(o Options) *Server {
@@ -109,7 +113,7 @@ func NewServer(o Options) *Server {
 		o.Jobs = jobs.New(context.Background())
 	}
 	return &Server{backend: o.Backend, live: o.Live, jobs: o.Jobs, auth: o.Auth, ui: o.UI, version: o.Version, log: o.Log,
-		history: o.History, tokens: o.Tokens, activity: o.Activity}
+		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -128,6 +132,7 @@ func (s *Server) Handler() http.Handler {
 	s.extraRoutes(mux)
 	s.accessRoutes(mux)
 	s.consoleRoutes(mux)
+	s.alertRoutes(mux)
 
 	// GET-only fallbacks, so a wrong method on a real endpoint still gets 405.
 	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {

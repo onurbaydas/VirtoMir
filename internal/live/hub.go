@@ -77,6 +77,7 @@ type Hub struct {
 	prevIOAt   time.Time
 	prevIOOK   bool
 	rec        Recorder
+	observers  []func(Snapshot)
 
 	mu      sync.Mutex
 	backlog [][]byte // oldest first, at most Backlog entries

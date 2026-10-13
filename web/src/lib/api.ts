@@ -237,6 +237,61 @@ export interface ApiToken {
   lastUsed?: string
 }
 
+export type Severity = 'warning' | 'critical'
+export type AlertKind = 'host.cpu' | 'host.mem' | 'vm.cpu' | 'vm.crashed' | 'vm.down' | 'pool.free' | 'libvirt.down'
+
+export interface Alert {
+  id: string
+  ruleId: string
+  kind: AlertKind
+  severity: Severity
+  subject: string
+  subjectId?: string
+  message: string
+  value?: number
+  started: string
+  resolved?: string
+  ackedBy?: string
+  ackedAt?: string
+}
+
+export interface AlertRule {
+  id: string
+  kind: AlertKind
+  enabled: boolean
+  threshold?: number
+  forSec: number
+  target?: string
+  severity: Severity
+}
+
+export interface AlertChannel {
+  id: string
+  name: string
+  kind: 'webhook' | 'email'
+  enabled: boolean
+  minSeverity: Severity
+  url?: string
+  format?: 'json' | 'slack' | 'discord' | 'ntfy'
+  to?: string
+  resolved: boolean
+}
+
+export interface SMTPConfig {
+  host: string
+  port: number
+  username?: string
+  password?: string
+  from: string
+  tls: 'starttls' | 'tls' | 'none'
+}
+
+export interface AlertConfig {
+  rules: AlertRule[]
+  channels: AlertChannel[]
+  smtp: SMTPConfig
+}
+
 export interface ActivityEntry {
   time: string
   user: string
@@ -443,6 +498,12 @@ export const api = {
     p.set('limit', String(q.limit ?? 300))
     return (await request<{ entries: ActivityEntry[] }>('GET', `/api/v1/activity?${p}`)).entries
   },
+
+  alerts: async () => (await request<{ alerts: Alert[] }>('GET', '/api/v1/alerts')).alerts,
+  ackAlert: (id: string) => request<void>('POST', `/api/v1/alerts/${enc(id)}/ack`),
+  alertConfig: () => request<AlertConfig>('GET', '/api/v1/alerts/config'),
+  saveAlertConfig: (c: AlertConfig) => request<AlertConfig>('PUT', '/api/v1/alerts/config', c),
+  testChannel: (ch: AlertChannel) => request<void>('POST', '/api/v1/alerts/test', ch),
 
   job: (id: string) => request<Job>('GET', `/api/v1/jobs/${enc(id)}`),
 

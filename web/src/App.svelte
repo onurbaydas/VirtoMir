@@ -3,6 +3,8 @@
   import { live } from './lib/live.svelte'
   import { router } from './lib/router.svelte'
   import { session } from './lib/session.svelte'
+  import { alerts } from './lib/alerts.svelte'
+  import AlertsPage from './lib/pages/AlertsPage.svelte'
   import Sidebar from './lib/components/Sidebar.svelte'
   import ConnectionBanner from './lib/components/ConnectionBanner.svelte'
   import Toasts from './lib/components/Toasts.svelte'
@@ -28,8 +30,13 @@
 
   // The live stream needs a session; stop it when signed out so it does not retry on 401s.
   $effect(() => {
-    if (session.ready) live.start()
-    else live.stop()
+    if (session.ready) {
+      live.start()
+      alerts.start()
+    } else {
+      live.stop()
+      alerts.stop()
+    }
   })
 
   let route = $derived(router.route)
@@ -60,6 +67,8 @@
         <StoragePage pool={route.pool} />
       {:else if route.name === 'networks'}
         <NetworksPage />
+      {:else if route.name === 'alerts'}
+        <AlertsPage tab={route.tab} />
       {:else if route.name === 'activity'}
         <ActivityPage />
       {:else if route.name === 'account'}
