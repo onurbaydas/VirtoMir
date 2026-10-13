@@ -52,11 +52,15 @@ internal/live/       ← 1 s sampling hub + 60 s backlog, per-VM bulk stats, hos
 internal/api/        ← HTTP/JSON API (/api/v1), sign-in guard, SSE stream, serves the embedded UI
 internal/auth/       ← PAM (build tag `pam`), sessions, lockout, self-signed TLS (ADR-0010)
 internal/jobs/       ← background jobs (clone) the UI polls
+internal/history/    ← metric history rings, saved to -state-dir/history.gob (ADR-0013)
 packaging/           ← /etc/pam.d/virtomir, systemd unit
+.github/workflows/   ← CI (tests, race, PAM build, shellcheck) and releases on v* tags
+scripts/install.sh   ← installer shipped in release tarballs; build-release.sh builds them
+docs/screenshots/    ← README images (taken from the mock UI)
 web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embedded into virtomird
   src/app.css        ← design tokens (colors, radii, motion) — use these, never hard-coded colors
   src/lib/           ← api client, live/session stores, router, components (Dialog, ConfirmButton, …)
-  src/lib/pages/     ← Overview, MachinePage (#hardware|#snapshots|#xml), NewMachine, Storage, Networks, Login
+  src/lib/pages/     ← Overview, MachinePage (#settings|#hardware|#snapshots|#xml), NewMachine, Storage, Networks, Login
 ```
 
 ## 5. Build, test, run
