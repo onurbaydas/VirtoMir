@@ -27,6 +27,7 @@ type Migrator interface {
 	MigrateFinish(name, uri string, cookie []byte, flags libvirt.DomainMigrateFlags, disks []string, cancelled bool) ([]byte, error)
 	MigrateConfirm(uuid string, cookie []byte, flags libvirt.DomainMigrateFlags, disks []string, cancelled bool) error
 	RemoveImage(path string) error
+	HostCPU() (virt.HostCPU, error)
 }
 
 // Target side of a live migration: only another member may call these, for an admin.
@@ -34,6 +35,67 @@ func (s *Server) migrateRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/migrate/check", s.migrateCheck)
 	mux.HandleFunc("POST /api/v1/migrate/prepare", s.migratePrepare)
 	mux.HandleFunc("POST /api/v1/migrate/finish", s.migrateFinish)
+	mux.HandleFunc("GET /api/v1/host/cpu", s.hostCPU)
+	mux.HandleFunc("GET /api/v1/cluster/cpu-baseline", s.cpuBaseline)
+}
+
+func (s *Server) hostCPU(w http.ResponseWriter, r *http.Request) {
+	m, ok := s.migrator(w, r, false)
+	if !ok {
+		return
+	}
+	h, err := m.HostCPU()
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, h)
+}
+
+// cpuBaseline names a CPU model every cluster member supports, so machines using it can
+// be live-migrated anywhere in the cluster.
+func (s *Server) cpuBaseline(w http.ResponseWriter, r *http.Request) {
+	m, ok := s.migrator(w, r, false)
+	if !ok {
+		return
+	}
+	b, ok := s.backend.(interface {
+		BaselineCPU([]virt.HostCPU) (string, error)
+	})
+	if !ok {
+		s.writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not available"})
+		return
+	}
+	here, err := m.HostCPU()
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	cpus := []virt.HostCPU{here}
+	if s.cluster != nil {
+		members, _ := s.cluster.Members()
+		for _, n := range members {
+			if n.ID == s.cluster.SelfID() {
+				continue
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			var c virt.HostCPU
+			id := identity(r)
+			err := s.peer(n).As(id.Name, id.Role.String(), id.Token).Call(ctx, http.MethodGet, "/api/v1/host/cpu", nil, &c)
+			cancel()
+			if err != nil {
+				s.writeJSON(w, http.StatusConflict, map[string]string{"error": n.Name + " did not say which CPU it has: " + err.Error()})
+				return
+			}
+			cpus = append(cpus, c)
+		}
+	}
+	model, err := b.BaselineCPU(cpus)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"model": model, "hosts": len(cpus)})
 }
 
 // migrateStep is the body of prepare and finish.
@@ -130,7 +192,7 @@ type migrationPlan struct {
 // planMigration checks the target: networks, name, and for every disk whether it is shared
 // (same path on NFS on both hosts), can be copied (a pool there keeps that directory), or
 // blocks the migration.
-func planMigration(ctx context.Context, p *cluster.Peer, src virt.MigrationSource) (migrationPlan, error) {
+func planMigration(ctx context.Context, p *cluster.Peer, m Migrator, src virt.MigrationSource) (migrationPlan, error) {
 	host := p.Node.Name
 	plan := migrationPlan{src: src, flags: virt.MigrateFlags}
 	var doms struct{ Domains []virt.Domain }
@@ -152,6 +214,11 @@ func planMigration(ctx context.Context, p *cluster.Peer, src virt.MigrationSourc
 			return plan, fmt.Errorf("%s has no running network named %s; create or start it there first", host, n)
 		}
 	}
+	if src.CPUMode == "host-passthrough" {
+		if err := checkSameCPU(ctx, p, m); err != nil {
+			return plan, err
+		}
+	}
 	paths := make([]string, len(src.Disks))
 	for i, d := range src.Disks {
 		paths[i] = d.Path
@@ -169,6 +236,23 @@ func planMigration(ctx context.Context, p *cluster.Peer, src virt.MigrationSourc
 		plan.flags |= libvirt.MigrateNonSharedDisk
 	}
 	return plan, nil
+}
+
+// checkSameCPU refuses to send a machine that sees the host's exact CPU to a host with a
+// different one: the guest could crash on the first instruction the new CPU lacks.
+func checkSameCPU(ctx context.Context, p *cluster.Peer, m Migrator) error {
+	here, err := m.HostCPU()
+	if err != nil {
+		return err
+	}
+	var there virt.HostCPU
+	if err := p.Call(ctx, http.MethodGet, "/api/v1/host/cpu", nil, &there); err != nil {
+		return err
+	}
+	if !virt.SameCPU(here, there) {
+		return fmt.Errorf("this machine uses the host's exact CPU (%s), and %s has a different one (%s). In Settings, choose \"Named model\" with a model every host supports (VirtoMir can pick it), restart the machine, then migrate", here.Model, p.Node.Name, there.Model)
+	}
+	return nil
 }
 
 // disksToCopy decides per disk: shared (same path on network storage on both hosts: not
