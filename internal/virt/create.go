@@ -1,6 +1,9 @@
 package virt
 
 import (
+	"bytes"
+	"fmt"
+
 	"github.com/digitalocean/go-libvirt"
 	"libvirt.org/go/libvirtxml"
 )
@@ -16,10 +19,14 @@ type CreateSpec struct {
 	Firmware   string `json:"firmware"`
 	SecureBoot bool   `json:"secureBoot"`
 	TPM        bool   `json:"tpm"`
-	// Disk: a new volume (Pool + DiskGiB) or an existing image (DiskPath), or none.
-	Pool     string `json:"pool"`
-	DiskGiB  uint64 `json:"diskGiB"`
-	DiskPath string `json:"diskPath,omitempty"`
+	// Disk: a new empty volume (Pool + DiskGiB), a copy of a cloud image grown to DiskGiB
+	// (BaseImage), an existing image used as is (DiskPath), or none.
+	Pool      string `json:"pool"`
+	DiskGiB   uint64 `json:"diskGiB"`
+	DiskPath  string `json:"diskPath,omitempty"`
+	BaseImage string `json:"baseImage,omitempty"`
+	// CloudInit configures a cloud image on first boot (seed ISO attached as a CD-ROM).
+	CloudInit *CloudInit `json:"cloudInit,omitempty"`
 	// Installation media to boot from (optional).
 	ISO     string   `json:"iso,omitempty"`
 	Network *NICSpec `json:"network,omitempty"` // nil: no network adapter
@@ -72,15 +79,23 @@ func (s *CreateSpec) normalize() error {
 	if s.DiskGiB > 64<<10 {
 		return invalidf("Disk size must be at most 64 TiB.")
 	}
-	if s.DiskPath == "" && s.DiskGiB == 0 && s.ISO == "" {
+	if s.DiskPath != "" && s.BaseImage != "" {
+		return invalidf("Use either an existing disk or a cloud image, not both.")
+	}
+	if s.DiskPath == "" && s.BaseImage == "" && s.DiskGiB == 0 && s.ISO == "" {
 		return invalidf("Give the machine a disk or installation media, otherwise it has nothing to boot.")
+	}
+	if s.CloudInit != nil {
+		if err := s.CloudInit.normalize(s.Name); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 // buildDomain returns the domain XML for a normalized spec. diskPath/diskFormat describe the
 // prepared system disk ("" for none).
-func buildDomain(s CreateSpec, diskPath, diskFormat string) *libvirtxml.Domain {
+func buildDomain(s CreateSpec, diskPath, diskFormat, seedPath string) *libvirtxml.Domain {
 	p := profiles[s.OS]
 	x := &libvirtxml.Domain{
 		Type:          "kvm",
@@ -156,6 +171,16 @@ func buildDomain(s CreateSpec, diskPath, diskFormat string) *libvirtxml.Domain {
 			Boot:   &libvirtxml.DomainDeviceBoot{Order: boot},
 		})
 	}
+	if seedPath != "" {
+		// cloud-init finds its NoCloud seed by the volume label; it never boots from it.
+		dev.Disks = append(dev.Disks, libvirtxml.DomainDisk{
+			Device:   "cdrom",
+			Driver:   &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "raw"},
+			Source:   &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: seedPath}},
+			Target:   &libvirtxml.DomainDiskTarget{Dev: nextTarget(x, "sd"), Bus: "sata"},
+			ReadOnly: &libvirtxml.DomainDiskReadOnly{},
+		})
+	}
 	if s.Network != nil {
 		spec := *s.Network
 		spec.Model = orDefault(spec.Model, p.nicModel)
@@ -203,14 +228,26 @@ func (c *Client) CreateDomain(spec CreateSpec) (CreateResult, error) {
 	}
 
 	diskPath, diskFormat := spec.DiskPath, ""
-	var created *libvirt.StorageVol
-	if diskPath == "" && spec.DiskGiB > 0 {
+	var created []libvirt.StorageVol
+	rollback := func() {
+		for _, v := range created {
+			_ = l.StorageVolDelete(v, libvirt.StorageVolDeleteNormal)
+		}
+	}
+	switch {
+	case spec.BaseImage != "":
+		vol, p, err := copyVolumeInto(l, spec.BaseImage, spec.Pool, spec.Name+".qcow2", "qcow2", spec.DiskGiB<<30)
+		if err != nil {
+			return CreateResult{}, err
+		}
+		created, diskPath, diskFormat = append(created, vol), p, "qcow2"
+	case diskPath == "" && spec.DiskGiB > 0:
 		vol, p, err := createVolume(l, spec.Pool, spec.Name+".qcow2", spec.DiskGiB<<30, "qcow2")
 		if err != nil {
 			return CreateResult{}, err
 		}
-		created, diskPath, diskFormat = &vol, p, "qcow2"
-	} else if diskPath != "" {
+		created, diskPath, diskFormat = append(created, vol), p, "qcow2"
+	case diskPath != "":
 		if v, err := l.StorageVolLookupByPath(diskPath); err == nil {
 			if info, err := volumeInfo(l, v); err == nil && info.Format != "iso" {
 				diskFormat = info.Format
@@ -218,15 +255,29 @@ func (c *Client) CreateDomain(spec CreateSpec) (CreateResult, error) {
 		}
 	}
 
-	doc, err := buildDomain(spec, diskPath, diskFormat).Marshal()
+	seedPath := ""
+	if spec.CloudInit != nil {
+		iso, err := spec.CloudInit.seedISO()
+		if err != nil {
+			rollback()
+			return CreateResult{}, fmt.Errorf("build cloud-init seed: %w", err)
+		}
+		vol, p, err := uploadBytes(l, spec.Pool, spec.Name+"-cidata.iso", iso)
+		if err != nil {
+			rollback()
+			return CreateResult{}, err
+		}
+		created, seedPath = append(created, vol), p
+	}
+
+	doc, err := buildDomain(spec, diskPath, diskFormat, seedPath).Marshal()
 	if err != nil {
+		rollback()
 		return CreateResult{}, err
 	}
 	d, err := l.DomainDefineXMLFlags(doc, libvirt.DomainDefineValidate)
 	if err != nil {
-		if created != nil {
-			_ = l.StorageVolDelete(*created, libvirt.StorageVolDeleteNormal)
-		}
+		rollback()
 		return CreateResult{}, classify(err)
 	}
 	res := CreateResult{UUID: formatUUID(d.UUID)}
@@ -237,4 +288,62 @@ func (c *Client) CreateDomain(spec CreateSpec) (CreateResult, error) {
 		}
 	}
 	return res, nil
+}
+
+// copyVolumeInto copies the pool volume at src into pool as name (converting to format) and
+// grows it to minBytes if it is smaller. Used for cloud images.
+func copyVolumeInto(l *libvirt.Libvirt, src, pool, name, format string, minBytes uint64) (libvirt.StorageVol, string, error) {
+	srcVol, err := l.StorageVolLookupByPath(src)
+	if err != nil {
+		return libvirt.StorageVol{}, "", refusedf("%s is not in a storage pool. Upload the image in Storage first.", src)
+	}
+	_, srcCap, _, err := l.StorageVolGetInfo(srcVol)
+	if err != nil {
+		return libvirt.StorageVol{}, "", classify(err)
+	}
+	p, err := l.StoragePoolLookupByName(pool)
+	if err != nil {
+		return libvirt.StorageVol{}, "", classify(err)
+	}
+	if _, err := l.StorageVolLookupByName(p, name); err == nil {
+		return libvirt.StorageVol{}, "", refusedf("Pool %s already has a volume named %s.", pool, name)
+	}
+	nv := libvirtxml.StorageVolume{
+		Name:     name,
+		Capacity: &libvirtxml.StorageVolumeSize{Unit: "bytes", Value: srcCap},
+		Target:   &libvirtxml.StorageVolumeTarget{Format: &libvirtxml.StorageVolumeTargetFormat{Type: format}},
+	}
+	doc, err := nv.Marshal()
+	if err != nil {
+		return libvirt.StorageVol{}, "", err
+	}
+	vol, err := l.StorageVolCreateXMLFrom(p, doc, srcVol, 0)
+	if err != nil {
+		return libvirt.StorageVol{}, "", classify(err)
+	}
+	if minBytes > srcCap {
+		if err := l.StorageVolResize(vol, minBytes, 0); err != nil {
+			_ = l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal)
+			return libvirt.StorageVol{}, "", classify(err)
+		}
+	}
+	path, err := l.StorageVolGetPath(vol)
+	if err != nil {
+		_ = l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal)
+		return libvirt.StorageVol{}, "", classify(err)
+	}
+	return vol, path, nil
+}
+
+// uploadBytes stores data as a new raw volume (e.g. a cloud-init seed ISO).
+func uploadBytes(l *libvirt.Libvirt, pool, name string, data []byte) (libvirt.StorageVol, string, error) {
+	vol, path, err := createVolume(l, pool, name, uint64(len(data)), "raw")
+	if err != nil {
+		return libvirt.StorageVol{}, "", err
+	}
+	if err := l.StorageVolUpload(vol, bytes.NewReader(data), 0, uint64(len(data)), 0); err != nil {
+		_ = l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal)
+		return libvirt.StorageVol{}, "", classify(err)
+	}
+	return vol, path, nil
 }

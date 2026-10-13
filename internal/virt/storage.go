@@ -1,6 +1,8 @@
 package virt
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -257,8 +259,9 @@ func (c *Client) DeleteVolume(pool, name string) error {
 	return nil
 }
 
-// UploadVolume streams size bytes from r into a new raw volume (ISO images, raw disks).
-// A failed or cancelled upload leaves nothing behind.
+// UploadVolume streams size bytes from r into a new volume. QCOW2 images (cloud images)
+// are recognized by their magic bytes and stored as qcow2; everything else (ISOs, raw
+// disks) as raw. A failed or cancelled upload leaves nothing behind.
 func (c *Client) UploadVolume(ctx context.Context, pool, name string, size int64, r io.Reader) (Volume, error) {
 	if err := checkName("Volume", name); err != nil {
 		return Volume{}, err
@@ -270,20 +273,34 @@ func (c *Client) UploadVolume(ctx context.Context, pool, name string, size int64
 	if err != nil {
 		return Volume{}, err
 	}
-	vol, _, err := createVolume(l, pool, name, uint64(size), "raw")
+	br := bufio.NewReader(r)
+	format := "raw"
+	if magic, _ := br.Peek(4); bytes.Equal(magic, qcow2Magic) {
+		format = "qcow2"
+	}
+	vol, _, err := createVolume(l, pool, name, uint64(size), format)
 	if err != nil {
 		return Volume{}, err
 	}
-	if err := l.StorageVolUpload(vol, &ctxReader{ctx: ctx, r: io.LimitReader(r, size)}, 0, uint64(size), 0); err != nil {
+	if err := l.StorageVolUpload(vol, &ctxReader{ctx: ctx, r: io.LimitReader(br, size)}, 0, uint64(size), 0); err != nil {
 		_ = l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal)
 		if ctx.Err() != nil {
 			return Volume{}, ctx.Err()
 		}
 		return Volume{}, classify(err)
 	}
-	c.log.Info("volume uploaded", "pool", pool, "volume", name, "bytes", size)
+	// The uploaded qcow2 header carries its own virtual size; let libvirt re-read it.
+	if p, err := l.StoragePoolLookupByName(pool); err == nil {
+		_ = l.StoragePoolRefresh(p, 0)
+		if v, err := l.StorageVolLookupByName(p, name); err == nil {
+			vol = v
+		}
+	}
+	c.log.Info("volume uploaded", "pool", pool, "volume", name, "bytes", size, "format", format)
 	return volumeInfo(l, vol)
 }
+
+var qcow2Magic = []byte{'Q', 'F', 'I', 0xfb}
 
 // ctxReader stops a long upload when the client goes away.
 type ctxReader struct {
