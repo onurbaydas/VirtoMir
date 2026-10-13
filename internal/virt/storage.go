@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"regexp"
@@ -213,6 +214,48 @@ func createVolume(l *libvirt.Libvirt, pool, name string, bytes uint64, format st
 	return vol, path, nil
 }
 
+// cephSecret stores a cephx key in a libvirt secret (usage "virtomir/<pool>") and returns
+// its UUID. The key is base64 as Ceph prints it.
+func cephSecret(l *libvirt.Libvirt, pool, key string) (string, error) {
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(key))
+	if err != nil || len(raw) == 0 {
+		return "", invalidf("The Ceph key is the base64 string from 'ceph auth get-key client.<user>'.")
+	}
+	usage := "virtomir/" + pool
+	s := libvirtxml.Secret{Ephemeral: "no", Private: "yes", Description: "Ceph key for VirtoMir pool " + pool,
+		Usage: &libvirtxml.SecretUsage{Type: "ceph", Name: usage}}
+	doc, err := s.Marshal()
+	if err != nil {
+		return "", err
+	}
+	sec, err := l.SecretDefineXML(doc, 0)
+	if err != nil {
+		return "", classify(err)
+	}
+	if err := l.SecretSetValue(sec, raw, 0); err != nil {
+		return "", classify(err)
+	}
+	return formatUUID(sec.UUID), nil
+}
+
+// poolKeepsFiles reports whether a pool's volumes are plain files a disk can point at;
+// otherwise (iSCSI, Ceph, LVM) disks refer to them as <source pool= volume=>.
+func poolKeepsFiles(l *libvirt.Libvirt, pool string) bool {
+	p, err := l.StoragePoolLookupByName(pool)
+	if err != nil {
+		return true
+	}
+	raw, err := l.StoragePoolGetXMLDesc(p, 0)
+	if err != nil {
+		return true
+	}
+	var x libvirtxml.StoragePool
+	if x.Unmarshal(raw) != nil {
+		return true
+	}
+	return x.Type == "dir" || x.Type == "fs" || x.Type == "netfs"
+}
+
 func volumePath(l *libvirt.Libvirt, pool, name string) (path, format string, err error) {
 	p, err := l.StoragePoolLookupByName(pool)
 	if err != nil {
@@ -360,7 +403,17 @@ type PoolSpec struct {
 	Type   string `json:"type,omitempty"`
 	Host   string `json:"host,omitempty"`
 	Export string `json:"export,omitempty"`
+	// iscsi: Host is the portal, Target the IQN; the LUNs become volumes.
+	Target string `json:"target,omitempty"`
+	// rbd (Ceph): Monitors (host or host:port), the Ceph pool name, and the cephx user and
+	// key; the key is kept in a libvirt secret, never in the pool definition.
+	Monitors []string `json:"monitors,omitempty"`
+	CephPool string   `json:"cephPool,omitempty"`
+	CephUser string   `json:"cephUser,omitempty"`
+	CephKey  string   `json:"cephKey,omitempty"`
 }
+
+var iqnRE = regexp.MustCompile(`^(iqn\.[0-9]{4}-[0-9]{2}\.[a-z0-9.-]+(:[^\s]+)?|eui\.[0-9A-Fa-f]{16})$`)
 
 var nfsHostRE = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$|^[[0-9a-fA-F:]+]$`)
 
@@ -369,7 +422,7 @@ func poolXML(spec PoolSpec) (libvirtxml.StoragePool, error) {
 	if err := checkName("Pool", spec.Name); err != nil {
 		return libvirtxml.StoragePool{}, err
 	}
-	if !strings.HasPrefix(spec.Path, "/") || strings.Contains(spec.Path, "..") {
+	if (spec.Type == "" || spec.Type == "dir" || spec.Type == "netfs") && (!strings.HasPrefix(spec.Path, "/") || strings.Contains(spec.Path, "..")) {
 		return libvirtxml.StoragePool{}, invalidf("The path must be absolute, e.g. /srv/vm-images.")
 	}
 	x := libvirtxml.StoragePool{Type: "dir", Name: spec.Name, Target: &libvirtxml.StoragePoolTarget{Path: spec.Path}}
@@ -388,8 +441,42 @@ func poolXML(spec PoolSpec) (libvirtxml.StoragePool, error) {
 			Dir:    &libvirtxml.StoragePoolSourceDir{Path: spec.Export},
 			Format: &libvirtxml.StoragePoolSourceFormat{Type: "nfs"},
 		}
+	case "iscsi":
+		if !nfsHostRE.MatchString(spec.Host) {
+			return x, invalidf("Enter the iSCSI portal as a host name or IP address.")
+		}
+		if !iqnRE.MatchString(spec.Target) {
+			return x, invalidf("The target is an IQN like iqn.2026-01.com.example:storage.")
+		}
+		x.Type = "iscsi"
+		x.Source = &libvirtxml.StoragePoolSource{
+			Host:   []libvirtxml.StoragePoolSourceHost{{Name: spec.Host}},
+			Device: []libvirtxml.StoragePoolSourceDevice{{Path: spec.Target}},
+		}
+		x.Target = &libvirtxml.StoragePoolTarget{Path: "/dev/disk/by-path"}
+	case "rbd":
+		if len(spec.Monitors) == 0 {
+			return x, invalidf("Name at least one Ceph monitor.")
+		}
+		if err := checkName("Ceph pool", spec.CephPool); err != nil {
+			return x, err
+		}
+		x.Type = "rbd"
+		x.Target = nil
+		src := &libvirtxml.StoragePoolSource{Name: spec.CephPool}
+		for _, m := range spec.Monitors {
+			host, port, found := strings.Cut(strings.TrimSpace(m), ":")
+			if !nfsHostRE.MatchString(host) {
+				return x, invalidf("%q is not a monitor address.", m)
+			}
+			if !found {
+				port = "6789"
+			}
+			src.Host = append(src.Host, libvirtxml.StoragePoolSourceHost{Name: host, Port: port})
+		}
+		x.Source = src
 	default:
-		return x, invalidf("Unknown pool type %q (dir or netfs).", spec.Type)
+		return x, invalidf("Unknown pool type %q (dir, netfs, iscsi or rbd).", spec.Type)
 	}
 	return x, nil
 }
@@ -405,6 +492,14 @@ func (c *Client) CreatePool(spec PoolSpec) error {
 	if err != nil {
 		return err
 	}
+	if spec.Type == "rbd" && spec.CephUser != "" {
+		uuid, err := cephSecret(l, spec.Name, spec.CephKey)
+		if err != nil {
+			return err
+		}
+		x.Source.Auth = &libvirtxml.StoragePoolSourceAuth{Type: "ceph", Username: spec.CephUser,
+			Secret: &libvirtxml.StoragePoolSourceAuthSecret{UUID: uuid}}
+	}
 	doc, err := x.Marshal()
 	if err != nil {
 		return err
@@ -413,9 +508,12 @@ func (c *Client) CreatePool(spec PoolSpec) error {
 	if err != nil {
 		return classify(err)
 	}
-	if err := l.StoragePoolBuild(p, libvirt.StoragePoolBuildNew); err != nil {
-		_ = l.StoragePoolUndefine(p)
-		return classify(err)
+	// Only directory-like pools have something to build (iSCSI and Ceph exist already).
+	if x.Type == "dir" || x.Type == "netfs" {
+		if err := l.StoragePoolBuild(p, libvirt.StoragePoolBuildNew); err != nil {
+			_ = l.StoragePoolUndefine(p)
+			return classify(err)
+		}
 	}
 	if err := l.StoragePoolCreate(p, 0); err != nil {
 		_ = l.StoragePoolUndefine(p)

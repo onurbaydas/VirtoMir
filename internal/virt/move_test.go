@@ -86,3 +86,35 @@ func TestTuningRoundTrip(t *testing.T) {
 		t.Error("bad cpuset accepted")
 	}
 }
+
+func TestPoolXMLSAN(t *testing.T) {
+	x, err := poolXML(PoolSpec{Name: "san", Type: "iscsi", Host: "192.168.77.10", Target: "iqn.2026-10.dev.virtomir:lun"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := x.Marshal()
+	for _, want := range []string{`type="iscsi"`, `<host name="192.168.77.10">`, `<device path="iqn.2026-10.dev.virtomir:lun">`, `<path>/dev/disk/by-path</path>`} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("iscsi: missing %s in\n%s", want, doc)
+		}
+	}
+	x, err = poolXML(PoolSpec{Name: "ceph", Type: "rbd", Monitors: []string{"mon1", "10.0.0.2:3300"}, CephPool: "vms"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _ = x.Marshal()
+	for _, want := range []string{`type="rbd"`, `<name>vms</name>`, `<host name="mon1" port="6789">`, `<host name="10.0.0.2" port="3300">`} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("rbd: missing %s in\n%s", want, doc)
+		}
+	}
+	for _, bad := range []PoolSpec{
+		{Name: "a", Type: "iscsi", Host: "h", Target: "not-an-iqn"},
+		{Name: "a", Type: "rbd", CephPool: "vms"},
+		{Name: "a", Type: "rbd", Monitors: []string{"bad host"}, CephPool: "vms"},
+	} {
+		if _, err := poolXML(bad); err == nil {
+			t.Errorf("accepted %+v", bad)
+		}
+	}
+}

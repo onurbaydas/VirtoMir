@@ -158,7 +158,12 @@
   let poolDlg = $state(false)
   let pName = $state('')
   let pPath = $state('')
-  let pType = $state<'dir' | 'netfs'>('dir')
+  let pType = $state<'dir' | 'netfs' | 'iscsi' | 'rbd'>('dir')
+  let pTarget = $state('')
+  let pMonitors = $state('')
+  let pCephPool = $state('')
+  let pCephUser = $state('libvirt')
+  let pCephKey = $state('')
   let pHost = $state('')
   let pExport = $state('')
   let pEverywhere = $state(true)
@@ -168,7 +173,22 @@
     e.preventDefault()
     pBusy = true
     pErr = ''
-    const spec: PoolSpec = { name: pName, path: pPath, ...(pType === 'netfs' ? { type: 'netfs', host: pHost.trim(), export: pExport.trim() } : {}) }
+    const spec: PoolSpec =
+      pType === 'netfs'
+        ? { name: pName, path: pPath, type: 'netfs', host: pHost.trim(), export: pExport.trim() }
+        : pType === 'iscsi'
+          ? { name: pName, path: '', type: 'iscsi', host: pHost.trim(), target: pTarget.trim() }
+          : pType === 'rbd'
+            ? {
+                name: pName,
+                path: '',
+                type: 'rbd',
+                monitors: pMonitors.split(/[\s,]+/).filter(Boolean),
+                cephPool: pCephPool.trim(),
+                cephUser: pCephUser.trim(),
+                cephKey: pCephKey.trim(),
+              }
+            : { name: pName, path: pPath }
     try {
       if (cluster.clustered && pEverywhere) {
         const res = await api.createClusterPool(spec)
@@ -402,6 +422,8 @@
     <div class="seg" role="radiogroup" aria-label="Kind of storage">
       <button type="button" role="radio" aria-checked={pType === 'dir'} class:on={pType === 'dir'} onclick={() => (pType = 'dir')}>Directory on the host</button>
       <button type="button" role="radio" aria-checked={pType === 'netfs'} class:on={pType === 'netfs'} onclick={() => (pType = 'netfs')}>NFS share</button>
+      <button type="button" role="radio" aria-checked={pType === 'iscsi'} class:on={pType === 'iscsi'} onclick={() => (pType = 'iscsi')}>iSCSI</button>
+      <button type="button" role="radio" aria-checked={pType === 'rbd'} class:on={pType === 'rbd'} onclick={() => (pType = 'rbd')}>Ceph RBD</button>
     </div>
     <label class="ui-field">
       <span class="label">Name</span>
@@ -419,11 +441,46 @@
         </label>
       </div>
     {/if}
+    {#if pType === 'iscsi'}
+      <div class="row2">
+        <label class="ui-field">
+          <span class="label">Portal</span>
+          <input class="ui-input mono" bind:value={pHost} placeholder="192.168.1.30" required />
+        </label>
+        <label class="ui-field">
+          <span class="label">Target IQN</span>
+          <input class="ui-input mono" bind:value={pTarget} placeholder="iqn.2026-01.com.example:vms" required />
+        </label>
+      </div>
+      <span class="hint">Each LUN of the target becomes a volume you can give to a machine. The host needs the iSCSI initiator (open-iscsi).</span>
+    {:else if pType === 'rbd'}
+      <label class="ui-field">
+        <span class="label">Monitors</span>
+        <input class="ui-input mono" bind:value={pMonitors} placeholder="10.0.0.1, 10.0.0.2, 10.0.0.3:3300" required />
+      </label>
+      <div class="row2">
+        <label class="ui-field">
+          <span class="label">Ceph pool</span>
+          <input class="ui-input mono" bind:value={pCephPool} placeholder="vms" required />
+        </label>
+        <label class="ui-field">
+          <span class="label">User</span>
+          <input class="ui-input mono" bind:value={pCephUser} placeholder="libvirt" />
+        </label>
+      </div>
+      <label class="ui-field">
+        <span class="label">Key</span>
+        <input class="ui-input mono" type="password" bind:value={pCephKey} placeholder="from: ceph auth get-key client.libvirt" autocomplete="off" />
+        <span class="hint">Stored in a libvirt secret on the host, never in the pool definition.</span>
+      </label>
+    {/if}
+    {#if pType === 'dir' || pType === 'netfs'}
     <label class="ui-field">
       <span class="label">{pType === 'netfs' ? 'Mount at' : 'Directory'}</span>
       <input class="ui-input mono" bind:value={pPath} placeholder={pType === 'netfs' ? '/var/lib/libvirt/shared' : '/srv/vm-images'} required />
       <span class="hint">{pType === 'netfs' ? 'Mounted now and on every boot (the host needs the NFS client, e.g. nfs-common).' : 'Created if it does not exist. The pool starts now and on every boot.'}</span>
     </label>
+    {/if}
     {#if cluster.clustered}
       <label class="check">
         <input type="checkbox" bind:checked={pEverywhere} />
