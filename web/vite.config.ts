@@ -20,6 +20,8 @@ export default defineConfig({
     proxy: { '/api': { target: api, changeOrigin: true } },
   },
   build: {
+    // noVNC uses top-level await.
+    target: 'es2022',
     outDir: 'dist',
     emptyOutDir: true,
   },
