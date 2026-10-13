@@ -46,11 +46,13 @@ scripts/             ← helper scripts (sync-ai-memory.ps1, dev-run.ps1)
 dev/hyperv/          ← one-command Hyper-V dev host (Debian 13 + KVM/libvirt)
 cmd/virtomird/       ← daemon entry point (Go, ADR-0006)
 internal/virt/       ← libvirt gateway: connection, reconnect, libvirt → VirtoMir types
+                       detail.go: domain XML (libvirtxml) → machine page model, fixtures in testdata/
 internal/live/       ← 1 s sampling hub + 60 s backlog, fans snapshots out (SSE)
 internal/api/        ← HTTP/JSON API (/api/v1), SSE stream, serves the embedded UI
 web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embedded into virtomird
   src/app.css        ← design tokens (colors, radii, motion) — use these, never hard-coded colors
-  src/lib/           ← api types, live store, components
+  src/lib/           ← api types, live store, router, components
+  src/lib/pages/     ← Overview, MachinePage (/machines/<uuid>[#hardware|#xml]), NotFound
 ```
 
 ## 5. Build, test, run
