@@ -17,6 +17,7 @@ export type Route =
   | { name: 'account' }
   | { name: 'console'; uuid: string }
   | { name: 'cluster' }
+  | { name: 'hardware' }
   | { name: 'not-found' }
 
 function parse(path: string, hash: string): Route {
@@ -31,6 +32,7 @@ function parse(path: string, hash: string): Route {
   if (path === '/backups') return { name: 'backups' }
   if (path === '/account') return { name: 'account' }
   if (path === '/cluster') return { name: 'cluster' }
+  if (path === '/hardware') return { name: 'hardware' }
   const c = /^\/console\/([0-9a-fA-F-]{36})$/.exec(path)
   if (c) return { name: 'console', uuid: c[1].toLowerCase() }
   const m = /^\/machines\/([0-9a-fA-F-]{36})$/.exec(path)

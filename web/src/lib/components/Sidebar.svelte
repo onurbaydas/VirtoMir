@@ -13,6 +13,7 @@
   import Bell from '@lucide/svelte/icons/bell'
   import Archive from '@lucide/svelte/icons/archive'
   import Boxes from '@lucide/svelte/icons/boxes'
+  import CircuitBoard from '@lucide/svelte/icons/circuit-board'
   import { cluster } from '../cluster.svelte'
   import { alerts } from '../alerts.svelte'
   import { session } from '../session.svelte'
@@ -38,6 +39,7 @@
     { name: 'storage', href: '/storage', label: 'Storage', icon: HardDrive, role: 'viewer' },
     { name: 'networks', href: '/networks', label: 'Networks', icon: Network, role: 'viewer' },
     { name: 'backups', href: '/backups', label: 'Backups', icon: Archive, role: 'viewer' },
+    { name: 'hardware', href: '/hardware', label: 'Hardware', icon: CircuitBoard, role: 'viewer' },
     { name: 'alerts', href: '/alerts', label: 'Alerts', icon: Bell, role: 'viewer' },
     { name: 'activity', href: '/activity', label: 'Activity', icon: ClockArrowUp, role: 'admin' },
   ] as const
