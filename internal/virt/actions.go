@@ -3,34 +3,11 @@ package virt
 import (
 	"context"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/digitalocean/go-libvirt"
 )
-
-// ErrNotFound means the requested domain does not exist (any more).
-var ErrNotFound = errors.New("not found")
-
-// OperationError is libvirt refusing an operation on a reachable host
-// (e.g. starting a domain that is already running). Its message is libvirt's own.
-type OperationError struct{ Message string }
-
-func (e *OperationError) Error() string { return e.Message }
-
-// classify turns libvirt RPC errors into ErrNotFound / *OperationError; other errors
-// (connection problems) pass through unchanged.
-func classify(err error) error {
-	var lerr libvirt.Error
-	if !errors.As(err, &lerr) {
-		return err
-	}
-	if libvirt.ErrorNumber(lerr.Code) == libvirt.ErrNoDomain {
-		return fmt.Errorf("%w: %s", ErrNotFound, lerr.Message)
-	}
-	return &OperationError{Message: lerr.Message}
-}
 
 // Action is a power/lifecycle operation on a domain.
 type Action string

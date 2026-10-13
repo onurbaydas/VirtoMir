@@ -26,6 +26,8 @@ type HostLive struct {
 	CPUPercent  float64 `json:"cpuPercent"`
 	MemTotalKiB uint64  `json:"memTotalKiB"`
 	MemUsedKiB  uint64  `json:"memUsedKiB"`
+	// Physical disk and network throughput; absent off Linux and on the first sample.
+	IO *HostIO `json:"io,omitempty"`
 }
 
 type DomainLive struct {
@@ -70,6 +72,10 @@ type Hub struct {
 	prevHostOK bool
 	prevDom    map[string]cpuSample
 	prevStats  map[string]statsSample
+	hostIO     func() (hostCounters, error) // nil: not available on this OS
+	prevIO     hostCounters
+	prevIOAt   time.Time
+	prevIOOK   bool
 
 	mu      sync.Mutex
 	backlog [][]byte // oldest first, at most Backlog entries
@@ -85,6 +91,7 @@ func NewHub(src Source, interval time.Duration, log *slog.Logger) *Hub {
 		refresh:   make(chan struct{}, 1),
 		prevDom:   map[string]cpuSample{},
 		prevStats: map[string]statsSample{},
+		hostIO:    defaultHostIO(),
 		subs:      map[chan []byte]struct{}{},
 	}
 }
@@ -164,6 +171,7 @@ func (h *Hub) sample(now time.Time) {
 		var doms []virt.Domain
 		if doms, err = h.src.ListDomains(); err == nil {
 			snap.Host = h.hostLive(hs)
+			snap.Host.IO = h.sampleHostIO(now)
 			snap.Domains = h.domainsLive(doms, now)
 			// Extras: a failing bulk-stats call must not take the basic view down.
 			if stats, serr := h.src.DomainStats(); serr == nil {

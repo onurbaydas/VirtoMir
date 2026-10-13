@@ -4,6 +4,7 @@ go 1.27.2
 
 require (
 	github.com/digitalocean/go-libvirt v0.0.0-20260814190004-1a83157e1858
+	github.com/msteinert/pam/v2 v2.1.0
 	libvirt.org/go/libvirtxml v1.12008.0
 )
 

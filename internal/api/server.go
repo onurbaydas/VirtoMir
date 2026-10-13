@@ -2,14 +2,19 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/auth"
+	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
@@ -20,6 +25,40 @@ type Backend interface {
 	DomainDetail(uuid string) (virt.DomainDetail, error)
 	DomainXML(uuid string, inactive bool) (string, error)
 	DomainAction(uuid string, action virt.Action) error
+
+	CreateDomain(spec virt.CreateSpec) (virt.CreateResult, error)
+	DefineXML(uuid, xml string) (virt.DefineResult, error)
+	SetAutostart(uuid string, on bool) error
+	Rename(uuid, name string) error
+	Delete(uuid string, removeStorage bool) (virt.DeleteResult, error)
+	Clone(ctx context.Context, uuid, name string, report func(string)) (string, error)
+
+	ChangeMedia(uuid, target, source string) error
+	AttachDisk(uuid string, spec virt.DiskSpec) (string, error)
+	AttachInterface(uuid string, spec virt.NICSpec) error
+	DetachDevice(uuid string, ref virt.DeviceRef) error
+
+	ListSnapshots(uuid string) ([]virt.Snapshot, error)
+	CreateSnapshot(uuid string, spec virt.SnapshotSpec) (string, error)
+	RevertSnapshot(uuid, name string) error
+	DeleteSnapshot(uuid, name string) error
+
+	ListPools() ([]virt.Pool, error)
+	CreatePool(spec virt.PoolSpec) error
+	DeletePool(name string) error
+	PoolAction(name, action string) error
+	SetPoolAutostart(name string, on bool) error
+	ListVolumes(pool string) ([]virt.Volume, error)
+	CreateVolume(pool string, spec virt.VolumeSpec) (virt.Volume, error)
+	DeleteVolume(pool, name string) error
+	UploadVolume(ctx context.Context, pool, name string, size int64, r io.Reader) (virt.Volume, error)
+
+	ListNetworks() ([]virt.VNetwork, error)
+	CreateNetwork(spec virt.NetworkSpec) error
+	DeleteNetwork(name string) error
+	NetworkAction(name, action string) error
+	SetNetworkAutostart(name string, on bool) error
+	NetworkLeases(name string) ([]virt.Lease, error)
 }
 
 // Live is the snapshot stream (implemented by *live.Hub).
@@ -28,16 +67,32 @@ type Live interface {
 	Refresh()
 }
 
+type Options struct {
+	Backend Backend
+	Live    Live
+	Jobs    *jobs.Manager
+	// Auth nil means no sign-in (development only; virtomird warns loudly).
+	Auth    *auth.Manager
+	UI      fs.FS // nil: no UI bundled
+	Version string
+	Log     *slog.Logger
+}
+
 type Server struct {
 	backend Backend
 	live    Live
-	ui      fs.FS // nil: no UI bundled
+	jobs    *jobs.Manager
+	auth    *auth.Manager
+	ui      fs.FS
 	version string
 	log     *slog.Logger
 }
 
-func NewServer(backend Backend, live Live, ui fs.FS, version string, log *slog.Logger) *Server {
-	return &Server{backend: backend, live: live, ui: ui, version: version, log: log}
+func NewServer(o Options) *Server {
+	if o.Jobs == nil {
+		o.Jobs = jobs.New(context.Background())
+	}
+	return &Server{backend: o.Backend, live: o.Live, jobs: o.Jobs, auth: o.Auth, ui: o.UI, version: o.Version, log: o.Log}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -45,11 +100,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /api/v1/version", s.getVersion)
 	mux.HandleFunc("GET /api/v1/host", s.getHost)
-	mux.HandleFunc("GET /api/v1/domains", s.listDomains)
-	mux.HandleFunc("GET /api/v1/domains/{uuid}", s.getDomain)
-	mux.HandleFunc("GET /api/v1/domains/{uuid}/xml", s.getDomainXML)
-	mux.HandleFunc("POST /api/v1/domains/{uuid}/actions/{action}", s.domainAction)
 	mux.HandleFunc("GET /api/v1/stream", s.stream)
+	mux.HandleFunc("GET /api/v1/jobs", s.listJobs)
+	mux.HandleFunc("GET /api/v1/jobs/{id}", s.getJob)
+
+	s.authRoutes(mux)
+	s.domainRoutes(mux)
+	s.storageRoutes(mux)
+	s.networkRoutes(mux)
+
 	// GET-only fallbacks, so a wrong method on a real endpoint still gets 405.
 	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such API endpoint"})
@@ -57,7 +116,55 @@ func (s *Server) Handler() http.Handler {
 	if s.ui != nil {
 		mux.Handle("GET /", spaHandler(s.ui))
 	}
-	return mux
+	return s.guard(mux)
+}
+
+type ctxKey int
+
+const userKey ctxKey = 0
+
+// guard enforces sign-in on the API, rejects cross-site writes and logs every change
+// together with the user who made it.
+func (s *Server) guard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		unsafe := r.Method != http.MethodGet && r.Method != http.MethodHead
+		if unsafe && !sameOrigin(r) {
+			s.writeJSON(w, http.StatusForbidden, map[string]string{"error": "cross-site request refused"})
+			return
+		}
+		user := ""
+		if s.auth != nil && strings.HasPrefix(r.URL.Path, "/api/") && !publicPath(r.URL.Path) {
+			u, ok := s.auth.User(auth.Token(r))
+			if !ok {
+				s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in required"})
+				return
+			}
+			user = u
+			r = r.WithContext(context.WithValue(r.Context(), userKey, u))
+		}
+		if unsafe && strings.HasPrefix(r.URL.Path, "/api/v1/") && !strings.HasPrefix(r.URL.Path, "/api/v1/auth/") {
+			s.log.Info("api change", "user", user, "method", r.Method, "path", r.URL.Path)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func publicPath(p string) bool {
+	return p == "/api/v1/version" || strings.HasPrefix(p, "/api/v1/auth/")
+}
+
+// sameOrigin: browsers send Origin (or Sec-Fetch-Site) with every cross-site write;
+// requests without either header (curl, scripts) are not CSRF.
+func sameOrigin(r *http.Request) bool {
+	if o := r.Header.Get("Origin"); o != "" {
+		u, err := url.Parse(o)
+		return err == nil && u.Host == r.Host
+	}
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "", "same-origin", "none":
+		return true
+	}
+	return false
 }
 
 func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
@@ -77,49 +184,17 @@ func (s *Server) getHost(w http.ResponseWriter, _ *http.Request) {
 	s.writeJSON(w, http.StatusOK, h)
 }
 
-func (s *Server) listDomains(w http.ResponseWriter, _ *http.Request) {
-	doms, err := s.backend.ListDomains()
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-	s.writeJSON(w, http.StatusOK, map[string]any{"domains": doms})
+func (s *Server) listJobs(w http.ResponseWriter, _ *http.Request) {
+	s.writeJSON(w, http.StatusOK, map[string]any{"jobs": s.jobs.List()})
 }
 
-func (s *Server) getDomain(w http.ResponseWriter, r *http.Request) {
-	d, err := s.backend.DomainDetail(r.PathValue("uuid"))
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-	s.writeJSON(w, http.StatusOK, d)
-}
-
-// getDomainXML returns the raw domain XML; ?inactive=true selects the next-boot config.
-func (s *Server) getDomainXML(w http.ResponseWriter, r *http.Request) {
-	inactive := r.URL.Query().Get("inactive") == "true"
-	x, err := s.backend.DomainXML(r.PathValue("uuid"), inactive)
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	_, _ = io.WriteString(w, x)
-}
-
-func (s *Server) domainAction(w http.ResponseWriter, r *http.Request) {
-	action, ok := virt.ParseAction(r.PathValue("action"))
+func (s *Server) getJob(w http.ResponseWriter, r *http.Request) {
+	j, ok := s.jobs.Get(r.PathValue("id"))
 	if !ok {
-		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown action " + r.PathValue("action")})
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such job"})
 		return
 	}
-	if err := s.backend.DomainAction(r.PathValue("uuid"), action); err != nil {
-		s.writeError(w, err)
-		return
-	}
-	s.live.Refresh()
-	w.WriteHeader(http.StatusAccepted) // e.g. a shutdown is only a request to the guest
+	s.writeJSON(w, http.StatusOK, j)
 }
 
 // stream sends live snapshots as Server-Sent Events ("snapshot" events, JSON payload),
@@ -130,6 +205,7 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no") // don't let reverse proxies buffer the stream
 
+	token := auth.Token(r)
 	backlog, snaps, unsubscribe := s.live.Subscribe()
 	defer unsubscribe()
 	heartbeat := time.NewTicker(15 * time.Second)
@@ -153,6 +229,9 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 			}
 			chunk = appendEvent(nil, b)
 		case <-heartbeat.C:
+			if s.auth != nil && !s.auth.Valid(token) {
+				return // signed out or expired: the browser reconnects and gets 401
+			}
 			chunk = []byte(": keep-alive\n\n")
 		}
 		if _, err := w.Write(chunk); err != nil {
@@ -178,19 +257,52 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-// writeError maps backend errors to HTTP: 404 unknown domain, 409 libvirt refused the
-// operation, 502 VirtoMir is up but libvirt is not answering.
+// maxBody limits JSON and XML request bodies (uploads have their own path).
+const maxBody = 2 << 20
+
+// decode reads a JSON body into v; on failure it has already answered 400.
+func (s *Server) decode(w http.ResponseWriter, r *http.Request, v any) bool {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body: " + err.Error()})
+		return false
+	}
+	return true
+}
+
+// writeError maps backend errors to HTTP: 404 unknown object, 422 invalid input,
+// 409 refused operation, 429 login lockout, 502 VirtoMir is up but libvirt is not answering.
 func (s *Server) writeError(w http.ResponseWriter, err error) {
 	status := http.StatusBadGateway
 	var opErr *virt.OperationError
+	var invErr *virt.InvalidError
 	switch {
 	case errors.Is(err, virt.ErrNotFound):
 		status = http.StatusNotFound
+	case errors.As(err, &invErr):
+		status = http.StatusUnprocessableEntity
 	case errors.As(err, &opErr):
 		status = http.StatusConflict
+	case errors.Is(err, auth.ErrBadCredentials), errors.Is(err, auth.ErrNotAllowed):
+		status = http.StatusUnauthorized
+	case errors.Is(err, auth.ErrTooManyAttempts):
+		status = http.StatusTooManyRequests
+	case errors.Is(err, context.Canceled):
+		status = 499 // client went away; nobody reads this
 	}
 	if status == http.StatusBadGateway {
 		s.log.Error("request failed", "err", err)
 	}
 	s.writeJSON(w, status, map[string]string{"error": err.Error()})
+}
+
+// done answers a successful change and refreshes the live view.
+func (s *Server) done(w http.ResponseWriter, status int, v any) {
+	s.live.Refresh()
+	if v == nil {
+		w.WriteHeader(status)
+		return
+	}
+	s.writeJSON(w, status, v)
 }

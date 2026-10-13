@@ -17,7 +17,10 @@ import (
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
+// fakeBackend implements the calls the tests use; the embedded interface makes any other
+// call panic, which flags an untested path.
 type fakeBackend struct {
+	Backend
 	host         virt.HostInfo
 	domains      []virt.Domain
 	detail       virt.DomainDetail
@@ -25,7 +28,10 @@ type fakeBackend struct {
 	err          error
 	lastAction   virt.Action
 	lastInactive bool
+	calls        []string
 }
+
+func (f *fakeBackend) call(s string) { f.calls = append(f.calls, s) }
 
 func (f *fakeBackend) HostInfo() (virt.HostInfo, error)    { return f.host, f.err }
 func (f *fakeBackend) ListDomains() ([]virt.Domain, error) { return f.domains, f.err }
@@ -55,7 +61,7 @@ func newTestServer(b Backend, l Live) *Server {
 		"index.html":    {Data: []byte("<html>app</html>")},
 		"assets/app.js": {Data: []byte("console.log(1)")},
 	}
-	return NewServer(b, l, ui, "test", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return NewServer(Options{Backend: b, Live: l, UI: ui, Version: "test", Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 }
 
 func serve(t *testing.T, b Backend, method, path string) *httptest.ResponseRecorder {
@@ -165,7 +171,7 @@ func TestDomainAction(t *testing.T) {
 }
 
 func TestWrongMethodRejected(t *testing.T) {
-	rec := serve(t, &fakeBackend{}, http.MethodPost, "/api/v1/domains")
+	rec := serve(t, &fakeBackend{}, http.MethodPatch, "/api/v1/domains")
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want 405", rec.Code)
 	}

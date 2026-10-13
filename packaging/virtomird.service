@@ -1,0 +1,18 @@
+[Unit]
+Description=VirtoMir - web control deck for libvirt
+Documentation=https://github.com/onurbaydas/VirtoMir
+After=network-online.target libvirtd.service virtqemud.service
+Wants=network-online.target
+
+[Service]
+# Runs as root: it talks to the system libvirt socket and checks passwords via PAM.
+ExecStart=/usr/local/bin/virtomird -listen 0.0.0.0:8420
+StateDirectory=virtomir
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

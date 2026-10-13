@@ -166,3 +166,12 @@ func TestToKiB(t *testing.T) {
 		}
 	}
 }
+
+func mustRead(t *testing.T, file string) string {
+	t.Helper()
+	b, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}

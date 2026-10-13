@@ -1,0 +1,6 @@
+#%PAM-1.0
+# PAM service for VirtoMir sign-in. Install as /etc/pam.d/virtomir.
+# Debian/Ubuntu syntax; on Fedora/RHEL use "auth include system-auth" and
+# "account include system-auth" instead of the @include lines.
+@include common-auth
+@include common-account

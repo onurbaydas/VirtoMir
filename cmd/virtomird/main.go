@@ -1,19 +1,24 @@
 // Command virtomird is the VirtoMir daemon. It runs on the libvirt host and serves
-// the VirtoMir API (and, later, the web UI).
+// the VirtoMir API and the web UI.
 package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/onurbaydas/virtomir/internal/api"
+	"github.com/onurbaydas/virtomir/internal/auth"
+	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/live"
 	"github.com/onurbaydas/virtomir/internal/virt"
 	"github.com/onurbaydas/virtomir/web"
@@ -22,9 +27,25 @@ import (
 // version is set at build time: -ldflags "-X main.version=..."
 var version = "dev"
 
+type config struct {
+	listen, socket           string
+	authMode, authGroup      string
+	pamService               string
+	tlsMode, tlsCert, tlsKey string
+	stateDir                 string
+}
+
 func main() {
-	listen := flag.String("listen", "127.0.0.1:8420", "HTTP listen address")
-	socket := flag.String("libvirt-socket", virt.DefaultSocket, "libvirt UNIX socket")
+	var c config
+	flag.StringVar(&c.listen, "listen", "127.0.0.1:8420", "HTTP(S) listen address")
+	flag.StringVar(&c.socket, "libvirt-socket", virt.DefaultSocket, "libvirt UNIX socket")
+	flag.StringVar(&c.authMode, "auth", "pam", `sign-in: "pam" (Linux accounts) or "none" (development only)`)
+	flag.StringVar(&c.authGroup, "auth-group", "libvirt", "besides root, only members of this group may sign in")
+	flag.StringVar(&c.pamService, "pam-service", "virtomir", "PAM service name (/etc/pam.d/<name>)")
+	flag.StringVar(&c.tlsMode, "tls", "auto", `"auto" (self-signed certificate in -state-dir), "files" (-tls-cert/-tls-key) or "off"`)
+	flag.StringVar(&c.tlsCert, "tls-cert", "", "certificate file for -tls=files")
+	flag.StringVar(&c.tlsKey, "tls-key", "", "private key file for -tls=files")
+	flag.StringVar(&c.stateDir, "state-dir", "/var/lib/virtomir", "where virtomird keeps its own files (TLS certificate)")
 	debug := flag.Bool("debug", false, "verbose logging")
 	flag.Parse()
 
@@ -34,17 +55,26 @@ func main() {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
-	if err := run(*listen, *socket, log); err != nil {
+	if err := run(c, log); err != nil {
 		log.Error("fatal", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(listen, socket string, log *slog.Logger) error {
+func run(c config, log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	client := virt.NewClient(socket, log)
+	authMgr, err := setupAuth(c, log)
+	if err != nil {
+		return err
+	}
+	tlsConf, err := setupTLS(c, log)
+	if err != nil {
+		return err
+	}
+
+	client := virt.NewClient(c.socket, log)
 	defer client.Close()
 
 	hub := live.NewHub(client, time.Second, log)
@@ -53,15 +83,27 @@ func run(listen, socket string, log *slog.Logger) error {
 	defer func() { <-hubDone }()
 
 	srv := &http.Server{
-		Addr:              listen,
-		Handler:           api.NewServer(client, hub, web.Dist(), version, log).Handler(),
+		Addr: c.listen,
+		Handler: api.NewServer(api.Options{
+			Backend: client, Live: hub, Jobs: jobs.New(ctx), Auth: authMgr,
+			UI: web.Dist(), Version: version, Log: log,
+		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		TLSConfig:         tlsConf,
 	}
 
 	errc := make(chan error, 1)
 	go func() {
-		log.Info("virtomird listening", "addr", listen, "version", version)
-		errc <- srv.ListenAndServe()
+		scheme := "http"
+		if tlsConf != nil {
+			scheme = "https"
+		}
+		log.Info("virtomird listening", "addr", scheme+"://"+c.listen, "version", version, "auth", c.authMode)
+		if tlsConf != nil {
+			errc <- srv.ListenAndServeTLS("", "")
+		} else {
+			errc <- srv.ListenAndServe()
+		}
 	}()
 
 	select {
@@ -76,4 +118,40 @@ func run(listen, socket string, log *slog.Logger) error {
 		}
 		return nil
 	}
+}
+
+func setupAuth(c config, log *slog.Logger) (*auth.Manager, error) {
+	switch c.authMode {
+	case "none":
+		log.Warn("SIGN-IN IS DISABLED (-auth=none): anyone who can reach " + c.listen + " controls every VM on this host. Use only for development.")
+		return nil, nil
+	case "pam":
+		if !auth.PAMAvailable {
+			return nil, errors.New("this build has no PAM support; rebuild with CGO_ENABLED=1 -tags pam, or use -auth=none for development")
+		}
+		return auth.New(auth.PAM{Service: c.pamService}, auth.GroupCheck(c.authGroup)), nil
+	}
+	return nil, fmt.Errorf("unknown -auth %q (pam or none)", c.authMode)
+}
+
+func setupTLS(c config, log *slog.Logger) (*tls.Config, error) {
+	var cert tls.Certificate
+	var err error
+	switch c.tlsMode {
+	case "off":
+		if c.authMode != "none" {
+			log.Warn("TLS is off: passwords travel unencrypted unless a TLS proxy sits in front of virtomird")
+		}
+		return nil, nil
+	case "auto":
+		cert, err = auth.SelfSignedCert(filepath.Join(c.stateDir, "tls"))
+	case "files":
+		cert, err = tls.LoadX509KeyPair(c.tlsCert, c.tlsKey)
+	default:
+		return nil, fmt.Errorf("unknown -tls %q (auto, files or off)", c.tlsMode)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("TLS: %w", err)
+	}
+	return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}, nil
 }

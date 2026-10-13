@@ -1,0 +1,321 @@
+package virt
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/digitalocean/go-libvirt"
+	"libvirt.org/go/libvirtxml"
+)
+
+// deviceFlags applies a change to the running machine and to its saved definition, so
+// hot-plugged devices survive a reboot and changes to a stopped machine just work.
+func (c *Client) deviceFlags(l *libvirt.Libvirt, d libvirt.Domain) (uint32, bool, error) {
+	sum, err := summary(l, d)
+	if err != nil {
+		return 0, false, classify(err)
+	}
+	var f uint32
+	on := isOn(sum.State) || sum.State == StatePaused
+	if on {
+		f |= uint32(libvirt.DomainAffectLive)
+	}
+	if sum.Persistent {
+		f |= uint32(libvirt.DomainAffectConfig)
+	}
+	return f, on, nil
+}
+
+// ChangeMedia inserts an image into (or with source "" ejects it from) a CD/DVD or floppy drive.
+func (c *Client) ChangeMedia(uuid, target, source string) error {
+	l, d, err := c.lookup(uuid)
+	if err != nil {
+		return err
+	}
+	flags, on, err := c.deviceFlags(l, d)
+	if err != nil {
+		return err
+	}
+	x, err := c.parseDomain(l, d, !on)
+	if err != nil {
+		return err
+	}
+	disk := findDisk(x, target)
+	if disk == nil {
+		return fmt.Errorf("%w: no drive %s", ErrNotFound, target)
+	}
+	if disk.Device != "cdrom" && disk.Device != "floppy" {
+		return invalidf("%s is a %s, not a removable drive.", target, orDefault(disk.Device, "disk"))
+	}
+	if source == "" {
+		disk.Source = nil
+	} else {
+		disk.Source = &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: source}}
+	}
+	disk.Alias, disk.Address = nil, nil
+	doc, err := disk.Marshal()
+	if err != nil {
+		return err
+	}
+	if err := l.DomainUpdateDeviceFlags(d, doc, libvirt.DomainDeviceModifyFlags(flags)); err != nil {
+		return classify(err)
+	}
+	return nil
+}
+
+// DiskSpec describes a disk to add. Either Path (an existing image, e.g. an ISO for a CD-ROM),
+// Pool+Volume (an existing volume) or Pool+SizeGiB (a new volume) is set.
+type DiskSpec struct {
+	Device  string `json:"device"` // disk (default) or cdrom
+	Bus     string `json:"bus"`    // virtio (default for disks), sata, scsi, usb
+	Path    string `json:"path,omitempty"`
+	Pool    string `json:"pool,omitempty"`
+	Volume  string `json:"volume,omitempty"`
+	SizeGiB uint64 `json:"sizeGiB,omitempty"`
+	Format  string `json:"format,omitempty"` // qcow2 (default) or raw, for new volumes
+}
+
+// AttachDisk adds a disk or CD/DVD drive, creating a new volume if requested.
+// It returns the device name in the guest (e.g. "vdb").
+func (c *Client) AttachDisk(uuid string, spec DiskSpec) (string, error) {
+	spec.Device = orDefault(spec.Device, "disk")
+	if spec.Device != "disk" && spec.Device != "cdrom" {
+		return "", invalidf("Unsupported device type %q.", spec.Device)
+	}
+	if spec.Bus == "" {
+		spec.Bus = map[string]string{"disk": "virtio", "cdrom": "sata"}[spec.Device]
+	}
+	prefix, ok := busPrefix[spec.Bus]
+	if !ok {
+		return "", invalidf("Unsupported bus %q.", spec.Bus)
+	}
+	l, d, err := c.lookup(uuid)
+	if err != nil {
+		return "", err
+	}
+	flags, on, err := c.deviceFlags(l, d)
+	if err != nil {
+		return "", err
+	}
+	x, err := c.parseDomain(l, d, !on)
+	if err != nil {
+		return "", err
+	}
+	target := nextTarget(x, prefix)
+
+	disk := libvirtxml.DomainDisk{
+		Device: spec.Device,
+		Driver: &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "raw"},
+		Target: &libvirtxml.DomainDiskTarget{Dev: target, Bus: spec.Bus},
+	}
+	var created *libvirt.StorageVol
+	switch {
+	case spec.Path != "":
+		disk.Source = &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: spec.Path}}
+		if strings.HasSuffix(spec.Path, ".qcow2") {
+			disk.Driver.Type = "qcow2"
+		}
+	case spec.Pool != "" && spec.Volume != "":
+		p, format, err := volumePath(l, spec.Pool, spec.Volume)
+		if err != nil {
+			return "", err
+		}
+		disk.Source = &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: p}}
+		disk.Driver.Type = orDefault(format, "raw")
+	case spec.Pool != "" && spec.SizeGiB > 0:
+		if spec.Device != "disk" {
+			return "", invalidf("A new empty volume only makes sense for a disk.")
+		}
+		format := orDefault(spec.Format, "qcow2")
+		vol, p, err := createVolume(l, spec.Pool, newVolName(d.Name, target, format), spec.SizeGiB<<30, format)
+		if err != nil {
+			return "", err
+		}
+		created = &vol
+		disk.Source = &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: p}}
+		disk.Driver.Type = format
+	case spec.Device == "cdrom":
+		// An empty drive; media can be inserted later.
+	default:
+		return "", invalidf("Choose an existing image or volume, or a pool and a size for a new disk.")
+	}
+	if spec.Device == "cdrom" {
+		disk.ReadOnly = &libvirtxml.DomainDiskReadOnly{}
+	}
+	doc, err := disk.Marshal()
+	if err != nil {
+		return "", err
+	}
+	if err := l.DomainAttachDeviceFlags(d, doc, flags); err != nil {
+		if created != nil {
+			_ = l.StorageVolDelete(*created, libvirt.StorageVolDeleteNormal)
+		}
+		return "", classify(err)
+	}
+	c.log.Info("disk attached", "domain", d.Name, "target", target)
+	return target, nil
+}
+
+// NICSpec describes a network adapter to add: connected to a libvirt network or a host bridge.
+type NICSpec struct {
+	Network string `json:"network,omitempty"`
+	Bridge  string `json:"bridge,omitempty"`
+	Model   string `json:"model,omitempty"` // virtio (default), e1000e, rtl8139
+	MAC     string `json:"mac,omitempty"`   // generated when empty
+}
+
+func (c *Client) AttachInterface(uuid string, spec NICSpec) error {
+	nic, err := buildNIC(spec)
+	if err != nil {
+		return err
+	}
+	l, d, err := c.lookup(uuid)
+	if err != nil {
+		return err
+	}
+	flags, _, err := c.deviceFlags(l, d)
+	if err != nil {
+		return err
+	}
+	doc, err := nic.Marshal()
+	if err != nil {
+		return err
+	}
+	if err := l.DomainAttachDeviceFlags(d, doc, flags); err != nil {
+		return classify(err)
+	}
+	c.log.Info("interface attached", "domain", d.Name)
+	return nil
+}
+
+func buildNIC(spec NICSpec) (libvirtxml.DomainInterface, error) {
+	nic := libvirtxml.DomainInterface{Model: &libvirtxml.DomainInterfaceModel{Type: orDefault(spec.Model, "virtio")}}
+	switch {
+	case spec.Network != "" && spec.Bridge == "":
+		nic.Source = &libvirtxml.DomainInterfaceSource{Network: &libvirtxml.DomainInterfaceSourceNetwork{Network: spec.Network}}
+	case spec.Bridge != "" && spec.Network == "":
+		nic.Source = &libvirtxml.DomainInterfaceSource{Bridge: &libvirtxml.DomainInterfaceSourceBridge{Bridge: spec.Bridge}}
+	default:
+		return nic, invalidf("Connect the adapter to either a virtual network or a host bridge.")
+	}
+	if spec.MAC != "" {
+		nic.MAC = &libvirtxml.DomainInterfaceMAC{Address: spec.MAC}
+	}
+	return nic, nil
+}
+
+// DeviceRef identifies a device to remove: a disk by its guest device name, an adapter by MAC.
+type DeviceRef struct {
+	Kind   string `json:"kind"` // disk or interface
+	Target string `json:"target,omitempty"`
+	MAC    string `json:"mac,omitempty"`
+}
+
+// DetachDevice removes a disk/drive or network adapter. The disk image itself is kept.
+func (c *Client) DetachDevice(uuid string, ref DeviceRef) error {
+	l, d, err := c.lookup(uuid)
+	if err != nil {
+		return err
+	}
+	flags, on, err := c.deviceFlags(l, d)
+	if err != nil {
+		return err
+	}
+	x, err := c.parseDomain(l, d, !on)
+	if err != nil {
+		return err
+	}
+	var doc string
+	switch ref.Kind {
+	case "disk":
+		disk := findDisk(x, ref.Target)
+		if disk == nil {
+			return fmt.Errorf("%w: no disk %s", ErrNotFound, ref.Target)
+		}
+		doc, err = disk.Marshal()
+	case "interface":
+		nic := findNIC(x, ref.MAC)
+		if nic == nil {
+			return fmt.Errorf("%w: no adapter %s", ErrNotFound, ref.MAC)
+		}
+		doc, err = nic.Marshal()
+	default:
+		return invalidf("Only disks and network adapters can be removed here; use the XML editor for other devices.")
+	}
+	if err != nil {
+		return err
+	}
+	if err := l.DomainDetachDeviceFlags(d, doc, flags); err != nil {
+		return classify(err)
+	}
+	c.log.Info("device detached", "domain", d.Name, "kind", ref.Kind, "target", ref.Target, "mac", ref.MAC)
+	return nil
+}
+
+var busPrefix = map[string]string{"virtio": "vd", "sata": "sd", "scsi": "sd", "usb": "sd", "ide": "hd"}
+
+func findDisk(x *libvirtxml.Domain, target string) *libvirtxml.DomainDisk {
+	if x.Devices == nil {
+		return nil
+	}
+	for i := range x.Devices.Disks {
+		if t := x.Devices.Disks[i].Target; t != nil && t.Dev == target {
+			return &x.Devices.Disks[i]
+		}
+	}
+	return nil
+}
+
+func findNIC(x *libvirtxml.Domain, mac string) *libvirtxml.DomainInterface {
+	if x.Devices == nil {
+		return nil
+	}
+	for i := range x.Devices.Interfaces {
+		if m := x.Devices.Interfaces[i].MAC; m != nil && strings.EqualFold(m.Address, mac) {
+			return &x.Devices.Interfaces[i]
+		}
+	}
+	return nil
+}
+
+// nextTarget returns the first free device name with the prefix: vda, vdb, …, vdz, vdaa, …
+func nextTarget(x *libvirtxml.Domain, prefix string) string {
+	used := map[string]bool{}
+	if x.Devices != nil {
+		for _, d := range x.Devices.Disks {
+			if d.Target != nil {
+				used[d.Target.Dev] = true
+			}
+		}
+	}
+	for i := 0; ; i++ {
+		name := prefix + diskLetters(i)
+		if !used[name] {
+			return name
+		}
+	}
+}
+
+// diskLetters is the Linux disk suffix for index i: 0→a, 25→z, 26→aa.
+func diskLetters(i int) string {
+	s := ""
+	for i++; i > 0; i = (i - 1) / 26 {
+		s = string(rune('a'+(i-1)%26)) + s
+	}
+	return s
+}
+
+func newVolName(machine, target, format string) string {
+	ext := "img"
+	if format == "qcow2" {
+		ext = "qcow2"
+	}
+	return fmt.Sprintf("%s-%s.%s", machine, target, ext)
+}
+
+func orDefault(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
+}
