@@ -191,8 +191,10 @@ func buildDomain(s CreateSpec, diskPath, diskFormat, seedPath string) *libvirtxm
 	zero := uint(0)
 	dev.Controllers = append(dev.Controllers, libvirtxml.DomainController{Type: "usb", Index: &zero, Model: "qemu-xhci"})
 	// Spare PCIe root ports: on q35 every hot-plugged disk or adapter needs a free one.
-	for range 8 {
-		dev.Controllers = append(dev.Controllers, libvirtxml.DomainController{Type: "pci", Model: "pcie-root-port"})
+	// Indexes are explicit: libvirt (11.x) reads a missing index as 0, which is pcie-root's.
+	dev.Controllers = append(dev.Controllers, libvirtxml.DomainController{Type: "pci", Index: &zero, Model: "pcie-root"})
+	for i := uint(1); i <= 8; i++ {
+		dev.Controllers = append(dev.Controllers, libvirtxml.DomainController{Type: "pci", Index: &i, Model: "pcie-root-port"})
 	}
 	dev.Inputs = []libvirtxml.DomainInput{{Type: "tablet", Bus: "usb"}}
 	// The console proxy in virtomird connects locally; VNC is never exposed directly.
