@@ -577,10 +577,15 @@ export interface Lease {
 export interface PoolSpec {
   name: string
   path: string
-  /** dir (default) or netfs: an NFS share host:export mounted at path. */
-  type?: 'dir' | 'netfs'
+  /** dir (default), netfs (NFS host:export mounted at path), iscsi (portal host + target IQN), rbd (Ceph). */
+  type?: 'dir' | 'netfs' | 'iscsi' | 'rbd'
   host?: string
   export?: string
+  target?: string
+  monitors?: string[]
+  cephPool?: string
+  cephUser?: string
+  cephKey?: string
 }
 
 export interface HostPCI {

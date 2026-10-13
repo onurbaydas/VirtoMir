@@ -115,6 +115,12 @@ func (c *Client) AttachDisk(uuid string, spec DiskSpec) (string, error) {
 		if strings.HasSuffix(spec.Path, ".qcow2") {
 			disk.Driver.Type = "qcow2"
 		}
+	case spec.Pool != "" && spec.Volume != "" && !poolKeepsFiles(l, spec.Pool):
+		// iSCSI LUN, Ceph image, LVM volume: libvirt resolves pool/volume itself.
+		if _, _, err := volumePath(l, spec.Pool, spec.Volume); err != nil {
+			return "", err
+		}
+		disk.Source = &libvirtxml.DomainDiskSource{Volume: &libvirtxml.DomainDiskSourceVolume{Pool: spec.Pool, Volume: spec.Volume}}
 	case spec.Pool != "" && spec.Volume != "":
 		p, format, err := volumePath(l, spec.Pool, spec.Volume)
 		if err != nil {
@@ -126,13 +132,21 @@ func (c *Client) AttachDisk(uuid string, spec DiskSpec) (string, error) {
 		if spec.Device != "disk" {
 			return "", invalidf("A new empty volume only makes sense for a disk.")
 		}
+		files := poolKeepsFiles(l, spec.Pool)
 		format := orDefault(spec.Format, "qcow2")
-		vol, p, err := createVolume(l, spec.Pool, newVolName(d.Name, target, format), spec.SizeGiB<<30, format)
+		if !files {
+			format = "raw" // Ceph images and LVM volumes are raw block storage
+		}
+		name := newVolName(d.Name, target, format)
+		vol, p, err := createVolume(l, spec.Pool, name, spec.SizeGiB<<30, format)
 		if err != nil {
 			return "", err
 		}
 		created = &vol
 		disk.Source = &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: p}}
+		if !files {
+			disk.Source = &libvirtxml.DomainDiskSource{Volume: &libvirtxml.DomainDiskSourceVolume{Pool: spec.Pool, Volume: name}}
+		}
 		disk.Driver.Type = format
 	case spec.Device == "cdrom":
 		// An empty drive; media can be inserted later.
