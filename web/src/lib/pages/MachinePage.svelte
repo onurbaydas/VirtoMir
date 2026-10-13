@@ -29,6 +29,7 @@
   import Maximize2 from '@lucide/svelte/icons/maximize-2'
   import ConfirmButton from '../components/ConfirmButton.svelte'
   import ManageDialogs, { type ManageDialog } from '../components/ManageDialogs.svelte'
+  import ChangesPanel from '../components/ChangesPanel.svelte'
   import type { MenuItem } from '../components/ActionMenu.svelte'
   import Pencil from '@lucide/svelte/icons/pencil'
   import CopyPlus from '@lucide/svelte/icons/copy-plus'
@@ -76,8 +77,8 @@
     return () => clearInterval(t)
   })
 
-  type Tab = 'overview' | 'console' | 'settings' | 'hardware' | 'snapshots' | 'backups' | 'xml'
-  const TABS: Tab[] = ['overview', 'console', 'settings', 'hardware', 'snapshots', 'backups', 'xml']
+  type Tab = 'overview' | 'console' | 'settings' | 'hardware' | 'snapshots' | 'backups' | 'changes' | 'xml'
+  const TABS: Tab[] = ['overview', 'console', 'settings', 'hardware', 'snapshots', 'backups', 'changes', 'xml']
   let tab = $derived<Tab>(
     router.route.name === 'machine' && TABS.includes(router.route.tab as Tab) ? (router.route.tab as Tab) : 'overview',
   )
@@ -395,6 +396,7 @@
     <button role="tab" aria-selected={tab === 'backups'} class:on={tab === 'backups'} onclick={() => setTab('backups')}>
       Backups
     </button>
+    <button role="tab" aria-selected={tab === 'changes'} class:on={tab === 'changes'} onclick={() => setTab('changes')}>Changes</button>
     <button role="tab" aria-selected={tab === 'xml'} class:on={tab === 'xml'} onclick={() => setTab('xml')}>XML</button>
   </div>
 
@@ -489,6 +491,10 @@
   {:else if tab === 'backups'}
     <div role="tabpanel">
       <BackupsPanel {uuid} name={dom.name} {active} />
+    </div>
+  {:else if tab === 'changes'}
+    <div role="tabpanel">
+      <ChangesPanel {uuid} {active} version={stateKey} onchange={load} />
     </div>
   {:else if tab === 'snapshots'}
     <div role="tabpanel">

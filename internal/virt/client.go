@@ -275,3 +275,16 @@ func summary(l *libvirt.Libvirt, d libvirt.Domain) (Domain, error) {
 		Autostart:    autostart == 1,
 	}, nil
 }
+
+// DomainUUIDs lists every machine's UUID (config history sweeps).
+func (c *Client) DomainUUIDs() ([]string, error) {
+	doms, err := c.ListDomains()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(doms))
+	for i, d := range doms {
+		out[i] = d.UUID
+	}
+	return out, nil
+}

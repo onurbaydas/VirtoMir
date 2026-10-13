@@ -17,6 +17,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/alerts"
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/cluster"
+	"github.com/onurbaydas/virtomir/internal/confighist"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/schedule"
 	"github.com/onurbaydas/virtomir/internal/virt"
@@ -98,10 +99,12 @@ type Options struct {
 	Schedules *schedule.Scheduler
 	// Cluster nil: this host cannot join others (no TLS). Fingerprint is this host's TLS
 	// certificate, HostName how members call it, ListenPort where it listens (ADR-0020).
-	Cluster     *cluster.Store
-	Fingerprint string
-	HostName    string
-	ListenPort  string
+	// ConfigHistory nil: machine definitions are not versioned.
+	ConfigHistory *confighist.Store
+	Cluster       *cluster.Store
+	Fingerprint   string
+	HostName      string
+	ListenPort    string
 }
 
 type Server struct {
@@ -118,6 +121,7 @@ type Server struct {
 	alerts    *alerts.Engine
 	schedules *schedule.Scheduler
 
+	confighist   *confighist.Store
 	cluster      *cluster.Store
 	fingerprint  string
 	hostName     string
@@ -132,7 +136,8 @@ func NewServer(o Options) *Server {
 	}
 	return &Server{backend: o.Backend, live: o.Live, jobs: o.Jobs, auth: o.Auth, ui: o.UI, version: o.Version, log: o.Log,
 		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts, schedules: o.Schedules,
-		cluster: o.Cluster, fingerprint: o.Fingerprint, hostName: o.HostName, listenPort: o.ListenPort}
+		cluster: o.Cluster, fingerprint: o.Fingerprint, hostName: o.HostName, listenPort: o.ListenPort,
+		confighist: o.ConfigHistory}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -158,6 +163,7 @@ func (s *Server) Handler() http.Handler {
 	s.clusterRoutes(mux)
 	s.moveRoutes(mux)
 	s.migrateRoutes(mux)
+	s.configHistoryRoutes(mux)
 
 	// GET-only fallbacks, so a wrong method on a real endpoint still gets 405.
 	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {
