@@ -236,6 +236,30 @@ async function send(method: string, path: string, opts: SendOpts = {}): Promise<
   return res
 }
 
+/** Uploads a file with progress (fetch cannot report upload progress). */
+function sendFile<T>(url: string, file: File, onProgress: (fraction: number) => void, signal?: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', url)
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(JSON.parse(xhr.responseText))
+      let msg = xhr.statusText
+      try {
+        msg = JSON.parse(xhr.responseText).error ?? msg
+      } catch {
+        /* non-JSON error body */
+      }
+      if (xhr.status === 401) onUnauthorized()
+      reject(new ApiError(msg, xhr.status))
+    }
+    xhr.onerror = () => reject(new ApiError('Upload failed: VirtoMir is not reachable', 0))
+    xhr.onabort = () => reject(new ApiError('Upload cancelled', 0))
+    signal?.addEventListener('abort', () => xhr.abort())
+    xhr.send(file)
+  })
+}
+
 async function request<T>(method: string, path: string, json?: unknown): Promise<T> {
   const res = await send(method, path, { json })
   const text = res.status === 204 ? '' : await res.text()
@@ -707,26 +731,12 @@ export const api = {
   deleteVolume: (pool: string, name: string) => request<void>('DELETE', `${poolPath(pool)}/volumes/${enc(name)}`),
   /** Uploads with progress (fetch cannot report upload progress). */
   upload: (pool: string, file: File, name: string, onProgress: (fraction: number) => void, signal?: AbortSignal) =>
-    new Promise<Volume>((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-      xhr.open('POST', scoped(`${poolPath(pool)}/upload?name=${enc(name)}`))
-      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) return resolve(JSON.parse(xhr.responseText))
-        let msg = xhr.statusText
-        try {
-          msg = JSON.parse(xhr.responseText).error ?? msg
-        } catch {
-          /* non-JSON error body */
-        }
-        if (xhr.status === 401) onUnauthorized()
-        reject(new ApiError(msg, xhr.status))
-      }
-      xhr.onerror = () => reject(new ApiError('Upload failed: VirtoMir is not reachable', 0))
-      xhr.onabort = () => reject(new ApiError('Upload cancelled', 0))
-      signal?.addEventListener('abort', () => xhr.abort())
-      xhr.send(file)
-    }),
+    sendFile<Volume>(scoped(`${poolPath(pool)}/upload?name=${enc(name)}`), file, onProgress, signal),
+  /** An OVA appliance: its disks are converted into the pool and the machine created (stopped). */
+  importOVA: (pool: string, file: File, name: string, onProgress: (fraction: number) => void, signal?: AbortSignal) =>
+    sendFile<{ uuid: string }>(scoped(`${poolPath(pool)}/import-ova?name=${enc(name)}`), file, onProgress, signal),
+  /** A machine from a libvirt domain XML (name and UUID must be free on this host). */
+  importXML: (xml: string) => request<{ uuid: string }>('POST', '/api/v1/domains/import', { xml }),
 
   // Networks
   networks: async () => (await request<{ networks: VNetwork[] }>('GET', '/api/v1/networks')).networks,

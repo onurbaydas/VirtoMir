@@ -6,6 +6,7 @@
   import { alerts } from './lib/alerts.svelte'
   import { cluster } from './lib/cluster.svelte'
   import ClusterPage from './lib/pages/ClusterPage.svelte'
+  import ImportPage from './lib/pages/ImportPage.svelte'
   import AlertsPage from './lib/pages/AlertsPage.svelte'
   import BackupsPage from './lib/pages/BackupsPage.svelte'
   import Sidebar from './lib/components/Sidebar.svelte'
@@ -90,6 +91,8 @@
         {/key}
       {:else if route.name === 'new'}
         <NewMachine />
+      {:else if route.name === 'import'}
+        <ImportPage />
       {:else if route.name === 'storage'}
         <StoragePage pool={route.pool} />
       {:else if route.name === 'networks'}
