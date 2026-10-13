@@ -247,23 +247,33 @@ func (s *Server) push(to []cluster.Node, list cluster.MemberList) {
 }
 
 // SyncMembers pulls the member list from every peer and keeps the newest; run it now and
-// then so a host that was down during a change catches up.
+// then so a host that was down during a change catches up. A host that every other member
+// refuses was removed while it was away: it becomes standalone.
 func (s *Server) SyncMembers(ctx context.Context) {
 	if s.cluster == nil || !s.cluster.Clustered() {
 		return
 	}
-	members, _ := s.cluster.Members()
+	members, version := s.cluster.Members()
+	peers, refused := 0, 0
 	for _, n := range members {
 		if n.ID == s.cluster.SelfID() {
 			continue
 		}
+		peers++
 		c, cancel := context.WithTimeout(ctx, 5*time.Second)
 		var list cluster.MemberList
 		err := s.peer(n).Call(c, http.MethodGet, "/api/v1/cluster/peer/members", nil, &list)
 		cancel()
-		if err == nil {
+		switch {
+		case err == nil:
 			_ = s.cluster.Replace(list.Members, list.Version)
+		case cluster.IsStatus(err, http.StatusUnauthorized):
+			refused++
 		}
+	}
+	if peers > 0 && refused == peers {
+		s.log.Warn("no member accepts this host any more; leaving the cluster")
+		_ = s.cluster.Replace(nil, version+1)
 	}
 }
 

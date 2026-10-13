@@ -101,6 +101,29 @@ type Peer struct {
 	selfID string
 	key    string
 	client *http.Client
+	// user is who this call is made for (empty: the host itself, membership protocol only).
+	user, role, token string
+}
+
+// As returns a copy of p that acts for a signed-in user: the member applies that user's role.
+func (p *Peer) As(user, role, token string) *Peer {
+	q := *p
+	q.user, q.role, q.token = user, role, token
+	return &q
+}
+
+// StatusError is an answer from a peer with an HTTP error status.
+type StatusError struct {
+	Code    int
+	Message string
+}
+
+func (e *StatusError) Error() string { return e.Message }
+
+// IsStatus reports whether err is a peer answer with the given HTTP status.
+func IsStatus(err error, code int) bool {
+	var se *StatusError
+	return errors.As(err, &se) && se.Code == code
 }
 
 // Peer returns a client for member n authenticated as this node. rt must be pinned to n's
@@ -137,11 +160,34 @@ func (p *Peer) Call(ctx context.Context, method, path string, in, out any) error
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", AuthScheme+p.selfID+"."+p.key)
+	p.authorize(req)
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	return do(p.client, req, out)
+}
+
+// Send streams body (size bytes, e.g. a disk image) to the peer and decodes the answer.
+func (p *Peer) Send(ctx context.Context, method, path string, body io.Reader, size int64, out any) error {
+	req, err := http.NewRequestWithContext(ctx, method, p.Node.Address+path, body)
+	if err != nil {
+		return err
+	}
+	req.ContentLength = size
+	req.Header.Set("Content-Type", "application/octet-stream")
+	p.authorize(req)
+	return do(p.client, req, out)
+}
+
+func (p *Peer) authorize(req *http.Request) {
+	req.Header.Set("Authorization", AuthScheme+p.selfID+"."+p.key)
+	if p.user != "" {
+		req.Header.Set(HeaderUser, p.user)
+		req.Header.Set(HeaderRole, p.role)
+		if p.token != "" {
+			req.Header.Set(HeaderToken, p.token)
+		}
+	}
 }
 
 // do runs req and decodes the answer; API errors come back as their message.
@@ -156,10 +202,11 @@ func do(c *http.Client, req *http.Request, out any) error {
 			Error string `json:"error"`
 		}
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		msg := fmt.Sprintf("%s answered %s", req.URL.Host, resp.Status)
 		if json.Unmarshal(b, &e) == nil && e.Error != "" {
-			return errors.New(e.Error)
+			msg = e.Error
 		}
-		return fmt.Errorf("%s answered %s", req.URL.Host, resp.Status)
+		return &StatusError{Code: resp.StatusCode, Message: msg}
 	}
 	if out == nil {
 		return nil
