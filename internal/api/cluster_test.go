@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"io"
@@ -26,6 +27,7 @@ type testNode struct {
 	backend *fakeBackend
 	acts    *activity.Log
 	lv      *fakeLive
+	api     *Server
 }
 
 func (n *testNode) live() *fakeLive { return n.lv }
@@ -54,12 +56,13 @@ func newTestNode(t *testing.T, name string, domains []virt.Domain) *testNode {
 	b := &fakeBackend{domains: domains}
 	lv := &fakeLive{}
 	_, port, _ := net.SplitHostPort(srv.Listener.Addr().String())
-	srv.Config.Handler = NewServer(Options{
+	s := NewServer(Options{
 		Backend: b, Live: lv, Auth: m, Activity: acts, Version: "v-" + name,
 		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Cluster: store, Fingerprint: fp, HostName: name, ListenPort: port,
-	}).Handler()
-	return &testNode{url: srv.URL, store: store, backend: b, acts: acts, lv: lv}
+	})
+	srv.Config.Handler = s.Handler()
+	return &testNode{url: srv.URL, store: store, backend: b, acts: acts, lv: lv, api: s}
 }
 
 // browser is a user's HTTPS client signed in on one node.
@@ -272,5 +275,22 @@ func TestClusterRemoveMember(t *testing.T) {
 	anon := &browser{t: t, base: a.url, c: &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}}
 	if resp, _ := anon.req("GET", "/api/v1/cluster/peer/members", "", "Authorization", b.store.Credential()); resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("removed member still accepted: %d", resp.StatusCode)
+	}
+}
+
+func TestClusterRemovedWhileAwayLeaves(t *testing.T) {
+	a := newTestNode(t, "alpha", []virt.Domain{})
+	b := newTestNode(t, "beta", []virt.Domain{})
+	joinNodes(t, a, b)
+	// alpha forgets beta without telling it (beta was "down").
+	if _, _, err := a.store.Remove(b.store.SelfID()); err != nil {
+		t.Fatal(err)
+	}
+	if !b.store.Clustered() {
+		t.Fatal("beta should still believe it is clustered")
+	}
+	b.api.SyncMembers(context.Background())
+	if b.store.Clustered() {
+		t.Error("beta did not notice it was removed")
 	}
 }
