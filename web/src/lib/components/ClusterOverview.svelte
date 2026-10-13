@@ -8,6 +8,18 @@
   import { isActive } from '../live.svelte'
   import { router } from '../router.svelte'
   import StatePill from './StatePill.svelte'
+  import HistoryChart from './HistoryChart.svelte'
+  import RangeTabs, { type Range } from './RangeTabs.svelte'
+  import type { HistoryRange } from '../api'
+
+  // History of every host side by side (each host keeps its own, ADR-0013).
+  const COLORS = ['--accent', '--accent-2', '--info', '--warn', '--ok', '--danger']
+  let histRange = $state<Range>('24h')
+  let histLines = $derived((key: string) =>
+    cluster.members
+      .filter((m) => m.reachable)
+      .map((m, i) => ({ key, label: m.name, color: COLORS[i % COLORS.length], host: m.id, dashed: i >= COLORS.length })),
+  )
 
   let snaps = $state<Record<string, Snapshot | null>>({})
 
@@ -82,6 +94,19 @@
       {/if}
     </button>
   {/each}
+</section>
+
+<section class="ui-panel hist">
+  <header class="a-head">
+    <h2>History by host</h2>
+    <RangeTabs bind:value={histRange} live={false} />
+  </header>
+  <div class="h-grid">
+    {#key cluster.members.map((m) => m.id + m.reachable).join()}
+      <HistoryChart title="CPU" unit="percent" range={histRange as HistoryRange} lines={histLines('host.cpu')} />
+      <HistoryChart title="Memory" unit="percent" range={histRange as HistoryRange} lines={histLines('host.mem')} />
+    {/key}
+  </div>
 </section>
 
 <section class="ui-panel all">
@@ -208,6 +233,15 @@
     font-size: 11px;
     font-weight: 500;
     margin-left: 6px;
+  }
+  .hist {
+    margin-bottom: 14px;
+  }
+  .h-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 16px;
+    padding: 14px 16px;
   }
   .all {
     margin-bottom: 14px;

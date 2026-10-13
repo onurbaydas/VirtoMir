@@ -672,8 +672,8 @@ export const api = {
   resizeDisk: (uuid: string, target: string, sizeGiB: number) =>
     request<void>('POST', `${domainPath(uuid)}/disks/${enc(target)}/resize`, { sizeGiB }),
 
-  history: (series: string[], range: HistoryRange) =>
-    request<HistoryResult>('GET', `/api/v1/history?range=${range}&series=${series.map(enc).join(',')}`),
+  history: (series: string[], range: HistoryRange, host?: string) =>
+    request<HistoryResult>('GET', at(host, `/api/v1/history?range=${range}&series=${series.map(enc).join(',')}`)),
 
   // Storage
   pools: async () => (await request<{ pools: Pool[] }>('GET', '/api/v1/storage/pools')).pools,
