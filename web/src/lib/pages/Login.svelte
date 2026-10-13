@@ -1,11 +1,21 @@
 <script lang="ts">
   import LogIn from '@lucide/svelte/icons/log-in'
-  import { errorText } from '../api'
+  import KeyRound from '@lucide/svelte/icons/key-round'
+  import { api, errorText } from '../api'
   import { session } from '../session.svelte'
 
   let user = $state('')
   let password = $state('')
-  let error = $state('')
+  // A failed single sign-on comes back as ?signin_error=…
+  let error = $state(new URLSearchParams(location.search).get('signin_error') ?? '')
+  let methods = $state<{ ldap: boolean; oidc: boolean; oidcLabel?: string }>({ ldap: false, oidc: false })
+  $effect(() => {
+    api
+      .authMethods()
+      .then((m) => (methods = m))
+      .catch(() => {})
+    if (location.search.includes('signin_error')) history.replaceState(null, '', location.pathname)
+  })
   let busy = $state(false)
 
   async function submit(e: SubmitEvent) {
@@ -31,7 +41,7 @@
       <img src="/favicon.svg" alt="" width="40" height="40" />
       <div>
         <div class="wordmark">VirtoMir</div>
-        <div class="tagline">Sign in with your account on this host</div>
+        <div class="tagline">Sign in with your account on this host{methods.ldap ? ' or in the directory' : ''}</div>
       </div>
     </div>
 
@@ -51,7 +61,11 @@
       <LogIn size={15} />
       {busy ? 'Signing in…' : 'Sign in'}
     </button>
-    <p class="note">Root and members of the <span class="mono">libvirt</span> group can sign in.</p>
+    {#if methods.oidc}
+      <div class="or"><span>or</span></div>
+      <a class="ui-btn sso" href="/api/v1/auth/oidc/start"><KeyRound size={15} /> {methods.oidcLabel || 'Sign in with single sign-on'}</a>
+    {/if}
+    <p class="note">Root and members of the <span class="mono">libvirt</span> group can sign in{methods.ldap || methods.oidc ? ', and directory users whose groups have a role' : ''}.</p>
   </form>
 </div>
 
@@ -95,6 +109,25 @@
   .submit {
     height: 38px;
     margin-top: 4px;
+  }
+  .or {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-3);
+    font-size: 12px;
+  }
+  .or::before,
+  .or::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .sso {
+    justify-content: center;
+    height: 38px;
+    text-decoration: none;
   }
   .note {
     margin: 2px 0 0;

@@ -220,7 +220,14 @@ func setupAuth(c config, log *slog.Logger) (*auth.Manager, error) {
 			return nil, errors.New("this build has no PAM support; rebuild with CGO_ENABLED=1 -tags pam, or use -auth=none for development")
 		}
 		groups := auth.Groups{Admin: c.authGroup, Operator: c.operatorGroup, Viewer: c.viewerGroup}
-		return auth.New(auth.PAM{Service: c.pamService}, groups.RoleOf), nil
+		m := auth.New(auth.PAM{Service: c.pamService}, groups.RoleOf)
+		// LDAP and OpenID Connect, configured by admins in the UI (ADR-0023).
+		ext, err := auth.OpenExternal(filepath.Join(c.stateDir, "signin.json"))
+		if err != nil {
+			return nil, err
+		}
+		m.SetExternal(ext)
+		return m, nil
 	}
 	return nil, fmt.Errorf("unknown -auth %q (pam or none)", c.authMode)
 }
