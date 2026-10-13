@@ -76,6 +76,7 @@ type Hub struct {
 	prevIO     hostCounters
 	prevIOAt   time.Time
 	prevIOOK   bool
+	rec        Recorder
 
 	mu      sync.Mutex
 	backlog [][]byte // oldest first, at most Backlog entries
@@ -188,6 +189,8 @@ func (h *Hub) sample(now time.Time) {
 		clear(h.prevDom)
 		clear(h.prevStats)
 	}
+
+	h.record(&snap, now)
 
 	b, err := json.Marshal(snap)
 	if err != nil {

@@ -226,3 +226,34 @@ func TestStatsFailureKeepsBasics(t *testing.T) {
 func mkDisk(rdReqs, wrReqs, rdTimes, wrTimes uint64) virt.DiskCounters {
 	return virt.DiskCounters{Name: "vda", RdReqs: rdReqs, WrReqs: wrReqs, RdTimesNs: rdTimes, WrTimesNs: wrTimes, Timed: true}
 }
+
+type memRec map[string][]float64
+
+func (m memRec) Add(name string, _ time.Time, v float64) { m[name] = append(m[name], v) }
+
+func TestRecordsHistory(t *testing.T) {
+	src := &fakeSource{
+		host:  virt.HostStats{MemTotalKiB: 1000, MemUsedKiB: 500},
+		doms:  []virt.Domain{{UUID: "a", State: virt.StateRunning, VCPUs: 1}, {UUID: "b", State: virt.StateShutoff}},
+		stats: []virt.DomainStats{{UUID: "a", Disks: []virt.DiskCounters{{Name: "vda"}}}},
+	}
+	h := newTestHub(src)
+	h.hostIO = nil
+	rec := memRec{}
+	h.SetRecorder(rec)
+	h.sample(time.Unix(1000, 0))
+	if len(rec[SeriesHostMem]) != 1 || rec[SeriesHostMem][0] != 50 {
+		t.Errorf("host mem = %v", rec[SeriesHostMem])
+	}
+	if len(rec[VMSeries("a", "cpu")]) != 1 {
+		t.Error("running machine not recorded")
+	}
+	if _, ok := rec[VMSeries("b", "cpu")]; ok {
+		t.Error("stopped machine must not be recorded")
+	}
+	// Disk rates only exist from the second sample on.
+	h.sample(time.Unix(1001, 0))
+	if len(rec[VMSeries("a", "disk.read")]) != 1 {
+		t.Errorf("disk series = %v", rec[VMSeries("a", "disk.read")])
+	}
+}

@@ -25,6 +25,8 @@ type VNetwork struct {
 	DHCPEnd   string   `json:"dhcpEnd,omitempty"`
 	Domain    string   `json:"domain,omitempty"`
 	UsedBy    []string `json:"usedBy"`
+	// Fixed address reservations (static DHCP).
+	DHCPHosts []DHCPHost `json:"dhcpHosts"`
 }
 
 func (c *Client) ListNetworks() ([]VNetwork, error) {
@@ -72,7 +74,7 @@ func parseNetwork(raw string) (VNetwork, error) {
 	if err := x.Unmarshal(raw); err != nil {
 		return VNetwork{}, err
 	}
-	v := VNetwork{Name: x.Name, Mode: "isolated"}
+	v := VNetwork{Name: x.Name, Mode: "isolated", DHCPHosts: dhcpHostsFromXML(&x)}
 	if x.Forward != nil {
 		v.Mode = orDefault(x.Forward.Mode, "nat")
 	}

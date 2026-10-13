@@ -59,6 +59,14 @@ type Backend interface {
 	NetworkAction(name, action string) error
 	SetNetworkAutostart(name string, on bool) error
 	NetworkLeases(name string) ([]virt.Lease, error)
+
+	GetSettings(uuid string) (virt.SettingsView, error)
+	PreviewSettings(uuid string, s virt.Settings) (string, error)
+	SaveSettings(uuid string, s virt.Settings) (virt.SaveResult, error)
+	ResizeDisk(uuid, target string, sizeGiB uint64) error
+	ResizeVolume(pool, name string, sizeGiB uint64) error
+	AddDHCPHost(network string, h virt.DHCPHost) error
+	DeleteDHCPHost(network, mac string) error
 }
 
 // Live is the snapshot stream (implemented by *live.Hub).
@@ -76,6 +84,8 @@ type Options struct {
 	UI      fs.FS // nil: no UI bundled
 	Version string
 	Log     *slog.Logger
+	// History nil: no metric history (GET /api/v1/history answers 404).
+	History HistoryQuerier
 }
 
 type Server struct {
@@ -86,13 +96,14 @@ type Server struct {
 	ui      fs.FS
 	version string
 	log     *slog.Logger
+	history HistoryQuerier
 }
 
 func NewServer(o Options) *Server {
 	if o.Jobs == nil {
 		o.Jobs = jobs.New(context.Background())
 	}
-	return &Server{backend: o.Backend, live: o.Live, jobs: o.Jobs, auth: o.Auth, ui: o.UI, version: o.Version, log: o.Log}
+	return &Server{backend: o.Backend, live: o.Live, jobs: o.Jobs, auth: o.Auth, ui: o.UI, version: o.Version, log: o.Log, history: o.History}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -108,6 +119,7 @@ func (s *Server) Handler() http.Handler {
 	s.domainRoutes(mux)
 	s.storageRoutes(mux)
 	s.networkRoutes(mux)
+	s.extraRoutes(mux)
 
 	// GET-only fallbacks, so a wrong method on a real endpoint still gets 405.
 	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/onurbaydas/virtomir/internal/api"
 	"github.com/onurbaydas/virtomir/internal/auth"
+	"github.com/onurbaydas/virtomir/internal/history"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/live"
 	"github.com/onurbaydas/virtomir/internal/virt"
@@ -77,7 +78,19 @@ func run(c config, log *slog.Logger) error {
 	client := virt.NewClient(c.socket, log)
 	defer client.Close()
 
+	hist, err := history.Open(filepath.Join(c.stateDir, "history.gob"))
+	if err != nil {
+		log.Warn("metric history", "err", err)
+	}
+	defer func() {
+		if err := hist.Save(); err != nil {
+			log.Warn("save metric history", "err", err)
+		}
+	}()
+	go saveHistory(ctx, hist, log)
+
 	hub := live.NewHub(client, time.Second, log)
+	hub.SetRecorder(hist)
 	hubDone := make(chan struct{})
 	go func() { hub.Run(ctx); close(hubDone) }()
 	defer func() { <-hubDone }()
@@ -86,7 +99,7 @@ func run(c config, log *slog.Logger) error {
 		Addr: c.listen,
 		Handler: api.NewServer(api.Options{
 			Backend: client, Live: hub, Jobs: jobs.New(ctx), Auth: authMgr,
-			UI: web.Dist(), Version: version, Log: log,
+			UI: web.Dist(), Version: version, Log: log, History: hist,
 		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		TLSConfig:         tlsConf,
@@ -117,6 +130,24 @@ func run(c config, log *slog.Logger) error {
 			return err
 		}
 		return nil
+	}
+}
+
+// saveHistory writes the metric history every 5 minutes, so a crash loses little.
+func saveHistory(ctx context.Context, h *history.Store, log *slog.Logger) {
+	t := time.NewTicker(5 * time.Minute)
+	defer t.Stop()
+	warned := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := h.Save(); err != nil && !warned {
+				log.Warn("save metric history (will keep trying)", "err", err)
+				warned = true
+			}
+		}
 	}
 }
 

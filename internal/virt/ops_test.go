@@ -182,7 +182,7 @@ func TestBuildDomainLinux(t *testing.T) {
 	if err := s.normalize(); err != nil {
 		t.Fatal(err)
 	}
-	doc, err := buildDomain(s, "/pool/web.qcow2", "qcow2").Marshal()
+	doc, err := buildDomain(s, "/pool/web.qcow2", "qcow2", "").Marshal()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestBuildDomainWindows(t *testing.T) {
 	if err := s.normalize(); err != nil {
 		t.Fatal(err)
 	}
-	doc, _ := buildDomain(s, "/pool/win11.qcow2", "qcow2").Marshal()
+	doc, _ := buildDomain(s, "/pool/win11.qcow2", "qcow2", "").Marshal()
 	for _, must := range []string{"bus=\"sata\"", "e1000e", "<smm state=\"on\"", "secure-boot", "tpm-crb", "localtime", "<hyperv"} {
 		if !strings.Contains(doc, must) {
 			t.Errorf("windows XML lacks %s", must)
