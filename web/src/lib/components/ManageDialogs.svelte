@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | 'resize' | 'template' | 'move' | null
+  export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | 'resize' | 'template' | 'move' | 'hostdev' | null
 </script>
 
 <script lang="ts">
@@ -12,6 +12,7 @@
   import { toasts } from '../toast.svelte'
   import { cluster } from '../cluster.svelte'
   import Dialog from './Dialog.svelte'
+  import type { HostHardware } from '../api'
 
   interface Props {
     which: ManageDialog
@@ -44,6 +45,9 @@
   let nicModel = $state('virtio')
   let bridge = $state('br0')
   let growGiB = $state(0)
+  let hw = $state<HostHardware | null>(null)
+  let hdKind = $state<'pci' | 'usb'>('pci')
+  let hdPick = $state('')
   let moveHost = $state('')
   let movePool = $state('')
   let targetPools = $state<Pool[] | null>(null)
@@ -69,6 +73,14 @@
           error = errorText(e)
         }
       })()
+    }
+    if (which === 'hostdev') {
+      hw = null
+      hdPick = ''
+      api
+        .hostDevices()
+        .then((h) => (hw = h))
+        .catch((e) => (error = errorText(e)))
     }
     if (which === 'move') {
       moveHost = targets[0]?.id ?? ''
@@ -151,6 +163,27 @@
         success: `${detail.name} is now on ${target.name}`,
         onSuccess: () => router.go(target.self ? null : target.id, `/machines/${detail.uuid}`),
       })
+    })
+
+  const usbKey = (v: string, p: string) => `${v.replace('0x', '')}:${p.replace('0x', '')}`
+  const attachHostdev = () =>
+    run(async () => {
+      const spec =
+        hdKind === 'pci'
+          ? { type: 'pci' as const, address: hdPick }
+          : { type: 'usb' as const, vendorId: hdPick.split(':')[0], productId: hdPick.split(':')[1] }
+      const r = await api.attachHostdev(detail.uuid, spec)
+      toasts.push({
+        kind: r.liveError ? 'warn' : 'info',
+        title: 'Host device added',
+        detail: r.liveError
+          ? `Saved for the next start; it could not be added live: ${r.liveError}`
+          : active
+            ? 'Added live and for the next start.'
+            : 'The machine gets it from its next start.',
+      })
+      onchange()
+      onclose()
     })
 
   const remove = () =>
@@ -317,6 +350,55 @@
   {/snippet}
 </Dialog>
 
+<Dialog open={which === 'hostdev'} title="Add a host device" subtitle="Give {detail.name} a PCI or USB device of this host" {onclose} width={620}>
+  <div class="form">
+    <div class="seg" role="radiogroup" aria-label="Kind">
+      <button type="button" role="radio" aria-checked={hdKind === 'pci'} class:on={hdKind === 'pci'} onclick={() => ((hdKind = 'pci'), (hdPick = ''))}>PCI (GPU, NIC, controller)</button>
+      <button type="button" role="radio" aria-checked={hdKind === 'usb'} class:on={hdKind === 'usb'} onclick={() => ((hdKind = 'usb'), (hdPick = ''))}>USB</button>
+    </div>
+    {#if !hw}
+      <p class="text">Looking at the host's hardware…</p>
+    {:else}
+      {#if hdKind === 'pci' && !hw.iommu}
+        <div class="ui-error-box">The IOMMU is off on this host, so no PCI device can be passed through. Turn on VT-d/AMD-Vi in the firmware and add <span class="mono">intel_iommu=on</span> (or <span class="mono">amd_iommu=on</span>) to the kernel command line.</div>
+      {/if}
+      <div class="hd-list" role="radiogroup">
+        {#if hdKind === 'pci'}
+          {#each hw.pci.filter((p) => !p.class.toLowerCase().startsWith('0x06')) as p (p.address)}
+            <label class="hd" class:off={!!p.blocked || p.usedBy.length > 0}>
+              <input type="radio" name="hd" value={p.address} bind:group={hdPick} disabled={!!p.blocked || p.usedBy.length > 0} />
+              <span class="hd-text">
+                <span><b>{p.product || p.productId}</b> <span class="muted">{p.vendor}</span></span>
+                <span class="hd-meta mono">{p.address} · {p.className || p.class}{p.driver ? ' · ' + p.driver : ''}</span>
+                {#if p.blocked}<span class="hd-why">{p.blocked}</span>{:else if p.usedBy.length}<span class="hd-why">Given to {p.usedBy.join(', ')}</span>{/if}
+              </span>
+            </label>
+          {/each}
+        {:else}
+          {#each hw.usb as u (u.name)}
+            <label class="hd" class:off={!!u.blocked || u.usedBy.length > 0}>
+              <input type="radio" name="hd" value={usbKey(u.vendorId, u.productId)} bind:group={hdPick} disabled={!!u.blocked || u.usedBy.length > 0} />
+              <span class="hd-text">
+                <span><b>{u.product || usbKey(u.vendorId, u.productId)}</b> <span class="muted">{u.vendor}</span></span>
+                <span class="hd-meta mono">bus {u.bus} · device {u.device} · {usbKey(u.vendorId, u.productId)}</span>
+                {#if u.blocked}<span class="hd-why">{u.blocked}</span>{:else if u.usedBy.length}<span class="hd-why">Given to {u.usedBy.join(', ')}</span>{/if}
+              </span>
+            </label>
+          {:else}
+            <p class="text">No USB devices are connected to this host.</p>
+          {/each}
+        {/if}
+      </div>
+      {#if hdKind === 'pci'}<p class="text muted">The device is taken away from the host while the machine has it; all devices of its IOMMU group go together.</p>{/if}
+    {/if}
+    {#if error}<div class="ui-error-box">{error}</div>{/if}
+  </div>
+  {#snippet footer()}
+    <button class="ui-btn ghost" onclick={onclose}>Cancel</button>
+    <button class="ui-btn primary" disabled={busy || !hdPick} onclick={attachHostdev}>Add device</button>
+  {/snippet}
+</Dialog>
+
 <Dialog open={which === 'delete'} title="Delete {detail.name}?" {onclose}>
   <div class="form">
     {#if active}
@@ -469,6 +551,65 @@
 </Dialog>
 
 <style>
+  .seg {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border-radius: var(--radius);
+    background: var(--surface-2);
+  }
+  .seg button {
+    flex: 1;
+    height: 32px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-2);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .seg button.on {
+    background: var(--surface);
+    color: var(--text);
+  }
+  .hd-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 46vh;
+    overflow-y: auto;
+  }
+  .hd {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+  .hd.off {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+  .hd input {
+    margin-top: 3px;
+  }
+  .hd-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .hd-meta {
+    font-size: 11.5px;
+    color: var(--text-3);
+  }
+  .hd-why {
+    font-size: 12px;
+    color: var(--warn);
+  }
   .form {
     display: flex;
     flex-direction: column;

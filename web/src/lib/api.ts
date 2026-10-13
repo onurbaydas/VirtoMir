@@ -583,6 +583,43 @@ export interface PoolSpec {
   export?: string
 }
 
+export interface HostPCI {
+  name: string
+  address: string
+  class: string
+  className: string
+  vendor: string
+  product: string
+  vendorId: string
+  productId: string
+  driver?: string
+  iommuGroup?: number
+  group?: string[]
+  usedBy: string[]
+  /** Why the host itself needs it (mounted disk, interface with an address). */
+  hostUse?: string
+  /** Why it cannot be passed through; absent when it can. */
+  blocked?: string
+}
+
+export interface HostUSB {
+  name: string
+  bus: number
+  device: number
+  vendorId: string
+  productId: string
+  vendor: string
+  product: string
+  usedBy: string[]
+  blocked?: string
+}
+
+export interface HostHardware {
+  iommu: boolean
+  pci: HostPCI[]
+  usb: HostUSB[]
+}
+
 export interface ConfigVersion {
   id: string
   time: string
@@ -682,6 +719,9 @@ export const api = {
   deploy: (uuid: string, spec: DeploySpec) => request<Job>('POST', `${domainPath(uuid)}/deploy`, spec),
   setAutostart: (uuid: string, enabled: boolean) => request<void>('PUT', `${domainPath(uuid)}/autostart`, { enabled }),
   rename: (uuid: string, name: string) => request<void>('POST', `${domainPath(uuid)}/rename`, { name }),
+  hostDevices: () => request<HostHardware>('GET', '/api/v1/host/devices'),
+  attachHostdev: (uuid: string, spec: { type: 'pci' | 'usb'; address?: string; vendorId?: string; productId?: string }) =>
+    request<{ liveError: string }>('POST', `${domainPath(uuid)}/hostdevs`, spec),
   configVersions: async (uuid: string) =>
     (await request<{ versions: ConfigVersion[] }>('GET', `${domainPath(uuid)}/config-history`)).versions,
   configVersion: async (uuid: string, id: string) =>
@@ -700,7 +740,7 @@ export const api = {
     request<void>('PUT', `${domainPath(uuid)}/media`, { target, source }),
   attachDisk: (uuid: string, spec: DiskSpec) => request<{ target: string }>('POST', `${domainPath(uuid)}/disks`, spec),
   attachNIC: (uuid: string, spec: NICSpec) => request<void>('POST', `${domainPath(uuid)}/interfaces`, spec),
-  detach: (uuid: string, ref: { kind: 'disk' | 'interface'; target?: string; mac?: string }) =>
+  detach: (uuid: string, ref: { kind: 'disk' | 'interface' | 'hostdev-pci' | 'hostdev-usb'; target?: string; mac?: string }) =>
     request<void>('POST', `${domainPath(uuid)}/devices/detach`, ref),
 
   snapshots: async (uuid: string) =>

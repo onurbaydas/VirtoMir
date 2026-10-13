@@ -239,8 +239,14 @@ func (c *Client) DetachDevice(uuid string, ref DeviceRef) error {
 			return fmt.Errorf("%w: no adapter %s", ErrNotFound, ref.MAC)
 		}
 		doc, err = nic.Marshal()
+	case "hostdev-pci", "hostdev-usb":
+		hd := findHostdev(x, ref.Kind, ref.Target)
+		if hd == nil {
+			return fmt.Errorf("%w: no host device %s", ErrNotFound, ref.Target)
+		}
+		doc, err = hd.Marshal()
 	default:
-		return invalidf("Only disks and network adapters can be removed here; use the XML editor for other devices.")
+		return invalidf("Only disks, network adapters and host devices can be removed here; use the XML editor for other devices.")
 	}
 	if err != nil {
 		return err
@@ -249,6 +255,26 @@ func (c *Client) DetachDevice(uuid string, ref DeviceRef) error {
 		return classify(err)
 	}
 	c.log.Info("device detached", "domain", d.Name, "kind", ref.Kind, "target", ref.Target, "mac", ref.MAC)
+	return nil
+}
+
+// findHostdev finds a passed-through device by host PCI address or USB vendor:product.
+func findHostdev(x *libvirtxml.Domain, kind, target string) *libvirtxml.DomainHostdev {
+	if x.Devices == nil {
+		return nil
+	}
+	for i, h := range x.Devices.Hostdevs {
+		switch {
+		case kind == "hostdev-pci" && h.SubsysPCI != nil && h.SubsysPCI.Source != nil && h.SubsysPCI.Source.Address != nil:
+			if pciAddr(h.SubsysPCI.Source.Address) == strings.ToLower(target) {
+				return &x.Devices.Hostdevs[i]
+			}
+		case kind == "hostdev-usb" && h.SubsysUSB != nil && h.SubsysUSB.Source != nil && h.SubsysUSB.Source.Vendor != nil && h.SubsysUSB.Source.Product != nil:
+			if usbKey(h.SubsysUSB.Source.Vendor.ID, h.SubsysUSB.Source.Product.ID) == strings.ToLower(target) {
+				return &x.Devices.Hostdevs[i]
+			}
+		}
+	}
 	return nil
 }
 

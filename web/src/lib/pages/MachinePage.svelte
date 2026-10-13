@@ -135,6 +135,7 @@
 
   async function detachDevice(d: Device) {
     if (d.kind === 'interface') await api.detach(uuid, { kind: 'interface', mac: d.mac })
+    else if (d.kind === 'hostdev-pci' || d.kind === 'hostdev-usb') await api.detach(uuid, { kind: d.kind, target: d.target })
     else await api.detach(uuid, { kind: 'disk', target: d.target })
     toasts.push({ kind: 'info', title: `${d.title} removed`, detail: d.kind === 'disk' ? 'The disk image stays in its pool.' : undefined })
     await load()
@@ -439,6 +440,7 @@
       <div class="hw-tools">
         <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'disk')}><Plus size={14} /> Add storage</button>
         <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'nic')}><Plus size={14} /> Add network adapter</button>
+        <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'hostdev')}><Plus size={14} /> Add host device</button>
         <span class="hw-hint">{active ? 'Changes are hot-plugged and kept for the next boot.' : 'Other devices: edit the XML.'}</span>
       </div>
       {#each grouped as g (g.key)}
@@ -459,6 +461,8 @@
                     {/if}
                     {#if (d.kind === 'disk' || d.kind === 'cdrom') && d.target}
                       <ConfirmButton label="Remove" confirm="Detach from machine?" icon={Unplug} failure="Could not remove {d.title}" disabled={!session.can('admin')} title={session.why('admin')} run={() => detachDevice(d)} />
+                    {:else if (d.kind === 'hostdev-pci' || d.kind === 'hostdev-usb') && d.target}
+                      <ConfirmButton label="Remove" confirm="Give it back to the host?" icon={Unplug} failure="Could not remove {d.title}" disabled={!session.can('admin')} title={session.why('admin')} run={() => detachDevice(d)} />
                     {:else if d.kind === 'interface' && d.mac}
                       <ConfirmButton label="Remove" confirm="Unplug this adapter?" icon={Unplug} failure="Could not remove {d.title}" disabled={!session.can('admin')} title={session.why('admin')} run={() => detachDevice(d)} />
                     {/if}

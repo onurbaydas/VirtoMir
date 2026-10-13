@@ -731,6 +731,7 @@ func hostdevDevice(v libvirtxml.DomainHostdev) Device {
 		dev.Kind, dev.Title = "hostdev-pci", "PCI device"
 		if s := v.SubsysPCI.Source; s != nil && s.Address != nil {
 			dev.Summary = pciAddr(s.Address)
+			dev.Target = dev.Summary
 			dev.Props = append(dev.Props, Prop{"Host PCI address", dev.Summary, "source/address"})
 		}
 	case v.SubsysUSB != nil:
@@ -738,6 +739,7 @@ func hostdevDevice(v libvirtxml.DomainHostdev) Device {
 		if s := v.SubsysUSB.Source; s != nil {
 			if s.Vendor != nil && s.Product != nil {
 				dev.Summary = strings.TrimPrefix(s.Vendor.ID, "0x") + ":" + strings.TrimPrefix(s.Product.ID, "0x")
+				dev.Target = usbKey(s.Vendor.ID, s.Product.ID)
 				dev.Props = append(dev.Props, Prop{"Vendor:product", dev.Summary, "source/vendor@id,product@id"})
 			}
 			if s.Address != nil && s.Address.Bus != nil && s.Address.Device != nil {

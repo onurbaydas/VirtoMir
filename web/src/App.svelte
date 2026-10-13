@@ -7,6 +7,7 @@
   import { cluster } from './lib/cluster.svelte'
   import ClusterPage from './lib/pages/ClusterPage.svelte'
   import ImportPage from './lib/pages/ImportPage.svelte'
+  import HardwarePage from './lib/pages/HardwarePage.svelte'
   import AlertsPage from './lib/pages/AlertsPage.svelte'
   import BackupsPage from './lib/pages/BackupsPage.svelte'
   import Sidebar from './lib/components/Sidebar.svelte'
@@ -105,6 +106,8 @@
         <ActivityPage />
       {:else if route.name === 'account'}
         <AccountPage />
+      {:else if route.name === 'hardware'}
+        <HardwarePage />
       {:else if route.name === 'cluster'}
         <ClusterPage />
       {:else}
