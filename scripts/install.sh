@@ -118,7 +118,9 @@ if [ -f "$FROM" ]; then
 else
 	SRC=$FROM
 fi
-[ -n "${SRC:-}" ] && [ -x "$SRC/virtomird" ] || die "no virtomird binary found in $FROM"
+if [ -z "${SRC:-}" ] || [ ! -x "$SRC/virtomird" ]; then
+	die "no virtomird binary found in $FROM"
+fi
 
 # ---- Install --------------------------------------------------------------------------
 UPGRADE=0
