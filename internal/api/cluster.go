@@ -24,6 +24,7 @@ func (s *Server) clusterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/cluster/join", s.join)
 	mux.HandleFunc("DELETE /api/v1/cluster/members/{id}", s.removeMember)
 	mux.HandleFunc("POST /api/v1/cluster/pools", s.createClusterPool)
+	mux.HandleFunc("POST /api/v1/cluster/networks", s.createClusterNetwork)
 
 	mux.HandleFunc("GET /api/v1/cluster/peer/hello", s.peerHello)
 	mux.HandleFunc("POST /api/v1/cluster/peer/join", s.peerJoin)
@@ -159,6 +160,28 @@ func (s *Server) createClusterPool(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &spec) {
 		return
 	}
+	// Mounting an unreachable NFS server takes libvirt a few minutes to give up.
+	results := s.everyHost(r, 4*time.Minute, func() error { return s.backend.CreatePool(spec) }, "/api/v1/storage/pools", spec)
+	s.writeJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+// createClusterNetwork creates the same virtual network on every member (e.g. a bridge
+// network with a VLAN), so machines keep their connection when they move.
+func (s *Server) createClusterNetwork(w http.ResponseWriter, r *http.Request) {
+	if s.noCluster(w) {
+		return
+	}
+	var spec virt.NetworkSpec
+	if !s.decode(w, r, &spec) {
+		return
+	}
+	results := s.everyHost(r, time.Minute, func() error { return s.backend.CreateNetwork(spec) }, "/api/v1/networks", spec)
+	s.writeJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+// everyHost runs a create on every member in parallel: local runs here, the others get
+// POST path with body on behalf of the user. Each host reports its own result.
+func (s *Server) everyHost(r *http.Request, timeout time.Duration, local func() error, path string, body any) []HostResult {
 	id := identity(r)
 	members, _ := s.cluster.Members()
 	if len(members) == 0 {
@@ -173,12 +196,11 @@ func (s *Server) createClusterPool(w http.ResponseWriter, r *http.Request) {
 			defer wg.Done()
 			var err error
 			if n.ID == s.cluster.SelfID() {
-				err = s.backend.CreatePool(spec)
+				err = local()
 			} else {
-				// Mounting an unreachable NFS server takes libvirt a few minutes to give up.
-				ctx, cancel := context.WithTimeout(r.Context(), 4*time.Minute)
+				ctx, cancel := context.WithTimeout(r.Context(), timeout)
 				defer cancel()
-				err = s.peer(n).As(id.Name, id.Role.String(), id.Token).Call(ctx, http.MethodPost, "/api/v1/storage/pools", spec, nil)
+				err = s.peer(n).As(id.Name, id.Role.String(), id.Token).Call(ctx, http.MethodPost, path, body, nil)
 			}
 			res.OK = err == nil
 			if err != nil {
@@ -188,7 +210,7 @@ func (s *Server) createClusterPool(w http.ResponseWriter, r *http.Request) {
 	}
 	wg.Wait()
 	s.live.Refresh()
-	s.writeJSON(w, http.StatusOK, map[string]any{"results": results})
+	return results
 }
 
 func removeNode(nodes []cluster.Node, id string) []cluster.Node {

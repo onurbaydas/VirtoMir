@@ -8,6 +8,7 @@
   import ChevronDown from '@lucide/svelte/icons/chevron-down'
   import Pin from '@lucide/svelte/icons/pin'
   import { api, errorText, type Lease, type NetworkSpec, type VNetwork } from '../api'
+  import { cluster } from '../cluster.svelte'
   import { toasts } from '../toast.svelte'
   import Dialog from '../components/Dialog.svelte'
   import ConfirmButton from '../components/ConfirmButton.svelte'
@@ -82,16 +83,30 @@
     formErr = ''
     dlg = true
   }
+  let everywhere = $state(true)
   async function create(e: SubmitEvent) {
     e.preventDefault()
     busy = true
     formErr = ''
     try {
       const body: NetworkSpec =
-        spec.mode === 'bridge' ? { name: spec.name, mode: 'bridge', bridge: spec.bridge, dhcp: false } : { ...spec, bridge: undefined }
-      await api.createNetwork(body)
+        spec.mode === 'bridge'
+          ? { name: spec.name, mode: 'bridge', bridge: spec.bridge, dhcp: false, ovs: spec.ovs, vlan: spec.ovs && spec.vlan ? Number(spec.vlan) : undefined }
+          : { ...spec, bridge: undefined, ovs: undefined, vlan: undefined }
+      if (cluster.clustered && everywhere) {
+        const res = await api.createClusterNetwork(body)
+        const failed = res.filter((r) => !r.ok)
+        if (failed.length === res.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
+        toasts.push({
+          kind: failed.length ? 'warn' : 'info',
+          title: failed.length ? `${spec.name} created on ${res.length - failed.length} of ${res.length} hosts` : `${spec.name} created on every host`,
+          detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') || undefined,
+        })
+      } else {
+        await api.createNetwork(body)
+        toasts.push({ kind: 'info', title: `Network ${spec.name} created` })
+      }
       dlg = false
-      toasts.push({ kind: 'info', title: `Network ${spec.name} created` })
       await load()
     } catch (err) {
       formErr = errorText(err)
@@ -327,8 +342,18 @@
       <label class="ui-field">
         <span class="label">Host bridge</span>
         <input class="ui-input mono" bind:value={spec.bridge} placeholder="br0" required />
-        <span class="hint">The bridge must already exist on the host (e.g. created with NetworkManager or netplan).</span>
+        <span class="hint">The bridge must already exist on the host (e.g. created with NetworkManager, netplan or ovs-vsctl).</span>
       </label>
+      <label class="ui-switch"><input type="checkbox" bind:checked={spec.ovs} /> It is an Open vSwitch bridge</label>
+      {#if spec.ovs}
+        <label class="ui-field">
+          <span class="label">VLAN <span class="opt">(optional)</span></span>
+          <input class="ui-input mono" type="number" min="1" max="4094" bind:value={spec.vlan} placeholder="untagged" />
+          <span class="hint">Every machine on this network is put into that VLAN. Adapters can also get their own tag.</span>
+        </label>
+      {:else}
+        <span class="hint">VLANs on a plain Linux bridge: create a bridge on the VLAN interface (e.g. br0.10) and use that.</span>
+      {/if}
     {:else}
       <label class="ui-field">
         <span class="label">Subnet</span>
@@ -336,6 +361,9 @@
         <span class="hint">The host becomes .1; with DHCP, machines get the rest.</span>
       </label>
       <label class="ui-switch"><input type="checkbox" bind:checked={spec.dhcp} /> Hand out addresses with DHCP</label>
+    {/if}
+    {#if cluster.clustered}
+      <label class="ui-switch"><input type="checkbox" bind:checked={everywhere} /> Create it on every host of the cluster (machines keep their network when they move)</label>
     {/if}
     {#if formErr}<div class="ui-error-box">{formErr}</div>{/if}
   </form>

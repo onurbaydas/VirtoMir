@@ -420,6 +420,8 @@ export interface NICSpec {
   bridge?: string
   model?: string
   mac?: string
+  /** VLAN tag for this adapter (Open vSwitch networks, macvtap, SR-IOV); 0/absent = untagged. */
+  vlan?: number
 }
 
 export interface CreateSpec {
@@ -564,6 +566,9 @@ export interface NetworkSpec {
   subnet?: string
   dhcp: boolean
   bridge?: string
+  /** Bridge mode: the host bridge is Open vSwitch; vlan tags every machine on it. */
+  ovs?: boolean
+  vlan?: number
 }
 
 export interface Lease {
@@ -769,6 +774,8 @@ export const api = {
   pools: async () => (await request<{ pools: Pool[] }>('GET', '/api/v1/storage/pools')).pools,
   createPool: (spec: PoolSpec) => request<void>('POST', '/api/v1/storage/pools', spec),
   /** The same pool on every cluster member; each host reports its own result. */
+  createClusterNetwork: async (spec: NetworkSpec) =>
+    (await request<{ results: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/cluster/networks', spec)).results,
   createClusterPool: async (spec: PoolSpec) =>
     (await request<{ results: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/cluster/pools', spec)).results,
   deletePool: (name: string) => request<void>('DELETE', poolPath(name)),

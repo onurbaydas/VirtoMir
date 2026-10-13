@@ -176,6 +176,9 @@ type NICSpec struct {
 	Bridge  string `json:"bridge,omitempty"`
 	Model   string `json:"model,omitempty"` // virtio (default), e1000e, rtl8139
 	MAC     string `json:"mac,omitempty"`   // generated when empty
+	// VLAN tags this adapter's traffic (Open vSwitch networks, macvtap passthrough, SR-IOV);
+	// 0 = as the network says.
+	VLAN uint `json:"vlan,omitempty"`
 }
 
 func (c *Client) AttachInterface(uuid string, spec NICSpec) error {
@@ -214,6 +217,12 @@ func buildNIC(spec NICSpec) (libvirtxml.DomainInterface, error) {
 	}
 	if spec.MAC != "" {
 		nic.MAC = &libvirtxml.DomainInterfaceMAC{Address: spec.MAC}
+	}
+	if spec.VLAN > 4094 {
+		return nic, invalidf("A VLAN ID is between 1 and 4094.")
+	}
+	if spec.VLAN != 0 {
+		nic.VLan = &libvirtxml.DomainInterfaceVLan{Tags: []libvirtxml.DomainInterfaceVLanTag{{ID: spec.VLAN}}}
 	}
 	return nic, nil
 }

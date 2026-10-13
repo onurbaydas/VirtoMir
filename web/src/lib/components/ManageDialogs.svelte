@@ -43,6 +43,7 @@
   let isoPath = $state('')
   let nicChoice = $state('')
   let nicModel = $state('virtio')
+  let nicVlan = $state<number | null>(null)
   let bridge = $state('br0')
   let growGiB = $state(0)
   let hw = $state<HostHardware | null>(null)
@@ -220,7 +221,8 @@
 
   const addNIC = () =>
     run(async () => {
-      const spec = nicChoice === 'bridge' ? { bridge, model: nicModel } : { network: nicChoice.slice(8), model: nicModel }
+      const base = nicChoice === 'bridge' ? { bridge, model: nicModel } : { network: nicChoice.slice(8), model: nicModel }
+      const spec = nicVlan ? { ...base, vlan: Number(nicVlan) } : base
       await api.attachNIC(detail.uuid, spec)
       toasts.push({ kind: 'info', title: 'Network adapter added' })
       onchange()
@@ -505,6 +507,11 @@
         <option value="e1000e">Intel e1000e (works without drivers)</option>
         <option value="rtl8139">Realtek RTL8139 (very old guests)</option>
       </select>
+    </label>
+    <label class="ui-field">
+      <span class="label">VLAN <span class="muted">(optional)</span></span>
+      <input class="ui-input mono" type="number" min="1" max="4094" bind:value={nicVlan} placeholder="as the network says" />
+      <span class="hint">Works on Open vSwitch networks, macvtap passthrough and SR-IOV adapters.</span>
     </label>
     {#if error}<div class="ui-error-box">{error}</div>{/if}
   </form>
