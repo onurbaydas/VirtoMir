@@ -50,6 +50,14 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 
 - Storage pools and volumes, **ISO / cloud image upload** with progress, grow volumes
 - Virtual networks (NAT, isolated, routed, bridged), DHCP leases with machine names, **reserved addresses**
+- **NFS storage**, and one pool on every host of a cluster in a single step
+
+### Several hosts
+
+- Install VirtoMir on each host and join them with a **one-time join code** — no shared database, no extra services; if one host is down, the others carry on
+- Manage every host from any of them: **cluster overview** with live host cards and all machines in one list, host switcher, consoles and live charts of any host
+- **Move machines between hosts**: stopped ones are copied, running ones are **live-migrated** — without copying disks on shared NFS storage, or copying them live
+- Alerts, activity and backups of all hosts in one place; roles apply on every host
 
 ### Security
 
@@ -125,7 +133,7 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 
 ## Roadmap
 
-PCI/USB passthrough with IOMMU insight, configuration history with one-click revert, then a small cluster: several hosts in one view, live migration, shared storage.
+PCI/USB passthrough with IOMMU insight, configuration history with one-click revert, then enterprise features (HA, LDAP/OIDC, quotas).
 
 ## License
 
