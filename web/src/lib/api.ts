@@ -475,6 +475,12 @@ export interface Settings {
   bootMenu: boolean
   firmware: 'uefi' | 'bios'
   secureBoot: boolean
+  /** Per vCPU: host CPU set ("2", "4-5"); "" = anywhere. */
+  pinning: string[]
+  emulatorPin: string
+  hugePages: boolean
+  numaMode: '' | 'strict' | 'preferred' | 'interleave' | 'restrictive'
+  numaNodes: string
 }
 
 export interface SettingsView extends Settings {

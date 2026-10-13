@@ -32,6 +32,8 @@ type Settings struct {
 
 	Firmware   string `json:"firmware"` // uefi or bios
 	SecureBoot bool   `json:"secureBoot"`
+
+	Tuning
 }
 
 // BootDevice is something the machine can boot from.
@@ -65,6 +67,7 @@ func settingsFromXML(x *libvirtxml.Domain) SettingsView {
 		BootOrder: []string{},
 	}, BootDevices: bootDevices(x), HotplugMemoryMiB: d.Memory.HotplugKiB >> 10}
 	v.BootOrder = currentBootOrder(x, v.BootDevices)
+	v.Tuning = tuningFromXML(x, v.MaxVCPUs)
 	return v
 }
 
@@ -201,6 +204,20 @@ func applySettings(x *libvirtxml.Domain, s Settings) error {
 	if s.Firmware == "bios" && s.SecureBoot {
 		return invalidf("Secure Boot needs UEFI firmware.")
 	}
+	if s.Pinning == nil {
+		s.Pinning = make([]string, s.MaxVCPUs)
+	}
+	for uint(len(s.Pinning)) < s.MaxVCPUs {
+		s.Pinning = append(s.Pinning, "")
+	}
+	if err := validTuning(s.Tuning, s.MaxVCPUs); err != nil {
+		return err
+	}
+	oldTuning := old.Tuning
+	for uint(len(oldTuning.Pinning)) < s.MaxVCPUs {
+		oldTuning.Pinning = append(oldTuning.Pinning, "")
+	}
+	applyTuning(x, s.Tuning, oldTuning)
 
 	x.Title, x.Description = s.Title, s.Description
 

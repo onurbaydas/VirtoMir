@@ -42,8 +42,27 @@
 
   function pick(v: SettingsView): Settings {
     const { bootDevices: _b, hotplugMemoryMiB: _h, ...s } = v
-    return { ...s, bootOrder: [...s.bootOrder] }
+    return { ...s, bootOrder: [...s.bootOrder], pinning: [...(s.pinning ?? [])] }
   }
+
+  // ---- Performance tuning (pinning, huge pages, NUMA) -------------------------------------
+  let tuningOpen = $state(false)
+  // Pinning has one entry per vCPU and follows the vCPU count.
+  $effect(() => {
+    if (!form) return
+    const n = form.maxVcpus
+    if (form.pinning.length !== n) form.pinning = Array.from({ length: n }, (_, i) => form!.pinning[i] ?? '')
+  })
+  let pinned = $derived(form ? form.pinning.filter((p) => p).length : 0)
+  let tuned = $derived(!!form && (pinned > 0 || !!form.emulatorPin || form.hugePages || !!form.numaMode))
+  // One host CPU per vCPU, starting at `first` — the usual setup for latency-sensitive guests.
+  let pinFrom = $state(0)
+  function pinOneToOne() {
+    if (!form) return
+    form.pinning = form.pinning.map((_, i) => String(pinFrom + i))
+  }
+  const CPUSET = /^\^?[0-9]+(-[0-9]+)?(,\^?[0-9]+(-[0-9]+)?)*$/
+  const badSet = (s: string) => !!s && !CPUSET.test(s)
 
   let dirty = $derived(!!form && !!view && JSON.stringify(form) !== JSON.stringify(pick(view)))
   let hostThreads = $derived(live.host?.cpus ?? 0)
@@ -71,6 +90,10 @@
     if (form.currentMemoryMiB > form.memoryMiB) p.push('Current memory cannot be larger than the assigned memory.')
     if (form.memoryMiB < 64) p.push('Memory must be at least 64 MiB.')
     if (form.firmware === 'bios' && form.secureBoot) p.push('Secure Boot needs UEFI.')
+    const bad = form.pinning.findIndex(badSet)
+    if (bad >= 0) p.push(`vCPU ${bad}: use host CPU numbers and ranges like 2, 4-5 or 0,2.`)
+    if (badSet(form.emulatorPin)) p.push('Emulator threads: use host CPU numbers and ranges.')
+    if (form.numaMode && (!form.numaNodes || badSet(form.numaNodes))) p.push('Name the NUMA nodes memory may come from, e.g. 0.')
     return p
   })
   let firmwareChanged = $derived(!!form && !!view && (form.firmware !== view.firmware || form.secureBoot !== view.secureBoot))
@@ -233,6 +256,57 @@
     </section>
 
     <section class="ui-panel card">
+      <button class="fold" type="button" aria-expanded={tuningOpen || tuned} onclick={() => (tuningOpen = !tuningOpen)}>
+        <h2>Performance tuning</h2>
+        <span class="hint">{tuned ? `${pinned ? `${pinned} pinned vCPU${pinned > 1 ? 's' : ''}` : 'no pinning'}${form.hugePages ? ' · huge pages' : ''}${form.numaMode ? ` · NUMA ${form.numaMode} ${form.numaNodes}` : ''}` : 'Default: the host schedules everything. For latency-sensitive guests.'}</span>
+      </button>
+      {#if tuningOpen || tuned}
+        <div class="tuning">
+          <div>
+            <span class="label">vCPU pinning <span class="hint">— host CPUs each vCPU may run on (this host has {hostThreads || '?'}: 0–{Math.max(0, hostThreads - 1)})</span></span>
+            <div class="pins">
+              {#each form.pinning as _, i (i)}
+                <label class="pin">
+                  <span class="mono">vCPU {i}</span>
+                  <input class="ui-input mono" bind:value={form.pinning[i]} placeholder="any" aria-invalid={badSet(form.pinning[i])} />
+                </label>
+              {/each}
+            </div>
+            <div class="pin-tools">
+              <span class="hint">One host CPU each, starting at</span>
+              <input class="ui-input mono tiny" type="number" min="0" max={Math.max(0, hostThreads - 1)} bind:value={pinFrom} />
+              <button class="ui-btn sm" type="button" onclick={pinOneToOne}>Pin 1:1</button>
+              <button class="ui-btn sm ghost" type="button" onclick={() => form && (form.pinning = form.pinning.map(() => ''))}>Clear</button>
+            </div>
+          </div>
+          <div class="grid2">
+            <label class="ui-field">
+              <span class="label">Emulator threads on</span>
+              <input class="ui-input mono" bind:value={form.emulatorPin} placeholder="any (e.g. 0-1)" aria-invalid={badSet(form.emulatorPin)} />
+              <span class="hint">QEMU's own work (I/O, timers) — keep it off the pinned vCPUs' cores.</span>
+            </label>
+            <label class="ui-field">
+              <span class="label">Memory from NUMA nodes</span>
+              <div class="numa">
+                <select class="ui-input" bind:value={form.numaMode}>
+                  <option value="">Any node (default)</option>
+                  <option value="strict">Only these (strict)</option>
+                  <option value="preferred">Prefer this one</option>
+                  <option value="interleave">Spread over these</option>
+                  <option value="restrictive">Only these, movable</option>
+                </select>
+                {#if form.numaMode}<input class="ui-input mono" bind:value={form.numaNodes} placeholder="0" aria-invalid={badSet(form.numaNodes) || !form.numaNodes} />{/if}
+              </div>
+              <span class="hint">This host has {live.host?.numaNodes ?? '?'} NUMA node{live.host?.numaNodes === 1 ? '' : 's'}.</span>
+            </label>
+          </div>
+          <label class="ui-switch"><input type="checkbox" bind:checked={form.hugePages} /> Back memory with huge pages <span class="hint">— faster for big guests; the host must reserve them (vm.nr_hugepages), or the machine will not start</span></label>
+          <span class="hint">Takes effect at the next start.</span>
+        </div>
+      {/if}
+    </section>
+
+    <section class="ui-panel card">
       <h2>Boot</h2>
       <ol class="boot">
         {#each form.bootOrder as key, i (key)}
@@ -349,6 +423,53 @@
     margin: 0;
     font-size: 14.5px;
     font-weight: 600;
+  }
+  .fold {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .tuning {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .pins {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .pin {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px;
+    color: var(--text-3);
+  }
+  .pin-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .tiny {
+    width: 70px;
+  }
+  .numa {
+    display: flex;
+    gap: 8px;
+  }
+  .numa input {
+    width: 90px;
   }
   .grid3 {
     display: grid;
