@@ -13,6 +13,7 @@
   import { live } from '../live.svelte'
   import { formatKiB } from '../format'
   import { toasts } from '../toast.svelte'
+  import { cluster } from '../cluster.svelte'
 
   let { uuid, active, onsaved }: { uuid: string; active: boolean; onsaved: () => void } = $props()
 
@@ -123,11 +124,28 @@
   }
 
   const MODES = [
-    { key: 'host-passthrough', label: 'Same as host', hint: 'Fastest; the guest sees your real CPU. Live migration only to identical hosts.' },
+    { key: 'host-passthrough', label: 'Same as host', hint: 'Fastest; the guest sees your real CPU. Live migration only to hosts with the identical CPU.' },
     { key: 'host-model', label: 'Closest to host', hint: 'Nearly as fast, a bit more portable.' },
     { key: 'maximum', label: 'Everything supported', hint: 'All features the hypervisor can offer.' },
     { key: 'custom', label: 'Named model', hint: 'A fixed CPU model, e.g. for migration across different hosts.' },
   ] as const
+
+  // A model every host of the cluster runs, so the machine can be live-migrated anywhere.
+  let baselineBusy = $state(false)
+  async function useBaseline() {
+    if (!form) return
+    baselineBusy = true
+    try {
+      const b = await api.cpuBaseline()
+      form.cpuMode = 'custom'
+      form.cpuModel = b.model
+      toasts.push({ kind: 'info', title: `${b.model} runs on all ${b.hosts} hosts`, detail: 'Save, then restart the machine for it to take effect.' })
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'No common CPU model', detail: errorText(e) })
+    } finally {
+      baselineBusy = false
+    }
+  }
 </script>
 
 {#if loadErr}
@@ -182,6 +200,11 @@
           <span class="label">CPU model</span>
           <input class="ui-input mono" bind:value={form.cpuModel} placeholder="Skylake-Client, EPYC-Rome, Westmere…" />
         </label>
+      {/if}
+      {#if cluster.clustered}
+        <button class="ui-btn sm baseline" class:busy={baselineBusy} disabled={baselineBusy || !session.can('admin')} onclick={useBaseline}>
+          Use a model every cluster host supports
+        </button>
       {/if}
     </section>
 
@@ -293,6 +316,9 @@
 {/if}
 
 <style>
+  .baseline {
+    margin-top: 10px;
+  }
   .settings {
     display: grid;
     gap: 14px;

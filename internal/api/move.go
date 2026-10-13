@@ -130,7 +130,7 @@ func (s *Server) migrateLive(w http.ResponseWriter, r *http.Request, p *cluster.
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	plan, err := planMigration(ctx, p, src)
+	plan, err := planMigration(ctx, p, m, src)
 	cancel()
 	if err != nil {
 		s.writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})

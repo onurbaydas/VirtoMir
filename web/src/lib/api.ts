@@ -581,6 +581,8 @@ export const api = {
   streamURL: () => scoped('/api/v1/stream'),
 
   cluster: () => request<ClusterInfo>('GET', '/api/v1/cluster'),
+  /** A named CPU model every cluster member supports (for migration between different hosts). */
+  cpuBaseline: () => request<{ model: string; hosts: number }>('GET', '/api/v1/cluster/cpu-baseline'),
   /** Newest live snapshot of a member (cluster overview). */
   summary: (host: string) => request<Snapshot>('GET', onHost(host, '/api/v1/summary')),
   invite: () => request<Invite>('POST', '/api/v1/cluster/invite'),

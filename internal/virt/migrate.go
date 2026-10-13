@@ -36,6 +36,8 @@ type MigrationSource struct {
 	Disks []LiveDisk `json:"disks"`
 	// Networks the interfaces use; they must exist on the target.
 	Networks []string `json:"networks"`
+	// CPUMode of the machine: host-passthrough needs an identical CPU on the target.
+	CPUMode string `json:"cpuMode"`
 }
 
 // PlanMigration checks that a machine can be live-migrated and describes its disks.
@@ -62,6 +64,9 @@ func (c *Client) PlanMigration(uuid string) (MigrationSource, error) {
 		return MigrationSource{}, err
 	}
 	src := MigrationSource{UUID: formatUUID(d.UUID), Name: d.Name, Disks: []LiveDisk{}, Networks: []string{}}
+	if x.CPU != nil {
+		src.CPUMode = x.CPU.Mode
+	}
 	if x.Devices == nil {
 		return src, nil
 	}
