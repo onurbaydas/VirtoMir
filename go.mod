@@ -3,6 +3,7 @@ module github.com/onurbaydas/virtomir
 go 1.27.2
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/digitalocean/go-libvirt v0.0.0-20260814190004-1a83157e1858
 	github.com/kdomanski/iso9660 v0.4.0
 	github.com/msteinert/pam/v2 v2.1.0

@@ -24,6 +24,7 @@
   import PerformancePanel from '../components/PerformancePanel.svelte'
   import SnapshotsPanel from '../components/SnapshotsPanel.svelte'
   import SettingsPanel from '../components/SettingsPanel.svelte'
+  import ConsolePanel from '../components/ConsolePanel.svelte'
   import Maximize2 from '@lucide/svelte/icons/maximize-2'
   import ConfirmButton from '../components/ConfirmButton.svelte'
   import ManageDialogs, { type ManageDialog } from '../components/ManageDialogs.svelte'
@@ -70,8 +71,8 @@
     return () => clearInterval(t)
   })
 
-  type Tab = 'overview' | 'settings' | 'hardware' | 'snapshots' | 'xml'
-  const TABS: Tab[] = ['overview', 'settings', 'hardware', 'snapshots', 'xml']
+  type Tab = 'overview' | 'console' | 'settings' | 'hardware' | 'snapshots' | 'xml'
+  const TABS: Tab[] = ['overview', 'console', 'settings', 'hardware', 'snapshots', 'xml']
   let tab = $derived<Tab>(
     router.route.name === 'machine' && TABS.includes(router.route.tab as Tab) ? (router.route.tab as Tab) : 'overview',
   )
@@ -349,6 +350,11 @@
     <button role="tab" aria-selected={tab === 'overview'} class:on={tab === 'overview'} onclick={() => setTab('overview')}>
       Overview
     </button>
+    {#if session.can('operator')}
+      <button role="tab" aria-selected={tab === 'console'} class:on={tab === 'console'} onclick={() => setTab('console')}>
+        Console
+      </button>
+    {/if}
     <button role="tab" aria-selected={tab === 'settings'} class:on={tab === 'settings'} onclick={() => setTab('settings')}>
       Settings
     </button>
@@ -440,6 +446,10 @@
       {#if detail.devices.length === 0}
         <div class="state-msg"><strong>No devices defined</strong></div>
       {/if}
+    </div>
+  {:else if tab === 'console'}
+    <div role="tabpanel">
+      {#if liveDom}<ConsolePanel d={liveDom} />{/if}
     </div>
   {:else if tab === 'settings'}
     <div role="tabpanel">

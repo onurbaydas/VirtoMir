@@ -97,8 +97,9 @@ sudo install -m 0644 packaging/virtomir.pam /etc/pam.d/virtomir
     Write-Host "==> Deploying to $SshHost" -ForegroundColor Cyan
     scp -q $out "${SshHost}:virtomir/virtomird.new"
     if ($LASTEXITCODE -ne 0) { throw 'scp failed' }
-    $flags = "-listen $Listen -auth none -tls off -state-dir `$HOME/virtomir/state"
-    $scheme = 'http'
+    # TLS even without sign-in: the console (noVNC) needs a secure context.
+    $flags = "-listen $Listen -auth none -tls auto -state-dir `$HOME/virtomir/state"
+    $scheme = 'https'
 }
 
 $remote = @"

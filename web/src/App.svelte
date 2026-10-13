@@ -14,6 +14,7 @@
   import NotFound from './lib/pages/NotFound.svelte'
   import ActivityPage from './lib/pages/ActivityPage.svelte'
   import AccountPage from './lib/pages/AccountPage.svelte'
+  import ConsolePage from './lib/pages/ConsolePage.svelte'
   import Login from './lib/pages/Login.svelte'
 
   let version = $state('')
@@ -38,6 +39,8 @@
   <div class="splash" aria-busy="true"><img src="/favicon.svg" alt="VirtoMir" width="44" height="44" /></div>
 {:else if !session.ready}
   <Login />
+{:else if route.name === 'console'}
+  <ConsolePage uuid={route.uuid} />
 {:else}
   <div class="app">
     <Sidebar {version} />
