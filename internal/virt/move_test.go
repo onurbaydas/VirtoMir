@@ -49,3 +49,40 @@ func TestPoolXML(t *testing.T) {
 		}
 	}
 }
+
+func TestTuningRoundTrip(t *testing.T) {
+	x := fixture(t)
+	s := settingsFromXML(x).Settings
+	n := int(s.MaxVCPUs)
+	s.Pinning = make([]string, n)
+	s.Pinning[0] = "2"
+	s.EmulatorPin = "0-1"
+	s.HugePages = true
+	s.NUMAMode, s.NUMANodes = "strict", "0"
+	if err := applySettings(x, s); err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := x.Marshal()
+	for _, want := range []string{`<vcpupin vcpu="0" cpuset="2">`, `<emulatorpin cpuset="0-1">`, `<hugepages>`, `<memory mode="strict" nodeset="0">`} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	back := settingsFromXML(x).Tuning
+	if back.Pinning[0] != "2" || back.EmulatorPin != "0-1" || !back.HugePages || back.NUMAMode != "strict" {
+		t.Errorf("read back %+v", back)
+	}
+	// Clearing everything removes the elements again.
+	s.Pinning, s.EmulatorPin, s.HugePages, s.NUMAMode, s.NUMANodes = make([]string, n), "", false, "", ""
+	if err := applySettings(x, s); err != nil {
+		t.Fatal(err)
+	}
+	doc, _ = x.Marshal()
+	if strings.Contains(doc, "vcpupin") || strings.Contains(doc, "hugepages") || strings.Contains(doc, "numatune") {
+		t.Errorf("not cleared:\n%s", doc)
+	}
+	s.Pinning[0] = "two"
+	if err := applySettings(x, s); err == nil {
+		t.Error("bad cpuset accepted")
+	}
+}
