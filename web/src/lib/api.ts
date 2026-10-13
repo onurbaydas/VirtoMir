@@ -192,8 +192,13 @@ const LOCAL = ['/api/v1/auth/', '/api/v1/cluster', '/api/v1/version', '/api/v1/t
 /** Points an API path at the member being shown (ADR-0020): /api/v1/x → /api/v1/hosts/<id>/x. */
 export function scoped(path: string): string {
   const host = router.host
-  if (!host || LOCAL.some((p) => path.startsWith(p))) return path
+  if (!host || path.startsWith('/api/v1/hosts/') || LOCAL.some((p) => path.startsWith(p))) return path
   return '/api/v1/hosts/' + host + path.slice('/api/v1'.length)
+}
+
+/** An API path on a given member, whichever one is shown (cluster-wide views). */
+export function onHost(id: string, path: string): string {
+  return '/api/v1/hosts/' + id + path.slice('/api/v1'.length)
 }
 
 /** WebSocket URL for an API path on the member being shown. */
@@ -564,6 +569,8 @@ export const api = {
   streamURL: () => scoped('/api/v1/stream'),
 
   cluster: () => request<ClusterInfo>('GET', '/api/v1/cluster'),
+  /** Newest live snapshot of a member (cluster overview). */
+  summary: (host: string) => request<Snapshot>('GET', onHost(host, '/api/v1/summary')),
   invite: () => request<Invite>('POST', '/api/v1/cluster/invite'),
   join: (code: string) => request<void>('POST', '/api/v1/cluster/join', { code }),
   removeMember: (id: string) => request<void>('DELETE', `/api/v1/cluster/members/${enc(id)}`),

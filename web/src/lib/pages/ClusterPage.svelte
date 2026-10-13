@@ -12,6 +12,7 @@
   import { session } from '../session.svelte'
   import { toasts } from '../toast.svelte'
   import ConfirmButton from '../components/ConfirmButton.svelte'
+  import ClusterOverview from '../components/ClusterOverview.svelte'
 
   $effect(() => {
     void cluster.refresh()
@@ -94,6 +95,8 @@
   </div>
 {:else}
   {#if cluster.clustered}
+    <ClusterOverview />
+    <h2 class="sub">Members</h2>
     <section class="ui-panel members" aria-label="Hosts">
       {#each cluster.members as m (m.id)}
         <div class="member" class:current={cluster.current?.id === m.id}>
@@ -210,6 +213,10 @@
   .notice p {
     margin: 4px 0 0;
     color: var(--text-2);
+  }
+  .sub {
+    margin: 22px 0 10px;
+    font-size: 15px;
   }
   .members {
     display: flex;

@@ -294,3 +294,14 @@ func TestClusterRemovedWhileAwayLeaves(t *testing.T) {
 		t.Error("beta did not notice it was removed")
 	}
 }
+
+func TestClusterSummaryThroughPeer(t *testing.T) {
+	a := newTestNode(t, "alpha", []virt.Domain{})
+	b := newTestNode(t, "beta", []virt.Domain{})
+	b.live().backlog = [][]byte{[]byte(`{"old":1}`), []byte(`{"host":"beta-latest"}`)}
+	joinNodes(t, a, b)
+	resp, body := a.signIn(t, "view").req("GET", "/api/v1/hosts/"+b.store.SelfID()+"/summary", "")
+	if resp.StatusCode != http.StatusOK || body != `{"host":"beta-latest"}` {
+		t.Errorf("summary: %d %s", resp.StatusCode, body)
+	}
+}
