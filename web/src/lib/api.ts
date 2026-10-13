@@ -44,6 +44,8 @@ export interface Domain {
   template?: boolean
   /** UUID of the template whose disks this machine's disks are overlays on. */
   linkedFrom?: string
+  /** Who created it through VirtoMir (counts against their quota). */
+  owner?: string
   /** Share of the domain's own vCPUs in use (0–100). */
   cpuPercent: number
   /** Running machines, from libvirt bulk stats (absent on the first sample). */
@@ -630,6 +632,20 @@ export interface HostHardware {
   usb: HostUSB[]
 }
 
+export interface QuotaRule {
+  kind: 'user' | 'group'
+  name: string
+  machines: number
+  vcpus: number
+  memoryMiB: number
+}
+
+export interface MyQuota {
+  unlimited: boolean
+  rule?: QuotaRule
+  used?: { machines: number; vcpus: number; memoryMiB: number }
+}
+
 export interface ConfigVersion {
   id: string
   time: string
@@ -730,6 +746,10 @@ export const api = {
   setAutostart: (uuid: string, enabled: boolean) => request<void>('PUT', `${domainPath(uuid)}/autostart`, { enabled }),
   rename: (uuid: string, name: string) => request<void>('POST', `${domainPath(uuid)}/rename`, { name }),
   hostDevices: () => request<HostHardware>('GET', '/api/v1/host/devices'),
+  quotas: async () => (await request<{ rules: QuotaRule[] }>('GET', '/api/v1/quotas')).rules,
+  saveQuotas: async (rules: QuotaRule[], host?: string) =>
+    (await request<{ rules: QuotaRule[] }>('PUT', at(host, '/api/v1/quotas'), { rules })).rules,
+  myQuota: () => request<MyQuota>('GET', '/api/v1/quotas/mine'),
   attachHostdev: (uuid: string, spec: { type: 'pci' | 'usb'; address?: string; vendorId?: string; productId?: string }) =>
     request<{ liveError: string }>('POST', `${domainPath(uuid)}/hostdevs`, spec),
   configVersions: async (uuid: string) =>

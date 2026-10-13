@@ -14,6 +14,8 @@
   import { formatKiB } from '../format'
   import { toasts } from '../toast.svelte'
   import { cluster } from '../cluster.svelte'
+  // The machine's owner (quota self-service): live list entry for this machine.
+  let owner = $derived(live.snapshot?.domains.find((d) => d.uuid === uuid))
 
   let { uuid, active, onsaved }: { uuid: string; active: boolean; onsaved: () => void } = $props()
 
@@ -383,7 +385,7 @@
       </span>
       <button class="ui-btn ghost" onclick={() => view && ((form = pick(view)), (diff = null))} disabled={!dirty || saving}><Undo2 size={14} /> Reset</button>
       <button class="ui-btn" onclick={review} disabled={!dirty || problems.length > 0 || diffBusy}><FileDiff size={14} /> {diffBusy ? 'Comparing…' : 'Review changes'}</button>
-      <button class="ui-btn primary" onclick={save} disabled={!dirty || problems.length > 0 || saving || !session.can('admin')} title={session.why('admin')}><Save size={14} /> {saving ? 'Saving…' : 'Save'}</button>
+      <button class="ui-btn primary" onclick={save} disabled={!dirty || problems.length > 0 || saving || !session.canManage(owner)} title={session.whyManage(owner)}><Save size={14} /> {saving ? 'Saving…' : 'Save'}</button>
     </footer>
     {#if saveErr}<div class="ui-error-box" role="alert">{saveErr}</div>{/if}
   </div>

@@ -19,6 +19,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/cluster"
 	"github.com/onurbaydas/virtomir/internal/confighist"
 	"github.com/onurbaydas/virtomir/internal/jobs"
+	"github.com/onurbaydas/virtomir/internal/quota"
 	"github.com/onurbaydas/virtomir/internal/schedule"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
@@ -99,6 +100,10 @@ type Options struct {
 	Schedules *schedule.Scheduler
 	// Cluster nil: this host cannot join others (no TLS). Fingerprint is this host's TLS
 	// certificate, HostName how members call it, ListenPort where it listens (ADR-0020).
+	// Quotas nil: only admins create machines. GroupsOf names a user's groups for group
+	// rules (default: the Linux groups).
+	Quotas   *quota.Store
+	GroupsOf func(user string) []string
 	// ConfigHistory nil: machine definitions are not versioned.
 	ConfigHistory *confighist.Store
 	Cluster       *cluster.Store
@@ -122,6 +127,8 @@ type Server struct {
 	schedules *schedule.Scheduler
 
 	confighist   *confighist.Store
+	quotas       *quota.Store
+	groupsOf     func(string) []string
 	cluster      *cluster.Store
 	fingerprint  string
 	hostName     string
@@ -131,13 +138,16 @@ type Server struct {
 }
 
 func NewServer(o Options) *Server {
+	if o.GroupsOf == nil {
+		o.GroupsOf = auth.UserGroups
+	}
 	if o.Jobs == nil {
 		o.Jobs = jobs.New(context.Background())
 	}
 	return &Server{backend: o.Backend, live: o.Live, jobs: o.Jobs, auth: o.Auth, ui: o.UI, version: o.Version, log: o.Log,
 		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts, schedules: o.Schedules,
 		cluster: o.Cluster, fingerprint: o.Fingerprint, hostName: o.HostName, listenPort: o.ListenPort,
-		confighist: o.ConfigHistory}
+		confighist: o.ConfigHistory, quotas: o.Quotas, groupsOf: o.GroupsOf}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -166,6 +176,7 @@ func (s *Server) Handler() http.Handler {
 	s.configHistoryRoutes(mux)
 	s.importRoutes(mux)
 	s.hostdevRoutes(mux)
+	s.quotaRoutes(mux)
 
 	// GET-only fallbacks, so a wrong method on a real endpoint still gets 405.
 	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {

@@ -90,3 +90,22 @@ func (g Groups) RoleOf(name string) Role {
 	}
 	return NoAccess
 }
+
+// UserGroups lists the names of the Linux groups a user belongs to (quota rules by group).
+func UserGroups(name string) []string {
+	u, err := user.Lookup(name)
+	if err != nil {
+		return nil
+	}
+	ids, err := u.GroupIds()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, id := range ids {
+		if g, err := user.LookupGroupId(id); err == nil {
+			out = append(out, g.Name)
+		}
+	}
+	return out
+}

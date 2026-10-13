@@ -55,7 +55,7 @@
     {#if live.streamOpen && snap?.connected}
       <span class="live" title="Updated every second"><span class="live-dot"></span>Live</span>
     {/if}
-    {#if session.can('admin')}<a class="ui-btn primary" href="/machines/new" onclick={router.link}><Plus size={15} /> New machine</a>{/if}
+    {#if session.canCreate}<a class="ui-btn primary" href="/machines/new" onclick={router.link}><Plus size={15} /> New machine</a>{/if}
   </div>
 </header>
 

@@ -125,7 +125,7 @@
 
     <div class="section machines-head">
       Machines
-      {#if session.can('admin')}
+      {#if session.canCreate}
         <a class="add" class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} title="New machine" aria-label="New machine">
           <Plus size={14} />
         </a>
