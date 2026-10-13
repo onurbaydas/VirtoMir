@@ -26,6 +26,8 @@ type Client struct {
 
 	mu sync.Mutex
 	l  *libvirt.Libvirt
+
+	metas metaCache
 }
 
 func NewClient(socket string, log *slog.Logger) *Client {
@@ -131,6 +133,10 @@ type Domain struct {
 	CPUTimeNs    uint64      `json:"cpuTimeNs"`
 	Persistent   bool        `json:"persistent"`
 	Autostart    bool        `json:"autostart"`
+	// Template machines never start; they are the source of new machines.
+	Template bool `json:"template,omitempty"`
+	// LinkedFrom is the template whose disks this machine's disks are overlays on.
+	LinkedFrom string `json:"linkedFrom,omitempty"`
 }
 
 func (c *Client) ListDomains() ([]Domain, error) {
@@ -151,6 +157,7 @@ func (c *Client) ListDomains() ([]Domain, error) {
 			c.log.Debug("skipping domain", "name", d.Name, "err", err)
 			continue
 		}
+		c.addMeta(l, d, &s)
 		out = append(out, s)
 	}
 	return out, nil
@@ -186,6 +193,7 @@ func (c *Client) DomainDetail(uuid string) (DomainDetail, error) {
 	if err != nil {
 		return DomainDetail{}, classify(err)
 	}
+	c.addMeta(l, d, &sum)
 	raw, err := l.DomainGetXMLDesc(d, 0)
 	if err != nil {
 		return DomainDetail{}, classify(err)

@@ -5,6 +5,8 @@
   import { ACTIONS, live } from '../live.svelte'
   import { menuItems, primaryAction } from '../machine'
   import ActionMenu, { type MenuItem } from './ActionMenu.svelte'
+  import Rocket from '@lucide/svelte/icons/rocket'
+  import { openDeploy } from '../deploy.svelte'
 
   let { d, size = 'md', extra = [] }: { d: Domain; size?: 'md' | 'lg'; extra?: MenuItem[] } = $props()
 
@@ -14,7 +16,12 @@
 </script>
 
 <div class="actions {size}">
-  {#if primary}
+  {#if d.template}
+    <button class="btn accent" disabled={!session.can('admin')} title={session.why('admin') || 'Create a machine from this template'} onclick={() => openDeploy(d)}>
+      <Rocket size={size === 'lg' ? 15 : 14} strokeWidth={2.25} />
+      New machine
+    </button>
+  {:else if primary}
     {@const Icon = primary.icon}
     <button
       class="btn"

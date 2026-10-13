@@ -38,6 +38,10 @@ export interface Domain {
   cpuTimeNs: number
   persistent: boolean
   autostart: boolean
+  /** Templates never start; new machines are made from them. */
+  template?: boolean
+  /** UUID of the template whose disks this machine's disks are overlays on. */
+  linkedFrom?: string
   /** Share of the domain's own vCPUs in use (0–100). */
   cpuPercent: number
   /** Running machines, from libvirt bulk stats (absent on the first sample). */
@@ -387,6 +391,14 @@ export interface CreateSpec {
   start: boolean
 }
 
+/** POST /api/v1/domains/{uuid}/deploy: a new machine from a template. */
+export interface DeploySpec {
+  name: string
+  linked: boolean
+  cloudInit?: CloudInit
+  start: boolean
+}
+
 export interface CloudInit {
   hostname?: string
   user: string
@@ -557,6 +569,8 @@ export const api = {
     (await send('PUT', `${domainPath(uuid)}/xml`, { body: xml, contentType: 'application/xml' })).json(),
   action: (uuid: string, action: Action) => request<void>('POST', `${domainPath(uuid)}/actions/${action}`),
   create: (spec: CreateSpec) => request<{ uuid: string; startError?: string }>('POST', '/api/v1/domains', spec),
+  setTemplate: (uuid: string, template: boolean) => request<void>('PUT', `${domainPath(uuid)}/template`, { template }),
+  deploy: (uuid: string, spec: DeploySpec) => request<Job>('POST', `${domainPath(uuid)}/deploy`, spec),
   setAutostart: (uuid: string, enabled: boolean) => request<void>('PUT', `${domainPath(uuid)}/autostart`, { enabled }),
   rename: (uuid: string, name: string) => request<void>('POST', `${domainPath(uuid)}/rename`, { name }),
   clone: (uuid: string, name: string) => request<Job>('POST', `${domainPath(uuid)}/clone`, { name }),

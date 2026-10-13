@@ -37,6 +37,8 @@
   import Plus from '@lucide/svelte/icons/plus'
   import Unplug from '@lucide/svelte/icons/unplug'
   import Disc from '@lucide/svelte/icons/disc'
+  import LayoutTemplate from '@lucide/svelte/icons/layout-template'
+  import { machineHref } from '../router.svelte'
   import { errorText } from '../api'
   import { toasts } from '../toast.svelte'
 
@@ -90,6 +92,12 @@
       { label: 'Clone…', icon: CopyPlus, run: () => (dlg = 'clone'), disabled: admin },
     ]
     if (detail.persistent)
+      items.push(
+        dom?.template
+          ? { label: 'Turn into a normal machine', icon: LayoutTemplate, run: () => void setTemplate(false), disabled: admin }
+          : { label: 'Make template…', icon: LayoutTemplate, run: () => (dlg = 'template'), disabled: admin },
+      )
+    if (detail.persistent)
       items.push({
         label: liveDom?.autostart ?? detail.autostart ? 'Don’t start with the host' : 'Start with the host',
         icon: Power,
@@ -99,6 +107,16 @@
     items.push({ label: 'Delete…', icon: Trash, run: () => (dlg = 'delete'), disabled: admin })
     return items
   })
+
+  async function setTemplate(on: boolean) {
+    try {
+      await api.setTemplate(uuid, on)
+      toasts.push({ kind: 'info', title: on ? 'Now a template' : `${detail?.name} is a normal machine again` })
+      await load()
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'Not changed', detail: errorText(e) })
+    }
+  }
 
   async function setAutostart(on: boolean) {
     try {
@@ -287,6 +305,11 @@
             {dom.persistent ? 'persistent' : 'transient'}
           </span>
           {#if dom.autostart}<span class="chip" title="Starts when the host boots">autostart</span>{/if}
+          {#if dom.template}<span class="chip accent" title="Never starts; new machines are made from it"><LayoutTemplate size={12} /> template</span>{/if}
+          {#if dom.linkedFrom}
+            {@const t = live.snapshot?.domains.find((d) => d.uuid === dom.linkedFrom)}
+            <a class="chip link" href={machineHref(dom.linkedFrom)} onclick={router.link} title="Its disks only store changes on top of this template's disks">linked to {t?.name ?? 'template'}</a>
+          {/if}
           <span class="chip mono" title="Firmware">{detail.system.firmware === 'uefi' ? 'UEFI' : 'BIOS'}{detail.system.secureBoot ? ' · Secure Boot' : ''}</span>
           {#if detail.system.machine}<span class="chip mono" title="Machine type">{detail.system.machine}</span>{/if}
         </div>

@@ -20,6 +20,7 @@ export interface Primary {
 
 /** The one obvious next step for the machine's current state. */
 export function primaryAction(d: Domain): Primary | null {
+  if (d.template) return null // its button is "New machine"
   switch (d.state) {
     case 'shutoff':
     case 'crashed':

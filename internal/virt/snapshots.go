@@ -116,6 +116,9 @@ func (c *Client) RevertSnapshot(uuid, name string) error {
 	if err != nil {
 		return err
 	}
+	if err := c.guardTemplate(l, d, "go back to a snapshot"); err != nil {
+		return err
+	}
 	s, err := l.DomainSnapshotLookupByName(d, name, 0)
 	if err != nil {
 		return classify(err)

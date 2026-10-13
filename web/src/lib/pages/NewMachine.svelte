@@ -8,6 +8,8 @@
   import ShieldCheck from '@lucide/svelte/icons/shield-check'
   import ChevronDown from '@lucide/svelte/icons/chevron-down'
   import Rocket from '@lucide/svelte/icons/rocket'
+  import LayoutTemplate from '@lucide/svelte/icons/layout-template'
+  import { openDeploy } from '../deploy.svelte'
   import { api, errorText, type CreateSpec, type Pool, type VNetwork, type Volume } from '../api'
   import { live } from '../live.svelte'
   import { formatBytes, formatKiB } from '../format'
@@ -106,6 +108,7 @@
     for (let i = 2; ; i++) if (!taken.has(`${base}-${i}`)) return `${base}-${i}`
   }
 
+  let templates = $derived((live.snapshot?.domains ?? []).filter((d) => d.template).sort((a, b) => a.name.localeCompare(b.name)))
   let selectedPool = $derived(pools.find((p) => p.name === pool))
   let diskTooBig = $derived(!!selectedPool && withDisk && diskGiB * 2 ** 30 > selectedPool.availableBytes)
   let nameValid = $derived(/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(name))
@@ -177,6 +180,20 @@
 </header>
 
 {#if loadErr}<div class="ui-error-box">{loadErr}</div>{/if}
+
+{#if templates.length}
+  <section class="ui-panel templates">
+    <span class="t-label"><LayoutTemplate size={15} /> Start from a template — ready in seconds</span>
+    <div class="t-list">
+      {#each templates as t (t.uuid)}
+        <button type="button" class="t-card" disabled={!session.can('admin')} onclick={() => openDeploy(t)}>
+          <strong>{t.name}</strong>
+          <span>{t.vcpus} vCPU · {formatKiB(t.maxMemoryKiB)}</span>
+        </button>
+      {/each}
+    </div>
+  </section>
+{/if}
 
 <form class="layout" onsubmit={create}>
   <div class="steps">
@@ -430,6 +447,44 @@
   .steps {
     display: grid;
     gap: 14px;
+  }
+  .templates {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+  }
+  .t-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 13.5px;
+  }
+  .t-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .t-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 10px 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    font: inherit;
+    cursor: pointer;
+  }
+  .t-card:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+  .t-card span {
+    color: var(--text-3);
+    font-size: 12px;
   }
   .step {
     display: flex;
