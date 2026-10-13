@@ -38,6 +38,8 @@
   import Unplug from '@lucide/svelte/icons/unplug'
   import Disc from '@lucide/svelte/icons/disc'
   import LayoutTemplate from '@lucide/svelte/icons/layout-template'
+  import ArrowRightLeft from '@lucide/svelte/icons/arrow-right-left'
+  import { cluster } from '../cluster.svelte'
   import { machineHref } from '../router.svelte'
   import { errorText } from '../api'
   import { toasts } from '../toast.svelte'
@@ -91,6 +93,8 @@
       { label: 'Rename…', icon: Pencil, run: () => (dlg = 'rename'), disabled: admin },
       { label: 'Clone…', icon: CopyPlus, run: () => (dlg = 'clone'), disabled: admin },
     ]
+    if (cluster.clustered && detail.persistent)
+      items.push({ label: 'Move to another host…', icon: ArrowRightLeft, run: () => (dlg = 'move'), disabled: admin })
     if (detail.persistent)
       items.push(
         dom?.template

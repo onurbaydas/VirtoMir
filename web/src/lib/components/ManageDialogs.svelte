@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | 'resize' | 'template' | null
+  export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | 'resize' | 'template' | 'move' | null
 </script>
 
 <script lang="ts">
@@ -10,6 +10,7 @@
   import { formatBytes } from '../format'
   import { machineHref, router } from '../router.svelte'
   import { toasts } from '../toast.svelte'
+  import { cluster } from '../cluster.svelte'
   import Dialog from './Dialog.svelte'
 
   interface Props {
@@ -43,6 +44,10 @@
   let nicModel = $state('virtio')
   let bridge = $state('br0')
   let growGiB = $state(0)
+  let moveHost = $state('')
+  let movePool = $state('')
+  let targetPools = $state<Pool[] | null>(null)
+  let targets = $derived(cluster.members.filter((m) => m.id !== cluster.current?.id && m.reachable))
 
   $effect(() => {
     if (!which) return
@@ -64,6 +69,10 @@
           error = errorText(e)
         }
       })()
+    }
+    if (which === 'move') {
+      moveHost = targets[0]?.id ?? ''
+      targetPools = null
     }
     if (which === 'nic') {
       void api
@@ -115,6 +124,32 @@
       track(job, {
         success: `${newName} is ready`,
         onSuccess: (j) => j.result && router.navigate(machineHref(j.result)),
+      })
+    })
+
+  // Pools of the chosen target host (for copying a stopped machine's disks).
+  $effect(() => {
+    if (which !== 'move' || !moveHost) return
+    const host = moveHost
+    targetPools = null
+    api
+      .poolsOn(host)
+      .then((p) => {
+        if (host !== moveHost) return
+        targetPools = p.filter((x) => x.active && ['dir', 'netfs', 'fs'].includes(x.type))
+        movePool = (targetPools.find((x) => x.name === 'default') ?? targetPools[0])?.name ?? ''
+      })
+      .catch((e) => (error = errorText(e)))
+  })
+
+  const move = () =>
+    run(async () => {
+      const target = cluster.members.find((m) => m.id === moveHost)!
+      const job = await api.move(detail.uuid, moveHost, movePool)
+      onclose()
+      track(job, {
+        success: `${detail.name} is now on ${target.name}`,
+        onSuccess: () => router.go(target.self ? null : target.id, `/machines/${detail.uuid}`),
       })
     })
 
@@ -239,6 +274,46 @@
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={onclose}>Cancel</button>
     <button class="ui-btn primary" form="clone" disabled={busy || !nameOK || active}>Start cloning</button>
+  {/snippet}
+</Dialog>
+
+<Dialog open={which === 'move'} title="Move {detail.name}" subtitle={active ? 'Live migration: it keeps running' : 'To another host of this cluster'} {onclose}>
+  <form id="move" class="form" onsubmit={(e) => (e.preventDefault(), move())}>
+    {#if targets.length === 0}
+      <div class="ui-error-box">No other host of the cluster is reachable right now.</div>
+    {:else}
+      <label class="ui-field">
+        <span class="label">Target host</span>
+        <select class="ui-input" bind:value={moveHost}>
+          {#each targets as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+        </select>
+      </label>
+      {#if !active}
+        <label class="ui-field">
+          <span class="label">Storage pool there</span>
+          <select class="ui-input" bind:value={movePool} disabled={!targetPools?.length}>
+            {#each targetPools ?? [] as p (p.name)}<option value={p.name}>{p.name} · {formatBytes(p.availableBytes)} free</option>{/each}
+          </select>
+          {#if targetPools && !targetPools.length}<span class="hint">That host has no started storage pool for image files.</span>{/if}
+        </label>
+        <ul class="facts">
+          <li>Its disks are copied there ({ownDisks.length} disk{ownDisks.length === 1 ? '' : 's'}); you can keep working meanwhile.</li>
+          <li>Only when it is defined there is it removed here — a failed move changes nothing on this host.</li>
+          <li>CD/DVD media is ejected. Snapshots cannot travel: delete them first.</li>
+        </ul>
+      {:else}
+        <ul class="facts">
+          <li>Memory is copied while the machine keeps running; it pauses only for a moment at the very end.</li>
+          <li>Disks on storage both hosts share (an NFS pool with the same path) are not copied. Other disks are copied live into a pool with the same path there.</li>
+          <li>Both hosts should have the same CPU type, or the guest may not survive the move.</li>
+        </ul>
+      {/if}
+    {/if}
+    {#if error}<div class="ui-error-box">{error}</div>{/if}
+  </form>
+  {#snippet footer()}
+    <button class="ui-btn ghost" onclick={onclose}>Cancel</button>
+    <button class="ui-btn primary" form="move" disabled={busy || !moveHost || (!active && !movePool)}>{active ? 'Migrate live' : 'Move'}</button>
   {/snippet}
 </Dialog>
 

@@ -628,6 +628,10 @@ export const api = {
   setAutostart: (uuid: string, enabled: boolean) => request<void>('PUT', `${domainPath(uuid)}/autostart`, { enabled }),
   rename: (uuid: string, name: string) => request<void>('POST', `${domainPath(uuid)}/rename`, { name }),
   clone: (uuid: string, name: string) => request<Job>('POST', `${domainPath(uuid)}/clone`, { name }),
+  /** Moves a machine to another cluster member: copied when stopped, live-migrated when running. */
+  move: (uuid: string, host: string, pool: string) => request<Job>('POST', `${domainPath(uuid)}/move`, { host, pool }),
+  /** Storage pools of a given member. */
+  poolsOn: async (host: string) => (await request<{ pools: Pool[] }>('GET', onHost(host, '/api/v1/storage/pools'))).pools,
   remove: (uuid: string, removeStorage: boolean) =>
     request<DeleteResult>('DELETE', `${domainPath(uuid)}${removeStorage ? '?storage=remove' : ''}`),
 
