@@ -177,6 +177,7 @@
     <h1>New machine</h1>
     <p class="lead">Pick an operating system and installation media; everything else has a sensible default.</p>
   </div>
+  <a class="ui-btn" href={router.scoped('/machines/import')} onclick={router.link}>Import OVA or XML…</a>
 </header>
 
 {#if loadErr}<div class="ui-error-box">{loadErr}</div>{/if}
