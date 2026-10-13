@@ -11,6 +11,7 @@ import (
 
 	"github.com/onurbaydas/virtomir/internal/activity"
 	"github.com/onurbaydas/virtomir/internal/auth"
+	"github.com/onurbaydas/virtomir/internal/cluster"
 )
 
 type ctxKey int
@@ -30,6 +31,8 @@ func requiredRole(method, path string) auth.Role {
 	switch {
 	case path == "/api/v1/version" || strings.HasPrefix(path, "/api/v1/auth/"):
 		return auth.NoAccess // public: the session probe and sign-in itself
+	case strings.HasPrefix(path, "/api/v1/cluster/peer/"):
+		return auth.NoAccess // host-to-host protocol; the handlers check the peer or the join secret
 	case strings.HasPrefix(path, "/api/v1/tokens"):
 		return auth.Viewer // everyone manages their own tokens (handlers check ownership)
 	case path == "/api/v1/activity":
@@ -65,26 +68,57 @@ func operatorWrite(method, path string) bool {
 	return false
 }
 
-// guard authenticates (session cookie or API token), authorizes by role, rejects cross-site
-// writes and records every change in the activity log.
+// guard authenticates (session cookie, API token or a cluster peer vouching for its user),
+// authorizes by role, rejects cross-site writes, forwards requests for other cluster members
+// and records every change in the activity log.
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
+		peerID, isPeer, peerOK := s.peerIdentity(r)
+		if !peerOK {
+			s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unknown cluster member"})
+			return
+		}
 		unsafe := r.Method != http.MethodGet && r.Method != http.MethodHead
 		bearer, hasBearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		// Tokens are not sent by browsers automatically, so they cannot be used for CSRF.
-		if unsafe && !hasBearer && !sameOrigin(r) {
+		// Tokens and peers are not sent by browsers automatically, so they cannot be used for CSRF.
+		if unsafe && !hasBearer && !isPeer && !sameOrigin(r) {
 			s.writeJSON(w, http.StatusForbidden, map[string]string{"error": "cross-site request refused"})
 			return
 		}
-		if !strings.HasPrefix(path, "/api/") {
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			next.ServeHTTP(w, r) // the UI itself
 			return
 		}
 
+		// /api/v1/hosts/<id>/…: this host serves its own ID, others are forwarded below.
+		var member cluster.Node
+		path := r.URL.Path
+		if hostID, inner, ok := splitHost(path); ok {
+			switch {
+			case s.cluster == nil || hostID == s.cluster.SelfID():
+				r.URL.Path, r.URL.RawPath, path = inner, "", inner
+			case isPeer:
+				s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "members do not forward for each other"})
+				return
+			default:
+				if member, ok = s.cluster.Member(hostID); !ok {
+					s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such host in this cluster"})
+					return
+				}
+				path = inner
+			}
+		}
+
 		need := requiredRole(r.Method, path)
 		id := auth.Identity{Name: "dev", Role: auth.Admin}
-		if s.auth != nil {
+		switch {
+		case isPeer:
+			id = peerID
+			if id.Role == auth.NoAccess && !strings.HasPrefix(path, "/api/v1/cluster/peer/") {
+				s.writeJSON(w, http.StatusForbidden, map[string]string{"error": "members may only call the cluster protocol on their own behalf"})
+				return
+			}
+		case s.auth != nil:
 			var ok bool
 			id, ok = s.authenticate(r, bearer, hasBearer)
 			if !ok && need > auth.NoAccess {
@@ -99,6 +133,20 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			return
 		}
 		r = r.WithContext(context.WithValue(r.Context(), identityKey, id))
+
+		if member.ID != "" {
+			if !unsafe {
+				s.forward(w, r, member, path, id)
+				return
+			}
+			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+			s.forward(rec, r, member, path, id)
+			s.record(activity.Entry{
+				User: id.Name, Token: id.Token, Remote: r.RemoteAddr, Method: r.Method, Path: r.URL.Path,
+				Status: rec.status, Error: rec.errorMessage(),
+			})
+			return
+		}
 
 		if !unsafe || strings.HasPrefix(path, "/api/v1/auth/") {
 			next.ServeHTTP(w, r)

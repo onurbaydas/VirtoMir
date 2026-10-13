@@ -51,6 +51,8 @@ type Identity struct {
 	Role Role   `json:"role"`
 	// Token is the API token name when the request used one.
 	Token string `json:"token,omitempty"`
+	// Via is the cluster member that forwarded the request (ADR-0020); the user signed in there.
+	Via string `json:"via,omitempty"`
 }
 
 // Groups maps Linux groups to roles. Root is always Admin. An empty group name is unused.

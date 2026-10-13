@@ -26,6 +26,14 @@ class AlertStore {
     this.#timer = undefined
   }
 
+  /** Another cluster member: its alerts are not news, so no toasts for the first load. */
+  reset() {
+    this.list = []
+    this.#seen.clear()
+    this.#first = true
+    void this.refresh()
+  }
+
   async refresh() {
     try {
       const list = await api.alerts()

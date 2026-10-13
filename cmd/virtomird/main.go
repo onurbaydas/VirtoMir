@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,6 +21,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/alerts"
 	"github.com/onurbaydas/virtomir/internal/api"
 	"github.com/onurbaydas/virtomir/internal/auth"
+	"github.com/onurbaydas/virtomir/internal/cluster"
 	"github.com/onurbaydas/virtomir/internal/history"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/live"
@@ -39,6 +41,7 @@ type config struct {
 	pamService               string
 	tlsMode, tlsCert, tlsKey string
 	stateDir                 string
+	name                     string
 }
 
 func main() {
@@ -54,6 +57,7 @@ func main() {
 	flag.StringVar(&c.tlsCert, "tls-cert", "", "certificate file for -tls=files")
 	flag.StringVar(&c.tlsKey, "tls-key", "", "private key file for -tls=files")
 	flag.StringVar(&c.stateDir, "state-dir", "/var/lib/virtomir", "where virtomird keeps its own files (TLS certificate)")
+	flag.StringVar(&c.name, "name", "", "how this host is called in a cluster (default: its hostname)")
 	debug := flag.Bool("debug", false, "verbose logging")
 	flag.Parse()
 
@@ -130,12 +134,19 @@ func run(c config, log *slog.Logger) error {
 	go func() { hub.Run(ctx); close(hubDone) }()
 	defer func() { <-hubDone }()
 
+	opts := api.Options{
+		Backend: client, Live: hub, Jobs: jobManager, Auth: authMgr, Schedules: scheduler,
+		UI: web.Dist(), Version: version, Log: log, History: hist, Tokens: tokens, Activity: acts, Alerts: alertEngine,
+	}
+	if err := setupCluster(c, tlsConf, &opts); err != nil {
+		log.Warn("cluster", "err", err)
+	}
+	apiServer := api.NewServer(opts)
+	go syncCluster(ctx, apiServer)
+
 	srv := &http.Server{
-		Addr: c.listen,
-		Handler: api.NewServer(api.Options{
-			Backend: client, Live: hub, Jobs: jobManager, Auth: authMgr, Schedules: scheduler,
-			UI: web.Dist(), Version: version, Log: log, History: hist, Tokens: tokens, Activity: acts, Alerts: alertEngine,
-		}).Handler(),
+		Addr:              c.listen,
+		Handler:           apiServer.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		TLSConfig:         tlsConf,
 	}
@@ -221,4 +232,38 @@ func setupTLS(c config, log *slog.Logger) (*tls.Config, error) {
 		return nil, fmt.Errorf("TLS: %w", err)
 	}
 	return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}, nil
+}
+
+// setupCluster opens -state-dir/cluster.json. Joining other hosts needs TLS: members
+// recognize each other by certificate fingerprint (ADR-0020).
+func setupCluster(c config, tlsConf *tls.Config, o *api.Options) error {
+	_, port, err := net.SplitHostPort(c.listen)
+	if err != nil {
+		return err
+	}
+	o.ListenPort = port
+	o.HostName = c.name
+	if o.HostName == "" {
+		o.HostName, _ = os.Hostname()
+	}
+	if tlsConf == nil || len(tlsConf.Certificates) == 0 || len(tlsConf.Certificates[0].Certificate) == 0 {
+		return nil
+	}
+	o.Fingerprint = cluster.Fingerprint(tlsConf.Certificates[0].Certificate[0])
+	o.Cluster, err = cluster.Open(filepath.Join(c.stateDir, "cluster.json"), o.HostName, o.Fingerprint)
+	return err
+}
+
+// syncCluster lets a host that missed a membership change catch up.
+func syncCluster(ctx context.Context, s *api.Server) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.SyncMembers(ctx)
+		}
+	}
 }

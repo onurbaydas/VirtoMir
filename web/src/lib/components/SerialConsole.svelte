@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { wsURL } from '../api'
   // Text console (serial port / virtio console) with xterm.js over virtomird's WebSocket bridge.
   // Reconnects by itself; takes over a console someone else left open (virsh console).
   import RefreshCw from '@lucide/svelte/icons/refresh-cw'
@@ -33,9 +34,8 @@
     if (destroyed || !term) return
     clearTimeout(timer)
     conn = 'connecting'
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const q = device ? `?device=${encodeURIComponent(device)}` : ''
-    const sock = new WebSocket(`${proto}://${location.host}/api/v1/domains/${encodeURIComponent(uuid)}/console/serial${q}`)
+    const sock = new WebSocket(wsURL(`/api/v1/domains/${encodeURIComponent(uuid)}/console/serial${q}`))
     sock.binaryType = 'arraybuffer'
     ws = sock
     sock.onopen = () => {

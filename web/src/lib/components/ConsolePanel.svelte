@@ -4,7 +4,7 @@
   import Monitor from '@lucide/svelte/icons/monitor'
   import SquareTerminal from '@lucide/svelte/icons/square-terminal'
   import Play from '@lucide/svelte/icons/play'
-  import { api, errorText, type Domain } from '../api'
+  import { api, errorText, scoped, type Domain } from '../api'
   import { isActive, live } from '../live.svelte'
   import { session } from '../session.svelte'
   import VncConsole from './VncConsole.svelte'
@@ -25,7 +25,7 @@
 
   async function load() {
     try {
-      const i = (await fetch(`/api/v1/domains/${encodeURIComponent(d.uuid)}/console/info`).then(async (r) => {
+      const i = (await fetch(scoped(`/api/v1/domains/${encodeURIComponent(d.uuid)}/console/info`)).then(async (r) => {
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? r.statusText)
         return r.json()
       })) as Info
