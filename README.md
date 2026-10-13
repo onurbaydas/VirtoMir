@@ -31,16 +31,20 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - New-machine wizard: install from an ISO, start from a **cloud image with cloud-init** (user, password, SSH keys), or boot an existing disk. Linux, Windows (UEFI + Secure Boot + TPM 2.0) and "other" profiles with sensible defaults
 - Start, shut down, reboot, pause, force off — one by one or **in bulk**
 - Rename, **clone** (full copies, new identity, runs in the background), delete (optionally with its own disks — never shared ones)
+- **Templates**: turn a prepared machine into a template and create new machines from it in seconds — **linked clones** (store only their own changes) or full copies, with optional cloud-init
+- **Console in the browser**: graphical (noVNC) and serial, also full-screen
 - **Settings form** for CPU (topology, model), memory (balloon), boot order, firmware — with a **"review changes" XML diff** before saving; vCPUs and memory are applied live where possible
 - **XML editor** for everything else, validated by libvirt
 - Hardware: add/remove disks and network adapters (hot-plug), insert/eject ISOs, **grow disks**
 - **Snapshots** as a tree: take, revert, delete
+- **Backups**: live (no downtime) or offline, restore as a new machine; **automatic snapshots and backups** on a schedule with retention
 
 ### Monitoring
 
 - Per machine: CPU, per-vCPU load, disk throughput / IOPS / latency, network traffic, guest-reported memory
 - Host CPU, memory, physical disk and network throughput
 - **History** for 1 h, 6 h, 24 h, 7 days and 30 days — kept by VirtoMir itself, no Prometheus needed
+- **Alerts** with sensible defaults (host overloaded, machine crashed, pool filling up, libvirt down) — to a webhook, Slack, Discord, ntfy or e-mail
 
 ### Storage & networks
 
@@ -50,8 +54,10 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 ### Security
 
 - Sign in with your Linux account (**PAM**); only root and members of the `libvirt` group
+- **Roles** from Linux groups: admin (`libvirt`), operator (`virtomir-operator`: run machines, console, snapshots, backups) and viewer (`virtomir-viewer`)
+- **API tokens** for scripts and automation, limited to their owner's role
 - HTTPS by default (self-signed certificate created on first start, or your own)
-- Session timeouts, lockout after failed sign-ins, CSRF protection, audit log of every change
+- Session timeouts, lockout after failed sign-ins, CSRF protection, **activity log** of every change
 
 | | |
 |---|---|
@@ -89,9 +95,11 @@ The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pa
 |---|---|---|
 | `-listen` | `127.0.0.1:8420` (installer: `0.0.0.0:8420`) | address and port |
 | `-auth` | `pam` | `none` disables sign-in — development only |
-| `-auth-group` | `libvirt` | besides root, who may sign in |
+| `-auth-group` | `libvirt` | besides root, who may sign in as admin |
+| `-operator-group` | `virtomir-operator` | members may run machines but not change them |
+| `-viewer-group` | `virtomir-viewer` | members may look but change nothing |
 | `-tls` | `auto` | `auto` (self-signed in `-state-dir`), `files` (`-tls-cert`, `-tls-key`), `off` (behind a TLS proxy) |
-| `-state-dir` | `/var/lib/virtomir` | certificate and metric history |
+| `-state-dir` | `/var/lib/virtomir` | certificate, metric history, alerts, schedules, activity log, tokens; default backup location (`backups/`) |
 | `-libvirt-socket` | `/var/run/libvirt/libvirt-sock` | |
 
 ## Build from source
@@ -117,7 +125,7 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 
 ## Roadmap
 
-In-browser console (noVNC + serial), PCI/USB passthrough with IOMMU insight, multi-host, alerts, configuration history with one-click revert.
+PCI/USB passthrough with IOMMU insight, configuration history with one-click revert, then a small cluster: several hosts in one view, live migration, shared storage.
 
 ## License
 
