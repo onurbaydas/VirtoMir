@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { session } from '../session.svelte'
   // Primary power button + "more" menu for one machine (list rows and the machine page).
   import type { Domain } from '../api'
   import { ACTIONS, live } from '../live.svelte'
@@ -15,7 +16,13 @@
 <div class="actions {size}">
   {#if primary}
     {@const Icon = primary.icon}
-    <button class="btn" class:accent={primary.accent} disabled={!!pending} onclick={() => live.act(d, primary.action)}>
+    <button
+      class="btn"
+      class:accent={primary.accent}
+      disabled={!!pending || !session.can('operator')}
+      title={session.why('operator')}
+      onclick={() => live.act(d, primary.action)}
+    >
       <Icon size={size === 'lg' ? 15 : 14} strokeWidth={2.25} />
       {ACTIONS[primary.action].label}
     </button>

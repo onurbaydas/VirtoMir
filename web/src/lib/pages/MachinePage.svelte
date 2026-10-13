@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { session } from '../session.svelte'
   import ArrowLeft from '@lucide/svelte/icons/arrow-left'
   import Monitor from '@lucide/svelte/icons/monitor'
   import Cpu from '@lucide/svelte/icons/cpu'
@@ -81,17 +82,19 @@
 
   let manageItems = $derived.by((): MenuItem[] => {
     if (!detail) return []
+    const admin = session.why('admin') || undefined
     const items: MenuItem[] = [
-      { label: 'Rename…', icon: Pencil, run: () => (dlg = 'rename') },
-      { label: 'Clone…', icon: CopyPlus, run: () => (dlg = 'clone') },
+      { label: 'Rename…', icon: Pencil, run: () => (dlg = 'rename'), disabled: admin },
+      { label: 'Clone…', icon: CopyPlus, run: () => (dlg = 'clone'), disabled: admin },
     ]
     if (detail.persistent)
       items.push({
         label: liveDom?.autostart ?? detail.autostart ? 'Don’t start with the host' : 'Start with the host',
         icon: Power,
         run: () => void setAutostart(!(liveDom?.autostart ?? detail!.autostart)),
+        disabled: admin,
       })
-    items.push({ label: 'Delete…', icon: Trash, run: () => (dlg = 'delete') })
+    items.push({ label: 'Delete…', icon: Trash, run: () => (dlg = 'delete'), disabled: admin })
     return items
   })
 
@@ -395,8 +398,8 @@
   {:else if tab === 'hardware'}
     <div class="hw" role="tabpanel">
       <div class="hw-tools">
-        <button class="ui-btn sm" onclick={() => (dlg = 'disk')}><Plus size={14} /> Add storage</button>
-        <button class="ui-btn sm" onclick={() => (dlg = 'nic')}><Plus size={14} /> Add network adapter</button>
+        <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'disk')}><Plus size={14} /> Add storage</button>
+        <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'nic')}><Plus size={14} /> Add network adapter</button>
         <span class="hw-hint">{active ? 'Changes are hot-plugged and kept for the next boot.' : 'Other devices: edit the XML.'}</span>
       </div>
       {#each grouped as g (g.key)}
@@ -408,17 +411,17 @@
                 <DeviceCard device={d}>
                   {#snippet actions()}
                     {#if d.kind === 'cdrom' || d.kind === 'floppy'}
-                      <button class="ui-btn sm" onclick={() => ((mediaDrive = d), (dlg = 'media'))}>
+                      <button class="ui-btn sm" disabled={!session.can('operator')} title={session.why('operator')} onclick={() => ((mediaDrive = d), (dlg = 'media'))}>
                         <Disc size={14} /> {d.summary?.endsWith('Empty') ? 'Insert media…' : 'Change media…'}
                       </button>
                     {/if}
                     {#if d.kind === 'disk' && d.target}
-                      <button class="ui-btn sm" onclick={() => ((mediaDrive = d), (dlg = 'resize'))}><Maximize2 size={14} /> Grow…</button>
+                      <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'resize'))}><Maximize2 size={14} /> Grow…</button>
                     {/if}
                     {#if (d.kind === 'disk' || d.kind === 'cdrom') && d.target}
-                      <ConfirmButton label="Remove" confirm="Detach from machine?" icon={Unplug} failure="Could not remove {d.title}" run={() => detachDevice(d)} />
+                      <ConfirmButton label="Remove" confirm="Detach from machine?" icon={Unplug} failure="Could not remove {d.title}" disabled={!session.can('admin')} title={session.why('admin')} run={() => detachDevice(d)} />
                     {:else if d.kind === 'interface' && d.mac}
-                      <ConfirmButton label="Remove" confirm="Unplug this adapter?" icon={Unplug} failure="Could not remove {d.title}" run={() => detachDevice(d)} />
+                      <ConfirmButton label="Remove" confirm="Unplug this adapter?" icon={Unplug} failure="Could not remove {d.title}" disabled={!session.can('admin')} title={session.why('admin')} run={() => detachDevice(d)} />
                     {/if}
                   {/snippet}
                 </DeviceCard>

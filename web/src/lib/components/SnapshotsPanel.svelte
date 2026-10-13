@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { session } from '../session.svelte'
   // Snapshot tree of one machine: take, revert to and delete snapshots.
   import Camera from '@lucide/svelte/icons/camera'
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw'
@@ -79,7 +80,7 @@
       <input class="ui-input" bind:value={name} placeholder="Name (optional, e.g. before-upgrade)" pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" spellcheck="false" />
       <input class="ui-input" bind:value={description} placeholder="Note (optional)" />
     </div>
-    <button class="ui-btn primary" disabled={busy}><Camera size={15} /> {busy ? 'Taking…' : 'Take snapshot'}</button>
+    <button class="ui-btn primary" disabled={busy || !session.can('operator')} title={session.why('operator')}><Camera size={15} /> {busy ? 'Taking…' : 'Take snapshot'}</button>
   </form>
   <p class="hint">
     {active
@@ -113,6 +114,8 @@
               label="Revert"
               confirm="Lose changes since then?"
               icon={RotateCcw}
+              disabled={!session.can('operator')}
+              title={session.why('operator')}
               failure="Could not revert to {s.name}"
               run={async () => {
                 await api.revertSnapshot(uuid, s.name)
@@ -125,6 +128,8 @@
               label="Delete"
               confirm="Delete snapshot?"
               icon={Trash}
+              disabled={!session.can('admin')}
+              title={session.why('admin')}
               failure="Could not delete {s.name}"
               run={async () => {
                 await api.deleteSnapshot(uuid, s.name)

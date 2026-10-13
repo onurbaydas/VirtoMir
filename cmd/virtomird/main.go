@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/activity"
 	"github.com/onurbaydas/virtomir/internal/api"
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/history"
@@ -31,6 +32,8 @@ var version = "dev"
 type config struct {
 	listen, socket           string
 	authMode, authGroup      string
+	operatorGroup            string
+	viewerGroup              string
 	pamService               string
 	tlsMode, tlsCert, tlsKey string
 	stateDir                 string
@@ -41,7 +44,9 @@ func main() {
 	flag.StringVar(&c.listen, "listen", "127.0.0.1:8420", "HTTP(S) listen address")
 	flag.StringVar(&c.socket, "libvirt-socket", virt.DefaultSocket, "libvirt UNIX socket")
 	flag.StringVar(&c.authMode, "auth", "pam", `sign-in: "pam" (Linux accounts) or "none" (development only)`)
-	flag.StringVar(&c.authGroup, "auth-group", "libvirt", "besides root, only members of this group may sign in")
+	flag.StringVar(&c.authGroup, "auth-group", "libvirt", "members of this group (and root) are admins")
+	flag.StringVar(&c.operatorGroup, "operator-group", "virtomir-operator", "members may run machines (power, console, snapshots) but not change them")
+	flag.StringVar(&c.viewerGroup, "viewer-group", "virtomir-viewer", "members may look at everything but change nothing")
 	flag.StringVar(&c.pamService, "pam-service", "virtomir", "PAM service name (/etc/pam.d/<name>)")
 	flag.StringVar(&c.tlsMode, "tls", "auto", `"auto" (self-signed certificate in -state-dir), "files" (-tls-cert/-tls-key) or "off"`)
 	flag.StringVar(&c.tlsCert, "tls-cert", "", "certificate file for -tls=files")
@@ -78,6 +83,15 @@ func run(c config, log *slog.Logger) error {
 	client := virt.NewClient(c.socket, log)
 	defer client.Close()
 
+	tokens, err := auth.OpenTokens(filepath.Join(c.stateDir, "tokens.json"))
+	if err != nil {
+		log.Warn("API tokens", "err", err)
+	}
+	acts, err := activity.Open(filepath.Join(c.stateDir, "activity.jsonl"))
+	if err != nil {
+		log.Warn("activity log", "err", err)
+	}
+
 	hist, err := history.Open(filepath.Join(c.stateDir, "history.gob"))
 	if err != nil {
 		log.Warn("metric history", "err", err)
@@ -99,7 +113,7 @@ func run(c config, log *slog.Logger) error {
 		Addr: c.listen,
 		Handler: api.NewServer(api.Options{
 			Backend: client, Live: hub, Jobs: jobs.New(ctx), Auth: authMgr,
-			UI: web.Dist(), Version: version, Log: log, History: hist,
+			UI: web.Dist(), Version: version, Log: log, History: hist, Tokens: tokens, Activity: acts,
 		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		TLSConfig:         tlsConf,
@@ -160,7 +174,8 @@ func setupAuth(c config, log *slog.Logger) (*auth.Manager, error) {
 		if !auth.PAMAvailable {
 			return nil, errors.New("this build has no PAM support; rebuild with CGO_ENABLED=1 -tags pam, or use -auth=none for development")
 		}
-		return auth.New(auth.PAM{Service: c.pamService}, auth.GroupCheck(c.authGroup)), nil
+		groups := auth.Groups{Admin: c.authGroup, Operator: c.operatorGroup, Viewer: c.viewerGroup}
+		return auth.New(auth.PAM{Service: c.pamService}, groups.RoleOf), nil
 	}
 	return nil, fmt.Errorf("unknown -auth %q (pam or none)", c.authMode)
 }

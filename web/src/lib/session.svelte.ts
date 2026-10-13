@@ -1,12 +1,25 @@
 // Who is signed in. Any 401 from the API flips the app to the sign-in page.
 
-import { api, setUnauthorizedHandler, type Session } from './api'
+import { api, setUnauthorizedHandler, type Role, type Session } from './api'
+
+const RANK: Record<Role, number> = { viewer: 1, operator: 2, admin: 3 }
 
 class SessionStore {
   /** null until the first check finished. */
   info = $state<Session | null>(null)
   /** Signed in, or sign-in disabled (development mode). */
   ready = $derived(this.info !== null && (this.info.mode === 'none' || !!this.info.user))
+  role = $derived<Role>(this.info?.role ?? (this.info?.mode === 'none' ? 'admin' : 'viewer'))
+
+  /** Whether the signed-in user's role includes `need`. */
+  can(need: Role): boolean {
+    return RANK[this.role] >= RANK[need]
+  }
+
+  /** Tooltip for controls the role does not allow ('' when allowed). */
+  why(need: Role): string {
+    return this.can(need) ? '' : `Needs the ${need} role — you are ${this.role === 'viewer' ? 'a viewer' : `an ${this.role}`}.`
+  }
 
   constructor() {
     setUnauthorizedHandler(() => {

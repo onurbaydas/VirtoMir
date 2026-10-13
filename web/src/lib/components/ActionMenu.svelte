@@ -8,6 +8,8 @@
     /** Requires a confirming second click; shown in red. */
     danger?: { confirm: string }
     hint?: string
+    /** Set to the reason when the item is not allowed (e.g. missing role). */
+    disabled?: string
   }
 </script>
 
@@ -39,6 +41,7 @@
 
   function choose(i: number) {
     const item = items[i]
+    if (item.disabled) return
     if (item.danger && armed !== i) {
       armed = i
       return
@@ -89,7 +92,8 @@
           class:danger={item.danger}
           class:armed={armed === i}
           onclick={() => choose(i)}
-          title={item.hint}
+          title={item.disabled || item.hint}
+          disabled={!!item.disabled}
         >
           <Icon size={15} />
           <span>{armed === i && item.danger ? item.danger.confirm : item.label}</span>
@@ -158,8 +162,12 @@
     white-space: nowrap;
     cursor: pointer;
   }
-  .item:hover {
+  .item:hover:not(:disabled) {
     background: var(--surface-hover);
+  }
+  .item:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
   .item.danger {
     color: var(--danger);

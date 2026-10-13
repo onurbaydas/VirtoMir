@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { session } from '../session.svelte'
   // The common settings as a form. Form and XML editor read and write the same persistent
   // definition; "Review changes" shows exactly what the form will change in the XML.
   import ArrowUp from '@lucide/svelte/icons/arrow-up'
@@ -285,7 +286,7 @@
       </span>
       <button class="ui-btn ghost" onclick={() => view && ((form = pick(view)), (diff = null))} disabled={!dirty || saving}><Undo2 size={14} /> Reset</button>
       <button class="ui-btn" onclick={review} disabled={!dirty || problems.length > 0 || diffBusy}><FileDiff size={14} /> {diffBusy ? 'Comparing…' : 'Review changes'}</button>
-      <button class="ui-btn primary" onclick={save} disabled={!dirty || problems.length > 0 || saving}><Save size={14} /> {saving ? 'Saving…' : 'Save'}</button>
+      <button class="ui-btn primary" onclick={save} disabled={!dirty || problems.length > 0 || saving || !session.can('admin')} title={session.why('admin')}><Save size={14} /> {saving ? 'Saving…' : 'Save'}</button>
     </footer>
     {#if saveErr}<div class="ui-error-box" role="alert">{saveErr}</div>{/if}
   </div>

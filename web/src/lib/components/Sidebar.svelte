@@ -9,6 +9,7 @@
   import Plus from '@lucide/svelte/icons/plus'
   import LogOut from '@lucide/svelte/icons/log-out'
   import UserRound from '@lucide/svelte/icons/user-round'
+  import ClockArrowUp from '@lucide/svelte/icons/clock-arrow-up'
   import { session } from '../session.svelte'
   import { isActive, live } from '../live.svelte'
   import { machineHref, router } from '../router.svelte'
@@ -27,11 +28,13 @@
     pending: 'Connecting…',
   }
 
-  const NAV = [
-    { name: 'overview', href: '/', label: 'Overview', icon: LayoutDashboard },
-    { name: 'storage', href: '/storage', label: 'Storage', icon: HardDrive },
-    { name: 'networks', href: '/networks', label: 'Networks', icon: Network },
+  const ALL_NAV = [
+    { name: 'overview', href: '/', label: 'Overview', icon: LayoutDashboard, role: 'viewer' },
+    { name: 'storage', href: '/storage', label: 'Storage', icon: HardDrive, role: 'viewer' },
+    { name: 'networks', href: '/networks', label: 'Networks', icon: Network, role: 'viewer' },
+    { name: 'activity', href: '/activity', label: 'Activity', icon: ClockArrowUp, role: 'admin' },
   ] as const
+  let NAV = $derived(ALL_NAV.filter((n) => session.can(n.role)))
 
   let domains = $derived(live.snapshot?.domains ?? [])
   let current = $derived(router.route.name === 'machine' ? router.route.uuid : null)
@@ -87,9 +90,11 @@
 
     <div class="section machines-head">
       Machines
-      <a class="add" class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} title="New machine" aria-label="New machine">
-        <Plus size={14} />
-      </a>
+      {#if session.can('admin')}
+        <a class="add" class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} title="New machine" aria-label="New machine">
+          <Plus size={14} />
+        </a>
+      {/if}
     </div>
     {#if domains.length}
       <div class="machines">
@@ -115,11 +120,15 @@
     {/if}
   </nav>
 
-  {#if session.info?.user}
+  {#if session.info}
     <div class="user">
-      <span class="avatar"><UserRound size={14} /></span>
-      <span class="uname">{session.info.user}</span>
-      <button class="logout" title="Sign out" aria-label="Sign out" onclick={() => session.logout()}><LogOut size={15} /></button>
+      <a class="who" class:active={router.route.name === 'account'} href="/account" onclick={router.link} title="Your role and API tokens">
+        <span class="avatar"><UserRound size={14} /></span>
+        <span class="uname">{session.info.user ?? 'dev mode'}<small>{session.role}</small></span>
+      </a>
+      {#if session.info.user}
+        <button class="logout" title="Sign out" aria-label="Sign out" onclick={() => session.logout()}><LogOut size={15} /></button>
+      {/if}
     </div>
   {/if}
   <footer>
@@ -292,13 +301,36 @@
     background: var(--surface-2);
     color: var(--text-2);
   }
+  .who {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 4px;
+    margin: -4px;
+    border-radius: 8px;
+    color: inherit;
+    text-decoration: none;
+  }
+  .who:hover,
+  .who.active {
+    background: var(--surface-hover);
+  }
   .uname {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 13px;
     font-weight: 500;
+  }
+  .uname small {
+    color: var(--text-3);
+    font-size: 11px;
+    font-weight: 400;
   }
   .logout {
     display: grid;

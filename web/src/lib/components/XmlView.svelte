@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { session } from '../session.svelte'
   import Copy from '@lucide/svelte/icons/copy'
   import Download from '@lucide/svelte/icons/download'
   import RefreshCw from '@lucide/svelte/icons/refresh-cw'
@@ -97,7 +98,7 @@
     <button class="tool" onclick={() => xml && copy(xml, 'XML')} disabled={!xml}><Copy size={14} /> Copy</button>
     <button class="tool" onclick={download} disabled={!xml}><Download size={14} /> Download</button>
     {#if persistent || !active}
-      <button class="tool edit" onclick={() => (editing = true)}><Pencil size={14} /> Edit</button>
+      <button class="tool edit" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (editing = true)}><Pencil size={14} /> Edit</button>
     {/if}
   </header>
 

@@ -9,6 +9,7 @@ import Copy from '@lucide/svelte/icons/copy'
 import type { Action, Domain } from './api'
 import { isActive, live } from './live.svelte'
 import { toasts } from './toast.svelte'
+import { session } from './session.svelte'
 import type { MenuItem } from './components/ActionMenu.svelte'
 
 export interface Primary {
@@ -38,9 +39,10 @@ export function primaryAction(d: Domain): Primary | null {
 export function menuItems(d: Domain): MenuItem[] {
   const items: MenuItem[] = []
   const act = (a: Action) => () => live.act(d, a)
+  const disabled = session.why('operator') || undefined
   if (d.state === 'running' || d.state === 'blocked') {
-    items.push({ label: 'Reboot', icon: RotateCw, run: act('reboot') })
-    items.push({ label: 'Pause', icon: Pause, run: act('pause') })
+    items.push({ label: 'Reboot', icon: RotateCw, run: act('reboot'), disabled })
+    items.push({ label: 'Pause', icon: Pause, run: act('pause'), disabled })
   }
   if (isActive(d.state) || d.state === 'paused') {
     items.push({
@@ -48,6 +50,7 @@ export function menuItems(d: Domain): MenuItem[] {
       icon: Zap,
       run: act('force-off'),
       danger: { confirm: 'Click again to force off' },
+      disabled,
       hint: 'Cuts power immediately (virsh destroy). Unsaved data in the guest is lost.',
     })
   }

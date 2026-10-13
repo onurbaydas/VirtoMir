@@ -1,6 +1,7 @@
-// Package auth signs people in with their Linux account (PAM, like Cockpit) and keeps
-// browser sessions. Only root and members of the admin group (default "libvirt", the group
-// that may manage VMs anyway) are let in.
+// Package auth signs people in with their Linux account (PAM, like Cockpit), keeps browser
+// sessions and API tokens, and decides roles: root and the admin group (default "libvirt",
+// the group that may manage VMs anyway) are admins; optional operator and viewer groups get
+// less (see roles.go).
 package auth
 
 import (
@@ -10,8 +11,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"os/user"
-	"slices"
 	"sync"
 	"time"
 )
@@ -20,31 +19,12 @@ import (
 // the user exists.
 var ErrBadCredentials = errors.New("wrong user name or password")
 
-// ErrNotAllowed: the password was right but the account may not manage VMs.
-var ErrNotAllowed = errors.New("this account is not allowed to manage virtual machines")
+// ErrNotAllowed: the password was right but the account has no VirtoMir role.
+var ErrNotAllowed = errors.New("this account is not allowed to use VirtoMir")
 
 // Authenticator checks a user name and password.
 type Authenticator interface {
 	Authenticate(ctx context.Context, user, password string) error
-}
-
-// GroupCheck allows root and members of group.
-func GroupCheck(group string) func(name string) bool {
-	return func(name string) bool {
-		u, err := user.Lookup(name)
-		if err != nil {
-			return false
-		}
-		if u.Uid == "0" {
-			return true
-		}
-		g, err := user.LookupGroup(group)
-		if err != nil {
-			return false
-		}
-		ids, err := u.GroupIds()
-		return err == nil && slices.Contains(ids, g.Gid)
-	}
 }
 
 const (
@@ -56,24 +36,26 @@ const (
 
 type session struct {
 	user     string
+	role     Role
 	created  time.Time
 	lastSeen time.Time
 }
 
 // Manager owns sessions and the login rate limit. The zero value is not usable; use New.
 type Manager struct {
-	authn   Authenticator
-	allowed func(user string) bool
-	now     func() time.Time
+	authn  Authenticator
+	roleOf func(user string) Role
+	now    func() time.Time
 
 	mu       sync.Mutex
 	sessions map[string]*session
 	failures map[string][]time.Time // remote IP → recent failed logins
 }
 
-func New(authn Authenticator, allowed func(string) bool) *Manager {
+// New returns a manager. roleOf decides each user's role at sign-in (NoAccess refuses).
+func New(authn Authenticator, roleOf func(string) Role) *Manager {
 	return &Manager{
-		authn: authn, allowed: allowed, now: time.Now,
+		authn: authn, roleOf: roleOf, now: time.Now,
 		sessions: map[string]*session{}, failures: map[string][]time.Time{},
 	}
 }
@@ -104,35 +86,39 @@ func (m *Manager) Login(ctx context.Context, remote, name, password string) (str
 		}
 		return "", err
 	}
-	if !m.allowed(name) {
+	role := m.roleOf(name)
+	if role == NoAccess {
 		m.fail(ip)
 		return "", ErrNotAllowed
 	}
 	token := newToken()
 	now := m.now()
 	m.mu.Lock()
-	m.sessions[token] = &session{user: name, created: now, lastSeen: now}
+	m.sessions[token] = &session{user: name, role: role, created: now, lastSeen: now}
 	delete(m.failures, ip)
 	m.mu.Unlock()
 	return token, nil
 }
 
-// User returns the session's user and refreshes its idle timer.
-func (m *Manager) User(token string) (string, bool) {
+// User returns the session's identity and refreshes its idle timer.
+func (m *Manager) User(token string) (Identity, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s, ok := m.sessions[token]
 	if !ok {
-		return "", false
+		return Identity{}, false
 	}
 	now := m.now()
 	if now.Sub(s.lastSeen) > IdleTimeout || now.Sub(s.created) > MaxAge {
 		delete(m.sessions, token)
-		return "", false
+		return Identity{}, false
 	}
 	s.lastSeen = now
-	return s.user, true
+	return Identity{Name: s.user, Role: s.role}, true
 }
+
+// RoleOf is the user's current role (group memberships are re-read).
+func (m *Manager) RoleOf(user string) Role { return m.roleOf(user) }
 
 // Valid reports whether the session still exists, without refreshing it (for long streams).
 func (m *Manager) Valid(token string) bool {
@@ -181,8 +167,8 @@ func (m *Manager) recentFailures(ip string) []time.Time {
 	return kept
 }
 
-// Token returns the session token of a request ("" when none).
-func Token(r *http.Request) string {
+// SessionToken returns the session cookie of a request ("" when none).
+func SessionToken(r *http.Request) string {
 	c, err := r.Cookie(CookieName)
 	if err != nil {
 		return ""

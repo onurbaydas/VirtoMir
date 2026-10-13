@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { session } from '../session.svelte'
   import Search from '@lucide/svelte/icons/search'
   import MonitorOff from '@lucide/svelte/icons/monitor-off'
   import { isActive, live } from '../live.svelte'
@@ -101,7 +102,7 @@
   <div class="table" role="table" aria-label="Virtual machines">
     <div class="colhead" role="row">
       <span role="columnheader" class="name-h">
-        {#if shown.length}
+        {#if shown.length && session.can('operator')}
           <input type="checkbox" checked={allShown} aria-label="Select all shown machines" onchange={(e) => selectAll(e.currentTarget.checked)} />
         {/if}
         Name
@@ -123,7 +124,7 @@
         {#if counts.all === 0}
           <strong>No virtual machines on this host yet</strong>
           <span>Create one here, or with virt-manager or virsh — it appears instantly.</span>
-          <a class="ui-btn primary new" href="/machines/new" onclick={router.link}>New machine</a>
+          {#if session.can('admin')}<a class="ui-btn primary new" href="/machines/new" onclick={router.link}>New machine</a>{/if}
         {:else}
           <strong>Nothing matches</strong>
           <button class="link" onclick={() => ((filter = 'all'), (query = ''))}>Show all machines</button>
@@ -131,7 +132,7 @@
       </div>
     {:else}
       {#each shown as d (d.uuid)}
-        <MachineRow {d} selected={selected.has(d.uuid)} onselect={(on) => select(d.uuid, on)} />
+        <MachineRow {d} selected={selected.has(d.uuid)} onselect={session.can('operator') ? (on) => select(d.uuid, on) : undefined} />
       {/each}
     {/if}
   </div>
