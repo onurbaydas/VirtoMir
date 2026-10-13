@@ -209,6 +209,10 @@ type NetworkSpec struct {
 	Subnet string `json:"subnet,omitempty"` // e.g. 192.168.100.0/24
 	DHCP   bool   `json:"dhcp"`
 	Bridge string `json:"bridge,omitempty"` // host bridge, bridge mode only
+	// OVS: the host bridge is an Open vSwitch bridge (bridge mode). VLAN tags every
+	// machine on this network (bridge mode with OVS); 0 = untagged.
+	OVS  bool `json:"ovs,omitempty"`
+	VLAN uint `json:"vlan,omitempty"`
 }
 
 // buildNetwork turns a spec into network XML: gateway .1, DHCP .2 to the last usable address.
@@ -224,7 +228,25 @@ func buildNetwork(spec NetworkSpec) (*libvirtxml.Network, error) {
 		}
 		x.Forward = &libvirtxml.NetworkForward{Mode: "bridge"}
 		x.Bridge = &libvirtxml.NetworkBridge{Name: spec.Bridge}
+		if spec.OVS {
+			x.VirtualPort = &libvirtxml.NetworkVirtualPort{Params: &libvirtxml.NetworkVirtualPortParams{OpenVSwitch: &libvirtxml.NetworkVirtualPortParamsOpenVSwitch{}}}
+		}
+		if spec.VLAN != 0 {
+			if !spec.OVS {
+				return nil, invalidf("VLAN tags on a bridge network need an Open vSwitch bridge; on a plain Linux bridge, use a bridge on the VLAN interface (e.g. br0.10) instead.")
+			}
+			if spec.VLAN > 4094 {
+				return nil, invalidf("A VLAN ID is between 1 and 4094.")
+			}
+			x.VLAN = &libvirtxml.NetworkVLAN{Tags: []libvirtxml.NetworkVLANTag{{ID: spec.VLAN}}}
+		}
 		return x, nil
+	case "nat", "route", "isolated", "open":
+		if spec.VLAN != 0 || spec.OVS {
+			return nil, invalidf("VLAN tags and Open vSwitch apply to bridge networks only.")
+		}
+	}
+	switch spec.Mode {
 	case "nat", "route":
 		x.Forward = &libvirtxml.NetworkForward{Mode: spec.Mode}
 	case "isolated":

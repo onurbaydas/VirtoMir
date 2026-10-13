@@ -118,3 +118,32 @@ func TestPoolXMLSAN(t *testing.T) {
 		}
 	}
 }
+
+func TestNetworkVLAN(t *testing.T) {
+	x, err := buildNetwork(NetworkSpec{Name: "lab10", Mode: "bridge", Bridge: "ovsbr0", OVS: true, VLAN: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := x.Marshal()
+	for _, want := range []string{`<forward mode="bridge">`, `<bridge name="ovsbr0">`, `<virtualport type="openvswitch">`, `<tag id="10">`} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("missing %s in\n%s", want, doc)
+		}
+	}
+	for _, bad := range []NetworkSpec{
+		{Name: "a", Mode: "bridge", Bridge: "br0", VLAN: 10},              // Linux bridge + tag
+		{Name: "a", Mode: "bridge", Bridge: "br0", OVS: true, VLAN: 5000}, // out of range
+		{Name: "a", Mode: "nat", Subnet: "192.168.50.0/24", VLAN: 10},     // NAT + tag
+	} {
+		if _, err := buildNetwork(bad); err == nil {
+			t.Errorf("accepted %+v", bad)
+		}
+	}
+	nic, err := buildNIC(NICSpec{Network: "lab10", VLAN: 20})
+	if err != nil || nic.VLan == nil || nic.VLan.Tags[0].ID != 20 {
+		t.Errorf("nic vlan: %+v %v", nic.VLan, err)
+	}
+	if _, err := buildNIC(NICSpec{Network: "lab10", VLAN: 4095}); err == nil {
+		t.Error("vlan 4095 accepted")
+	}
+}
