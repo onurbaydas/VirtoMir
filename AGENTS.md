@@ -48,10 +48,14 @@ cmd/virtomird/       ← daemon entry point (Go, ADR-0006)
 internal/virt/       ← libvirt gateway: connection, reconnect, libvirt → VirtoMir types
                        detail.go: domain XML (libvirtxml) → machine page model, fixtures in testdata/
                        manage/devices/snapshots/storage/networks/create.go: the management operations (ADR-0011)
+                       console.go (ADR-0016), backup.go (ADR-0018), template.go: templates, linked clones, <metadata> (ADR-0019)
 internal/live/       ← 1 s sampling hub + 60 s backlog, per-VM bulk stats, host /proc I/O (SSE)
 internal/api/        ← HTTP/JSON API (/api/v1), sign-in guard, SSE stream, serves the embedded UI
-internal/auth/       ← PAM (build tag `pam`), sessions, lockout, self-signed TLS (ADR-0010)
-internal/jobs/       ← background jobs (clone) the UI polls
+internal/auth/       ← PAM (build tag `pam`), sessions, lockout, self-signed TLS (ADR-0010), roles + API tokens (ADR-0015)
+internal/activity/   ← who did what: -state-dir/activity.jsonl (ADR-0015)
+internal/alerts/     ← alert rules on live snapshots, webhook/e-mail channels (ADR-0017)
+internal/schedule/   ← automatic snapshots/backups with retention (ADR-0018)
+internal/jobs/       ← background jobs (clone, backup, restore, deploy) the UI polls
 internal/history/    ← metric history rings, saved to -state-dir/history.gob (ADR-0013)
 packaging/           ← /etc/pam.d/virtomir, systemd unit
 .github/workflows/   ← CI (tests, race, PAM build, shellcheck) and releases on v* tags
@@ -60,7 +64,8 @@ docs/screenshots/    ← README images (taken from the mock UI)
 web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embedded into virtomird
   src/app.css        ← design tokens (colors, radii, motion) — use these, never hard-coded colors
   src/lib/           ← api client, live/session stores, router, components (Dialog, ConfirmButton, …)
-  src/lib/pages/     ← Overview, MachinePage (#settings|#hardware|#snapshots|#xml), NewMachine, Storage, Networks, Login
+  src/lib/pages/     ← Overview, MachinePage (#console|#settings|#hardware|#snapshots|#backups|#xml), NewMachine, Storage,
+                       Networks, Backups, Alerts, Activity, Account, Console (full-screen /console/<uuid>), Login
 ```
 
 ## 5. Build, test, run
