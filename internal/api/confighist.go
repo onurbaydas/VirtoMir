@@ -9,7 +9,7 @@ import (
 )
 
 // Configuration history of a machine (ADR-0021): every saved definition, compare, revert.
-func (s *Server) configHistoryRoutes(mux *http.ServeMux) {
+func (s *Server) configHistoryRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/config-history", s.listConfigVersions)
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/config-history/{id}", s.getConfigVersion)
 	mux.HandleFunc("POST /api/v1/domains/{uuid}/config-history/{id}/revert", s.revertConfigVersion)

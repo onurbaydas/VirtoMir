@@ -6,7 +6,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
-func (s *Server) storageRoutes(mux *http.ServeMux) {
+func (s *Server) storageRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/storage/pools", s.listPools)
 	mux.HandleFunc("POST /api/v1/storage/pools", s.createPool)
 	mux.HandleFunc("DELETE /api/v1/storage/pools/{pool}", s.deletePool)

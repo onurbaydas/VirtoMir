@@ -19,7 +19,7 @@ import (
 
 // External sign-in endpoints (ADR-0023). start/callback are public (the guard lets
 // /api/v1/auth/* through); the configuration is admin-only.
-func (s *Server) externalAuthRoutes(mux *http.ServeMux) {
+func (s *Server) externalAuthRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/auth/methods", s.authMethods)
 	mux.HandleFunc("GET /api/v1/auth/oidc/start", s.oidcStart)
 	mux.HandleFunc("GET /api/v1/auth/oidc/callback", s.oidcCallback)

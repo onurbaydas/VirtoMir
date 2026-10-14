@@ -15,7 +15,7 @@ type HistoryQuerier interface {
 	Query(names []string, rng time.Duration, now time.Time) (history.Result, error)
 }
 
-func (s *Server) extraRoutes(mux *http.ServeMux) {
+func (s *Server) extraRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/settings", s.getSettings)
 	mux.HandleFunc("POST /api/v1/domains/{uuid}/settings/preview", s.previewSettings)
 	mux.HandleFunc("PUT /api/v1/domains/{uuid}/settings", s.saveSettings)

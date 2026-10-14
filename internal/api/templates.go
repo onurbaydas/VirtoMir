@@ -15,7 +15,7 @@ type Templater interface {
 	Deploy(ctx context.Context, template string, spec virt.DeploySpec, report func(string)) (string, error)
 }
 
-func (s *Server) templateRoutes(mux *http.ServeMux) {
+func (s *Server) templateRoutes(mux *routeMux) {
 	mux.HandleFunc("PUT /api/v1/domains/{uuid}/template", s.setTemplate)
 	mux.HandleFunc("POST /api/v1/domains/{uuid}/deploy", s.deploy)
 }

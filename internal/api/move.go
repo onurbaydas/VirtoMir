@@ -23,7 +23,7 @@ type Mover interface {
 	AdoptDomain(xml string) (string, error)
 }
 
-func (s *Server) moveRoutes(mux *http.ServeMux) {
+func (s *Server) moveRoutes(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/domains/{uuid}/move", s.moveDomain)
 	mux.HandleFunc("POST /api/v1/domains/import", s.importDomain)
 }

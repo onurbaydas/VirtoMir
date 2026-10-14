@@ -13,7 +13,7 @@ type OVAImporter interface {
 	ImportOVA(ctx context.Context, pool, name string, r io.Reader, report func(string)) (virt.CreateResult, error)
 }
 
-func (s *Server) importRoutes(mux *http.ServeMux) {
+func (s *Server) importRoutes(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/storage/pools/{pool}/import-ova", s.importOVA)
 }
 

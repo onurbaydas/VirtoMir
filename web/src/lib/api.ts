@@ -710,8 +710,32 @@ export interface Invite {
   expires: string
 }
 
+/** One row of the API reference, from GET /api/v1/openapi.json. */
+export interface ApiEndpoint {
+  method: string
+  path: string
+  summary: string
+  role: string
+}
+
+interface OpenAPIDoc {
+  paths: Record<string, Record<string, { summary?: string; description?: string }>>
+}
+
 export const api = {
   streamURL: () => scoped('/api/v1/stream'),
+
+  endpoints: async (): Promise<ApiEndpoint[]> => {
+    const doc = await request<OpenAPIDoc>('GET', '/api/v1/openapi.json')
+    const out: ApiEndpoint[] = []
+    for (const [path, ops] of Object.entries(doc.paths)) {
+      for (const [method, op] of Object.entries(ops)) {
+        const role = /role: (\w+)/.exec(op.description ?? '')?.[1] ?? 'public'
+        out.push({ method: method.toUpperCase(), path, summary: op.summary ?? '', role })
+      }
+    }
+    return out.sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method))
+  },
 
   cluster: () => request<ClusterInfo>('GET', '/api/v1/cluster'),
   /** A named CPU model every cluster member supports (for migration between different hosts). */

@@ -12,7 +12,7 @@ type HostDevicer interface {
 	AttachHostdev(uuid string, spec virt.HostdevSpec) (string, error)
 }
 
-func (s *Server) hostdevRoutes(mux *http.ServeMux) {
+func (s *Server) hostdevRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/host/devices", s.hostDevices)
 	mux.HandleFunc("POST /api/v1/domains/{uuid}/hostdevs", s.attachHostdev)
 }

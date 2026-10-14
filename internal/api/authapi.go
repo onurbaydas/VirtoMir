@@ -7,7 +7,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/auth"
 )
 
-func (s *Server) authRoutes(mux *http.ServeMux) {
+func (s *Server) authRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/auth/session", s.getSession)
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", s.logout)

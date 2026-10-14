@@ -6,7 +6,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/alerts"
 )
 
-func (s *Server) alertRoutes(mux *http.ServeMux) {
+func (s *Server) alertRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/alerts", s.listAlerts)
 	mux.HandleFunc("POST /api/v1/alerts/{id}/ack", s.ackAlert)
 	mux.HandleFunc("GET /api/v1/alerts/config", s.getAlertConfig)
