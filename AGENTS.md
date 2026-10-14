@@ -40,7 +40,7 @@ All project memory lives in the repo under [`.ai/`](.ai/README.md) so that **any
 AGENTS.md            ← you are here (CLAUDE.md / GEMINI.md point here)
 README.md            ← public-facing project README
 .ai/                 ← shared AI memory (see .ai/README.md)
-  context/           ← vision, decisions, open questions, environment
+  context/           ← vision, decisions, open questions, roadmap, environment
   sessions/          ← per-session summaries + redacted raw transcripts
   local/             ← gitignored: secrets, machine-specific notes
 scripts/             ← helper scripts (sync-ai-memory.ps1, dev-run.ps1)
@@ -50,9 +50,14 @@ internal/virt/       ← libvirt gateway: connection, reconnect, libvirt → Vir
                        detail.go: domain XML (libvirtxml) → machine page model, fixtures in testdata/
                        manage/devices/snapshots/storage/networks/create.go: the management operations (ADR-0011)
                        console.go (ADR-0016), backup.go (ADR-0018), template.go: templates, linked clones, <metadata> (ADR-0019)
+                       move.go / migrate.go: cold move + live migration, cpucompat.go: CPU baseline, ova.go: OVA import,
+                       tuning.go: pinning/hugepages/NUMA, hostdev.go: PCI/USB passthrough + IOMMU safety checks
 internal/live/       ← 1 s sampling hub + 60 s backlog, per-VM bulk stats, host /proc I/O (SSE)
 internal/api/        ← HTTP/JSON API (/api/v1), sign-in guard, SSE stream, serves the embedded UI
-internal/auth/       ← PAM (build tag `pam`), sessions, lockout, self-signed TLS (ADR-0010), roles + API tokens (ADR-0015)
+internal/auth/       ← PAM (build tag `pam`), sessions, lockout, self-signed TLS (ADR-0010), roles + API tokens (ADR-0015),
+                       external.go: LDAP + OIDC users and signin.json (ADR-0023; OIDC flow in internal/api/oidc.go)
+internal/confighist/ ← every version of each machine's definition, diff + revert (ADR-0021)
+internal/quota/      ← per-user/group quotas, machine ownership, operator self-service (ADR-0022)
 internal/activity/   ← who did what: -state-dir/activity.jsonl (ADR-0015)
 internal/alerts/     ← alert rules on live snapshots, webhook/e-mail channels (ADR-0017)
 internal/schedule/   ← automatic snapshots/backups with retention (ADR-0018)
@@ -67,8 +72,9 @@ docs/screenshots/    ← README images (taken from the mock UI)
 web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embedded into virtomird
   src/app.css        ← design tokens (colors, radii, motion) — use these, never hard-coded colors
   src/lib/           ← api client, live/session stores, router, components (Dialog, ConfirmButton, …)
-  src/lib/pages/     ← Overview, MachinePage (#console|#settings|#hardware|#snapshots|#backups|#xml), NewMachine, Storage,
-                       Networks, Backups, Alerts, Activity, Account, Console (full-screen /console/<uuid>), Login
+  src/lib/pages/     ← Overview, MachinePage (#console|#settings|#hardware|#snapshots|#backups|#changes|#xml), NewMachine,
+                       Import, Storage, Networks, Hardware (host PCI/USB), Backups, Alerts, Activity, Cluster,
+                       Account (quotas, sign-in settings), Console (full-screen /console/<uuid>), Login
 ```
 
 ## 5. Build, test, run

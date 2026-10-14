@@ -34,8 +34,12 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - **Templates**: turn a prepared machine into a template and create new machines from it in seconds — **linked clones** (store only their own changes) or full copies, with optional cloud-init
 - **Console in the browser**: graphical (noVNC) and serial, also full-screen
 - **Settings form** for CPU (topology, model), memory (balloon), boot order, firmware — with a **"review changes" XML diff** before saving; vCPUs and memory are applied live where possible
+- **Tuning**: CPU and emulator pinning, huge pages, NUMA memory policy
 - **XML editor** for everything else, validated by libvirt
+- **Configuration history**: every version of a machine's definition — also changes made with `virsh` — with a diff and one-click restore
 - Hardware: add/remove disks and network adapters (hot-plug), insert/eject ISOs, **grow disks**
+- **PCI/USB passthrough** with an IOMMU group view and safety checks (devices the host needs are refused, with the reason)
+- **Import**: OVA appliances, a libvirt domain XML, or a disk image already on the host
 - **Snapshots** as a tree: take, revert, delete
 - **Backups**: live (no downtime) or offline, restore as a new machine; **automatic snapshots and backups** on a schedule with retention
 
@@ -50,22 +54,27 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 
 - Storage pools and volumes, **ISO / cloud image upload** with progress, grow volumes
 - Virtual networks (NAT, isolated, routed, bridged), DHCP leases with machine names, **reserved addresses**
-- **NFS storage**, and one pool on every host of a cluster in a single step
+- **NFS, iSCSI and Ceph RBD storage**, and one pool on every host of a cluster in a single step
+- **VLANs** on Open vSwitch bridges (per network or per adapter), and one network on every host in a single step
 
 ### Several hosts
 
 - Install VirtoMir on each host and join them with a **one-time join code** — no shared database, no extra services; if one host is down, the others carry on
 - Manage every host from any of them: **cluster overview** with live host cards and all machines in one list, host switcher, consoles and live charts of any host
 - **Move machines between hosts**: stopped ones are copied, running ones are **live-migrated** — without copying disks on shared NFS storage, or copying them live
-- Alerts, activity and backups of all hosts in one place; roles apply on every host
+- Alerts, activity and backups of all hosts in one place, history charts of every host side by side; roles apply on every host
+- Alert rules, notifications and the backup location saved **the same on every host** in one step
+- A **CPU model every host supports**, so machines can live-migrate between different CPUs
 
 ### Security
 
 - Sign in with your Linux account (**PAM**); only root and members of the `libvirt` group
 - **Roles** from Linux groups: admin (`libvirt`), operator (`virtomir-operator`: run machines, console, snapshots, backups) and viewer (`virtomir-viewer`)
+- **LDAP / Active Directory** and **OpenID Connect** ("Sign in with …") besides local accounts, roles from directory groups
+- **Quotas and self-service**: operators create and manage their own machines within a limit on machines, vCPUs and memory
 - **API tokens** for scripts and automation, limited to their owner's role
 - HTTPS by default (self-signed certificate created on first start, or your own)
-- Session timeouts, lockout after failed sign-ins, CSRF protection, **activity log** of every change
+- Session timeouts, lockout after failed sign-ins, CSRF protection, **activity log** of every change (CSV export)
 
 | | |
 |---|---|
@@ -107,7 +116,8 @@ The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pa
 | `-operator-group` | `virtomir-operator` | members may run machines but not change them |
 | `-viewer-group` | `virtomir-viewer` | members may look but change nothing |
 | `-tls` | `auto` | `auto` (self-signed in `-state-dir`), `files` (`-tls-cert`, `-tls-key`), `off` (behind a TLS proxy) |
-| `-state-dir` | `/var/lib/virtomir` | certificate, metric history, alerts, schedules, activity log, tokens; default backup location (`backups/`) |
+| `-state-dir` | `/var/lib/virtomir` | certificate, metric history, alerts, schedules, activity log, tokens, cluster membership, configuration history, quotas, LDAP/OIDC settings; default backup location (`backups/`) |
+| `-name` | hostname | how this host is called in a cluster |
 | `-libvirt-socket` | `/var/run/libvirt/libvirt-sock` | |
 
 ## Build from source
@@ -133,7 +143,7 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 
 ## Roadmap
 
-PCI/USB passthrough with IOMMU insight, configuration history with one-click revert, then enterprise features (HA, LDAP/OIDC, quotas).
+High availability (restart machines of a failed host on another one), scheduled reports, per-tenant disk quotas.
 
 ## License
 
