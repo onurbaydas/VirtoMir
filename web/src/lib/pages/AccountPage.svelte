@@ -1,6 +1,7 @@
 <script lang="ts">
   import QuotasCard from '../components/QuotasCard.svelte'
   import SigninCard from '../components/SigninCard.svelte'
+  import IntegrationsCard from '../components/IntegrationsCard.svelte'
   import KeyRound from '@lucide/svelte/icons/key-round'
   import Plus from '@lucide/svelte/icons/plus'
   import Trash from '@lucide/svelte/icons/trash'
@@ -97,6 +98,7 @@
 
 <QuotasCard />
 {#if session.can('admin')}<SigninCard />{/if}
+<IntegrationsCard />
 
 <section class="ui-panel card">
   <header class="head">

@@ -10,7 +10,7 @@ import (
 
 // Quotas (ADR-0022): operators covered by a rule may create machines within it and manage
 // the machines they own; admins are not limited.
-func (s *Server) quotaRoutes(mux *http.ServeMux) {
+func (s *Server) quotaRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/quotas", s.getQuotas)
 	mux.HandleFunc("PUT /api/v1/quotas", s.putQuotas)
 	mux.HandleFunc("GET /api/v1/quotas/mine", s.myQuota)

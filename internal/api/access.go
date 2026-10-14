@@ -234,7 +234,7 @@ func (r *statusRecorder) errorMessage() string {
 
 // ---- Tokens and activity endpoints --------------------------------------------------------
 
-func (s *Server) accessRoutes(mux *http.ServeMux) {
+func (s *Server) accessRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/tokens", s.listTokens)
 	mux.HandleFunc("POST /api/v1/tokens", s.createToken)
 	mux.HandleFunc("DELETE /api/v1/tokens/{id}", s.revokeToken)

@@ -31,7 +31,7 @@ type Migrator interface {
 }
 
 // Target side of a live migration: only another member may call these, for an admin.
-func (s *Server) migrateRoutes(mux *http.ServeMux) {
+func (s *Server) migrateRoutes(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/migrate/check", s.migrateCheck)
 	mux.HandleFunc("POST /api/v1/migrate/prepare", s.migratePrepare)
 	mux.HandleFunc("POST /api/v1/migrate/finish", s.migrateFinish)

@@ -153,7 +153,7 @@ func NewServer(o Options) *Server {
 }
 
 func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
+	mux := newRouteMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /api/v1/version", s.getVersion)
 	mux.HandleFunc("GET /api/v1/host", s.getHost)
@@ -180,9 +180,15 @@ func (s *Server) Handler() http.Handler {
 	s.hostdevRoutes(mux)
 	s.quotaRoutes(mux)
 	s.externalAuthRoutes(mux)
+	s.metricsRoutes(mux)
+
+	spec := s.openAPI(mux.routes) // everything above, built once
+	mux.HandleFunc("GET /api/v1/openapi.json", func(w http.ResponseWriter, _ *http.Request) {
+		s.writeJSON(w, http.StatusOK, spec)
+	})
 
 	// GET-only fallbacks, so a wrong method on a real endpoint still gets 405.
-	mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {
+	mux.ServeMux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such API endpoint"})
 	})
 	if s.ui != nil {

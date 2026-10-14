@@ -22,7 +22,7 @@ type Consoler interface {
 	SerialConsole(ctx context.Context, uuid, device string, in io.Reader, out io.Writer) error
 }
 
-func (s *Server) consoleRoutes(mux *http.ServeMux) {
+func (s *Server) consoleRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/console/info", s.consoleInfo)
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/console/vnc", s.consoleVNC)
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/console/serial", s.consoleSerial)

@@ -16,7 +16,7 @@ type Backupper interface {
 	RestoreBackup(ctx context.Context, dir virt.BackupDir, id, name, pool string, report func(string)) (string, error)
 }
 
-func (s *Server) backupRoutes(mux *http.ServeMux) {
+func (s *Server) backupRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/backups", s.listBackups)
 	mux.HandleFunc("DELETE /api/v1/backups", s.deleteBackup)
 	mux.HandleFunc("POST /api/v1/backups/restore", s.restoreBackup)

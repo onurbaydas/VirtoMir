@@ -8,7 +8,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
-func (s *Server) domainRoutes(mux *http.ServeMux) {
+func (s *Server) domainRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/domains", s.listDomains)
 	mux.HandleFunc("POST /api/v1/domains", s.createDomain)
 	mux.HandleFunc("GET /api/v1/domains/{uuid}", s.getDomain)

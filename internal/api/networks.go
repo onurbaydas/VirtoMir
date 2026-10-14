@@ -6,7 +6,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
-func (s *Server) networkRoutes(mux *http.ServeMux) {
+func (s *Server) networkRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/networks", s.listNetworks)
 	mux.HandleFunc("POST /api/v1/networks", s.createNetwork)
 	mux.HandleFunc("DELETE /api/v1/networks/{name}", s.deleteNetwork)

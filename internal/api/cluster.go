@@ -18,7 +18,7 @@ import (
 
 // Cluster routes (ADR-0020). /api/v1/cluster/peer/* is the node-to-node protocol: hello and
 // join are public (join is authorized by the code's one-time secret), the rest needs a peer.
-func (s *Server) clusterRoutes(mux *http.ServeMux) {
+func (s *Server) clusterRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/cluster", s.getCluster)
 	mux.HandleFunc("POST /api/v1/cluster/invite", s.invite)
 	mux.HandleFunc("POST /api/v1/cluster/join", s.join)
