@@ -189,7 +189,7 @@ interface SendOpts {
 }
 
 /** API paths that are always about the host serving the UI: sign-in, cluster, tokens. */
-const LOCAL = ['/api/v1/auth/', '/api/v1/cluster', '/api/v1/version', '/api/v1/tokens']
+const LOCAL = ['/api/v1/auth/', '/api/v1/cluster', '/api/v1/version', '/api/v1/tokens', '/api/v1/account/', '/api/v1/twofactor/']
 
 /** Points an API path at the member being shown (ADR-0020): /api/v1/x → /api/v1/hosts/<id>/x. */
 export function scoped(path: string): string {
@@ -281,6 +281,17 @@ export interface Session {
   mode: 'pam' | 'none'
   user?: string
   role?: Role
+  /** The password was right; the one-time code goes to /auth/2fa with pending. */
+  needCode?: boolean
+  pending?: string
+}
+
+export interface TwoFactorStatus {
+  available: boolean
+  enabled?: boolean
+  since?: string
+  recoveryLeft?: number
+  pendingSetup?: boolean
 }
 
 export interface ApiToken {
@@ -750,6 +761,13 @@ export const api = {
   session: () => request<Session>('GET', '/api/v1/auth/session'),
   login: (user: string, password: string) => request<Session>('POST', '/api/v1/auth/login', { user, password }),
   logout: () => request<void>('POST', '/api/v1/auth/logout'),
+  loginCode: (pending: string, code: string) => request<Session>('POST', '/api/v1/auth/2fa', { pending, code }),
+  twoFactor: () => request<TwoFactorStatus>('GET', '/api/v1/account/2fa'),
+  twoFactorSetup: () => request<{ secret: string; uri: string; qr: string }>('POST', '/api/v1/account/2fa/setup'),
+  twoFactorConfirm: (code: string) => request<{ recovery: string[] }>('POST', '/api/v1/account/2fa/confirm', { code }),
+  twoFactorDisable: (code: string) => request<void>('POST', '/api/v1/account/2fa/disable', { code }),
+  twoFactorUsers: async () => (await request<{ users: string[] }>('GET', '/api/v1/twofactor/users')).users,
+  twoFactorReset: (user: string) => request<void>('DELETE', `/api/v1/twofactor/users/${enc(user)}`),
 
   tokens: async (all = false) => (await request<{ tokens: ApiToken[] }>('GET', `/api/v1/tokens${all ? '?all=true' : ''}`)).tokens,
   createToken: (name: string, role: Role, ttlDays: number) =>

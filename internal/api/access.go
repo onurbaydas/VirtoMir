@@ -34,9 +34,10 @@ func requiredRole(method, path string) auth.Role {
 		return auth.NoAccess // public: the session probe and sign-in itself
 	case strings.HasPrefix(path, "/api/v1/cluster/peer/"):
 		return auth.NoAccess // host-to-host protocol; the handlers check the peer or the join secret
-	case strings.HasPrefix(path, "/api/v1/tokens"):
-		return auth.Viewer // everyone manages their own tokens (handlers check ownership)
-	case path == "/api/v1/activity", path == "/api/v1/signin-config", path == "/api/v1/quotas":
+	case strings.HasPrefix(path, "/api/v1/tokens"), strings.HasPrefix(path, "/api/v1/account/"):
+		return auth.Viewer // everyone manages their own tokens and second factor (handlers check ownership)
+	case path == "/api/v1/activity", path == "/api/v1/signin-config", path == "/api/v1/quotas",
+		strings.HasPrefix(path, "/api/v1/twofactor/"):
 		return auth.Admin // who may sign in and who may create what is the admins' business
 	case strings.Contains(path, "/console/"):
 		return auth.Operator // a console is control over the machine

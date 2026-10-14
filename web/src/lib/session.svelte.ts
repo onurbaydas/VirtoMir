@@ -59,8 +59,16 @@ class SessionStore {
     }
   }
 
-  async login(user: string, password: string) {
-    this.info = await api.login(user, password)
+  /** Signs in; with two-factor sign-in on, returns the pending sign-in that waits for a code. */
+  async login(user: string, password: string): Promise<string | null> {
+    const res = await api.login(user, password)
+    if (res.needCode && res.pending) return res.pending
+    this.info = res
+    return null
+  }
+
+  async loginCode(pending: string, code: string) {
+    this.info = await api.loginCode(pending, code)
   }
 
   async logout() {

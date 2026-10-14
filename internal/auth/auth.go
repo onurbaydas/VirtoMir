@@ -48,19 +48,46 @@ type Manager struct {
 	now    func() time.Time
 	// ext: LDAP and OpenID Connect (nil: local accounts only).
 	ext *External
+	// twofa: one-time codes after the password (nil: off for everyone).
+	twofa *TwoFactor
 
 	mu       sync.Mutex
 	sessions map[string]*session
 	failures map[string][]time.Time // remote IP → recent failed logins
+	pending  map[string]*pendingLogin
 }
+
+// pendingLogin is a sign-in whose password was right and that waits for the one-time code.
+type pendingLogin struct {
+	id       Identity
+	expires  time.Time
+	attempts int
+}
+
+// CodeRequired is Login's answer when the password was right and the account has two-factor
+// sign-in: the client sends the code with Pending to CompleteLogin.
+type CodeRequired struct{ Pending string }
+
+func (e *CodeRequired) Error() string { return "enter the code from your authenticator app" }
+
+const (
+	pendingTTL      = 5 * time.Minute
+	pendingAttempts = 5
+)
 
 // New returns a manager. roleOf decides each user's role at sign-in (NoAccess refuses).
 func New(authn Authenticator, roleOf func(string) Role) *Manager {
 	return &Manager{
 		authn: authn, roleOf: roleOf, now: time.Now,
-		sessions: map[string]*session{}, failures: map[string][]time.Time{},
+		sessions: map[string]*session{}, failures: map[string][]time.Time{}, pending: map[string]*pendingLogin{},
 	}
 }
+
+// SetTwoFactor enables one-time codes for the accounts that turned them on.
+func (m *Manager) SetTwoFactor(t *TwoFactor) { m.twofa = t }
+
+// TwoFactor is the code store (nil when not available).
+func (m *Manager) TwoFactor() *TwoFactor { return m.twofa }
 
 // SetExternal adds LDAP / OpenID Connect sign-in (local accounts keep working first).
 func (m *Manager) SetExternal(e *External) { m.ext = e }
@@ -115,7 +142,53 @@ func (m *Manager) Login(ctx context.Context, remote, name, password string) (str
 	m.mu.Lock()
 	delete(m.failures, ip)
 	m.mu.Unlock()
+	if m.twofa.Enabled(id.Name) {
+		p := newToken()
+		m.mu.Lock()
+		now := m.now()
+		for k, v := range m.pending {
+			if now.After(v.expires) {
+				delete(m.pending, k)
+			}
+		}
+		m.pending[p] = &pendingLogin{id: id, expires: now.Add(pendingTTL)}
+		m.mu.Unlock()
+		return "", &CodeRequired{Pending: p}
+	}
 	return m.NewSession(id)
+}
+
+// CompleteLogin finishes a sign-in that needed a one-time code. Wrong codes count towards the
+// address's lockout like wrong passwords, and a pending sign-in dies after a few of them.
+func (m *Manager) CompleteLogin(remote, pending, code string) (Identity, string, error) {
+	ip := remoteIP(remote)
+	if m.lockedOut(ip) {
+		return Identity{}, "", ErrTooManyAttempts
+	}
+	m.mu.Lock()
+	p, ok := m.pending[pending]
+	if ok && m.now().After(p.expires) {
+		delete(m.pending, pending)
+		ok = false
+	}
+	m.mu.Unlock()
+	if !ok {
+		return Identity{}, "", errors.New("the sign-in expired; enter your password again")
+	}
+	if err := m.twofa.Verify(p.id.Name, code); err != nil {
+		m.fail(ip)
+		m.mu.Lock()
+		if p.attempts++; p.attempts >= pendingAttempts {
+			delete(m.pending, pending)
+		}
+		m.mu.Unlock()
+		return p.id, "", ErrBadCode
+	}
+	m.mu.Lock()
+	delete(m.pending, pending)
+	m.mu.Unlock()
+	tok, err := m.NewSession(p.id)
+	return p.id, tok, err
 }
 
 // NewSession starts a session for someone already authenticated (OpenID Connect).

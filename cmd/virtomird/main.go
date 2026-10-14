@@ -227,6 +227,11 @@ func setupAuth(c config, log *slog.Logger) (*auth.Manager, error) {
 			return nil, err
 		}
 		m.SetExternal(ext)
+		tf, err := auth.OpenTwoFactor(filepath.Join(c.stateDir, "twofactor.json"))
+		if err != nil {
+			return nil, err
+		}
+		m.SetTwoFactor(tf)
 		return m, nil
 	}
 	return nil, fmt.Errorf("unknown -auth %q (pam or none)", c.authMode)

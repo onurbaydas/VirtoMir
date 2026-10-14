@@ -181,6 +181,7 @@ func (s *Server) Handler() http.Handler {
 	s.quotaRoutes(mux)
 	s.externalAuthRoutes(mux)
 	s.metricsRoutes(mux)
+	s.twoFactorRoutes(mux)
 
 	spec := s.openAPI(mux.routes) // everything above, built once
 	mux.HandleFunc("GET /api/v1/openapi.json", func(w http.ResponseWriter, _ *http.Request) {
