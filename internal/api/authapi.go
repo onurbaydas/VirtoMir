@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/onurbaydas/virtomir/internal/activity"
@@ -18,6 +19,9 @@ type sessionInfo struct {
 	Mode string    `json:"mode"`
 	User string    `json:"user,omitempty"`
 	Role auth.Role `json:"role,omitempty"`
+	// NeedCode: the password was right; send the one-time code with Pending to /auth/2fa.
+	NeedCode bool   `json:"needCode,omitempty"`
+	Pending  string `json:"pending,omitempty"`
 }
 
 func (s *Server) mode() string {
@@ -53,6 +57,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token, err := s.auth.Login(r.Context(), r.RemoteAddr, body.User, body.Password)
+	var need *auth.CodeRequired
+	if errors.As(err, &need) {
+		s.writeJSON(w, http.StatusOK, sessionInfo{Mode: s.mode(), NeedCode: true, Pending: need.Pending})
+		return
+	}
 	if err != nil {
 		s.log.Warn("sign-in failed", "user", body.User, "remote", r.RemoteAddr, "err", err)
 		s.recordSignIn(body.User, r.RemoteAddr, http.StatusUnauthorized, err.Error())

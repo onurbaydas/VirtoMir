@@ -1,6 +1,7 @@
 <script lang="ts">
   import LogIn from '@lucide/svelte/icons/log-in'
   import KeyRound from '@lucide/svelte/icons/key-round'
+  import ShieldCheck from '@lucide/svelte/icons/shield-check'
   import { api, errorText } from '../api'
   import { session } from '../session.svelte'
 
@@ -17,19 +18,39 @@
     if (location.search.includes('signin_error')) history.replaceState(null, '', location.pathname)
   })
   let busy = $state(false)
+  // Two-factor sign-in: after the password, the code from the authenticator app.
+  let pending = $state('')
+  let code = $state('')
 
   async function submit(e: SubmitEvent) {
     e.preventDefault()
     busy = true
     error = ''
     try {
-      await session.login(user.trim(), password)
+      if (pending) {
+        await session.loginCode(pending, code.trim())
+      } else {
+        const p = await session.login(user.trim(), password)
+        if (p) {
+          pending = p
+          code = ''
+        }
+      }
     } catch (err) {
       error = errorText(err)
-      password = ''
+      if (pending) {
+        code = ''
+        if (/expired/.test(error)) pending = ''
+      } else password = ''
     } finally {
       busy = false
     }
+  }
+
+  function back() {
+    pending = ''
+    password = ''
+    error = ''
   }
 </script>
 
@@ -45,23 +66,40 @@
       </div>
     </div>
 
-    <label class="ui-field">
-      <span class="label">User name</span>
-      <!-- svelte-ignore a11y_autofocus -->
-      <input class="ui-input" bind:value={user} autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus />
-    </label>
-    <label class="ui-field">
-      <span class="label">Password</span>
-      <input class="ui-input" type="password" bind:value={password} autocomplete="current-password" required />
-    </label>
+    {#if pending}
+      <div class="code-step">
+        <ShieldCheck size={22} />
+        <div>
+          <strong>Two-step sign-in</strong>
+          <p>Enter the 6-digit code from your authenticator app for <span class="mono">{user}</span>, or one of your recovery codes.</p>
+        </div>
+      </div>
+      <label class="ui-field">
+        <span class="label">Code</span>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input class="ui-input mono code" bind:value={code} autocomplete="one-time-code" inputmode="numeric" spellcheck="false" maxlength="11" required autofocus />
+      </label>
+    {:else}
+      <label class="ui-field">
+        <span class="label">User name</span>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input class="ui-input" bind:value={user} autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus />
+      </label>
+      <label class="ui-field">
+        <span class="label">Password</span>
+        <input class="ui-input" type="password" bind:value={password} autocomplete="current-password" required />
+      </label>
+    {/if}
 
     {#if error}<div class="ui-error-box" role="alert">{error}</div>{/if}
 
-    <button class="ui-btn primary submit" disabled={busy || !user || !password}>
+    <button class="ui-btn primary submit" disabled={busy || (pending ? code.trim().length < 6 : !user || !password)}>
       <LogIn size={15} />
-      {busy ? 'Signing in…' : 'Sign in'}
+      {busy ? 'Signing in…' : pending ? 'Verify' : 'Sign in'}
     </button>
-    {#if methods.oidc}
+    {#if pending}
+      <button type="button" class="ui-btn ghost" onclick={back}>Use another account</button>
+    {:else if methods.oidc}
       <div class="or"><span>or</span></div>
       <a class="ui-btn sso" href="/api/v1/auth/oidc/start"><KeyRound size={15} /> {methods.oidcLabel || 'Sign in with single sign-on'}</a>
     {/if}
@@ -128,6 +166,26 @@
     justify-content: center;
     height: 38px;
     text-decoration: none;
+  }
+  .code-step {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    color: var(--accent);
+  }
+  .code-step strong {
+    color: var(--text);
+    font-size: 14px;
+  }
+  .code-step p {
+    margin: 2px 0 0;
+    color: var(--text-2);
+    font-size: 12.5px;
+  }
+  .code {
+    font-size: 18px;
+    letter-spacing: 0.2em;
+    text-align: center;
   }
   .note {
     margin: 2px 0 0;
