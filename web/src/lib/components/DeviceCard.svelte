@@ -137,10 +137,12 @@
 <style>
   .device {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
     overflow: hidden;
-    transition: border-color var(--dur-fast);
+    box-shadow:
+      var(--bevel),
+      var(--shadow-hard);
   }
   .device:hover,
   .device.open {
@@ -163,7 +165,7 @@
     place-items: center;
     width: 32px;
     height: 32px;
-    border-radius: 8px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-2);
   }
@@ -182,7 +184,7 @@
   }
   .badge {
     padding: 1px 7px;
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--accent-soft);
     color: var(--accent);
     font-size: 11px;
@@ -212,7 +214,7 @@
   .bar {
     height: 3px;
     margin: -4px 14px 10px 58px;
-    border-radius: 2px;
+    border-radius: 0;
     background: var(--surface-2);
     overflow: hidden;
   }
@@ -229,7 +231,7 @@
   }
   .addr {
     padding: 2px 8px;
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text);
     font-size: 12px;

@@ -159,23 +159,32 @@
     padding: 16px 18px;
     margin-bottom: 16px;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
+    box-shadow:
+      var(--bevel),
+      var(--shadow-hard);
   }
   .head {
     display: flex;
-    align-items: baseline;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 12px;
+    margin: -16px -18px 14px;
+    padding: 6px 10px 6px 18px;
+    border-bottom: var(--frame) solid var(--border-strong);
+    background: var(--metal-head);
   }
   h2 {
     display: flex;
     align-items: center;
     gap: 8px;
     margin: 0;
-    font-size: 14.5px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
   h2 :global(svg) {
     color: var(--accent);
@@ -209,7 +218,7 @@
   }
   h3 {
     margin: 0 0 10px;
-    color: var(--text-3);
+    color: var(--text-2);
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -231,7 +240,7 @@
     position: relative;
     width: 14px;
     height: 56px;
-    border-radius: 4px;
+    border-radius: 0;
     background: var(--surface-2);
     overflow: hidden;
   }

@@ -405,7 +405,7 @@
     gap: 10px;
     align-items: flex-start;
     padding: 10px 14px;
-    border-radius: var(--radius);
+    border-radius: 0;
     background: color-mix(in srgb, var(--warn) 10%, var(--surface));
     border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
     color: var(--warn);
@@ -507,7 +507,7 @@
     gap: 2px;
     padding: 10px 12px;
     border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
+    border-radius: 0;
     cursor: pointer;
   }
   .mode input {
@@ -538,7 +538,7 @@
     height: 28px;
     padding: 0 10px;
     border: 1px solid var(--border-strong);
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 12.5px;
@@ -565,7 +565,7 @@
     gap: 8px;
     padding: 6px 8px;
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: 0;
     font-size: 13px;
   }
   .boot li.empty {
@@ -576,7 +576,7 @@
     place-items: center;
     width: 22px;
     height: 22px;
-    border-radius: 50%;
+    border-radius: 0;
     background: var(--accent-soft);
     color: var(--accent);
     font-size: 11.5px;

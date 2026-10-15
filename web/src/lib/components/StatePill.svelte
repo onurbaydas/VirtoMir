@@ -28,12 +28,16 @@
     align-items: center;
     gap: 7px;
     height: 24px;
-    padding: 0 10px 0 8px;
-    border-radius: 999px;
-    font-size: 12.5px;
-    font-weight: 500;
+    padding: 0 9px 0 7px;
+    border: 1px solid var(--border-strong);
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--c);
-    background: color-mix(in srgb, var(--c) 12%, transparent);
+    background: var(--bg-elev);
+    box-shadow: var(--bevel-in);
     white-space: nowrap;
     transition:
       color var(--dur) var(--ease-out),
@@ -56,10 +60,10 @@
     --c: var(--text-3);
   }
   .dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
+    width: 8px;
+    height: 8px;
     background: var(--c);
+    outline: 1px solid var(--ink);
   }
   .ok .dot {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent);

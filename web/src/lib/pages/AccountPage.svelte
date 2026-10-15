@@ -230,7 +230,7 @@
     place-items: center;
     width: 44px;
     height: 44px;
-    border-radius: 50%;
+    border-radius: 0;
     background: var(--accent-soft);
     color: var(--accent);
   }
@@ -297,7 +297,7 @@
   }
   .badge {
     padding: 1px 8px;
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11.5px;
@@ -349,7 +349,7 @@
     gap: 2px;
     padding: 10px 12px;
     border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
+    border-radius: 0;
     cursor: pointer;
   }
   .role-opt input {
@@ -383,7 +383,7 @@
     width: 100%;
     padding: 10px 12px;
     border: 1px dashed var(--accent);
-    border-radius: var(--radius);
+    border-radius: 0;
     background: var(--bg);
     font-size: 12.5px;
     overflow-wrap: anywhere;
@@ -393,7 +393,7 @@
     width: 100%;
     margin: 0;
     padding: 8px 10px;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11.5px;

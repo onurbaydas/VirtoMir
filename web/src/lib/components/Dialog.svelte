@@ -49,19 +49,20 @@
     width: min(var(--w), calc(100vw - 32px));
     max-height: calc(100vh - 48px);
     padding: 0;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    background: var(--bg-elev);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
+    background: var(--surface);
     color: var(--text);
-    box-shadow: var(--shadow-pop);
+    box-shadow:
+      var(--bevel),
+      8px 8px 0 var(--ink);
     overflow: hidden;
   }
   dialog[open] {
     animation: pop var(--dur) var(--ease-out);
   }
   dialog::backdrop {
-    background: rgba(5, 8, 12, 0.55);
-    backdrop-filter: blur(2px);
+    background: rgba(0, 0, 0, 0.6);
   }
   .inner {
     display: flex;
@@ -73,32 +74,39 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    padding: 16px 18px 12px;
+    margin-bottom: 14px;
+    padding: 10px 10px 10px 18px;
+    border-bottom: var(--frame) solid var(--border-strong);
+    background: var(--brushed), var(--metal-head);
+    box-shadow: inset 0 3px 0 var(--accent);
   }
   h2 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 650;
+    margin: 3px 0 0;
+    font-size: 17px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
   }
   header p {
-    margin: 4px 0 0;
-    color: var(--text-3);
+    margin: 2px 0 0;
+    color: var(--text-2);
     font-size: 13px;
   }
   .x {
     display: grid;
     place-items: center;
     width: 28px;
+    flex: none;
     height: 28px;
-    border: 0;
-    border-radius: 7px;
-    background: transparent;
-    color: var(--text-3);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
+    background: var(--metal);
+    box-shadow: var(--bevel);
+    color: var(--text);
     cursor: pointer;
   }
   .x:hover {
-    background: var(--surface-hover);
-    color: var(--text);
+    background: var(--danger);
+    color: #fff;
   }
   .body {
     display: flex;
@@ -112,13 +120,13 @@
     justify-content: flex-end;
     gap: 8px;
     padding: 12px 18px;
-    border-top: 1px solid var(--border);
-    background: var(--surface);
+    border-top: var(--frame) solid var(--border-strong);
+    background: var(--metal-head);
   }
   @keyframes pop {
     from {
       opacity: 0;
-      transform: translateY(8px) scale(0.98);
+      transform: translate(-6px, -6px);
     }
   }
 </style>

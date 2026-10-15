@@ -239,7 +239,7 @@
     flex: none;
     width: 9px;
     height: 9px;
-    border-radius: 50%;
+    border-radius: 0;
     background: var(--danger);
   }
   .dot.ok {
@@ -277,7 +277,7 @@
   }
   .pill {
     padding: 1px 8px;
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11px;
@@ -300,7 +300,7 @@
     gap: 8px;
     padding: 8px 10px;
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: 0;
     background: var(--surface-2);
   }
   .code code {

@@ -142,8 +142,11 @@
   .panel {
     --cols: minmax(200px, 1.6fr) 150px 80px 120px minmax(140px, 1.2fr) 190px;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
+    box-shadow:
+      var(--bevel),
+      var(--shadow-hard);
   }
   .head {
     display: flex;
@@ -162,7 +165,7 @@
     gap: 2px;
     padding: 3px;
     background: var(--surface-2);
-    border-radius: 9px;
+    border-radius: 0;
   }
   .tabs button {
     display: flex;
@@ -171,7 +174,7 @@
     height: 28px;
     padding: 0 11px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-2);
     font-size: 13px;
@@ -187,7 +190,7 @@
   .tabs button.active {
     background: var(--surface);
     color: var(--text);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--bevel);
   }
   .count {
     font-size: 11.5px;
@@ -202,7 +205,7 @@
     height: 34px;
     padding: 0 11px;
     border: 1px solid var(--border);
-    border-radius: 9px;
+    border-radius: 0;
     background: var(--bg-elev);
     color: var(--text-3);
     transition: border-color var(--dur-fast);
@@ -280,7 +283,7 @@
   }
   .sk {
     height: 14px;
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--skeleton);
     animation: shimmer 1.4s ease-in-out infinite;
   }

@@ -189,7 +189,7 @@
   }
   .bar {
     height: 6px;
-    border-radius: 3px;
+    border-radius: 0;
     background: var(--surface-2);
     overflow: hidden;
   }

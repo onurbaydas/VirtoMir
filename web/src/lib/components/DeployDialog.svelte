@@ -146,7 +146,7 @@
     gap: 4px;
     padding: 12px;
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: 0;
     cursor: pointer;
   }
   .mode.on {

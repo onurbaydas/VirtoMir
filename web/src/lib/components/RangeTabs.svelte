@@ -27,27 +27,30 @@
   .tabs {
     display: inline-flex;
     gap: 2px;
-    padding: 3px;
-    border-radius: 9px;
-    background: var(--surface-2);
+    padding: 2px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elev);
+    box-shadow: var(--bevel-in);
   }
   button {
     height: 26px;
     padding: 0 10px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-2);
-    font-size: 12.5px;
-    font-weight: 500;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
     cursor: pointer;
   }
   button:hover {
     color: var(--text);
   }
   button.on {
-    background: var(--surface);
-    color: var(--text);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    background: var(--metal-accent);
+    color: var(--accent-contrast);
+    outline: 1px solid var(--border-strong);
+    box-shadow: var(--bevel);
   }
 </style>

@@ -405,7 +405,7 @@
   }
   .host-chip {
     padding: 1px 8px;
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11px;
@@ -443,9 +443,10 @@
   }
   .count {
     padding: 0 7px;
-    border-radius: 999px;
-    background: var(--warn);
-    color: #1a1204;
+    border-radius: 0;
+    border: 1px solid #000;
+    background: var(--hazard);
+    color: #000;
     font-size: 11.5px;
     font-weight: 700;
   }
@@ -525,7 +526,7 @@
   }
   .badge {
     padding: 1px 8px;
-    border-radius: 999px;
+    border-radius: 0;
     font-size: 11.5px;
     font-weight: 600;
     text-transform: uppercase;
@@ -647,7 +648,7 @@
     height: 28px;
     padding: 0 10px;
     border: 1px dashed var(--border-strong);
-    border-radius: 999px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-2);
     font-size: 12.5px;
@@ -726,7 +727,7 @@
     gap: 2px;
     padding: 9px 11px;
     border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
+    border-radius: 0;
     cursor: pointer;
   }
   .fmt input {

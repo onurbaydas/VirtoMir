@@ -128,7 +128,7 @@
     place-items: center;
     width: 30px;
     height: 30px;
-    border-radius: 8px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--accent);
   }
@@ -145,7 +145,7 @@
   .tag {
     margin-left: 6px;
     padding: 0 7px;
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-3);
     font-size: 11px;

@@ -150,7 +150,7 @@
     width: 100%;
     padding: 8px 10px;
     border: none;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     background: none;
     color: inherit;
     font: inherit;
@@ -177,7 +177,7 @@
   .cur {
     margin-left: 6px;
     padding: 0 7px;
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--accent-soft);
     color: var(--accent);
     font-size: 11px;

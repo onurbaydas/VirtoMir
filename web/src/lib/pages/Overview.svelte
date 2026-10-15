@@ -217,7 +217,7 @@
   .cell {
     width: 14px;
     height: 14px;
-    border-radius: 4px;
+    border-radius: 0;
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
     transition: background var(--dur);

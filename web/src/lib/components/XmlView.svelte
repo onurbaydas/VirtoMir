@@ -127,9 +127,12 @@
 <style>
   .xml {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
     overflow: hidden;
+    box-shadow:
+      var(--bevel),
+      var(--shadow-hard);
   }
   .bar {
     display: flex;
@@ -152,14 +155,16 @@
     display: flex;
     gap: 2px;
     padding: 3px;
-    border-radius: 9px;
+    border-radius: 0;
     background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--bevel-in);
   }
   .seg button {
     height: 26px;
     padding: 0 11px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-2);
     font-size: 12.5px;
@@ -167,9 +172,10 @@
     cursor: pointer;
   }
   .seg button.on {
-    background: var(--surface);
+    background: var(--metal);
+    outline: 1px solid var(--border-strong);
     color: var(--text);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--bevel);
   }
   .tool {
     display: inline-flex;
@@ -178,7 +184,7 @@
     height: 30px;
     padding: 0 10px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 12.5px;
@@ -272,7 +278,7 @@
   }
   .sk {
     height: 12px;
-    border-radius: 5px;
+    border-radius: 0;
     background: var(--skeleton);
     animation: shimmer 1.4s ease-in-out infinite;
   }

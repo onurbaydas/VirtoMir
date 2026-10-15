@@ -96,7 +96,7 @@
     align-self: flex-start;
     gap: 2px;
     padding: 3px;
-    border-radius: 9px;
+    border-radius: 0;
     background: var(--surface-2);
   }
   .kinds button {
@@ -106,7 +106,7 @@
     height: 28px;
     padding: 0 12px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-2);
     font-size: 13px;
@@ -116,7 +116,7 @@
   .kinds button.on {
     background: var(--surface);
     color: var(--text);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--bevel);
   }
   .kinds button:disabled {
     opacity: 0.4;
@@ -140,7 +140,7 @@
     height: 22px;
     border: 2.5px solid var(--accent);
     border-right-color: transparent;
-    border-radius: 50%;
+    border-radius: 0;
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin {

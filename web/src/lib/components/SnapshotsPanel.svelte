@@ -197,8 +197,11 @@
     width: 12px;
     height: 12px;
     border: 2px solid var(--border-strong);
-    border-radius: 50%;
+    border-radius: 0;
     background: var(--surface);
+    box-shadow:
+      var(--bevel),
+      var(--shadow-hard);
   }
   .current .node {
     border-color: var(--accent);
@@ -221,7 +224,7 @@
   }
   .badge {
     padding: 0 7px;
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--accent-soft);
     color: var(--accent);
     font-size: 11px;

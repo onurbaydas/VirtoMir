@@ -12,12 +12,13 @@ const keepGitkeep: Plugin = {
 }
 
 // `npm run dev` proxies the API to a running virtomird (default: the Hyper-V dev host).
-const api = process.env.VIRTOMIR_API ?? 'http://192.168.77.10:8420'
+const api = process.env.VIRTOMIR_API ?? 'https://192.168.77.10:8420'
 
 export default defineConfig({
   plugins: [svelte(), keepGitkeep],
   server: {
-    proxy: { '/api': { target: api, changeOrigin: true } },
+    // secure: false — the dev host serves a self-signed certificate.
+    proxy: { '/api': { target: api, changeOrigin: true, secure: false } },
   },
   build: {
     // noVNC uses top-level await.

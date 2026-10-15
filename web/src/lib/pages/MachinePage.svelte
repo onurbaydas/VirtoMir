@@ -575,13 +575,14 @@
     place-items: center;
     width: 44px;
     height: 44px;
-    border-radius: 12px;
-    background: var(--surface-2);
-    color: var(--text-3);
+    border: var(--frame) solid var(--border-strong);
+    background: var(--metal);
+    box-shadow: var(--bevel);
+    color: var(--text-2);
   }
   .avatar.on {
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--metal-accent);
+    color: var(--accent-contrast);
   }
   h1 {
     display: flex;
@@ -617,8 +618,8 @@
     gap: 10px;
     padding: 10px 14px;
     margin-bottom: 18px;
-    border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
-    border-radius: var(--radius);
+    border: var(--frame) solid var(--warn);
+    border-left-width: 6px;
     background: color-mix(in srgb, var(--warn) 10%, var(--surface));
     color: var(--text);
     font-size: 13px;
@@ -637,36 +638,48 @@
   }
   .tabs {
     display: flex;
-    gap: 4px;
-    margin-bottom: 16px;
-    border-bottom: 1px solid var(--border);
+    margin-bottom: 18px;
+    overflow-x: auto;
+    border: var(--frame) solid var(--border-strong);
+    background: var(--bg-elev);
+    box-shadow: var(--bevel-in);
   }
   .tabs button {
+    flex: none;
     display: flex;
     align-items: center;
     gap: 7px;
     height: 38px;
-    padding: 0 12px;
-    margin-bottom: -1px;
+    padding: 0 16px;
     border: 0;
-    border-bottom: 2px solid transparent;
-    background: none;
+    border-right: 1px solid var(--border-strong);
+    background: var(--metal);
+    box-shadow: var(--bevel);
     color: var(--text-2);
-    font-size: 13.5px;
-    font-weight: 500;
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
     cursor: pointer;
   }
   .tabs button:hover {
+    background: var(--metal-hover);
     color: var(--text);
   }
   .tabs button.on {
-    color: var(--text);
-    border-bottom-color: var(--accent);
+    background: var(--metal-accent);
+    color: var(--accent-contrast);
   }
   .count {
-    color: var(--text-3);
-    font-size: 11.5px;
-    font-weight: 500;
+    padding: 0 5px;
+    border: 1px solid currentColor;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0;
+    opacity: 0.85;
   }
   .grid {
     display: grid;
@@ -681,17 +694,45 @@
   .panel {
     padding: 16px 18px 12px;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
+    box-shadow:
+      var(--bevel),
+      var(--shadow-hard);
   }
-  .panel h2,
+  .panel h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: -16px -18px 10px;
+    padding: 8px 18px;
+    border-bottom: var(--frame) solid var(--border-strong);
+    background: var(--metal-head);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .panel h2::before,
+  .group h2::before {
+    content: '';
+    flex: none;
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    outline: 1px solid var(--ink);
+  }
   .group h2 {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 0 0 8px;
-    font-size: 14.5px;
-    font-weight: 600;
+    margin: 0 0 10px;
+    padding-bottom: 6px;
+    border-bottom: var(--frame) solid var(--border-strong);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
   .sub-block {
     margin-top: 10px;
@@ -700,10 +741,10 @@
   }
   h3 {
     margin: 0 0 8px;
-    color: var(--text-3);
+    color: var(--text-2);
     font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
+    font-weight: 700;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
   }
   .boot {
@@ -720,9 +761,10 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 4px 10px 4px 5px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
+    padding: 3px 10px 3px 3px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    box-shadow: var(--bevel);
     font-size: 12.5px;
   }
   .boot li::before {
@@ -731,9 +773,9 @@
     place-items: center;
     width: 18px;
     height: 18px;
-    border-radius: 50%;
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 600;
   }
@@ -765,16 +807,19 @@
     gap: 8px;
     height: 34px;
     padding: 0 12px;
-    border: 1px dashed var(--border-strong);
-    border-radius: 9px;
+    border: var(--frame) dashed var(--border-strong);
     background: transparent;
     color: var(--text-2);
-    font-size: 13px;
+    font-family: var(--font-display);
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
     cursor: pointer;
   }
   .more:hover {
     color: var(--text);
-    border-color: var(--text-3);
+    background: var(--surface-hover);
   }
   .chev {
     display: grid;
@@ -812,7 +857,7 @@
   .sk {
     display: block;
     height: 14px;
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--skeleton);
     animation: shimmer 1.4s ease-in-out infinite;
   }
@@ -824,7 +869,7 @@
   }
   .sk.card {
     height: 128px;
-    border-radius: var(--radius-lg);
+    border-radius: 0;
   }
   @keyframes shimmer {
     50% {
