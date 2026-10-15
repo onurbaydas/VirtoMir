@@ -98,18 +98,24 @@
   {:else if rows.length === 0}
     <p class="empty">No snapshots yet. Take one before risky changes, then return to it in one click.</p>
   {:else}
+    <div class="tree-header">
+      <span class="mono font-bold text-accent">[SNAPSHOT GIT-GRAPH TIMELINE]</span>
+      <span class="mono text-muted text-xs">{rows.length} SNAPSHOT(S) CAPTURED</span>
+    </div>
     <ol class="tree">
       {#each rows as { s, depth } (s.name)}
         <li class="snap" class:current={s.current} style:--d={depth}>
+          <div class="branch-guide" aria-hidden="true" style:width="{depth * 20}px"></div>
           <span class="node" aria-hidden="true"></span>
           <div class="info">
-            <span class="name">
-              {s.name}
-              {#if s.current}<span class="badge" title="The machine was last reverted to or created from this snapshot">current</span>{/if}
-              {#if s.memory}<span class="mem" title="Includes memory: reverting resumes the running machine"><MemoryStick size={13} /></span>{/if}
+            <span class="name font-mono">
+              <span class="tree-glyph">{depth > 0 ? '├─' : '●'}</span>
+              <strong>{s.name}</strong>
+              {#if s.current}<span class="badge-brutal accent" title="The machine was last reverted to or created from this snapshot">[● YOU ARE HERE]</span>{/if}
+              {#if s.memory}<span class="badge-brutal ok" title="Includes memory: reverting resumes the running machine">[RAM INCLUDED]</span>{/if}
             </span>
-            <span class="meta">{when(s.created)} · {STATE[s.state] ?? s.state}{s.location === 'external' ? ' · external' : ''}</span>
-            {#if s.description}<span class="desc">{s.description}</span>{/if}
+            <span class="meta font-mono">{when(s.created)} // {STATE[s.state] ?? s.state}{s.location === 'external' ? ' // external' : ''}</span>
+            {#if s.description}<span class="desc font-mono">{s.description}</span>{/if}
           </div>
           <div class="acts">
             <ConfirmButton
@@ -178,6 +184,21 @@
     padding: 24px 0 10px;
     text-align: center;
   }
+  .tree-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+    font-size: 11px;
+  }
+  .tree-glyph {
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-weight: 700;
+  }
   .tree {
     margin: 0;
     padding: 0;
@@ -221,17 +242,6 @@
     gap: 7px;
     font-weight: 600;
     font-size: 13.5px;
-  }
-  .badge {
-    padding: 0 7px;
-    border-radius: 0;
-    background: var(--accent-soft);
-    color: var(--accent);
-    font-size: 11px;
-  }
-  .mem {
-    display: grid;
-    color: var(--accent-2);
   }
   .meta {
     color: var(--text-3);

@@ -24,6 +24,9 @@
   import AccountPage from './lib/pages/AccountPage.svelte'
   import ConsolePage from './lib/pages/ConsolePage.svelte'
   import Login from './lib/pages/Login.svelte'
+  import CommandPalette from './lib/components/CommandPalette.svelte'
+  import BottomDrawer from './lib/components/BottomDrawer.svelte'
+  import { theme } from './lib/theme.svelte'
 
   let version = $state('')
   onMount(() => {
@@ -32,6 +35,14 @@
       .then((r) => r.json())
       .then((v) => (version = v.version))
       .catch(() => {})
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key.toLowerCase() === 't' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName ?? '')) {
+        theme.set(theme.resolved === 'dark' ? 'light' : 'dark')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   })
 
   // The live stream needs a session; stop it when signed out so it does not retry on 401s.
@@ -120,6 +131,8 @@
 
 <DeployDialog />
 <Toasts />
+<CommandPalette />
+<BottomDrawer />
 
 <style>
   .app {

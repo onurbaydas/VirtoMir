@@ -26,81 +26,83 @@
 :root,
 :root[data-theme='dark'] {
   color-scheme: dark;
-  /* gunmetal */
-  --bg: #131416;
-  --bg-elev: #0d0e10; /* sunken: fields, wells */
-  --surface: #23262a;
-  --surface-2: #2d3136;
-  --surface-hover: #383d43;
-  --border: #3b4047; /* inner rules */
-  --border-strong: #050506; /* frames */
-  --text: #eef0f2;
-  --text-2: #c0c5cc;
-  --text-3: #a5acb5;
-  --accent: #ff6b1a;
+  /* Matte Industrial Obsidian (Halasyon/Göz Kamaşması Yapmayan Mat Koyu Tema) */
+  --bg: #121316;
+  --bg-elev: #0e0f11; /* sunken: fields, wells */
+  --surface: #181A1F;
+  --surface-2: #1E2128;
+  --surface-hover: #262A34;
+  --border: #2E333D; /* structural hairline borders */
+  --border-strong: #0a0b0d; /* outer frames */
+  --border-active: #525A6B; /* focus / active frames */
+  --text: #E6E4DD; /* warm broken white - prevents glare */
+  --text-2: #9499A3; /* matte steel gray */
+  --text-3: #5E6470; /* muted/disabled */
+  --accent: #D97724; /* industrial orange accent */
   --accent-strong: #ff8a47;
-  --accent-soft: rgba(255, 107, 26, 0.16);
+  --accent-soft: rgba(217, 119, 36, 0.16);
   --accent-contrast: #0b0b0c;
-  --accent-2: #7fa8d6;
-  --ok: #4fd27b;
-  --warn: #ffc43d;
-  --danger: #ff6666;
-  --danger-soft: rgba(255, 82, 82, 0.15);
-  --info: #6cb6ff;
-  --idle: #737a84;
-  --skeleton: #2d3136;
+  --accent-2: #4A7CC9; /* engineering blue */
+  --ok: #2E9E6B; /* matte emerald */
+  --warn: #D9822B; /* industrial amber */
+  --danger: #C94A4A; /* oxide red */
+  --danger-soft: rgba(201, 74, 74, 0.15);
+  --info: #4A7CC9;
+  --idle: #5E6470;
+  --skeleton: #262A34;
 
-  /* metal */
-  --ink: #000; /* hard shadows */
-  --metal: linear-gradient(180deg, #4a4f56 0%, #383c42 48%, #2e3237 52%, #33373c 100%);
-  --metal-hover: linear-gradient(180deg, #565c64 0%, #43484e 48%, #393d43 52%, #3e4248 100%);
-  --metal-pressed: linear-gradient(180deg, #24272b 0%, #2c3035 100%);
-  --metal-head: linear-gradient(180deg, #31353a 0%, #272a2e 100%);
-  --metal-accent: linear-gradient(180deg, #ff8a47 0%, #ff6b1a 50%, #f05a0a 52%, #ff6b1a 100%);
-  --bevel: inset 1px 1px 0 rgba(255, 255, 255, 0.16), inset -1px -1px 0 rgba(0, 0, 0, 0.55);
-  --bevel-in: inset 1px 1px 0 rgba(0, 0, 0, 0.7), inset -1px -1px 0 rgba(255, 255, 255, 0.07);
-  --shadow-hard: 4px 4px 0 var(--ink);
-  --shadow-pop: 6px 6px 0 var(--ink);
+  /* metal & tactile depth */
+  --ink: #0a0a0c; /* hard shadows */
+  --metal: linear-gradient(180deg, #2a2d34 0%, #1e2128 48%, #181a1f 52%, #1e2128 100%);
+  --metal-hover: linear-gradient(180deg, #363b45 0%, #262a34 48%, #1e2128 52%, #262a34 100%);
+  --metal-pressed: linear-gradient(180deg, #14161a 0%, #1e2128 100%);
+  --metal-head: linear-gradient(180deg, #22252c 0%, #181a1f 100%);
+  --metal-accent: linear-gradient(180deg, #e68330 0%, #d97724 50%, #c46516 52%, #d97724 100%);
+  --bevel: inset 1px 1px 0 rgba(255, 255, 255, 0.12), inset -1px -1px 0 rgba(0, 0, 0, 0.6);
+  --bevel-in: inset 1px 1px 0 rgba(0, 0, 0, 0.7), inset -1px -1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-hard: 2px 2px 0 var(--ink);
+  --shadow-pop: 4px 4px 0 var(--ink);
   --brushed: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.012) 0 1px, transparent 1px 3px);
 }
 
 :root[data-theme='light'] {
   color-scheme: light;
-  /* brushed aluminium */
-  --bg: #b9bec5;
-  --bg-elev: #f4f5f6;
-  --surface: #dde0e4;
-  --surface-2: #cdd1d6;
-  --surface-hover: #c2c7cd;
-  --border: #9da3ab;
-  --border-strong: #141518;
-  --text: #0a0b0d;
-  --text-2: #2a2e34;
-  --text-3: #474d55;
-  --accent: #983304;
-  --accent-strong: #8a2f04;
-  --accent-soft: rgba(168, 58, 6, 0.14);
+  /* Warm Architectural Paper & Limestone (Gözü Almayan Klasik Açık Tema) */
+  --bg: #EFECE6;
+  --bg-elev: #E5E0D8;
+  --surface: #E5E0D8;
+  --surface-2: #F7F5F0;
+  --surface-hover: #DBD5CA;
+  --border: #BDB7AC;
+  --border-strong: #18191C;
+  --border-active: #18191C;
+  --text: #18191C; /* deep ink black */
+  --text-2: #4A4D54; /* dark graphite */
+  --text-3: #85827A; /* muted trail */
+  --accent: #C25E0E;
+  --accent-strong: #a83a06;
+  --accent-soft: rgba(194, 94, 14, 0.14);
   --accent-contrast: #ffffff;
-  --accent-2: #1f5592;
-  --ok: #0f5c2d;
-  --warn: #6b4500;
-  --danger: #a31010;
-  --danger-soft: rgba(181, 21, 21, 0.12);
-  --info: #164f93;
-  --idle: #6a7078;
-  --skeleton: #cdd1d6;
+  --accent-2: #1D4ED8;
+  --ok: #1B6E47;
+  --warn: #B35E09;
+  --danger: #A32626;
+  --danger-soft: rgba(163, 38, 38, 0.12);
+  --info: #1D4ED8;
+  --idle: #85827A;
+  --skeleton: #DBD5CA;
 
-  --ink: #141518;
-  --metal: linear-gradient(180deg, #f3f4f6 0%, #d9dce0 48%, #c9cdd2 52%, #d3d6da 100%);
-  --metal-hover: linear-gradient(180deg, #ffffff 0%, #e6e8eb 48%, #d6d9dd 52%, #dfe2e5 100%);
-  --metal-pressed: linear-gradient(180deg, #b5bac0 0%, #c6cacf 100%);
-  --metal-head: linear-gradient(180deg, #e9ebee 0%, #d4d8dc 100%);
-  --metal-accent: linear-gradient(180deg, #c4500f 0%, #a83a06 50%, #962f02 52%, #a83a06 100%);
-  --bevel: inset 1px 1px 0 rgba(255, 255, 255, 0.9), inset -1px -1px 0 rgba(0, 0, 0, 0.28);
-  --bevel-in: inset 1px 1px 0 rgba(0, 0, 0, 0.32), inset -1px -1px 0 rgba(255, 255, 255, 0.8);
-  --shadow-hard: 4px 4px 0 var(--ink);
-  --shadow-pop: 6px 6px 0 var(--ink);
-  --brushed: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 3px);
+  --ink: #18191C;
+  --metal: linear-gradient(180deg, #fbf9f5 0%, #ebe6dc 48%, #dfd9ce 52%, #e5e0d7 100%);
+  --metal-hover: linear-gradient(180deg, #ffffff 0%, #f4efe7 48%, #e8e3d8 52%, #eeeae1 100%);
+  --metal-pressed: linear-gradient(180deg, #d3cdc1 0%, #dfd9ce 100%);
+  --metal-head: linear-gradient(180deg, #ebe6dd 0%, #dfd9ce 100%);
+  --metal-accent: linear-gradient(180deg, #d96f1d 0%, #c25e0e 50%, #af5007 52%, #c25e0e 100%);
+  --bevel: inset 1px 1px 0 rgba(255, 255, 255, 0.85), inset -1px -1px 0 rgba(0, 0, 0, 0.25);
+  --bevel-in: inset 1px 1px 0 rgba(0, 0, 0, 0.28), inset -1px -1px 0 rgba(255, 255, 255, 0.7);
+  --shadow-hard: 2px 2px 0 var(--ink);
+  --shadow-pop: 4px 4px 0 var(--ink);
+  --brushed: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px);
 }
 
 *,
@@ -499,6 +501,59 @@ input[type='radio'] {
   text-transform: uppercase;
 }
 
+/* Neo-Brutalist Industrial Badges & Status Indicators */
+.badge-brutal {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.badge-brutal.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, var(--bg-elev));
+}
+.badge-brutal.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, var(--bg-elev));
+}
+.badge-brutal.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg-elev));
+}
+.badge-brutal.accent {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.ascii-bar {
+  font-family: var(--font-mono);
+  letter-spacing: -0.06em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* Industrial Hazard Warning Strip */
+.hazard-stripes {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(217, 130, 43, 0.25) 0 10px,
+    transparent 10px 20px
+  );
+  border-left: 4px solid var(--warn);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -507,3 +562,4 @@ input[type='radio'] {
     transition-duration: 0.01ms !important;
   }
 }
+
