@@ -12,6 +12,7 @@
   import { session } from '../session.svelte'
   import { toasts } from '../toast.svelte'
   import ConfirmButton from '../components/ConfirmButton.svelte'
+  import GpuPoolPanel from '../components/GpuPoolPanel.svelte'
 
   let hw = $state<HostHardware | null>(null)
   let error = $state('')
@@ -93,6 +94,8 @@
       {/if}
     </div>
   </section>
+
+  <GpuPoolPanel />
 
   <h2 class="sub"><Cpu size={16} /> PCI devices</h2>
   {#each groups as [g, devs] (g)}

@@ -12,11 +12,16 @@
   import { toasts } from '../toast.svelte'
   import Dialog from '../components/Dialog.svelte'
   import ConfirmButton from '../components/ConfirmButton.svelte'
+  import Radio from '@lucide/svelte/icons/radio'
+  import SdnTopologyDiagram from '../components/SdnTopologyDiagram.svelte'
+  import IpamTable from '../components/IpamTable.svelte'
+  import PcapSnifferModal from '../components/PcapSnifferModal.svelte'
 
   let nets = $state<VNetwork[] | null>(null)
   let error = $state('')
   let open = $state<string | null>(null)
   let leases = $state<Record<string, Lease[] | string>>({})
+  let snifferOpen = $state(false)
 
   async function load() {
     try {
@@ -160,8 +165,13 @@
     <h1>Networks</h1>
     <p class="lead">Virtual networks connect machines to each other, to the host and to the outside world.</p>
   </div>
-  <button class="ui-btn primary" disabled={!session.can('admin')} title={session.why('admin')} onclick={openNew}><Plus size={15} /> New network</button>
+  <div class="head-right">
+    <button class="ui-btn" onclick={() => (snifferOpen = true)}><Radio size={14} /> Live PCAP Sniffer</button>
+    <button class="ui-btn primary" disabled={!session.can('admin')} title={session.why('admin')} onclick={openNew}><Plus size={15} /> New network</button>
+  </div>
 </header>
+
+<SdnTopologyDiagram />
 
 {#if error}
   <div class="ui-error-box">{error}</div>
@@ -297,6 +307,10 @@
     {/each}
   </div>
 {/if}
+
+<IpamTable />
+
+<PcapSnifferModal open={snifferOpen} onclose={() => (snifferOpen = false)} />
 
 <Dialog open={resNet !== null} title="Reserve an address on {resNet?.name ?? ''}" onclose={() => (resNet = null)}>
   <form id="res-form" class="form" onsubmit={reserve}>

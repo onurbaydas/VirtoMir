@@ -26,6 +26,7 @@
   import Login from './lib/pages/Login.svelte'
   import CommandPalette from './lib/components/CommandPalette.svelte'
   import BottomDrawer from './lib/components/BottomDrawer.svelte'
+  import GlobalTopBar from './lib/components/GlobalTopBar.svelte'
   import { theme } from './lib/theme.svelte'
 
   let version = $state('')
@@ -93,39 +94,43 @@
   <div class="app">
     <Sidebar {version} />
 
-    <main>
-      <ConnectionBanner />
+    <div class="deck-workspace">
+      <GlobalTopBar />
 
-      {#if route.name === 'overview'}
-        <Overview />
-      {:else if route.name === 'machine'}
-        {#key route.uuid}
-          <MachinePage uuid={route.uuid} />
-        {/key}
-      {:else if route.name === 'new'}
-        <NewMachine />
-      {:else if route.name === 'import'}
-        <ImportPage />
-      {:else if route.name === 'storage'}
-        <StoragePage pool={route.pool} />
-      {:else if route.name === 'networks'}
-        <NetworksPage />
-      {:else if route.name === 'backups'}
-        <BackupsPage />
-      {:else if route.name === 'alerts'}
-        <AlertsPage tab={route.tab} />
-      {:else if route.name === 'activity'}
-        <ActivityPage />
-      {:else if route.name === 'account'}
-        <AccountPage />
-      {:else if route.name === 'hardware'}
-        <HardwarePage />
-      {:else if route.name === 'cluster'}
-        <ClusterPage />
-      {:else}
-        <NotFound />
-      {/if}
-    </main>
+      <main>
+        <ConnectionBanner />
+
+        {#if route.name === 'overview'}
+          <Overview />
+        {:else if route.name === 'machine'}
+          {#key route.uuid}
+            <MachinePage uuid={route.uuid} />
+          {/key}
+        {:else if route.name === 'new'}
+          <NewMachine />
+        {:else if route.name === 'import'}
+          <ImportPage />
+        {:else if route.name === 'storage'}
+          <StoragePage pool={route.pool} />
+        {:else if route.name === 'networks'}
+          <NetworksPage />
+        {:else if route.name === 'backups'}
+          <BackupsPage />
+        {:else if route.name === 'alerts'}
+          <AlertsPage tab={route.tab} />
+        {:else if route.name === 'activity'}
+          <ActivityPage />
+        {:else if route.name === 'account'}
+          <AccountPage />
+        {:else if route.name === 'hardware'}
+          <HardwarePage />
+        {:else if route.name === 'cluster'}
+          <ClusterPage />
+        {:else}
+          <NotFound />
+        {/if}
+      </main>
+    </div>
   </div>
 {/if}
 
@@ -139,11 +144,18 @@
     display: flex;
     min-height: 100vh;
   }
+  .deck-workspace {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 100vh;
+  }
   main {
     flex: 1;
     min-width: 0;
     max-width: 1440px;
-    padding: 28px 32px 48px;
+    padding: 24px 32px 64px;
   }
   .splash {
     display: grid;

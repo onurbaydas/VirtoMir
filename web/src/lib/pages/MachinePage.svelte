@@ -31,6 +31,8 @@
   import ManageDialogs, { type ManageDialog } from '../components/ManageDialogs.svelte'
   import ChangesPanel from '../components/ChangesPanel.svelte'
   import QemuArgsCard from '../components/QemuArgsCard.svelte'
+  import FirewallPanel from '../components/FirewallPanel.svelte'
+  import MetricsPanel from '../components/MetricsPanel.svelte'
   import type { MenuItem } from '../components/ActionMenu.svelte'
   import Pencil from '@lucide/svelte/icons/pencil'
   import CopyPlus from '@lucide/svelte/icons/copy-plus'
@@ -78,8 +80,8 @@
     return () => clearInterval(t)
   })
 
-  type Tab = 'overview' | 'console' | 'settings' | 'hardware' | 'snapshots' | 'backups' | 'changes' | 'xml'
-  const TABS: Tab[] = ['overview', 'console', 'settings', 'hardware', 'snapshots', 'backups', 'changes', 'xml']
+  type Tab = 'overview' | 'console' | 'metrics' | 'firewall' | 'settings' | 'hardware' | 'snapshots' | 'backups' | 'changes' | 'xml'
+  const TABS: Tab[] = ['overview', 'console', 'metrics', 'firewall', 'settings', 'hardware', 'snapshots', 'backups', 'changes', 'xml']
   let tab = $derived<Tab>(
     router.route.name === 'machine' && TABS.includes(router.route.tab as Tab) ? (router.route.tab as Tab) : 'overview',
   )
@@ -416,6 +418,12 @@
         Console
       </button>
     {/if}
+    <button role="tab" aria-selected={tab === 'metrics'} class:on={tab === 'metrics'} onclick={() => setTab('metrics')}>
+      Metrics
+    </button>
+    <button role="tab" aria-selected={tab === 'firewall'} class:on={tab === 'firewall'} onclick={() => setTab('firewall')}>
+      Firewall
+    </button>
     <button role="tab" aria-selected={tab === 'settings'} class:on={tab === 'settings'} onclick={() => setTab('settings')}>
       Settings
     </button>
@@ -519,6 +527,14 @@
   {:else if tab === 'console'}
     <div role="tabpanel">
       {#if liveDom}<ConsolePanel d={liveDom} />{/if}
+    </div>
+  {:else if tab === 'metrics'}
+    <div role="tabpanel">
+      <MetricsPanel {uuid} {active} />
+    </div>
+  {:else if tab === 'firewall'}
+    <div role="tabpanel">
+      <FirewallPanel {uuid} name={dom.name} {active} />
     </div>
   {:else if tab === 'settings'}
     <div role="tabpanel">

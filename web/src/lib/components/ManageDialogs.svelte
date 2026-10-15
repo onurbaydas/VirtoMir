@@ -13,6 +13,7 @@
   import { cluster } from '../cluster.svelte'
   import Dialog from './Dialog.svelte'
   import type { HostHardware } from '../api'
+  import DestructiveGuardrailModal from './DestructiveGuardrailModal.svelte'
 
   interface Props {
     which: ManageDialog
@@ -254,6 +255,18 @@
 
   let nameOK = $derived(/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(newName))
 </script>
+
+<DestructiveGuardrailModal
+  open={which === 'delete'}
+  action="delete"
+  targetName={detail.name}
+  targetUuid={detail.uuid}
+  onconfirm={(opts) => {
+    removeStorage = opts.purgeDisks
+    remove()
+  }}
+  {onclose}
+/>
 
 <Dialog open={which === 'rename'} title="Rename {detail.name}" {onclose}>
   <form id="rename" class="form" onsubmit={(e) => (e.preventDefault(), rename())}>
