@@ -460,7 +460,7 @@ func filesystemDevice(v libvirtxml.DomainFilesystem) Device {
 	if v.Driver != nil {
 		driver = v.Driver.Type
 	}
-	dev := Device{Kind: "filesystem", Group: GroupStorage, Title: "Shared folder", Summary: joinNonEmpty(" → ", src, dst)}
+	dev := Device{Kind: "filesystem", Group: GroupStorage, Title: "Shared folder", Summary: joinNonEmpty(" → ", src, dst), Target: dst}
 	dev.Props = props(
 		Prop{"Host directory", src, "source@dir"},
 		Prop{"Mount tag in guest", dst, "target@dir"},
@@ -715,6 +715,9 @@ func channelDevice(v libvirtxml.DomainChannel) Device {
 	case "disconnected":
 		dev.Summary = "Not connected"
 	}
+	if isVDAgent(v) {
+		dev.Kind, dev.Title = "clipboard", "Clipboard sharing"
+	}
 	dev.Props = props(
 		Prop{"Name", name, "target@name"},
 		Prop{"Agent state", state, "target@state"},
@@ -749,6 +752,10 @@ func hostdevDevice(v libvirtxml.DomainHostdev) Device {
 	case v.SubsysMDev != nil:
 		dev.Kind, dev.Title = "hostdev-mdev", "Mediated device (vGPU)"
 		dev.Summary = v.SubsysMDev.Model
+		if s := v.SubsysMDev.Source; s != nil && s.Address != nil {
+			dev.Target = strings.ToLower(s.Address.UUID)
+			dev.Props = append(dev.Props, Prop{"Device UUID", dev.Target, "source/address@uuid"})
+		}
 	case v.SubsysSCSI != nil:
 		dev.Kind, dev.Title = "hostdev-scsi", "SCSI device"
 	}

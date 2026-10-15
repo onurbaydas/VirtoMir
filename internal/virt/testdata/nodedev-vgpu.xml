@@ -1,0 +1,32 @@
+<device>
+  <name>pci_0000_3b_00_0</name>
+  <path>/sys/devices/pci0000:3a/0000:3a:00.0/0000:3b:00.0</path>
+  <parent>pci_0000_3a_00_0</parent>
+  <driver>
+    <name>nvidia</name>
+  </driver>
+  <capability type='pci'>
+    <class>0x030200</class>
+    <domain>0</domain>
+    <bus>59</bus>
+    <slot>0</slot>
+    <function>0</function>
+    <product id='0x1bb3'>GP104GL [Tesla P4]</product>
+    <vendor id='0x10de'>NVIDIA Corporation</vendor>
+    <capability type='mdev_types'>
+      <type id='nvidia-63'>
+        <name>GRID P4-1Q</name>
+        <deviceAPI>vfio-pci</deviceAPI>
+        <availableInstances>8</availableInstances>
+      </type>
+      <type id='nvidia-65'>
+        <name>GRID P4-4Q</name>
+        <deviceAPI>vfio-pci</deviceAPI>
+        <availableInstances>0</availableInstances>
+      </type>
+    </capability>
+    <iommuGroup number='42'>
+      <address domain='0x0000' bus='0x3b' slot='0x00' function='0x0'/>
+    </iommuGroup>
+  </capability>
+</device>

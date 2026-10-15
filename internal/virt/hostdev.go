@@ -16,6 +16,8 @@ type HostHardware struct {
 	IOMMU bool      `json:"iommu"`
 	PCI   []HostPCI `json:"pci"`
 	USB   []HostUSB `json:"usb"`
+	// MDevs: mediated devices (vGPU slices) created on the host's cards (see mdev.go).
+	MDevs []HostMDev `json:"mdevs"`
 }
 
 type HostPCI struct {
@@ -35,6 +37,8 @@ type HostPCI struct {
 	HostUse string `json:"hostUse,omitempty"`
 	// Blocked explains why it cannot be passed through ("" = it can).
 	Blocked string `json:"blocked,omitempty"`
+	// MDevTypes: the slices this card can be split into (NVIDIA vGPU, Intel GVT-g, …).
+	MDevTypes []HostMDevType `json:"mdevTypes,omitempty"`
 }
 
 type HostUSB struct {
@@ -88,8 +92,9 @@ func (c *Client) HostHardware() (HostHardware, error) {
 	if err != nil {
 		return HostHardware{}, classify(err)
 	}
-	usedPCI, usedUSB := c.hostdevUsers(l)
-	hw := HostHardware{PCI: []HostPCI{}, USB: []HostUSB{}}
+	used := c.hostdevUsers(l)
+	usedPCI, usedUSB := used.pci, used.usb
+	hw := HostHardware{PCI: []HostPCI{}, USB: []HostUSB{}, MDevs: []HostMDev{}}
 	drivers := map[string]string{} // address → driver
 	for _, d := range devs {
 		raw, err := l.NodeDeviceGetXMLDesc(d.Name, 0)
@@ -121,6 +126,7 @@ func (c *Client) HostHardware() (HostHardware, error) {
 					}
 				}
 			}
+			p.MDevTypes = mdevTypes(cp.PCI)
 			p.UsedBy = append(p.UsedBy, usedPCI[p.Address]...)
 			p.HostUse = pciHostUse(p.Address)
 			drivers[p.Address] = driver
@@ -148,6 +154,12 @@ func (c *Client) HostHardware() (HostHardware, error) {
 		hw.PCI[i].Blocked = pciBlocked(hw.PCI[i], hw.IOMMU, drivers, isBridge)
 	}
 	slices.SortFunc(hw.PCI, func(a, b HostPCI) int { return strings.Compare(a.Address, b.Address) })
+	if hw.MDevs, err = c.hostMDevs(l, used.mdev); err != nil {
+		return HostHardware{}, err
+	}
+	for i, m := range hw.MDevs {
+		hw.MDevs[i].TypeName = mdevTypeName(hw.PCI, m.Parent, m.Type)
+	}
 	return hw, nil
 }
 
@@ -184,12 +196,19 @@ func usbKey(vendor, product string) string {
 	return strings.ToLower(strings.TrimPrefix(vendor, "0x") + ":" + strings.TrimPrefix(product, "0x"))
 }
 
-// hostdevUsers maps PCI addresses and USB vendor:product to the machines that have them.
-func (c *Client) hostdevUsers(l *libvirt.Libvirt) (map[string][]string, map[string][]string) {
-	pci, usb := map[string][]string{}, map[string][]string{}
+// hostdevUse maps passed-through host devices to the machines that have them.
+type hostdevUse struct {
+	pci  map[string][]string // PCI address
+	usb  map[string][]string // vendor:product
+	mdev map[string][]string // mediated device UUID (lower case)
+}
+
+func (c *Client) hostdevUsers(l *libvirt.Libvirt) hostdevUse {
+	pci, usb, mdev := map[string][]string{}, map[string][]string{}, map[string][]string{}
+	use := hostdevUse{pci: pci, usb: usb, mdev: mdev}
 	doms, _, err := l.ConnectListAllDomains(1, libvirt.ConnectListDomainsActive|libvirt.ConnectListDomainsInactive)
 	if err != nil {
-		return pci, usb
+		return use
 	}
 	for _, d := range doms {
 		x, err := c.parseDomain(l, d, true)
@@ -204,10 +223,13 @@ func (c *Client) hostdevUsers(l *libvirt.Libvirt) (map[string][]string, map[stri
 			case h.SubsysUSB != nil && h.SubsysUSB.Source != nil && h.SubsysUSB.Source.Vendor != nil && h.SubsysUSB.Source.Product != nil:
 				k := usbKey(h.SubsysUSB.Source.Vendor.ID, h.SubsysUSB.Source.Product.ID)
 				usb[k] = appendUnique(usb[k], d.Name)
+			case h.SubsysMDev != nil && h.SubsysMDev.Source != nil && h.SubsysMDev.Source.Address != nil:
+				u := strings.ToLower(h.SubsysMDev.Source.Address.UUID)
+				mdev[u] = appendUnique(mdev[u], d.Name)
 			}
 		}
 	}
-	return pci, usb
+	return use
 }
 
 // HostdevSpec names a host device to give a machine.

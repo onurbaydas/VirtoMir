@@ -42,7 +42,7 @@ type Backend interface {
 	ChangeMedia(uuid, target, source string) error
 	AttachDisk(uuid string, spec virt.DiskSpec) (string, error)
 	AttachInterface(uuid string, spec virt.NICSpec) error
-	DetachDevice(uuid string, ref virt.DeviceRef) error
+	DetachDevice(uuid string, ref virt.DeviceRef) (virt.DeviceResult, error)
 
 	ListSnapshots(uuid string) ([]virt.Snapshot, error)
 	CreateSnapshot(uuid string, spec virt.SnapshotSpec) (string, error)
@@ -178,6 +178,7 @@ func (s *Server) Handler() http.Handler {
 	s.configHistoryRoutes(mux)
 	s.importRoutes(mux)
 	s.hostdevRoutes(mux)
+	s.extraDeviceRoutes(mux)
 	s.quotaRoutes(mux)
 	s.externalAuthRoutes(mux)
 	s.metricsRoutes(mux)
