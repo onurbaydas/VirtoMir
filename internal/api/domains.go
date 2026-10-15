@@ -209,11 +209,12 @@ func (s *Server) detachDevice(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &ref) {
 		return
 	}
-	if err := s.backend.DetachDevice(r.PathValue("uuid"), ref); err != nil {
+	res, err := s.backend.DetachDevice(r.PathValue("uuid"), ref)
+	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	s.done(w, http.StatusNoContent, nil)
+	s.done(w, http.StatusOK, res)
 }
 
 func (s *Server) listSnapshots(w http.ResponseWriter, r *http.Request) {

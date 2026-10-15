@@ -2,6 +2,7 @@ package virt
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/digitalocean/go-libvirt"
@@ -227,58 +228,99 @@ func buildNIC(spec NICSpec) (libvirtxml.DomainInterface, error) {
 	return nic, nil
 }
 
-// DeviceRef identifies a device to remove: a disk by its guest device name, an adapter by MAC.
+// DeviceRef identifies a device to remove: a disk by its guest device name, an adapter by
+// MAC, a host device by address (PCI), vendor:product (USB) or UUID (mdev), a shared folder
+// by its mount tag. watchdog, tpm, rng and clipboard need no target (a machine has one).
 type DeviceRef struct {
-	Kind   string `json:"kind"` // disk or interface
+	Kind   string `json:"kind"`
 	Target string `json:"target,omitempty"`
 	MAC    string `json:"mac,omitempty"`
 }
 
-// DetachDevice removes a disk/drive or network adapter. The disk image itself is kept.
-func (c *Client) DetachDevice(uuid string, ref DeviceRef) error {
+// DetachDevice removes a device. A disk image itself is kept.
+func (c *Client) DetachDevice(uuid string, ref DeviceRef) (DeviceResult, error) {
+	if slices.Contains(extraDeviceKinds, ref.Kind) {
+		return c.detachExtraDevice(uuid, ref)
+	}
 	l, d, err := c.lookup(uuid)
 	if err != nil {
-		return err
+		return DeviceResult{}, err
 	}
 	flags, on, err := c.deviceFlags(l, d)
 	if err != nil {
-		return err
+		return DeviceResult{}, err
 	}
 	x, err := c.parseDomain(l, d, !on)
 	if err != nil {
-		return err
+		return DeviceResult{}, err
 	}
 	var doc string
 	switch ref.Kind {
 	case "disk":
 		disk := findDisk(x, ref.Target)
 		if disk == nil {
-			return fmt.Errorf("%w: no disk %s", ErrNotFound, ref.Target)
+			return DeviceResult{}, fmt.Errorf("%w: no disk %s", ErrNotFound, ref.Target)
 		}
 		doc, err = disk.Marshal()
 	case "interface":
 		nic := findNIC(x, ref.MAC)
 		if nic == nil {
-			return fmt.Errorf("%w: no adapter %s", ErrNotFound, ref.MAC)
+			return DeviceResult{}, fmt.Errorf("%w: no adapter %s", ErrNotFound, ref.MAC)
 		}
 		doc, err = nic.Marshal()
 	case "hostdev-pci", "hostdev-usb":
 		hd := findHostdev(x, ref.Kind, ref.Target)
 		if hd == nil {
-			return fmt.Errorf("%w: no host device %s", ErrNotFound, ref.Target)
+			return DeviceResult{}, fmt.Errorf("%w: no host device %s", ErrNotFound, ref.Target)
 		}
 		doc, err = hd.Marshal()
 	default:
-		return invalidf("Only disks, network adapters and host devices can be removed here; use the XML editor for other devices.")
+		return DeviceResult{}, invalidf("This kind of device cannot be removed here; use the XML editor.")
 	}
 	if err != nil {
-		return err
+		return DeviceResult{}, err
 	}
 	if err := l.DomainDetachDeviceFlags(d, doc, flags); err != nil {
-		return classify(err)
+		return DeviceResult{}, classify(err)
 	}
 	c.log.Info("device detached", "domain", d.Name, "kind", ref.Kind, "target", ref.Target, "mac", ref.MAC)
-	return nil
+	return DeviceResult{}, nil
+}
+
+// detachExtraDevice removes one of the extra devices from the definition and, where QEMU
+// can unplug it, from the running machine.
+func (c *Client) detachExtraDevice(uuid string, ref DeviceRef) (DeviceResult, error) {
+	var res DeviceResult
+	l, d, err := c.lookup(uuid)
+	if err != nil {
+		return res, err
+	}
+	sum, err := summary(l, d)
+	if err != nil {
+		return res, classify(err)
+	}
+	x, err := c.parseDomain(l, d, true)
+	if err != nil {
+		return res, err
+	}
+	live, err := removeExtraDevice(x, ref)
+	if err != nil {
+		return res, err
+	}
+	doc, err := x.Marshal()
+	if err != nil {
+		return res, err
+	}
+	if _, err := l.DomainDefineXMLFlags(doc, libvirt.DomainDefineValidate); err != nil {
+		return res, classify(err)
+	}
+	c.log.Info("device detached", "domain", d.Name, "kind", ref.Kind, "target", ref.Target)
+	if isOn(sum.State) || sum.State == StatePaused {
+		res = applyLive(live, func(doc string) error {
+			return l.DomainDetachDeviceFlags(d, doc, uint32(libvirt.DomainAffectLive))
+		})
+	}
+	return res, nil
 }
 
 // findHostdev finds a passed-through device by host PCI address or USB vendor:product.

@@ -2,7 +2,7 @@ package virt
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -23,7 +23,7 @@ type DeviceSpec struct {
 	Kind string `json:"kind"`
 
 	// watchdog: model i6300esb (default) or itco; action reset (default), poweroff, shutdown,
-	// pause, dump, inject-nmi, none.
+	// pause, dump, inject-nmi, none. tpm: tpm-crb (default) or tpm-tis. video: see Heads.
 	Model  string `json:"model,omitempty"`
 	Action string `json:"action,omitempty"`
 
@@ -35,25 +35,27 @@ type DeviceSpec struct {
 	// mdev: the UUID of a mediated device created on the host (see Host hardware).
 	UUID string `json:"uuid,omitempty"`
 
-	// video: model virtio (default), qxl, vga, bochs, ramfb; heads = monitors (1–4).
+	// video: model virtio (default), qxl, vga, bochs, ramfb, cirrus; heads = monitors (1–4).
 	Heads uint `json:"heads,omitempty"`
 }
 
-// AddDeviceResult tells the UI whether the running machine already has it.
-type AddDeviceResult struct {
+// DeviceResult tells the UI whether a running machine already has the change.
+type DeviceResult struct {
 	// AppliesOnNextBoot: only the saved definition changed (the machine runs and QEMU cannot
-	// add this device live, or it failed: LiveError).
+	// change this device live, or it failed: LiveError).
 	AppliesOnNextBoot bool   `json:"appliesOnNextBoot"`
 	LiveError         string `json:"liveError,omitempty"`
 }
 
 var tagRe = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,36}$`)
 
+var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
 var watchdogActions = []string{"reset", "poweroff", "shutdown", "pause", "dump", "inject-nmi", "none"}
 
 // AddDevice adds one of the extra devices.
-func (c *Client) AddDevice(uuid string, spec DeviceSpec) (AddDeviceResult, error) {
-	var res AddDeviceResult
+func (c *Client) AddDevice(uuid string, spec DeviceSpec) (DeviceResult, error) {
+	var res DeviceResult
 	l, d, err := c.lookup(uuid)
 	if err != nil {
 		return res, err
@@ -67,13 +69,55 @@ func (c *Client) AddDevice(uuid string, spec DeviceSpec) (AddDeviceResult, error
 		return res, classify(err)
 	}
 	running := isOn(sum.State) || sum.State == StatePaused
+	if spec.Kind == "mdev" {
+		mdevs, err := c.hostMDevs(l, nil)
+		if err != nil {
+			return res, err
+		}
+		if !slices.ContainsFunc(mdevs, func(m HostMDev) bool { return strings.EqualFold(m.UUID, spec.UUID) }) {
+			return res, invalidf("There is no mediated device %s on this host; create it on the Host hardware page first.", spec.UUID)
+		}
+	}
+	live, err := addExtraDevice(x, spec, running, func() map[string][]string { return c.hostdevUsers(l).mdev })
+	if err != nil {
+		return res, err
+	}
+	doc, err := x.Marshal()
+	if err != nil {
+		return res, err
+	}
+	if _, err := l.DomainDefineXMLFlags(doc, libvirt.DomainDefineValidate); err != nil {
+		return res, classify(err)
+	}
+	c.log.Info("device added", "domain", d.Name, "kind", spec.Kind)
+	if running {
+		res = applyLive(live, func(doc string) error {
+			return l.DomainAttachDeviceFlags(d, doc, uint32(libvirt.DomainAffectLive))
+		})
+	}
+	return res, nil
+}
+
+// applyLive hot-plugs or unplugs doc ("" = QEMU cannot do it live) on a running machine and
+// reports what is left for the next boot.
+func applyLive(doc string, do func(string) error) DeviceResult {
+	if doc == "" {
+		return DeviceResult{AppliesOnNextBoot: true}
+	}
+	if err := do(doc); err != nil {
+		return DeviceResult{AppliesOnNextBoot: true, LiveError: classify(err).Error()}
+	}
+	return DeviceResult{}
+}
+
+// addExtraDevice adds the device to the definition x. It returns the device XML to hot-plug
+// when the machine runs ("" = QEMU cannot add it live, or it does not run). mdevUsers is
+// only called for mediated devices.
+func addExtraDevice(x *libvirtxml.Domain, spec DeviceSpec, running bool, mdevUsers func() map[string][]string) (live string, err error) {
 	if x.Devices == nil {
 		x.Devices = &libvirtxml.DomainDeviceList{}
 	}
 	dev := x.Devices
-
-	// live is the device XML to hot-plug on a running machine ("" = cannot).
-	var live string
 	marshal := func(m interface{ Marshal() (string, error) }) string {
 		s, _ := m.Marshal()
 		return s
@@ -82,13 +126,13 @@ func (c *Client) AddDevice(uuid string, spec DeviceSpec) (AddDeviceResult, error
 	case "watchdog":
 		w := libvirtxml.DomainWatchdog{Model: orDefault(spec.Model, "i6300esb"), Action: orDefault(spec.Action, "reset")}
 		if w.Model != "i6300esb" && w.Model != "itco" {
-			return res, invalidf("Watchdog model is i6300esb or itco.")
+			return "", invalidf("Watchdog model is i6300esb or itco.")
 		}
 		if !slices.Contains(watchdogActions, w.Action) {
-			return res, invalidf("Watchdog action is one of %s.", strings.Join(watchdogActions, ", "))
+			return "", invalidf("Watchdog action is one of %s.", strings.Join(watchdogActions, ", "))
 		}
 		if len(dev.Watchdogs) > 0 {
-			return res, refusedf("This machine already has a watchdog; remove it first.")
+			return "", refusedf("This machine already has a watchdog; remove it first.")
 		}
 		dev.Watchdogs = append(dev.Watchdogs, w)
 		if w.Model == "i6300esb" {
@@ -96,32 +140,33 @@ func (c *Client) AddDevice(uuid string, spec DeviceSpec) (AddDeviceResult, error
 		}
 	case "tpm":
 		if len(dev.TPMs) > 0 {
-			return res, refusedf("This machine already has a TPM.")
+			return "", refusedf("This machine already has a TPM.")
 		}
 		model := orDefault(spec.Model, "tpm-crb")
 		if model != "tpm-crb" && model != "tpm-tis" {
-			return res, invalidf("TPM model is tpm-crb or tpm-tis.")
+			return "", invalidf("TPM model is tpm-crb or tpm-tis.")
 		}
 		dev.TPMs = append(dev.TPMs, libvirtxml.DomainTPM{Model: model,
 			Backend: &libvirtxml.DomainTPMBackend{Emulator: &libvirtxml.DomainTPMBackendEmulator{Version: "2.0"}}})
 	case "rng":
 		if len(dev.RNGs) > 0 {
-			return res, refusedf("This machine already has a random number generator.")
+			return "", refusedf("This machine already has a random number generator.")
 		}
 		r := libvirtxml.DomainRNG{Model: "virtio", Backend: &libvirtxml.DomainRNGBackend{
 			Random: &libvirtxml.DomainRNGBackendRandom{Device: "/dev/urandom"}}}
 		dev.RNGs = append(dev.RNGs, r)
 		live = marshal(&r)
 	case "filesystem":
-		if !filepath.IsAbs(spec.Source) || filepath.Clean(spec.Source) != spec.Source || spec.Source == "/" {
-			return res, invalidf("The shared folder is an absolute path on the host, like /srv/share.")
+		// path, not filepath: the folder is on the Linux host, whatever builds the daemon.
+		if !strings.HasPrefix(spec.Source, "/") || path.Clean(spec.Source) != spec.Source || spec.Source == "/" {
+			return "", invalidf("The shared folder is an absolute path on the host, like /srv/share.")
 		}
 		if !tagRe.MatchString(spec.Tag) {
-			return res, invalidf("The mount tag is 1–36 letters, digits, '.', '_' or '-'; the guest mounts it with: mount -t virtiofs <tag> /mnt")
+			return "", invalidf("The mount tag is 1–36 letters, digits, '.', '_' or '-'; the guest mounts it with: mount -t virtiofs <tag> /mnt")
 		}
 		for _, f := range dev.Filesystems {
 			if f.Target != nil && f.Target.Dir == spec.Tag {
-				return res, refusedf("The tag %s is already used.", spec.Tag)
+				return "", refusedf("The tag %s is already used.", spec.Tag)
 			}
 		}
 		fs := libvirtxml.DomainFilesystem{
@@ -134,51 +179,50 @@ func (c *Client) AddDevice(uuid string, spec DeviceSpec) (AddDeviceResult, error
 			fs.ReadOnly = &libvirtxml.DomainFilesystemReadOnly{}
 		}
 		dev.Filesystems = append(dev.Filesystems, fs)
-		// virtiofsd maps the guest's memory: it must be shared.
+		// virtiofsd maps the guest's memory, so it must be shared. A running machine whose
+		// memory is not shared yet gets the folder from its next boot on.
 		mb := orNew(x.MemoryBacking)
-		if mb.MemorySource == nil || mb.MemoryAccess == nil || mb.MemoryAccess.Mode != "shared" {
+		if mb.MemoryAccess != nil && mb.MemoryAccess.Mode == "shared" {
+			live = marshal(&fs)
+		} else {
 			if mb.MemorySource == nil && mb.MemoryHugePages == nil {
 				mb.MemorySource = &libvirtxml.DomainMemorySource{Type: "memfd"}
 			}
 			mb.MemoryAccess = &libvirtxml.DomainMemoryAccess{Mode: "shared"}
 			x.MemoryBacking = mb
-		} else if running {
-			live = marshal(&fs)
 		}
 	case "mdev":
-		if !uuidRe.MatchString(strings.ToLower(spec.UUID)) {
-			return res, invalidf("Choose a mediated device by its UUID.")
+		id := strings.ToLower(spec.UUID)
+		if !uuidRe.MatchString(id) {
+			return "", invalidf("Choose a mediated device by its UUID.")
 		}
-		for _, h := range dev.Hostdevs {
-			if h.SubsysMDev != nil && h.SubsysMDev.Source != nil && h.SubsysMDev.Source.Address != nil &&
-				strings.EqualFold(h.SubsysMDev.Source.Address.UUID, spec.UUID) {
-				return res, refusedf("This machine already has that device.")
-			}
+		if findMDev(x, id) >= 0 {
+			return "", refusedf("This machine already has that device.")
 		}
-		if users := c.mdevUsers(l)[strings.ToLower(spec.UUID)]; len(users) > 0 {
-			return res, refusedf("The mediated device is already given to %s.", strings.Join(users, ", "))
+		if users := mdevUsers()[id]; len(users) > 0 {
+			return "", refusedf("The mediated device is already given to %s.", strings.Join(users, ", "))
 		}
 		h := libvirtxml.DomainHostdev{Managed: "no", SubsysMDev: &libvirtxml.DomainHostdevSubsysMDev{
-			Model: orDefault(spec.Model, "vfio-pci"), Source: &libvirtxml.DomainHostdevSubsysMDevSource{
-				Address: &libvirtxml.DomainAddressMDev{UUID: strings.ToLower(spec.UUID)}}}}
+			Model: "vfio-pci", Source: &libvirtxml.DomainHostdevSubsysMDevSource{
+				Address: &libvirtxml.DomainAddressMDev{UUID: id}}}}
 		dev.Hostdevs = append(dev.Hostdevs, h)
 		live = marshal(&h)
 	case "clipboard":
 		if hasVDAgent(x) {
-			return res, refusedf("Clipboard sharing is already on.")
+			return "", refusedf("Clipboard sharing is already on.")
 		}
 		dev.Channels = append(dev.Channels, vdagentChannel())
 	case "video":
 		model := orDefault(spec.Model, "virtio")
 		if !slices.Contains([]string{"virtio", "qxl", "vga", "bochs", "ramfb", "cirrus"}, model) {
-			return res, invalidf("Video model is virtio, qxl, vga, bochs, ramfb or cirrus.")
+			return "", invalidf("Video model is virtio, qxl, vga, bochs, ramfb or cirrus.")
 		}
 		heads := max(spec.Heads, 1)
 		if heads > 4 {
-			return res, invalidf("Up to 4 monitors.")
+			return "", invalidf("Up to 4 monitors.")
 		}
 		if heads > 1 && model != "virtio" && model != "qxl" {
-			return res, invalidf("Several monitors need the virtio or qxl video model.")
+			return "", invalidf("Several monitors need the virtio or qxl video model.")
 		}
 		v := libvirtxml.DomainVideo{Model: libvirtxml.DomainVideoModel{Type: model, Heads: heads, Primary: "yes"}}
 		if model == "qxl" {
@@ -191,31 +235,24 @@ func (c *Client) AddDevice(uuid string, spec DeviceSpec) (AddDeviceResult, error
 			dev.Videos = append(dev.Videos, v)
 		}
 	default:
-		return res, invalidf("Unknown device kind %q.", spec.Kind)
+		return "", invalidf("Unknown device kind %q.", spec.Kind)
 	}
-
-	doc, err := x.Marshal()
-	if err != nil {
-		return res, err
+	if !running {
+		return "", nil
 	}
-	if _, err := l.DomainDefineXMLFlags(doc, libvirt.DomainDefineValidate); err != nil {
-		return res, classify(err)
-	}
-	c.log.Info("device added", "domain", d.Name, "kind", spec.Kind)
-	if running {
-		res.AppliesOnNextBoot = true
-		if live != "" {
-			if err := l.DomainAttachDeviceFlags(d, live, uint32(libvirt.DomainAffectLive)); err != nil {
-				res.LiveError = classify(err).Error()
-			} else {
-				res.AppliesOnNextBoot = false
-			}
-		}
-	}
-	return res, nil
+	return live, nil
 }
 
-var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+// findMDev returns the index of the hostdev for mediated device id, or -1.
+func findMDev(x *libvirtxml.Domain, id string) int {
+	if x.Devices == nil {
+		return -1
+	}
+	return slices.IndexFunc(x.Devices.Hostdevs, func(h libvirtxml.DomainHostdev) bool {
+		return h.SubsysMDev != nil && h.SubsysMDev.Source != nil && h.SubsysMDev.Source.Address != nil &&
+			strings.EqualFold(h.SubsysMDev.Source.Address.UUID, id)
+	})
+}
 
 // vdagentChannel lets the VNC console and the guest share the clipboard (QEMU 6.1+; the guest
 // needs spice-vdagent) and gives the guest an absolute mouse.
@@ -233,17 +270,18 @@ func hasVDAgent(x *libvirtxml.Domain) bool {
 	if x.Devices == nil {
 		return false
 	}
-	for _, ch := range x.Devices.Channels {
-		if ch.Source != nil && ch.Source.QEMUVDAgent != nil {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(x.Devices.Channels, isVDAgent)
 }
 
-// removeExtraDevice drops one of the devices above from the definition (DetachDevice kinds
-// watchdog, tpm, rng, filesystem, hostdev-mdev, clipboard). It reports the device XML so a
-// running machine can lose it live where possible.
+func isVDAgent(ch libvirtxml.DomainChannel) bool {
+	return ch.Source != nil && ch.Source.QEMUVDAgent != nil
+}
+
+// extraDeviceKinds are the DetachDevice kinds removeExtraDevice handles.
+var extraDeviceKinds = []string{"watchdog", "tpm", "rng", "filesystem", "hostdev-mdev", "clipboard"}
+
+// removeExtraDevice drops one of the devices above from the definition. It reports the device
+// XML so a running machine can lose it live where QEMU allows ("" = only from the next boot).
 func removeExtraDevice(x *libvirtxml.Domain, ref DeviceRef) (liveXML string, err error) {
 	dev := x.Devices
 	if dev == nil {
@@ -281,10 +319,7 @@ func removeExtraDevice(x *libvirtxml.Domain, ref DeviceRef) (liveXML string, err
 		dev.Filesystems = slices.Delete(dev.Filesystems, i, i+1)
 		liveXML, _ = f.Marshal()
 	case "hostdev-mdev":
-		i := slices.IndexFunc(dev.Hostdevs, func(h libvirtxml.DomainHostdev) bool {
-			return h.SubsysMDev != nil && h.SubsysMDev.Source != nil && h.SubsysMDev.Source.Address != nil &&
-				strings.EqualFold(h.SubsysMDev.Source.Address.UUID, ref.Target)
-		})
+		i := findMDev(x, ref.Target)
 		if i < 0 {
 			return "", notFound
 		}
@@ -292,7 +327,7 @@ func removeExtraDevice(x *libvirtxml.Domain, ref DeviceRef) (liveXML string, err
 		dev.Hostdevs = slices.Delete(dev.Hostdevs, i, i+1)
 		liveXML, _ = h.Marshal()
 	case "clipboard":
-		i := slices.IndexFunc(dev.Channels, func(ch libvirtxml.DomainChannel) bool { return ch.Source != nil && ch.Source.QEMUVDAgent != nil })
+		i := slices.IndexFunc(dev.Channels, isVDAgent)
 		if i < 0 {
 			return "", notFound
 		}
@@ -301,28 +336,6 @@ func removeExtraDevice(x *libvirtxml.Domain, ref DeviceRef) (liveXML string, err
 		return "", invalidf("Unknown device kind %q.", ref.Kind)
 	}
 	return liveXML, nil
-}
-
-// mdevUsers maps mediated device UUIDs to the machines that have them.
-func (c *Client) mdevUsers(l *libvirt.Libvirt) map[string][]string {
-	out := map[string][]string{}
-	doms, _, err := l.ConnectListAllDomains(1, libvirt.ConnectListDomainsActive|libvirt.ConnectListDomainsInactive)
-	if err != nil {
-		return out
-	}
-	for _, d := range doms {
-		x, err := c.parseDomain(l, d, true)
-		if err != nil || x.Devices == nil {
-			continue
-		}
-		for _, h := range x.Devices.Hostdevs {
-			if h.SubsysMDev != nil && h.SubsysMDev.Source != nil && h.SubsysMDev.Source.Address != nil {
-				u := strings.ToLower(h.SubsysMDev.Source.Address.UUID)
-				out[u] = appendUnique(out[u], d.Name)
-			}
-		}
-	}
-	return out
 }
 
 // ---- QEMU command line (expert setting) ------------------------------------------------
@@ -338,15 +351,19 @@ type QEMUArgs struct {
 var envNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func (c *Client) GetQEMUArgs(uuid string) (QEMUArgs, error) {
-	out := QEMUArgs{Args: []string{}, Env: map[string]string{}}
 	l, d, err := c.lookup(uuid)
 	if err != nil {
-		return out, err
+		return QEMUArgs{}, err
 	}
 	x, err := c.parseDomain(l, d, true)
 	if err != nil {
-		return out, err
+		return QEMUArgs{}, err
 	}
+	return readQEMUArgs(x), nil
+}
+
+func readQEMUArgs(x *libvirtxml.Domain) QEMUArgs {
+	out := QEMUArgs{Args: []string{}, Env: map[string]string{}}
 	if q := x.QEMUCommandline; q != nil {
 		for _, a := range q.Args {
 			out.Args = append(out.Args, a.Value)
@@ -355,7 +372,7 @@ func (c *Client) GetQEMUArgs(uuid string) (QEMUArgs, error) {
 			out.Env[e.Name] = e.Value
 		}
 	}
-	return out, nil
+	return out
 }
 
 // SetQEMUArgs replaces the extra QEMU arguments (empty removes them). Used from the next boot.
@@ -386,7 +403,7 @@ func (c *Client) SetQEMUArgs(uuid string, q QEMUArgs) (DefineResult, error) {
 		return DefineResult{}, classify(err)
 	}
 	c.log.Warn("QEMU command line changed", "domain", d.Name, "args", len(q.Args), "env", len(q.Env))
-	return DefineResult{AppliesOnNextBoot: isOn(sum.State)}, nil
+	return DefineResult{AppliesOnNextBoot: isOn(sum.State) || sum.State == StatePaused}, nil
 }
 
 func applyQEMUArgs(x *libvirtxml.Domain, q QEMUArgs) {
