@@ -797,6 +797,11 @@ interface OpenAPIDoc {
 export const api = {
   streamURL: () => scoped('/api/v1/stream'),
 
+  get: <T = any>(path: string) => request<T>('GET', path),
+  post: <T = any>(path: string, body?: any) => request<T>('POST', path, body),
+  put: <T = any>(path: string, body?: any) => request<T>('PUT', path, body),
+  delete: <T = any>(path: string) => request<T>('DELETE', path),
+
   endpoints: async (): Promise<ApiEndpoint[]> => {
     const doc = await request<OpenAPIDoc>('GET', '/api/v1/openapi.json')
     const out: ApiEndpoint[] = []

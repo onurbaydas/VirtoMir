@@ -13,6 +13,11 @@
   import { toasts } from '../toast.svelte'
   import ConfirmButton from '../components/ConfirmButton.svelte'
   import ClusterOverview from '../components/ClusterOverview.svelte'
+  import HaClusterPanel from '../components/HaClusterPanel.svelte'
+  import ResourcePoolsPanel from '../components/ResourcePoolsPanel.svelte'
+
+  type Tab = 'members' | 'ha' | 'pools'
+  let currentTab = $state<Tab>('members')
 
   $effect(() => {
     void cluster.refresh()
@@ -94,10 +99,27 @@
     </div>
   </div>
 {:else}
-  {#if cluster.clustered}
-    <ClusterOverview />
-    <h2 class="sub">Members</h2>
-    <section class="ui-panel members" aria-label="Hosts">
+  <div class="cluster-tabs mono">
+    <button class="c-tab" class:active={currentTab === 'members'} onclick={() => currentTab = 'members'}>
+      [01] CLUSTER MEMBERS
+    </button>
+    <button class="c-tab" class:active={currentTab === 'ha'} onclick={() => currentTab = 'ha'}>
+      [02] HIGH AVAILABILITY & STONITH
+    </button>
+    <button class="c-tab" class:active={currentTab === 'pools'} onclick={() => currentTab = 'pools'}>
+      [03] RESOURCE POOLS & QUOTAS
+    </button>
+  </div>
+
+  {#if currentTab === 'ha'}
+    <HaClusterPanel />
+  {:else if currentTab === 'pools'}
+    <ResourcePoolsPanel />
+  {:else}
+    {#if cluster.clustered}
+      <ClusterOverview />
+      <h2 class="sub">Members</h2>
+      <section class="ui-panel members" aria-label="Hosts">
       {#each cluster.members as m (m.id)}
         <div class="member" class:current={cluster.current?.id === m.id}>
           <span class="dot" class:ok={m.reachable} title={m.reachable ? 'Reachable' : 'Not reachable'}></span>
@@ -174,8 +196,36 @@
     <p class="muted">Adding and removing hosts needs the admin role.</p>
   {/if}
 {/if}
+{/if}
 
 <style>
+  .cluster-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--border-strong);
+    padding-bottom: 8px;
+  }
+  .c-tab {
+    padding: 8px 14px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+  }
+  .c-tab:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+  }
+  .c-tab.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 2px 2px 0 0 var(--border-strong);
+  }
   .lead {
     margin: 0;
     color: var(--text-3);

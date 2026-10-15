@@ -8,6 +8,7 @@
   import Undo2 from '@lucide/svelte/icons/undo-2'
   import FileDiff from '@lucide/svelte/icons/file-diff'
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert'
+  import Zap from '@lucide/svelte/icons/zap'
   import { api, errorText, type Settings, type SettingsView } from '../api'
   import { diffLines, hunks, type DiffLine } from '../diff'
   import { live } from '../live.svelte'
@@ -16,6 +17,43 @@
   import { cluster } from '../cluster.svelte'
   // The machine's owner (quota self-service): live list entry for this machine.
   let owner = $derived(live.snapshot?.domains.find((d) => d.uuid === uuid))
+
+  // ---- High Availability policy -----------------------------------------------------------
+  let haPolicy = $state({
+    enabled: false,
+    priority: 'normal',
+    restartDelaySec: 0,
+    maxRetries: 3,
+  })
+
+  $effect(() => {
+    void api.get<any[]>('/api/v1/ha/vms')
+      .then((policies: any[]) => {
+        const p = policies?.find((x: any) => x.uuid === uuid)
+        if (p) {
+          haPolicy = {
+            enabled: p.enabled,
+            priority: p.priority ?? 'normal',
+            restartDelaySec: p.restartDelaySec ?? 0,
+            maxRetries: p.maxRetries ?? 3,
+          }
+        }
+      })
+      .catch(() => {})
+  })
+
+  async function saveHAPolicy() {
+    try {
+      await api.put(`/api/v1/ha/vms/${uuid}`, {
+        uuid,
+        name: form?.title || owner?.name || uuid.slice(0, 8),
+        ...haPolicy,
+      })
+      toasts.push({ kind: 'info', title: 'HA Policy Saved' })
+    } catch (e: any) {
+      toasts.push({ kind: 'error', title: 'Failed to save HA policy', detail: e.message })
+    }
+  }
 
   let { uuid, active, onsaved }: { uuid: string; active: boolean; onsaved: () => void } = $props()
 
@@ -362,6 +400,41 @@
         <label class="ui-field">
           <span class="label">Description</span>
           <textarea class="ui-input" rows="2" bind:value={form.description} placeholder="Notes for yourself and your team"></textarea>
+        </label>
+      </div>
+    </section>
+
+    <section class="ui-panel card ha-card">
+      <div class="ha-head" style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="display: flex; align-items: center; gap: 8px; margin: 0;"><Zap size={16} /> High Availability & Failover Policy</h2>
+        <button class="ui-btn small primary mono" onclick={saveHAPolicy}>SAVE HA POLICY</button>
+      </div>
+      <div class="grid2">
+        <label class="ui-field">
+          <span class="label">HA Auto-Failover</span>
+          <select class="ui-input" bind:value={haPolicy.enabled}>
+            <option value={false}>Disabled (Manual operator start)</option>
+            <option value={true}>Enabled (Auto-restart on surviving host)</option>
+          </select>
+        </label>
+        <label class="ui-field">
+          <span class="label">Failover Priority</span>
+          <select class="ui-input" bind:value={haPolicy.priority} disabled={!haPolicy.enabled}>
+            <option value="critical">Critical (#1 Priority, Immediate)</option>
+            <option value="high">High (#2 Priority)</option>
+            <option value="normal">Normal (Standard workload)</option>
+            <option value="low">Low (Background/Dev)</option>
+          </select>
+        </label>
+      </div>
+      <div class="grid2" style="margin-top: 8px;">
+        <label class="ui-field">
+          <span class="label">Restart Delay (seconds)</span>
+          <input type="number" min="0" max="300" class="ui-input" bind:value={haPolicy.restartDelaySec} disabled={!haPolicy.enabled} />
+        </label>
+        <label class="ui-field">
+          <span class="label">Max Restart Retries</span>
+          <input type="number" min="1" max="10" class="ui-input" bind:value={haPolicy.maxRetries} disabled={!haPolicy.enabled} />
         </label>
       </div>
     </section>

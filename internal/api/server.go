@@ -18,8 +18,11 @@ import (
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/cluster"
 	"github.com/onurbaydas/virtomir/internal/confighist"
+	"github.com/onurbaydas/virtomir/internal/ha"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/quota"
+	"github.com/onurbaydas/virtomir/internal/reports"
+	"github.com/onurbaydas/virtomir/internal/respool"
 	"github.com/onurbaydas/virtomir/internal/schedule"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
@@ -110,6 +113,10 @@ type Options struct {
 	Fingerprint   string
 	HostName      string
 	ListenPort    string
+
+	HA       *ha.Store
+	Reports  *reports.Store
+	Respools *respool.Store
 }
 
 type Server struct {
@@ -137,6 +144,10 @@ type Server struct {
 	listenPort   string
 	transportsMu sync.Mutex
 	transports   map[string]http.RoundTripper // pinned, per member certificate
+
+	ha       *ha.Store
+	reports  *reports.Store
+	respools *respool.Store
 }
 
 func NewServer(o Options) *Server {
@@ -149,7 +160,8 @@ func NewServer(o Options) *Server {
 	return &Server{backend: o.Backend, live: o.Live, jobs: o.Jobs, auth: o.Auth, ui: o.UI, version: o.Version, log: o.Log,
 		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts, schedules: o.Schedules,
 		cluster: o.Cluster, fingerprint: o.Fingerprint, hostName: o.HostName, listenPort: o.ListenPort,
-		confighist: o.ConfigHistory, quotas: o.Quotas, groupsOf: o.GroupsOf}
+		confighist: o.ConfigHistory, quotas: o.Quotas, groupsOf: o.GroupsOf,
+		ha: o.HA, reports: o.Reports, respools: o.Respools}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -183,6 +195,9 @@ func (s *Server) Handler() http.Handler {
 	s.externalAuthRoutes(mux)
 	s.metricsRoutes(mux)
 	s.twoFactorRoutes(mux)
+	s.haRoutes(mux)
+	s.reportRoutes(mux)
+	s.respoolRoutes(mux)
 
 	spec := s.openAPI(mux.routes) // everything above, built once
 	mux.HandleFunc("GET /api/v1/openapi.json", func(w http.ResponseWriter, _ *http.Request) {

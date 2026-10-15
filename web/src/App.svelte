@@ -23,6 +23,7 @@
   import NotFound from './lib/pages/NotFound.svelte'
   import ActivityPage from './lib/pages/ActivityPage.svelte'
   import AccountPage from './lib/pages/AccountPage.svelte'
+  import ReportsPage from './lib/pages/ReportsPage.svelte'
   import ConsolePage from './lib/pages/ConsolePage.svelte'
   import Login from './lib/pages/Login.svelte'
   import CommandPalette from './lib/components/CommandPalette.svelte'
@@ -127,6 +128,8 @@
           <AccountPage />
         {:else if route.name === 'hardware'}
           <HardwarePage />
+        {:else if route.name === 'reports'}
+          <ReportsPage />
         {:else if route.name === 'cluster'}
           <ClusterPage />
         {:else}

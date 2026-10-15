@@ -75,6 +75,7 @@
       { path: '/backups', title: 'Backups & Schedules', detail: 'CBT Backups, Targets & Retention' },
       { path: '/alerts', title: 'System Alerts', detail: 'Open Alerts, Rules & Notifications' },
       { path: '/activity', title: 'Activity & Audit Log', detail: 'User actions & changing API logs' },
+      { path: '/reports', title: 'Reports & Compliance', detail: 'Automated capacity forecasting & backup SLA audits' },
       { path: '/cluster', title: 'Cluster Overview', detail: 'Multi-host federation and node status' },
       { path: '/account', title: 'Account & Quotas', detail: 'Roles, API tokens and sign-in config' },
       { path: '/machines/new', title: 'New Virtual Machine', detail: 'Step-by-step VM creation wizard' },

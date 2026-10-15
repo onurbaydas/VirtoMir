@@ -14,6 +14,7 @@
   import Archive from '@lucide/svelte/icons/archive'
   import Boxes from '@lucide/svelte/icons/boxes'
   import CircuitBoard from '@lucide/svelte/icons/circuit-board'
+  import FileText from '@lucide/svelte/icons/file-text'
   import { cluster } from '../cluster.svelte'
   import { alerts } from '../alerts.svelte'
   import { session } from '../session.svelte'
@@ -43,12 +44,13 @@
     { code: '06', name: 'backups', href: '/backups', label: 'Backups', icon: Archive, role: 'viewer' },
     { code: '07', name: 'alerts', href: '/alerts', label: 'Alerts', icon: Bell, role: 'viewer' },
     { code: '08', name: 'activity', href: '/activity', label: 'Activity', icon: ClockArrowUp, role: 'admin' },
+    { code: '09', name: 'reports', href: '/reports', label: 'Reports', icon: FileText, role: 'viewer' },
   ] as const
   // Cluster: admins always (that is where hosts are added), others once there is one.
   let NAV = $derived([
     ...ALL_NAV.filter((n) => session.can(n.role)),
     ...(session.can('admin') || cluster.clustered
-      ? [{ code: '09', name: 'cluster', href: '/cluster', label: 'Cluster', icon: Server, role: 'viewer' } as const]
+      ? [{ code: '10', name: 'cluster', href: '/cluster', label: 'Cluster', icon: Server, role: 'viewer' } as const]
       : []),
   ])
 
