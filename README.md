@@ -39,6 +39,8 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - **Configuration history**: every version of a machine's definition — also changes made with `virsh` — with a diff and one-click restore
 - Hardware: add/remove disks and network adapters (hot-plug), insert/eject ISOs, **grow disks**
 - **PCI/USB passthrough** with an IOMMU group view and safety checks (devices the host needs are refused, with the reason)
+- More devices from the Hardware tab: **shared folders** (virtiofs), **vGPU slices** (mediated devices, created on the Hardware page), **clipboard sharing**, video model and **up to 4 monitors**, watchdog, TPM 2.0, random number generator — hot-plugged where possible, otherwise from the next start (and it says which)
+- Expert **QEMU command line** (extra arguments and environment), clearly marked as such
 - **Import**: OVA appliances, a libvirt domain XML, or a disk image already on the host
 - **Snapshots** as a tree: take, revert, delete
 - **Backups**: live (no downtime) or offline, restore as a new machine; **automatic snapshots and backups** on a schedule with retention
@@ -48,6 +50,7 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - Per machine: CPU, per-vCPU load, disk throughput / IOPS / latency, network traffic, guest-reported memory
 - Host CPU, memory, physical disk and network throughput
 - **History** for 1 h, 6 h, 24 h, 7 days and 30 days — kept by VirtoMir itself, no Prometheus needed
+- …and a **Prometheus endpoint** (`/api/v1/metrics`) for those who have one; the whole API is described by **OpenAPI** (`/api/v1/openapi.json`)
 - **Alerts** with sensible defaults (host overloaded, machine crashed, pool filling up, libvirt down) — to a webhook, Slack, Discord, ntfy or e-mail
 
 ### Storage & networks
@@ -71,6 +74,7 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - Sign in with your Linux account (**PAM**); only root and members of the `libvirt` group
 - **Roles** from Linux groups: admin (`libvirt`), operator (`virtomir-operator`: run machines, console, snapshots, backups) and viewer (`virtomir-viewer`)
 - **LDAP / Active Directory** and **OpenID Connect** ("Sign in with …") besides local accounts, roles from directory groups
+- **Two-step sign-in** with any authenticator app (TOTP), with recovery codes; admins can reset it
 - **Quotas and self-service**: operators create and manage their own machines within a limit on machines, vCPUs and memory
 - **API tokens** for scripts and automation, limited to their owner's role
 - HTTPS by default (self-signed certificate created on first start, or your own)
