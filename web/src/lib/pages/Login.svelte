@@ -113,36 +113,49 @@
     place-items: center;
     min-height: 100vh;
     padding: 24px 16px;
-    background:
-      radial-gradient(900px 500px at 15% -10%, var(--accent-soft), transparent 60%),
-      radial-gradient(700px 420px at 110% 110%, color-mix(in srgb, var(--accent-2) 12%, transparent), transparent 60%),
-      var(--bg);
+    background: var(--brushed), var(--bg);
   }
   .card {
     display: flex;
     flex-direction: column;
     gap: 14px;
     width: min(380px, 100%);
-    padding: 26px 24px 20px;
-    background: var(--bg-elev);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-pop);
+    padding: 0 24px 20px;
+    background: var(--surface);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
+    box-shadow:
+      var(--bevel),
+      10px 10px 0 var(--ink);
+  }
+  /* Hazard band across the top of the card. */
+  .card::before {
+    content: '';
+    height: 10px;
+    margin: 0 -24px;
+    border-bottom: var(--frame) solid var(--border-strong);
+    background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, #111 10px 20px);
   }
   .brand {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 8px;
+    margin: 4px 0 8px;
   }
   .wordmark {
-    font-size: 19px;
+    font-family: var(--font-display);
+    font-size: 22px;
     font-weight: 700;
-    letter-spacing: -0.01em;
+    line-height: 1.1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
   .tagline {
-    color: var(--text-3);
-    font-size: 12.5px;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
   .submit {
     height: 38px;
@@ -159,8 +172,8 @@
   .or::after {
     content: '';
     flex: 1;
-    height: 1px;
-    background: var(--border);
+    height: 2px;
+    background: var(--border-strong);
   }
   .sso {
     justify-content: center;

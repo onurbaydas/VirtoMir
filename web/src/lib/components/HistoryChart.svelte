@@ -251,7 +251,7 @@
     place-items: center;
     padding: 0 16px;
     border: 1px dashed var(--border);
-    border-radius: var(--radius);
+    border-radius: 0;
     background: var(--surface);
     color: var(--text-3);
     font-size: 12.5px;

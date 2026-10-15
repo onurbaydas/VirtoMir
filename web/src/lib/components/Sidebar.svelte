@@ -194,32 +194,43 @@
     flex-direction: column;
     width: var(--sidebar-w);
     height: 100vh;
-    padding: 18px 14px;
-    background: var(--bg-elev);
-    border-right: 1px solid var(--border);
+    padding: 0 14px 14px;
+    background: var(--brushed), var(--metal-head);
+    border-right: var(--frame) solid var(--border-strong);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.06);
   }
   .brand {
     display: flex;
     align-items: center;
     gap: 11px;
-    padding: 0 6px 22px;
+    margin: 0 -14px 16px;
+    padding: 14px 20px;
+    border-bottom: var(--frame) solid var(--border-strong);
+    background: var(--bg-elev);
+    box-shadow: var(--bevel-in);
   }
   .wordmark {
-    font-size: 16px;
+    font-family: var(--font-display);
+    font-size: 19px;
     font-weight: 700;
-    letter-spacing: -0.01em;
+    line-height: 1.1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
   .tagline {
-    font-size: 11.5px;
-    color: var(--text-3);
-    letter-spacing: 0.02em;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
   .section {
-    padding: 0 8px 8px;
+    padding: 0 2px 8px;
     color: var(--text-3);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
+    font-family: var(--font-display);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
   }
   .host {
@@ -227,18 +238,22 @@
     align-items: center;
     gap: 10px;
     padding: 9px 8px;
-    margin-bottom: 6px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    margin: 0 4px 12px 0;
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
     background: var(--surface);
+    box-shadow:
+      var(--bevel),
+      var(--shadow-hard);
   }
   .host-icon {
     display: grid;
     place-items: center;
     width: 30px;
     height: 30px;
-    border-radius: 8px;
-    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    background: var(--metal);
+    box-shadow: var(--bevel);
     color: var(--text-2);
   }
   .host-text {
@@ -263,7 +278,7 @@
   .host-status .dot {
     width: 6px;
     height: 6px;
-    border-radius: 50%;
+    border-radius: 0;
     background: var(--idle);
   }
   .host-status.up .dot {
@@ -297,19 +312,29 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    min-width: 0;
     height: 36px;
     padding: 0 10px;
-    border-radius: 8px;
+    border: 1px solid transparent;
     color: var(--text-2);
     text-decoration: none;
     font-weight: 500;
   }
   .nav-item:hover {
     background: var(--surface-hover);
+    border-color: var(--border-strong);
     color: var(--text);
   }
   .nav-item.active {
-    background: var(--accent-soft);
+    background: var(--bg-elev);
+    border-color: var(--border-strong);
+    box-shadow:
+      inset 4px 0 0 var(--accent),
+      var(--bevel-in);
+    color: var(--text);
+    font-weight: 600;
+  }
+  .nav-item.active :global(svg) {
     color: var(--accent);
   }
   aside nav {
@@ -323,9 +348,9 @@
     min-width: 20px;
     height: 20px;
     padding: 0 6px;
-    border-radius: 999px;
-    background: var(--warn);
-    color: #1a1204;
+    border: 1px solid #000;
+    background: var(--hazard);
+    color: #000;
     font-size: 11.5px;
     font-weight: 700;
     line-height: 20px;
@@ -346,13 +371,15 @@
     place-items: center;
     width: 22px;
     height: 22px;
-    border-radius: 6px;
-    color: var(--text-3);
+    border: 1px solid var(--border-strong);
+    background: var(--metal);
+    box-shadow: var(--bevel);
+    color: var(--text-2);
   }
   .add:hover,
   .add.active {
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--metal-accent);
+    color: var(--accent-contrast);
   }
   .user {
     display: flex;
@@ -360,15 +387,16 @@
     gap: 9px;
     padding: 8px 6px;
     margin-bottom: 8px;
-    border-top: 1px solid var(--border);
+    border-top: var(--frame) solid var(--border-strong);
   }
   .user .avatar {
     display: grid;
     place-items: center;
     width: 26px;
     height: 26px;
-    border-radius: 50%;
-    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    background: var(--metal);
+    box-shadow: var(--bevel);
     color: var(--text-2);
   }
   .who {
@@ -379,7 +407,7 @@
     gap: 9px;
     padding: 4px;
     margin: -4px;
-    border-radius: 8px;
+    border-radius: 0;
     color: inherit;
     text-decoration: none;
   }
@@ -408,7 +436,7 @@
     width: 28px;
     height: 28px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-3);
     cursor: pointer;
@@ -438,7 +466,7 @@
     width: 8px;
     height: 8px;
     margin: 0 4px;
-    border-radius: 50%;
+    border-radius: 0;
     border: 1.5px solid var(--idle);
   }
   .mdot.on {
@@ -469,9 +497,10 @@
   .themes {
     display: flex;
     gap: 2px;
-    padding: 3px;
-    border-radius: 9px;
-    background: var(--surface-2);
+    padding: 2px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elev);
+    box-shadow: var(--bevel-in);
   }
   .themes button {
     display: grid;
@@ -479,7 +508,7 @@
     width: 28px;
     height: 26px;
     border: 0;
-    border-radius: 6px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-3);
     cursor: pointer;
@@ -488,9 +517,10 @@
     color: var(--text);
   }
   .themes button.active {
-    background: var(--surface);
-    color: var(--text);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    background: var(--metal);
+    color: var(--accent);
+    outline: 1px solid var(--border-strong);
+    box-shadow: var(--bevel);
   }
   .version {
     font-size: 11px;
@@ -509,8 +539,8 @@
       align-items: center;
       gap: 12px;
       padding: 10px 16px;
-      background: var(--bg-elev);
-      border-bottom: 1px solid var(--border);
+      background: var(--metal-head);
+      border-bottom: var(--frame) solid var(--border-strong);
     }
     .m-brand {
       display: grid;
@@ -525,7 +555,7 @@
       place-items: center;
       height: 30px;
       padding: 0 10px;
-      border-radius: 7px;
+      border-radius: 0;
       color: var(--text-2);
       font-size: 13px;
       font-weight: 500;

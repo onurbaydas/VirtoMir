@@ -113,7 +113,7 @@
     width: 32px;
     height: 32px;
     border: 1px solid transparent;
-    border-radius: 8px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-2);
     cursor: pointer;
@@ -123,8 +123,9 @@
   }
   .trigger:hover,
   .trigger.open {
-    background: var(--surface-2);
-    border-color: var(--border);
+    background: var(--metal);
+    border-color: var(--border-strong);
+    box-shadow: var(--bevel);
     color: var(--text);
   }
   .menu {
@@ -133,11 +134,13 @@
     top: calc(100% + 6px);
     z-index: 20;
     min-width: 220px;
-    padding: 5px;
-    background: var(--bg-elev);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-pop);
+    padding: 3px;
+    background: var(--surface);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
+    box-shadow:
+      var(--bevel),
+      var(--shadow-pop);
     animation: pop var(--dur) var(--ease-out);
     transform-origin: top right;
   }
@@ -154,7 +157,7 @@
     height: 34px;
     padding: 0 10px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 0;
     background: transparent;
     color: var(--text);
     font-size: 13.5px;
@@ -163,7 +166,8 @@
     cursor: pointer;
   }
   .item:hover:not(:disabled) {
-    background: var(--surface-hover);
+    background: var(--accent);
+    color: var(--accent-contrast);
   }
   .item:disabled {
     opacity: 0.45;
@@ -180,7 +184,7 @@
   @keyframes pop {
     from {
       opacity: 0;
-      transform: scale(0.96) translateY(-4px);
+      transform: translateY(-4px);
     }
   }
 </style>

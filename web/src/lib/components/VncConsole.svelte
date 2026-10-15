@@ -315,9 +315,12 @@
     display: flex;
     flex-direction: column;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
     overflow: hidden;
+    box-shadow:
+      var(--bevel),
+      var(--shadow-hard);
   }
   .console.standalone,
   .console:fullscreen {
@@ -356,7 +359,7 @@
   .dot {
     width: 7px;
     height: 7px;
-    border-radius: 50%;
+    border-radius: 0;
     background: var(--c);
   }
   .tb {
@@ -366,7 +369,7 @@
     height: 30px;
     padding: 0 10px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 12.5px;
@@ -400,7 +403,7 @@
     padding: 8px;
     background: var(--bg-elev);
     border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
+    border-radius: 0;
     box-shadow: var(--shadow-pop);
   }
   .keys {
@@ -417,7 +420,7 @@
   .fkeys button {
     height: 28px;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--surface-2);
     font-size: 12px;
     cursor: pointer;
@@ -433,7 +436,7 @@
     height: 32px;
     padding: 0 8px;
     border: 0;
-    border-radius: 6px;
+    border-radius: 0;
     background: transparent;
     font-size: 13px;
     text-align: left;
@@ -482,23 +485,26 @@
     display: flex;
     gap: 2px;
     padding: 2px;
-    border-radius: 8px;
+    border-radius: 0;
     background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--bevel-in);
   }
   .seg button {
     height: 26px;
     padding: 0 9px;
     border: 0;
-    border-radius: 6px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-2);
     font-size: 12px;
     cursor: pointer;
   }
   .seg button.on {
-    background: var(--surface);
+    background: var(--metal);
+    outline: 1px solid var(--border-strong);
     color: var(--text);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--bevel);
   }
   .screen-wrap {
     position: relative;
@@ -541,7 +547,7 @@
     height: 22px;
     border: 2.5px solid var(--accent);
     border-right-color: transparent;
-    border-radius: 50%;
+    border-radius: 0;
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin {

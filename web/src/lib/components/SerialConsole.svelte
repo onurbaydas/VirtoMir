@@ -131,9 +131,12 @@
     display: flex;
     flex-direction: column;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
     overflow: hidden;
+    box-shadow:
+      var(--bevel),
+      var(--shadow-hard);
   }
   .serial.standalone {
     height: 100vh;
@@ -162,7 +165,7 @@
   .dot {
     width: 7px;
     height: 7px;
-    border-radius: 50%;
+    border-radius: 0;
     background: var(--c);
   }
   .dev {
@@ -182,7 +185,7 @@
     width: 30px;
     height: 30px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-2);
     cursor: pointer;

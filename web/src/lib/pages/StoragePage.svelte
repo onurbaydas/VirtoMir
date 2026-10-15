@@ -265,7 +265,7 @@
     <section class="ui-panel vols">
       <header class="v-head">
         <div class="v-title">
-          <h2>{current.name}</h2>
+          <h2 class="keep-case">{current.name}</h2>
           <span class="chip mono">{current.type}</span>
           <label class="ui-switch small" title="Start this pool when the host boots">
             <input type="checkbox" checked={current.autostart} disabled={!session.can('admin')} onchange={(e) => toggleAutostart(current!, e.currentTarget.checked)} />
@@ -500,14 +500,16 @@
     display: flex;
     gap: 4px;
     padding: 3px;
-    border-radius: var(--radius);
+    border-radius: 0;
     background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--bevel-in);
   }
   .seg button {
     flex: 1;
     height: 32px;
     border: none;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     background: none;
     color: var(--text-2);
     font: inherit;
@@ -515,9 +517,10 @@
     cursor: pointer;
   }
   .seg button.on {
-    background: var(--surface);
+    background: var(--metal);
+    outline: 1px solid var(--border-strong);
     color: var(--text);
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+    box-shadow: var(--bevel);
   }
   .row2 {
     display: grid;
@@ -551,12 +554,14 @@
     gap: 6px;
     padding: 14px 16px;
     min-height: 104px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
     background: var(--surface);
     text-align: left;
     cursor: pointer;
-    transition: border-color var(--dur-fast);
+    box-shadow:
+      var(--bevel),
+      var(--shadow-hard);
   }
   .pool:hover {
     border-color: var(--border-strong);
@@ -600,7 +605,7 @@
   .bar {
     display: block;
     height: 5px;
-    border-radius: 3px;
+    border-radius: 0;
     background: var(--surface-2);
     overflow: hidden;
   }
@@ -654,7 +659,7 @@
     padding: 10px 12px;
     margin-bottom: 10px;
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: 0;
     background: var(--bg-elev);
     font-size: 13px;
   }

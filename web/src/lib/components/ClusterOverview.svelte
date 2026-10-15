@@ -180,7 +180,7 @@
   .dot {
     width: 8px;
     height: 8px;
-    border-radius: 50%;
+    border-radius: 0;
     background: var(--danger);
   }
   .dot.ok {
@@ -204,7 +204,7 @@
   }
   .bar {
     height: 6px;
-    border-radius: 3px;
+    border-radius: 0;
     background: var(--surface-2);
     overflow: hidden;
   }
@@ -227,7 +227,7 @@
   }
   .pill {
     padding: 1px 8px;
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11px;

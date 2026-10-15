@@ -41,38 +41,49 @@
     padding: 16px 18px 0;
     min-height: 148px;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
     overflow: hidden;
+    box-shadow:
+      var(--bevel),
+      var(--shadow-hard);
   }
   header {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 6px;
+    margin: -16px -18px 10px;
+    padding: 6px 18px;
+    border-bottom: var(--frame) solid var(--border-strong);
+    background: var(--metal-head);
     color: var(--text-2);
-    font-size: 13px;
-    font-weight: 500;
+    font-family: var(--font-display);
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
   }
   .icon {
     display: grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
-    background: var(--surface-2);
-    color: var(--text-2);
+    width: 22px;
+    height: 22px;
+    color: var(--accent);
   }
   .value {
+    font-family: var(--font-mono);
     font-size: 30px;
     font-weight: 600;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
     line-height: 1.1;
+    overflow-wrap: anywhere;
   }
   .unit {
     margin-left: 3px;
-    font-size: 16px;
-    font-weight: 500;
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
     color: var(--text-3);
   }
   .sub {
@@ -84,7 +95,7 @@
     padding-top: 10px;
   }
   .sk {
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--skeleton);
     animation: shimmer 1.4s ease-in-out infinite;
   }

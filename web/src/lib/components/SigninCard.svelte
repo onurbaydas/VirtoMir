@@ -132,7 +132,7 @@
     gap: 10px;
     padding: 12px 14px;
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: 0;
   }
   .head {
     display: flex;

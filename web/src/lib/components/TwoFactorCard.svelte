@@ -231,7 +231,7 @@
   }
   .qr {
     align-self: center;
-    border-radius: var(--radius);
+    border-radius: 0;
     background: #fff;
     padding: 8px;
   }
@@ -261,7 +261,7 @@
     gap: 6px 24px;
     width: 100%;
     padding: 12px;
-    border-radius: var(--radius);
+    border-radius: 0;
     background: var(--surface-2);
     font-size: 14px;
   }

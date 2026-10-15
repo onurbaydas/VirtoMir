@@ -403,7 +403,7 @@
     place-items: center;
     width: 36px;
     height: 36px;
-    border-radius: 9px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-3);
   }
@@ -425,7 +425,7 @@
   }
   .mode {
     padding: 1px 8px;
-    border-radius: 999px;
+    border-radius: 0;
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11.5px;
@@ -506,7 +506,7 @@
     height: 22px;
     margin-left: 6px;
     border: 0;
-    border-radius: 6px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-3);
     cursor: pointer;
@@ -570,7 +570,7 @@
     gap: 3px;
     padding: 10px 12px;
     border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
+    border-radius: 0;
     cursor: pointer;
     transition: border-color var(--dur-fast);
   }

@@ -48,19 +48,20 @@
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    height: 32px;
+    height: 30px;
     padding: 0 12px;
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    background: var(--surface-2);
-    font-size: 13px;
-    font-weight: 500;
+    border: var(--frame) solid var(--border-strong);
+    background: var(--metal);
+    box-shadow: var(--bevel);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
     white-space: nowrap;
     cursor: pointer;
-    transition:
-      background var(--dur-fast),
-      border-color var(--dur-fast),
-      opacity var(--dur-fast);
+    transition: background var(--dur-fast);
   }
   .lg .btn {
     height: 36px;
@@ -68,15 +69,28 @@
     font-size: 13.5px;
   }
   .btn:hover:not(:disabled) {
-    background: var(--surface-hover);
-    border-color: var(--text-3);
+    background: var(--metal-hover);
   }
-  .btn.accent {
-    background: var(--accent);
-    border-color: transparent;
+  .btn:active:not(:disabled) {
+    background: var(--metal-pressed);
+    box-shadow: var(--bevel-in);
+    transform: translate(1px, 1px);
+  }
+  /* In lists the accent is only the icon; the machine page's big button is filled. */
+  .btn.accent :global(svg) {
+    color: var(--accent);
+  }
+  .lg .btn.accent {
+    background: var(--metal-accent);
     color: var(--accent-contrast);
+    box-shadow:
+      var(--bevel),
+      3px 3px 0 var(--ink);
   }
-  .btn.accent:hover:not(:disabled) {
+  .lg .btn.accent :global(svg) {
+    color: inherit;
+  }
+  .lg .btn.accent:hover:not(:disabled) {
     background: var(--accent-strong);
   }
   .btn:disabled {

@@ -157,7 +157,7 @@
     gap: 8px;
     padding: 12px 14px;
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: 0;
   }
   .sched.on {
     border-color: color-mix(in srgb, var(--accent) 45%, transparent);

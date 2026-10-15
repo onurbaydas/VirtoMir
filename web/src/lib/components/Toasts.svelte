@@ -49,11 +49,14 @@
     --c: var(--ok);
     display: flex;
     gap: 11px;
-    padding: 13px 12px 13px 14px;
-    background: var(--bg-elev);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-pop);
+    padding: 12px 10px 12px 12px;
+    background: var(--surface);
+    border: var(--frame) solid var(--border-strong);
+    border-left: 8px solid var(--c);
+    border-radius: 0;
+    box-shadow:
+      var(--bevel),
+      var(--shadow-pop);
   }
   .toast.error {
     --c: var(--danger);
@@ -72,7 +75,7 @@
     margin: 1px;
     border: 2px solid var(--info);
     border-right-color: transparent;
-    border-radius: 50%;
+    border-radius: 0;
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin {
@@ -89,7 +92,10 @@
     min-width: 0;
   }
   strong {
-    font-weight: 600;
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    overflow-wrap: anywhere;
   }
   .body span {
     color: var(--text-2);
@@ -100,11 +106,15 @@
     margin-top: 8px;
     height: 28px;
     padding: 0 12px;
-    border: 1px solid var(--border-strong);
-    border-radius: 7px;
-    background: var(--surface-2);
-    font-size: 12.5px;
-    font-weight: 600;
+    border: var(--frame) solid var(--border-strong);
+    border-radius: 0;
+    background: var(--metal);
+    box-shadow: var(--bevel);
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
     cursor: pointer;
   }
   .act.danger {
@@ -119,7 +129,7 @@
     width: 24px;
     height: 24px;
     border: 0;
-    border-radius: 6px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-3);
     cursor: pointer;
