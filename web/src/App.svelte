@@ -15,6 +15,7 @@
   import Toasts from './lib/components/Toasts.svelte'
   import DeployDialog from './lib/components/DeployDialog.svelte'
   import Overview from './lib/pages/Overview.svelte'
+  import MachinesPage from './lib/pages/MachinesPage.svelte'
   import MachinePage from './lib/pages/MachinePage.svelte'
   import NewMachine from './lib/pages/NewMachine.svelte'
   import StoragePage from './lib/pages/StoragePage.svelte'
@@ -102,6 +103,8 @@
 
         {#if route.name === 'overview'}
           <Overview />
+        {:else if route.name === 'machines'}
+          <MachinesPage />
         {:else if route.name === 'machine'}
           {#key route.uuid}
             <MachinePage uuid={route.uuid} />
