@@ -51,7 +51,8 @@ internal/virt/       ← libvirt gateway: connection, reconnect, libvirt → Vir
                        manage/devices/snapshots/storage/networks/create.go: the management operations (ADR-0011)
                        console.go (ADR-0016), backup.go (ADR-0018), template.go: templates, linked clones, <metadata> (ADR-0019)
                        move.go / migrate.go: cold move + live migration, cpucompat.go: CPU baseline, ova.go: OVA import,
-                       tuning.go: pinning/hugepages/NUMA, hostdev.go: PCI/USB passthrough + IOMMU safety checks
+                       tuning.go: pinning/hugepages/NUMA, hostdev.go: PCI/USB passthrough + IOMMU safety checks,
+                       extradevs.go: watchdog/TPM/RNG/virtiofs/mdev/clipboard/video + QEMU args, mdev.go: host vGPU slices (ADR-0025)
 internal/live/       ← 1 s sampling hub + 60 s backlog, per-VM bulk stats, host /proc I/O (SSE)
 internal/api/        ← HTTP/JSON API (/api/v1), sign-in guard, SSE stream, serves the embedded UI
 internal/auth/       ← PAM (build tag `pam`), sessions, lockout, self-signed TLS (ADR-0010), roles + API tokens (ADR-0015),
