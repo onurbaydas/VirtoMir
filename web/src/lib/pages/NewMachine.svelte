@@ -15,6 +15,7 @@
   import { formatBytes, formatKiB } from '../format'
   import { machineHref, router } from '../router.svelte'
   import { toasts } from '../toast.svelte'
+  import IaCPanel from '../components/IaCPanel.svelte'
 
   type OS = CreateSpec['os']
   const OSES: { key: OS; label: string; hint: string }[] = [
@@ -421,6 +422,19 @@
       {busy ? 'Creating…' : start ? 'Create and start' : 'Create'}
     </button>
     {#if !bootable}<span class="error">Add a disk or installation media.</span>{/if}
+
+    <IaCPanel
+      {name}
+      {os}
+      {vcpus}
+      {memGiB}
+      {diskGiB}
+      {pool}
+      {firmware}
+      {secureBoot}
+      {tpm}
+      {netChoice}
+    />
   </aside>
 </form>
 

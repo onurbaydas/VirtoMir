@@ -35,24 +35,32 @@
   }
 
   const ALL_NAV = [
-    { name: 'overview', href: '/', label: 'Overview', icon: LayoutDashboard, role: 'viewer' },
-    { name: 'storage', href: '/storage', label: 'Storage', icon: HardDrive, role: 'viewer' },
-    { name: 'networks', href: '/networks', label: 'Networks', icon: Network, role: 'viewer' },
-    { name: 'backups', href: '/backups', label: 'Backups', icon: Archive, role: 'viewer' },
-    { name: 'hardware', href: '/hardware', label: 'Hardware', icon: CircuitBoard, role: 'viewer' },
-    { name: 'alerts', href: '/alerts', label: 'Alerts', icon: Bell, role: 'viewer' },
-    { name: 'activity', href: '/activity', label: 'Activity', icon: ClockArrowUp, role: 'admin' },
+    { code: '01', name: 'overview', href: '/', label: 'Overview', icon: LayoutDashboard, role: 'viewer' },
+    { code: '03', name: 'storage', href: '/storage', label: 'Storage', icon: HardDrive, role: 'viewer' },
+    { code: '04', name: 'networks', href: '/networks', label: 'Networks', icon: Network, role: 'viewer' },
+    { code: '06', name: 'backups', href: '/backups', label: 'Backups', icon: Archive, role: 'viewer' },
+    { code: '05', name: 'hardware', href: '/hardware', label: 'Hardware', icon: CircuitBoard, role: 'viewer' },
+    { code: '07', name: 'alerts', href: '/alerts', label: 'Alerts', icon: Bell, role: 'viewer' },
+    { code: '08', name: 'activity', href: '/activity', label: 'Activity', icon: ClockArrowUp, role: 'admin' },
   ] as const
   // Cluster: admins always (that is where hosts are added), others once there is one.
   let NAV = $derived([
     ...ALL_NAV.filter((n) => session.can(n.role)),
     ...(session.can('admin') || cluster.clustered
-      ? [{ name: 'cluster', href: '/cluster', label: 'Cluster', icon: Boxes, role: 'viewer' } as const]
+      ? [{ code: '09', name: 'cluster', href: '/cluster', label: 'Cluster', icon: Boxes, role: 'viewer' } as const]
       : []),
   ])
 
   let domains = $derived(live.snapshot?.domains ?? [])
+  let vmFilter = $state('')
+  let filteredDomains = $derived(
+    vmFilter.trim() ? domains.filter((d) => d.name.toLowerCase().includes(vmFilter.toLowerCase())) : domains,
+  )
   let current = $derived(router.route.name === 'machine' ? router.route.uuid : null)
+
+  function openCommandPalette() {
+    window.dispatchEvent(new CustomEvent('open-command-palette'))
+  }
 
   const THEMES: { key: ThemePref; icon: typeof Sun; label: string }[] = [
     { key: 'light', icon: Sun, label: 'Light' },
@@ -106,6 +114,12 @@
         {/each}
       </div>
     {/if}
+    <button class="cmd-trigger" onclick={openCommandPalette} title="Open Command Palette (Ctrl+K)">
+      <span class="cmd-prompt">>_</span>
+      <span class="cmd-text">COMMAND PALETTE</span>
+      <kbd>CTRL+K</kbd>
+    </button>
+
     {#each NAV as n (n.name)}
       {@const Icon = n.icon}
       <a
@@ -115,8 +129,9 @@
         aria-current={router.route.name === n.name ? 'page' : undefined}
         onclick={router.link}
       >
-        <Icon size={16} />
-        {n.label}
+        <span class="nav-code mono">[{n.code}]</span>
+        <Icon size={15} />
+        <span class="nav-label">{n.label}</span>
         {#if n.name === 'alerts' && alerts.open > 0}
           <span class="badge" class:crit={alerts.critical} title="{alerts.open} unacknowledged">{alerts.open}</span>
         {/if}
@@ -124,16 +139,29 @@
     {/each}
 
     <div class="section machines-head">
-      Machines
+      <span>[02] Machines</span>
       {#if session.canCreate}
         <a class="add" class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} title="New machine" aria-label="New machine">
           <Plus size={14} />
         </a>
       {/if}
     </div>
-    {#if domains.length}
+
+    {#if domains.length > 3}
+      <div class="vm-filter-wrap">
+        <input
+          type="text"
+          class="vm-filter-input"
+          bind:value={vmFilter}
+          placeholder="FILTER VMS..."
+          spellcheck="false"
+        />
+      </div>
+    {/if}
+
+    {#if filteredDomains.length}
       <div class="machines">
-        {#each domains as d (d.uuid)}
+        {#each filteredDomains as d (d.uuid)}
           <a
             class="nav-item machine"
             class:active={current === d.uuid}
@@ -149,6 +177,9 @@
               class:crashed={d.state === 'crashed'}
             ></span>
             <span class="mname">{d.name}</span>
+            {#if d.template}
+              <span class="mini-tag">TMPL</span>
+            {/if}
           </a>
         {/each}
       </div>
@@ -307,6 +338,74 @@
   .other-host:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+  }
+  .cmd-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 10px;
+    margin: 0 0 10px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elev);
+    box-shadow: var(--bevel-in);
+    color: var(--text-2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: left;
+  }
+  .cmd-trigger:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .cmd-prompt {
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .cmd-text {
+    flex: 1;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+  }
+  .cmd-trigger kbd {
+    padding: 1px 4px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-3);
+    font-size: 9px;
+  }
+  .nav-code {
+    font-size: 10px;
+    color: var(--text-3);
+    margin-right: -2px;
+  }
+  .vm-filter-wrap {
+    margin: 4px 0 8px;
+  }
+  .vm-filter-input {
+    width: 100%;
+    height: 26px;
+    padding: 0 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elev);
+    box-shadow: var(--bevel-in);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    outline: none;
+  }
+  .vm-filter-input:focus {
+    border-color: var(--accent);
+  }
+  .mini-tag {
+    margin-left: auto;
+    padding: 0 4px;
+    border: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-3);
   }
   .nav-item {
     display: flex;

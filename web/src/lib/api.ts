@@ -865,6 +865,8 @@ export const api = {
   runSchedule: (id: string) => request<void>('POST', `/api/v1/schedules/${enc(id)}/run`),
 
   job: (id: string, host?: string) => request<Job>('GET', at(host, `/api/v1/jobs/${enc(id)}`)),
+  jobs: async (host?: string) =>
+    (await request<{ jobs: Job[] }>('GET', at(host, '/api/v1/jobs'))).jobs,
 
   // Machines
   domain: (uuid: string) => request<DomainDetail>('GET', domainPath(uuid)),
