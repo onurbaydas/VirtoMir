@@ -17,12 +17,17 @@
   import { toasts } from '../toast.svelte'
   import Dialog from '../components/Dialog.svelte'
   import ConfirmButton from '../components/ConfirmButton.svelte'
+  import Download from '@lucide/svelte/icons/download'
+  import OrphanedDisksModal from '../components/OrphanedDisksModal.svelte'
+  import IsoDownloadModal from '../components/IsoDownloadModal.svelte'
 
   let { pool: selected }: { pool: string } = $props()
 
   let pools = $state<Pool[] | null>(null)
   let poolsError = $state('')
   let volumes = $state<Volume[] | null>(null)
+  let orphanedOpen = $state(false)
+  let isoOpen = $state(false)
   let volError = $state('')
 
   let current = $derived(pools?.find((p) => p.name === selected) ?? pools?.find((p) => p.name === 'default') ?? pools?.[0])
@@ -223,9 +228,17 @@
     <h1>Storage</h1>
     <p class="lead">Disk images and installation media live in storage pools, usually directories on this host.</p>
   </div>
-  <button class="ui-btn" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((pName = ''), (pPath = ''), (pErr = ''), (poolDlg = true))}>
-    <FolderPlus size={15} /> New pool
-  </button>
+  <div class="head-right">
+    <button class="ui-btn" onclick={() => (orphanedOpen = true)} title="Find disks not attached to any VM">
+      <HardDrive size={15} /> Orphaned Disks
+    </button>
+    <button class="ui-btn" onclick={() => (isoOpen = true)} title="Direct stream download ISO to pool">
+      <Download size={15} /> Pull ISO from URL
+    </button>
+    <button class="ui-btn primary" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((pName = ''), (pPath = ''), (pErr = ''), (poolDlg = true))}>
+      <FolderPlus size={15} /> New pool
+    </button>
+  </div>
 </header>
 
 {#if poolsError}
@@ -494,6 +507,14 @@
     <button class="ui-btn primary" form="pool-form" disabled={pBusy}>{pBusy ? 'Creating…' : 'Create pool'}</button>
   {/snippet}
 </Dialog>
+
+<OrphanedDisksModal open={orphanedOpen} onclose={() => (orphanedOpen = false)} />
+<IsoDownloadModal
+  open={isoOpen}
+  poolName={current?.name ?? 'default'}
+  onclose={() => (isoOpen = false)}
+  onsuccess={refresh}
+/>
 
 <style>
   .seg {

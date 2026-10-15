@@ -16,6 +16,7 @@
   import Eye from '@lucide/svelte/icons/eye'
   import RefreshCw from '@lucide/svelte/icons/refresh-cw'
   import ChevronDown from '@lucide/svelte/icons/chevron-down'
+  import Video from '@lucide/svelte/icons/video'
   import type RFBType from '@novnc/novnc'
   import { onDestroy } from 'svelte'
   import { toasts } from '../toast.svelte'
@@ -46,6 +47,49 @@
   let clipOpen = $state(false)
   let clipText = $state('')
   let guestClip = $state('')
+  let recording = $state(false)
+  let mediaRecorder: MediaRecorder | null = null
+  let recordedChunks: Blob[] = []
+
+  function toggleRecord() {
+    if (recording) {
+      mediaRecorder?.stop()
+      recording = false
+    } else {
+      const canvas = screen?.querySelector('canvas')
+      if (!canvas) {
+        toasts.push({ kind: 'warn', title: 'Cannot record', detail: 'No video stream active' })
+        return
+      }
+      try {
+        const stream = (canvas as any).captureStream ? (canvas as any).captureStream(30) : null
+        if (!stream) {
+          toasts.push({ kind: 'error', title: 'Recording not supported', detail: 'Canvas captureStream unavailable' })
+          return
+        }
+        recordedChunks = []
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' })
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) recordedChunks.push(e.data)
+        }
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${name}-console-${Date.now()}.webm`
+          a.click()
+          URL.revokeObjectURL(url)
+          toasts.push({ kind: 'info', title: 'Video saved', detail: 'Console session recording exported as WebM' })
+        }
+        mediaRecorder.start()
+        recording = true
+        toasts.push({ kind: 'info', title: 'Recording started', detail: 'Capturing console canvas at 30 FPS' })
+      } catch (err) {
+        toasts.push({ kind: 'error', title: 'Could not record', detail: String(err) })
+      }
+    }
+  }
 
   function load(key: string, def: string) {
     try {
@@ -288,6 +332,9 @@
     </div>
     <button class="tb icon" class:on={viewOnly} onclick={() => (viewOnly = !viewOnly)} title={viewOnly ? 'View only (input is off)' : 'Turn input off (view only)'} aria-pressed={viewOnly}><Eye size={15} /></button>
     <button class="tb icon" onclick={screenshot} disabled={conn !== 'connected'} title="Save a screenshot"><Camera size={15} /></button>
+    <button class="tb icon" class:recording onclick={toggleRecord} disabled={conn !== 'connected'} title={recording ? 'Stop and download WebM recording' : 'Record console to WebM'}>
+      <Video size={15} />
+    </button>
     {#if !standalone}<button class="tb icon" onclick={popOut} title="Open in its own window"><ExternalLink size={15} /></button>{/if}
     <button class="tb icon" onclick={fullscreen} title="Full screen (Esc leaves)"><Maximize size={15} /></button>
   </div>
@@ -387,6 +434,17 @@
   .tb.on {
     color: var(--accent);
     border-color: var(--accent);
+  }
+  .tb.icon.recording {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
+    animation: blink 1s infinite;
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0.5;
+    }
   }
   .tb:disabled {
     opacity: 0.45;

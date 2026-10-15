@@ -7,6 +7,7 @@
   import ActionMenu, { type MenuItem } from './ActionMenu.svelte'
   import Rocket from '@lucide/svelte/icons/rocket'
   import { openDeploy } from '../deploy.svelte'
+  import PowerSplitButton from './PowerSplitButton.svelte'
 
   let { d, size = 'md', extra = [] }: { d: Domain; size?: 'md' | 'lg'; extra?: MenuItem[] } = $props()
 
@@ -22,17 +23,7 @@
       New machine
     </button>
   {:else if primary}
-    {@const Icon = primary.icon}
-    <button
-      class="btn"
-      class:accent={primary.accent}
-      disabled={!!pending || !session.can('operator')}
-      title={session.why('operator')}
-      onclick={() => live.act(d, primary.action)}
-    >
-      <Icon size={size === 'lg' ? 15 : 14} strokeWidth={2.25} />
-      {ACTIONS[primary.action].label}
-    </button>
+    <PowerSplitButton {d} {size} />
   {/if}
   <ActionMenu items={menu} label="More actions for {d.name}" />
 </div>
