@@ -5,15 +5,15 @@
   import type { Snippet } from 'svelte'
 
   interface Props {
-    open: boolean
+    open?: boolean
     title: string
     subtitle?: string
     width?: number
-    onclose: () => void
+    onclose?: () => void
     children: Snippet
     footer?: Snippet
   }
-  let { open, title, subtitle, width = 480, onclose, children, footer }: Props = $props()
+  let { open = $bindable(false), title, subtitle, width = 480, onclose = () => (open = false), children, footer }: Props = $props()
 
   let el: HTMLDialogElement
   $effect(() => {

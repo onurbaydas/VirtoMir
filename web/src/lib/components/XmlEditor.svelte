@@ -4,6 +4,7 @@
   import Save from '@lucide/svelte/icons/save'
   import Undo2 from '@lucide/svelte/icons/undo-2'
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert'
+  import Split from '@lucide/svelte/icons/split'
   import { api, errorText } from '../api'
   import { toasts } from '../toast.svelte'
 
@@ -19,6 +20,7 @@
   let loadErr = $state('')
   let saveErr = $state('')
   let saving = $state(false)
+  let showDiff = $state(false)
   let ta = $state<HTMLTextAreaElement>()
   let gutter = $state<HTMLDivElement>()
 
@@ -34,6 +36,35 @@
 
   let dirty = $derived(original !== null && text !== original)
   let lineCount = $derived(text.split('\n').length)
+
+  interface DiffLine {
+    type: 'add' | 'del' | 'eq'
+    text: string
+  }
+  let diffLines = $derived.by((): DiffLine[] => {
+    if (!original || !dirty) return []
+    const origLines = original.split('\n')
+    const newLines = text.split('\n')
+    const res: DiffLine[] = []
+    let i = 0, j = 0
+    while (i < origLines.length || j < newLines.length) {
+      if (i < origLines.length && j < newLines.length && origLines[i] === newLines[j]) {
+        res.push({ type: 'eq', text: origLines[i] })
+        i++
+        j++
+      } else if (j < newLines.length && (!origLines.slice(i).includes(newLines[j]))) {
+        res.push({ type: 'add', text: newLines[j] })
+        j++
+      } else if (i < origLines.length) {
+        res.push({ type: 'del', text: origLines[i] })
+        i++
+      } else if (j < newLines.length) {
+        res.push({ type: 'add', text: newLines[j] })
+        j++
+      }
+    }
+    return res
+  })
 
   // Well-formedness check (cheap, instant). Schema problems come back from libvirt on save.
   let parseError = $derived.by(() => {
@@ -99,6 +130,15 @@
     <div class="err">{loadErr}</div>
   {:else if original === null}
     <p class="muted">Loading…</p>
+  {:else if showDiff}
+    <div class="diff-area mono">
+      {#each diffLines as dl}
+        <div class="diff-line {dl.type}">
+          <span class="d-sign">{dl.type === 'add' ? '+' : dl.type === 'del' ? '-' : ' '}</span>
+          <span class="d-text">{dl.text}</span>
+        </div>
+      {/each}
+    </div>
   {:else}
     <div class="area mono">
       <div class="gutter" bind:this={gutter} aria-hidden="true">
@@ -122,6 +162,9 @@
     <span class="status" class:bad={!!parseError}>
       {#if parseError}{parseError}{:else if dirty}Unsaved changes · Ctrl+S to save{:else}No changes{/if}
     </span>
+    <button class="ui-btn ghost mono" class:active={showDiff} onclick={() => (showDiff = !showDiff)} disabled={!dirty} title="Toggle visual diff">
+      <Split size={14} /> {showDiff ? 'EDIT CODE' : 'SHOW DIFF'}
+    </button>
     <button class="ui-btn ghost" onclick={() => (text = original ?? '')} disabled={!dirty || saving}><Undo2 size={14} /> Reset</button>
     <button class="ui-btn ghost" onclick={cancel} disabled={saving}>Cancel</button>
     <button class="ui-btn primary" onclick={save} disabled={!dirty || !!parseError || saving}>
@@ -132,6 +175,32 @@
 </div>
 
 <style>
+  .diff-area {
+    height: min(70vh, 720px);
+    overflow: auto;
+    background: var(--bg-elev);
+    font-size: 12.5px;
+    line-height: 1.6;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .diff-line {
+    white-space: pre;
+    display: flex;
+  }
+  .diff-line.add {
+    background: color-mix(in srgb, var(--ok) 18%, transparent);
+    color: var(--ok);
+  }
+  .diff-line.del {
+    background: color-mix(in srgb, var(--danger) 18%, transparent);
+    color: var(--danger);
+  }
+  .d-sign {
+    width: 20px;
+    font-weight: 700;
+    user-select: none;
+  }
   .editor {
     display: flex;
     flex-direction: column;

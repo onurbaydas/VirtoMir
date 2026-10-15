@@ -19,6 +19,7 @@ export type Route =
   | { name: 'console'; uuid: string }
   | { name: 'cluster' }
   | { name: 'hardware' }
+  | { name: 'reports' }
   | { name: 'not-found' }
 
 function parse(path: string, hash: string): Route {
@@ -35,6 +36,7 @@ function parse(path: string, hash: string): Route {
   if (path === '/account') return { name: 'account' }
   if (path === '/cluster') return { name: 'cluster' }
   if (path === '/hardware') return { name: 'hardware' }
+  if (path === '/reports') return { name: 'reports' }
   const c = /^\/console\/([0-9a-fA-F-]{36})$/.exec(path)
   if (c) return { name: 'console', uuid: c[1].toLowerCase() }
   const m = /^\/machines\/([0-9a-fA-F-]{36})$/.exec(path)
@@ -74,7 +76,7 @@ class Router {
 
   /** Shows the same kind of page for another member (machine pages fall back to its overview). */
   switchHost(id: string | null) {
-    const keep = ['overview', 'machines', 'storage', 'networks', 'backups', 'alerts', 'activity'].includes(this.route.name)
+    const keep = ['overview', 'machines', 'storage', 'networks', 'backups', 'alerts', 'activity', 'reports'].includes(this.route.name)
     const path = keep ? splitHost(location.pathname).path : '/'
     history.pushState(null, '', withHost(id, path))
     this.#sync()

@@ -23,10 +23,13 @@ import (
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/cluster"
 	"github.com/onurbaydas/virtomir/internal/confighist"
+	"github.com/onurbaydas/virtomir/internal/ha"
 	"github.com/onurbaydas/virtomir/internal/history"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/live"
 	"github.com/onurbaydas/virtomir/internal/quota"
+	"github.com/onurbaydas/virtomir/internal/reports"
+	"github.com/onurbaydas/virtomir/internal/respool"
 	"github.com/onurbaydas/virtomir/internal/schedule"
 	"github.com/onurbaydas/virtomir/internal/virt"
 	"github.com/onurbaydas/virtomir/web"
@@ -153,6 +156,21 @@ func run(c config, log *slog.Logger) error {
 		log.Warn("quotas", "err", err)
 	} else {
 		opts.Quotas = q
+	}
+	if haStore, err := ha.Open(filepath.Join(c.stateDir, "ha.json")); err != nil {
+		log.Warn("ha store", "err", err)
+	} else {
+		opts.HA = haStore
+	}
+	if repStore, err := reports.Open(filepath.Join(c.stateDir, "reports")); err != nil {
+		log.Warn("reports store", "err", err)
+	} else {
+		opts.Reports = repStore
+	}
+	if rpStore, err := respool.Open(filepath.Join(c.stateDir, "respools.json")); err != nil {
+		log.Warn("respools store", "err", err)
+	} else {
+		opts.Respools = rpStore
 	}
 	apiServer := api.NewServer(opts)
 	go syncCluster(ctx, apiServer)
