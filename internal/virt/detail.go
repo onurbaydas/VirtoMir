@@ -162,8 +162,12 @@ func buildDetail(sum Domain, x *libvirtxml.Domain) DomainDetail {
 			d.Devices = append(d.Devices, rngDevice(v))
 		}
 		for _, v := range dev.Watchdogs {
-			d.Devices = append(d.Devices, simpleDevice("watchdog", GroupSystem, "Watchdog", v.Model, v.Alias, v.Address,
-				Prop{"Model", v.Model, "watchdog@model"}, Prop{"When it fires", v.Action, "watchdog@action"}))
+			w := simpleDevice("watchdog", GroupSystem, "Watchdog", v.Model, v.Alias, v.Address,
+				Prop{"Model", v.Model, "watchdog@model"}, Prop{"When it fires", v.Action, "watchdog@action"})
+			if !chipsetWatchdog(x, v) {
+				w.Target = v.Model // removable
+			}
+			d.Devices = append(d.Devices, w)
 		}
 		for _, v := range dev.Panics {
 			d.Devices = append(d.Devices, simpleDevice("panic", GroupSystem, "Panic notifier", v.Model, v.Alias, v.Address,

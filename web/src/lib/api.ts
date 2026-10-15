@@ -623,6 +623,66 @@ export interface HostPCI {
   hostUse?: string
   /** Why it cannot be passed through; absent when it can. */
   blocked?: string
+  /** Slices the card can be split into (NVIDIA vGPU, Intel GVT-g, …). */
+  mdevTypes?: HostMDevType[]
+}
+
+export interface HostMDevType {
+  id: string
+  name: string
+  api: string
+  available: number
+}
+
+/** A mediated device (vGPU slice) on the host. */
+export interface HostMDev {
+  name: string
+  uuid: string
+  /** PCI address of the card it is cut from. */
+  parent: string
+  type: string
+  typeName?: string
+  active: boolean
+  autostart: boolean
+  usedBy: string[]
+}
+
+export type ExtraDeviceKind = 'watchdog' | 'tpm' | 'rng' | 'filesystem' | 'mdev' | 'clipboard' | 'video'
+
+export interface DeviceSpec {
+  kind: ExtraDeviceKind
+  model?: string
+  action?: string
+  source?: string
+  tag?: string
+  readOnly?: boolean
+  uuid?: string
+  heads?: number
+}
+
+/** Kinds the Remove button sends to …/devices/detach. */
+export type DetachKind =
+  | 'disk'
+  | 'interface'
+  | 'hostdev-pci'
+  | 'hostdev-usb'
+  | 'hostdev-mdev'
+  | 'watchdog'
+  | 'tpm'
+  | 'rng'
+  | 'filesystem'
+  | 'clipboard'
+
+export interface DeviceResult {
+  /** The machine runs and only gets the change from its next start. */
+  appliesOnNextBoot: boolean
+  /** Why the live change failed (the saved definition has it anyway). */
+  liveError?: string
+}
+
+export interface QEMUArgs {
+  args: string[]
+  env: Record<string, string>
 }
 
 export interface HostUSB {
@@ -641,6 +701,7 @@ export interface HostHardware {
   iommu: boolean
   pci: HostPCI[]
   usb: HostUSB[]
+  mdevs: HostMDev[]
 }
 
 export interface GroupRoles {
@@ -846,8 +907,13 @@ export const api = {
     request<void>('PUT', `${domainPath(uuid)}/media`, { target, source }),
   attachDisk: (uuid: string, spec: DiskSpec) => request<{ target: string }>('POST', `${domainPath(uuid)}/disks`, spec),
   attachNIC: (uuid: string, spec: NICSpec) => request<void>('POST', `${domainPath(uuid)}/interfaces`, spec),
-  detach: (uuid: string, ref: { kind: 'disk' | 'interface' | 'hostdev-pci' | 'hostdev-usb'; target?: string; mac?: string }) =>
-    request<void>('POST', `${domainPath(uuid)}/devices/detach`, ref),
+  detach: (uuid: string, ref: { kind: DetachKind; target?: string; mac?: string }) =>
+    request<DeviceResult>('POST', `${domainPath(uuid)}/devices/detach`, ref),
+  addDevice: (uuid: string, spec: DeviceSpec) => request<DeviceResult>('POST', `${domainPath(uuid)}/devices`, spec),
+  qemuArgs: (uuid: string) => request<QEMUArgs>('GET', `${domainPath(uuid)}/qemu-args`),
+  saveQEMUArgs: (uuid: string, q: QEMUArgs) => request<DefineResult>('PUT', `${domainPath(uuid)}/qemu-args`, q),
+  createMDev: (parent: string, type: string) => request<{ uuid: string }>('POST', '/api/v1/host/mdevs', { parent, type }),
+  deleteMDev: (uuid: string) => request<void>('DELETE', `/api/v1/host/mdevs/${enc(uuid)}`),
 
   snapshots: async (uuid: string) =>
     (await request<{ snapshots: SnapshotInfo[] }>('GET', `${domainPath(uuid)}/snapshots`)).snapshots,
