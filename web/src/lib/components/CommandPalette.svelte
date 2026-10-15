@@ -68,6 +68,7 @@
     // 1. Pages
     const pages = [
       { path: '/', title: 'Overview', detail: 'Datacenter & Host Telemetry' },
+      { path: '/machines', title: 'Virtual Machines', detail: 'Guest Workload Inventory & Fleet Management' },
       { path: '/storage', title: 'Storage Pools', detail: 'Disks, Datastores, ISOs & Volumes' },
       { path: '/networks', title: 'Virtual Networks', detail: 'Bridges, VLANs & Virtual Switches' },
       { path: '/hardware', title: 'Hardware & Devices', detail: 'PCI Passthrough, GPUs & Host Devices' },

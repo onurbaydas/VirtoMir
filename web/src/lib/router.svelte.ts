@@ -6,6 +6,7 @@
 
 export type Route =
   | { name: 'overview' }
+  | { name: 'machines' }
   | { name: 'machine'; uuid: string; tab: string }
   | { name: 'new' }
   | { name: 'import' }
@@ -23,6 +24,7 @@ export type Route =
 function parse(path: string, hash: string): Route {
   path = path.replace(/\/+$/, '') || '/'
   if (path === '/') return { name: 'overview' }
+  if (path === '/machines') return { name: 'machines' }
   if (path === '/machines/new') return { name: 'new' }
   if (path === '/machines/import') return { name: 'import' }
   if (path === '/storage') return { name: 'storage', pool: decodeURIComponent(hash.replace(/^#/, '')) }
@@ -72,7 +74,7 @@ class Router {
 
   /** Shows the same kind of page for another member (machine pages fall back to its overview). */
   switchHost(id: string | null) {
-    const keep = ['overview', 'storage', 'networks', 'backups', 'alerts', 'activity'].includes(this.route.name)
+    const keep = ['overview', 'machines', 'storage', 'networks', 'backups', 'alerts', 'activity'].includes(this.route.name)
     const path = keep ? splitHost(location.pathname).path : '/'
     history.pushState(null, '', withHost(id, path))
     this.#sync()

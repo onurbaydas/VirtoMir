@@ -36,10 +36,11 @@
 
   const ALL_NAV = [
     { code: '01', name: 'overview', href: '/', label: 'Overview', icon: LayoutDashboard, role: 'viewer' },
+    { code: '02', name: 'machines', href: '/machines', label: 'Virtual Machines', icon: Boxes, role: 'viewer' },
     { code: '03', name: 'storage', href: '/storage', label: 'Storage', icon: HardDrive, role: 'viewer' },
     { code: '04', name: 'networks', href: '/networks', label: 'Networks', icon: Network, role: 'viewer' },
-    { code: '06', name: 'backups', href: '/backups', label: 'Backups', icon: Archive, role: 'viewer' },
     { code: '05', name: 'hardware', href: '/hardware', label: 'Hardware', icon: CircuitBoard, role: 'viewer' },
+    { code: '06', name: 'backups', href: '/backups', label: 'Backups', icon: Archive, role: 'viewer' },
     { code: '07', name: 'alerts', href: '/alerts', label: 'Alerts', icon: Bell, role: 'viewer' },
     { code: '08', name: 'activity', href: '/activity', label: 'Activity', icon: ClockArrowUp, role: 'admin' },
   ] as const
@@ -47,7 +48,7 @@
   let NAV = $derived([
     ...ALL_NAV.filter((n) => session.can(n.role)),
     ...(session.can('admin') || cluster.clustered
-      ? [{ code: '09', name: 'cluster', href: '/cluster', label: 'Cluster', icon: Boxes, role: 'viewer' } as const]
+      ? [{ code: '09', name: 'cluster', href: '/cluster', label: 'Cluster', icon: Server, role: 'viewer' } as const]
       : []),
   ])
 
@@ -132,14 +133,16 @@
         <span class="nav-code mono">[{n.code}]</span>
         <Icon size={15} />
         <span class="nav-label">{n.label}</span>
-        {#if n.name === 'alerts' && alerts.open > 0}
+        {#if n.name === 'machines' && domains.length > 0}
+          <span class="badge" title="{domains.length} machines">{domains.length}</span>
+        {:else if n.name === 'alerts' && alerts.open > 0}
           <span class="badge" class:crit={alerts.critical} title="{alerts.open} unacknowledged">{alerts.open}</span>
         {/if}
       </a>
     {/each}
 
     <div class="section machines-head">
-      <span>[02] Machines</span>
+      <span>Direct Jump</span>
       {#if session.canCreate}
         <a class="add" class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} title="New machine" aria-label="New machine">
           <Plus size={14} />

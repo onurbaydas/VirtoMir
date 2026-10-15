@@ -39,6 +39,11 @@
       if (!pinnedTabs.some((t) => t.id === r.uuid)) {
         pinnedTabs = [...pinnedTabs, { id: r.uuid, title, href: machineHref(r.uuid), type: 'vm' }]
       }
+    } else if (r.name === 'machines') {
+      const id = 'vms-list'
+      if (!pinnedTabs.some((t) => t.id === id)) {
+        pinnedTabs = [...pinnedTabs, { id, title: 'VMS INVENTORY', href: '/machines', type: 'vm' }]
+      }
     } else if (r.name === 'storage' && r.pool) {
       const id = `pool-${r.pool}`
       if (!pinnedTabs.some((t) => t.id === id)) {
@@ -87,7 +92,10 @@
       <span class="crumb">[DC: {cluster.clustered ? 'CLUSTER' : 'LOCAL-DC'}]</span>
       <span class="sep">/</span>
       <span class="crumb">[NODE: {live.host?.hostname ?? 'HV-01'}]</span>
-      {#if router.route.name === 'machine'}
+      {#if router.route.name === 'machines'}
+        <span class="sep">/</span>
+        <span class="crumb active">[WORKLOADS: VMS]</span>
+      {:else if router.route.name === 'machine'}
         <span class="sep">/</span>
         <span class="crumb active">[VM: {live.snapshot?.domains.find((d) => d.uuid === (router.route as any).uuid)?.name ?? 'CURRENT'}]</span>
       {/if}
