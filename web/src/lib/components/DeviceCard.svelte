@@ -20,6 +20,7 @@
   import Timer from '@lucide/svelte/icons/timer'
   import Siren from '@lucide/svelte/icons/siren'
   import Cog from '@lucide/svelte/icons/cog'
+  import ClipboardCopy from '@lucide/svelte/icons/clipboard-copy'
   import type { Device } from '../api'
 
   function iconFor(d: Device) {
@@ -43,6 +44,8 @@
       case 'serial':
       case 'parallel':
         return Terminal
+      case 'clipboard':
+        return ClipboardCopy
       case 'channel':
         return d.title.includes('agent') ? Bot : Cable
       case 'hostdev-usb':

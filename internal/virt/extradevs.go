@@ -1,8 +1,11 @@
 package virt
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -69,6 +72,10 @@ func (c *Client) AddDevice(uuid string, spec DeviceSpec) (DeviceResult, error) {
 		return res, classify(err)
 	}
 	running := isOn(sum.State) || sum.State == StatePaused
+	if spec.Kind == "filesystem" && !hasVirtiofsd(vhostUserDirs) {
+		// Without it the machine would not start at all.
+		return res, refusedf("Shared folders need virtiofsd on this host, and it is not installed. Install the virtiofsd package (Debian/Ubuntu: apt install virtiofsd; Fedora/RHEL: dnf install virtiofsd) and try again.")
+	}
 	if spec.Kind == "mdev" {
 		mdevs, err := c.hostMDevs(l, nil)
 		if err != nil {
@@ -96,6 +103,31 @@ func (c *Client) AddDevice(uuid string, spec DeviceSpec) (DeviceResult, error) {
 		})
 	}
 	return res, nil
+}
+
+// vhostUserDirs are where libvirt looks for vhost-user back ends such as virtiofsd
+// (descriptors per QEMU's docs/interop/vhost-user.json).
+var vhostUserDirs = []string{"/usr/share/qemu/vhost-user", "/etc/qemu/vhost-user"}
+
+// hasVirtiofsd reports whether a vhost-user "fs" back end is installed (VirtoMir runs on
+// the host it manages, so it can look).
+func hasVirtiofsd(dirs []string) bool {
+	for _, d := range dirs {
+		files, _ := filepath.Glob(filepath.Join(d, "*.json"))
+		for _, f := range files {
+			b, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			var desc struct {
+				Type string `json:"type"`
+			}
+			if json.Unmarshal(b, &desc) == nil && desc.Type == "fs" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // applyLive hot-plugs or unplugs doc ("" = QEMU cannot do it live) on a running machine and
@@ -131,8 +163,14 @@ func addExtraDevice(x *libvirtxml.Domain, spec DeviceSpec, running bool, mdevUse
 		if !slices.Contains(watchdogActions, w.Action) {
 			return "", invalidf("Watchdog action is one of %s.", strings.Join(watchdogActions, ", "))
 		}
-		if len(dev.Watchdogs) > 0 {
-			return "", refusedf("This machine already has a watchdog; remove it first.")
+		// QEMU has one watchdog action per machine, so all of them get the chosen one.
+		for i := range dev.Watchdogs {
+			dev.Watchdogs[i].Action = w.Action
+		}
+		// One of each model (libvirt allows several; q35 always has its built-in iTCO). Asking
+		// for a model the machine has only changes the action, from the next boot on.
+		if slices.ContainsFunc(dev.Watchdogs, func(o libvirtxml.DomainWatchdog) bool { return o.Model == w.Model }) {
+			break
 		}
 		dev.Watchdogs = append(dev.Watchdogs, w)
 		if w.Model == "i6300esb" {
@@ -243,6 +281,12 @@ func addExtraDevice(x *libvirtxml.Domain, spec DeviceSpec, running bool, mdevUse
 	return live, nil
 }
 
+// chipsetWatchdog: the iTCO watchdog of a q35 machine is part of its chipset; libvirt lists it
+// and puts it back if it is removed.
+func chipsetWatchdog(x *libvirtxml.Domain, w libvirtxml.DomainWatchdog) bool {
+	return w.Model == "itco" && x.OS != nil && x.OS.Type != nil && strings.Contains(x.OS.Type.Machine, "q35")
+}
+
 // findMDev returns the index of the hostdev for mediated device id, or -1.
 func findMDev(x *libvirtxml.Domain, id string) int {
 	if x.Devices == nil {
@@ -289,12 +333,16 @@ func removeExtraDevice(x *libvirtxml.Domain, ref DeviceRef) (liveXML string, err
 	}
 	notFound := fmt.Errorf("%w: no %s %s", ErrNotFound, ref.Kind, ref.Target)
 	switch ref.Kind {
-	case "watchdog":
-		if len(dev.Watchdogs) == 0 {
+	case "watchdog": // Target: the model
+		i := slices.IndexFunc(dev.Watchdogs, func(w libvirtxml.DomainWatchdog) bool { return w.Model == ref.Target })
+		if i < 0 {
 			return "", notFound
 		}
-		w := dev.Watchdogs[0]
-		dev.Watchdogs = dev.Watchdogs[1:]
+		w := dev.Watchdogs[i]
+		if chipsetWatchdog(x, w) {
+			return "", refusedf("The iTCO watchdog is part of the q35 chipset and cannot be removed; set it to \"Do nothing\" instead.")
+		}
+		dev.Watchdogs = slices.Delete(dev.Watchdogs, i, i+1)
 		if w.Model == "i6300esb" {
 			liveXML, _ = w.Marshal()
 		}

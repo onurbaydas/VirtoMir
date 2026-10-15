@@ -1,6 +1,7 @@
 package virt
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -303,8 +304,7 @@ func (c *Client) detachExtraDevice(uuid string, ref DeviceRef) (DeviceResult, er
 	if err != nil {
 		return res, err
 	}
-	live, err := removeExtraDevice(x, ref)
-	if err != nil {
+	if _, err := removeExtraDevice(x, ref); err != nil {
 		return res, err
 	}
 	doc, err := x.Marshal()
@@ -315,12 +315,25 @@ func (c *Client) detachExtraDevice(uuid string, ref DeviceRef) (DeviceResult, er
 		return res, classify(err)
 	}
 	c.log.Info("device detached", "domain", d.Name, "kind", ref.Kind, "target", ref.Target)
-	if isOn(sum.State) || sum.State == StatePaused {
-		res = applyLive(live, func(doc string) error {
-			return l.DomainDetachDeviceFlags(d, doc, uint32(libvirt.DomainAffectLive))
-		})
+	if !isOn(sum.State) && sum.State != StatePaused {
+		return res, nil
 	}
-	return res, nil
+	// Unplug what the running machine has, as it has it: libvirt matches the live device
+	// (virtiofs gains a binary path and an alias there, for one).
+	lx, err := c.parseDomain(l, d, false)
+	if err != nil {
+		return DeviceResult{AppliesOnNextBoot: true, LiveError: err.Error()}, nil
+	}
+	live, err := removeExtraDevice(lx, ref)
+	switch {
+	case errors.Is(err, ErrNotFound): // it never made it into the running machine
+		return res, nil
+	case err != nil:
+		return DeviceResult{AppliesOnNextBoot: true, LiveError: err.Error()}, nil
+	}
+	return applyLive(live, func(doc string) error {
+		return l.DomainDetachDeviceFlags(d, doc, uint32(libvirt.DomainAffectLive))
+	}), nil
 }
 
 // findHostdev finds a passed-through device by host PCI address or USB vendor:product.

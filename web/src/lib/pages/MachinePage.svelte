@@ -9,7 +9,7 @@
   import SearchX from '@lucide/svelte/icons/search-x'
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert'
   import ChevronDown from '@lucide/svelte/icons/chevron-down'
-  import { api, ApiError, type Device, type DeviceGroup, type DomainDetail, type Prop } from '../api'
+  import { api, ApiError, type DetachKind, type Device, type DeviceGroup, type DomainDetail, type ExtraDeviceKind, type Prop } from '../api'
   import { ACTIONS, isActive, live } from '../live.svelte'
   import { formatBytes, formatKiB, formatPercent, plural } from '../format'
   import { copy } from '../machine'
@@ -30,6 +30,7 @@
   import ConfirmButton from '../components/ConfirmButton.svelte'
   import ManageDialogs, { type ManageDialog } from '../components/ManageDialogs.svelte'
   import ChangesPanel from '../components/ChangesPanel.svelte'
+  import QemuArgsCard from '../components/QemuArgsCard.svelte'
   import type { MenuItem } from '../components/ActionMenu.svelte'
   import Pencil from '@lucide/svelte/icons/pencil'
   import CopyPlus from '@lucide/svelte/icons/copy-plus'
@@ -86,6 +87,8 @@
   // ---- Management ---------------------------------------------------------------------
   let dlg = $state<ManageDialog>(null)
   let mediaDrive = $state<Device | undefined>()
+  let addOpen = $state(false)
+  let addKind = $state<ExtraDeviceKind | null>(null)
 
   let manageItems = $derived.by((): MenuItem[] => {
     if (!detail) return []
@@ -133,11 +136,39 @@
     }
   }
 
+  /** Devices the Remove button handles, with its question. The rest: the XML tab. */
+  const REMOVE: Partial<Record<string, string>> = {
+    disk: 'Detach from machine?',
+    cdrom: 'Detach from machine?',
+    'hostdev-pci': 'Give it back to the host?',
+    'hostdev-usb': 'Give it back to the host?',
+    'hostdev-mdev': 'Give the slice back?',
+    interface: 'Unplug this adapter?',
+    filesystem: 'Stop sharing this folder?',
+    watchdog: 'Remove the watchdog?',
+    tpm: 'Remove the TPM and its keys?',
+    rng: 'Remove it?',
+    clipboard: 'Turn clipboard sharing off?',
+  }
+  const NO_TARGET = new Set(['tpm', 'rng', 'clipboard'])
+  const removable = (d: Device) => !!REMOVE[d.kind] && (d.kind === 'interface' ? !!d.mac : NO_TARGET.has(d.kind) || !!d.target)
+
   async function detachDevice(d: Device) {
-    if (d.kind === 'interface') await api.detach(uuid, { kind: 'interface', mac: d.mac })
-    else if (d.kind === 'hostdev-pci' || d.kind === 'hostdev-usb') await api.detach(uuid, { kind: d.kind, target: d.target })
-    else await api.detach(uuid, { kind: 'disk', target: d.target })
-    toasts.push({ kind: 'info', title: `${d.title} removed`, detail: d.kind === 'disk' ? 'The disk image stays in its pool.' : undefined })
+    const r =
+      d.kind === 'interface'
+        ? await api.detach(uuid, { kind: 'interface', mac: d.mac })
+        : await api.detach(uuid, { kind: (d.kind === 'cdrom' ? 'disk' : d.kind) as DetachKind, target: d.target })
+    toasts.push({
+      kind: r.liveError ? 'warn' : 'info',
+      title: `${d.title} removed`,
+      detail: r.liveError
+        ? `Gone from the saved definition; the running machine keeps it until it stops: ${r.liveError}`
+        : r.appliesOnNextBoot
+          ? 'Gone from the next start; the running machine keeps it until then.'
+          : d.kind === 'disk'
+            ? 'The disk image stays in its pool.'
+            : undefined,
+    })
     await load()
   }
   const setTab = (t: Tab) => router.navigate(`/machines/${uuid}${t === 'overview' ? '' : '#' + t}`, { replace: true })
@@ -441,7 +472,8 @@
         <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'disk')}><Plus size={14} /> Add storage</button>
         <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'nic')}><Plus size={14} /> Add network adapter</button>
         <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'hostdev')}><Plus size={14} /> Add host device</button>
-        <span class="hw-hint">{active ? 'Changes are hot-plugged and kept for the next boot.' : 'Other devices: edit the XML.'}</span>
+        <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((addKind = null), (addOpen = true))}><Plus size={14} /> Add other device…</button>
+        <span class="hw-hint">{active ? 'Hot-plugged where the hardware allows; the rest from the next start.' : 'Anything else: the XML tab.'}</span>
       </div>
       {#each grouped as g (g.key)}
         {#if !g.advanced || showAdvanced}
@@ -459,12 +491,11 @@
                     {#if d.kind === 'disk' && d.target}
                       <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'resize'))}><Maximize2 size={14} /> Grow…</button>
                     {/if}
-                    {#if (d.kind === 'disk' || d.kind === 'cdrom') && d.target}
-                      <ConfirmButton label="Remove" confirm="Detach from machine?" icon={Unplug} failure="Could not remove {d.title}" disabled={!session.can('admin')} title={session.why('admin')} run={() => detachDevice(d)} />
-                    {:else if (d.kind === 'hostdev-pci' || d.kind === 'hostdev-usb') && d.target}
-                      <ConfirmButton label="Remove" confirm="Give it back to the host?" icon={Unplug} failure="Could not remove {d.title}" disabled={!session.can('admin')} title={session.why('admin')} run={() => detachDevice(d)} />
-                    {:else if d.kind === 'interface' && d.mac}
-                      <ConfirmButton label="Remove" confirm="Unplug this adapter?" icon={Unplug} failure="Could not remove {d.title}" disabled={!session.can('admin')} title={session.why('admin')} run={() => detachDevice(d)} />
+                    {#if d.kind === 'video'}
+                      <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((addKind = 'video'), (addOpen = true))}><Pencil size={14} /> Change…</button>
+                    {/if}
+                    {#if removable(d)}
+                      <ConfirmButton label="Remove" confirm={REMOVE[d.kind] ?? "Remove it?"} icon={Unplug} failure="Could not remove {d.title}" disabled={!session.can('admin')} title={session.why('admin')} run={() => detachDevice(d)} />
                     {/if}
                   {/snippet}
                 </DeviceCard>
@@ -483,6 +514,7 @@
       {#if detail.devices.length === 0}
         <div class="state-msg"><strong>No devices defined</strong></div>
       {/if}
+      {#if detail.persistent}<QemuArgsCard {uuid} onsaved={load} />{/if}
     </div>
   {:else if tab === 'console'}
     <div role="tabpanel">
@@ -511,6 +543,12 @@
   {/if}
 
   <ManageDialogs which={dlg} {detail} drive={mediaDrive} {active} onclose={() => (dlg = null)} onchange={load} />
+  {#if addOpen}
+    <!-- Loaded on first use: keeps the main bundle small. -->
+    {#await import('../components/AddDeviceDialog.svelte') then { default: AddDeviceDialog }}
+      <AddDeviceDialog open {detail} {active} start={addKind} onclose={() => (addOpen = false)} onchange={load} />
+    {/await}
+  {/if}
 {/if}
 
 <style>

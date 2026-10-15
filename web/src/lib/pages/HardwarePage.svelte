@@ -5,17 +5,53 @@
   import Usb from '@lucide/svelte/icons/usb'
   import ShieldCheck from '@lucide/svelte/icons/shield-check'
   import ShieldAlert from '@lucide/svelte/icons/shield-alert'
+  import Layers from '@lucide/svelte/icons/layers'
+  import Plus from '@lucide/svelte/icons/plus'
+  import Trash from '@lucide/svelte/icons/trash'
   import { api, errorText, type HostHardware, type HostPCI } from '../api'
+  import { session } from '../session.svelte'
+  import { toasts } from '../toast.svelte'
+  import ConfirmButton from '../components/ConfirmButton.svelte'
 
   let hw = $state<HostHardware | null>(null)
   let error = $state('')
   let showBridges = $state(false)
-  $effect(() => {
+  const load = () =>
     api
       .hostDevices()
       .then((h) => (hw = h))
       .catch((e) => (error = errorText(e)))
+  $effect(() => {
+    void load()
   })
+
+  // ---- vGPU slices (mediated devices) --------------------------------------------------
+  let cards = $derived((hw?.pci ?? []).filter((p) => p.mdevTypes?.length))
+  let mdevs = $derived(hw?.mdevs ?? [])
+  /** Chosen type per card address. */
+  let pick = $state<Record<string, string>>({})
+  let creating = $state('')
+
+  async function createSlice(p: HostPCI) {
+    const type = pick[p.address] ?? p.mdevTypes!.find((t) => t.available > 0)?.id
+    if (!type) return
+    creating = p.address
+    try {
+      const r = await api.createMDev(p.address, type)
+      toasts.push({ kind: 'info', title: 'vGPU slice created', detail: `${r.uuid} — give it to a machine on its Hardware tab (Add other device → vGPU slice).` })
+      await load()
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'Slice not created', detail: errorText(e) })
+    } finally {
+      creating = ''
+    }
+  }
+
+  async function deleteSlice(uuid: string) {
+    await api.deleteMDev(uuid)
+    toasts.push({ kind: 'info', title: 'vGPU slice deleted' })
+    await load()
+  }
 
   // IOMMU groups in order; devices without a group (IOMMU off) form one list.
   let groups = $derived.by(() => {
@@ -77,6 +113,55 @@
   {:else}
     <p class="muted">No PCI devices reported.</p>
   {/each}
+
+  {#if cards.length || mdevs.length}
+    <h2 class="sub"><Layers size={16} /> vGPU slices</h2>
+    <p class="lead sub-lead">Cards whose driver supports mediated devices (NVIDIA vGPU, Intel GVT-g, …) can be split into slices, each given to one machine. Slices start with the host.</p>
+    {#each cards as p (p.address)}
+      {@const free = p.mdevTypes!.filter((t) => t.available > 0)}
+      <section class="ui-panel group">
+        <header>{p.product || p.productId} <span class="muted mono">· {p.address}</span></header>
+        <div class="slice-new">
+          <select class="ui-input" aria-label="Slice type" value={pick[p.address] ?? free[0]?.id ?? ''} onchange={(e) => (pick[p.address] = e.currentTarget.value)} disabled={!free.length}>
+            {#each p.mdevTypes! as t (t.id)}
+              <option value={t.id} disabled={t.available === 0}>{t.name || t.id} — {t.available} free</option>
+            {/each}
+          </select>
+          <button class="ui-btn sm" disabled={!free.length || creating === p.address || !session.can('admin')} title={session.why('admin') || (free.length ? '' : 'No free slices left on this card')} onclick={() => createSlice(p)}>
+            <Plus size={14} /> {creating === p.address ? 'Creating…' : 'Create slice'}
+          </button>
+        </div>
+        {#each mdevs.filter((m) => m.parent === p.address) as m (m.uuid)}
+          <div class="dev">
+            <span class="dot" class:ok={m.active && !m.usedBy.length} class:used={m.usedBy.length > 0}></span>
+            <div class="main">
+              <span><b>{m.typeName || m.type}</b> {#if !m.active}<span class="why">not running</span>{/if}</span>
+              <span class="meta mono">{m.uuid}{m.autostart ? '' : ' · does not start with the host'}</span>
+              {#if m.usedBy.length}<span class="used-by">Given to {m.usedBy.join(', ')}</span>{/if}
+            </div>
+            <span class="act"><ConfirmButton label="Delete" confirm="Delete this slice?" icon={Trash} failure="Slice not deleted" disabled={m.usedBy.length > 0 || !session.can('admin')} title={m.usedBy.length ? 'Remove it from ' + m.usedBy.join(', ') + ' first' : session.why('admin')} run={() => deleteSlice(m.uuid)} /></span>
+          </div>
+        {/each}
+      </section>
+    {/each}
+    {@const orphans = mdevs.filter((m) => !cards.some((c) => c.address === m.parent))}
+    {#if orphans.length}
+      <section class="ui-panel group">
+        <header>Other slices</header>
+        {#each orphans as m (m.uuid)}
+          <div class="dev">
+            <span class="dot" class:used={m.usedBy.length > 0}></span>
+            <div class="main">
+              <span><b>{m.typeName || m.type}</b> <span class="muted">on {m.parent}</span></span>
+              <span class="meta mono">{m.uuid}</span>
+              {#if m.usedBy.length}<span class="used-by">Given to {m.usedBy.join(', ')}</span>{/if}
+            </div>
+            <span class="act"><ConfirmButton label="Delete" confirm="Delete this slice?" icon={Trash} failure="Slice not deleted" disabled={m.usedBy.length > 0 || !session.can('admin')} title={session.why('admin')} run={() => deleteSlice(m.uuid)} /></span>
+          </div>
+        {/each}
+      </section>
+    {/if}
+  {/if}
 
   <h2 class="sub"><Usb size={16} /> USB devices</h2>
   <section class="ui-panel group">
@@ -193,5 +278,24 @@
   .pad {
     padding: 12px 16px;
     margin: 0;
+  }
+  .sub-lead {
+    margin: -4px 0 10px;
+  }
+  .slice-new {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .slice-new select {
+    flex: 1;
+    min-width: 0;
+  }
+  .act {
+    flex: none;
+    margin-left: auto;
+    align-self: center;
   }
 </style>

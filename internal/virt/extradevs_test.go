@@ -2,6 +2,8 @@ package virt
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -43,17 +45,28 @@ func TestAddWatchdog(t *testing.T) {
 	if !strings.Contains(live, "i6300esb") {
 		t.Errorf("i6300esb is hot-pluggable: live = %q", live)
 	}
-	if _, err := addExtraDevice(x, DeviceSpec{Kind: "watchdog"}, false, noMDevUsers); !isRefused(err) {
-		t.Errorf("second watchdog: %v", err)
+	// The same model again only changes what it does.
+	x, live = addOK(t, x, DeviceSpec{Kind: "watchdog", Action: "pause"}, true)
+	if w := x.Devices.Watchdogs; len(w) != 1 || w[0].Action != "pause" || live != "" {
+		t.Errorf("same model = %+v, live %q", w, live)
 	}
 	for _, bad := range []DeviceSpec{{Kind: "watchdog", Model: "ib700"}, {Kind: "watchdog", Action: "explode"}} {
 		if _, err := addExtraDevice(fixture(t), bad, false, noMDevUsers); !isInvalid(err) {
 			t.Errorf("%+v: %v", bad, err)
 		}
 	}
-	// itco is part of the chipset: only from the next boot.
-	if _, live := addOK(t, fixture(t), DeviceSpec{Kind: "watchdog", Model: "itco"}, true); live != "" {
-		t.Errorf("itco live = %q", live)
+	// q35's built-in iTCO (libvirt lists it) sits next to an i6300esb; it cannot be hot-plugged
+	// and cannot be removed.
+	x, live = addOK(t, x, DeviceSpec{Kind: "watchdog", Model: "itco", Action: "none"}, true)
+	if w := x.Devices.Watchdogs; len(w) != 2 || live != "" || w[0].Action != "none" {
+		t.Errorf("itco = %+v (QEMU has one action for all), live %q", w, live)
+	}
+	if _, err := removeExtraDevice(x, DeviceRef{Kind: "watchdog", Target: "itco"}); !isRefused(err) {
+		t.Errorf("removing q35's iTCO: %v", err)
+	}
+	d := buildDetail(Domain{}, x)
+	if !hasDevice(d.Devices, "watchdog", "i6300esb") || !hasDevice(d.Devices, "watchdog", "") {
+		t.Errorf("detail must name the i6300esb only: %+v", d.Devices)
 	}
 }
 
@@ -204,7 +217,7 @@ func TestRemoveExtraDevice(t *testing.T) {
 	// The machine page names every one of them the way DetachDevice expects.
 	d := buildDetail(Domain{}, x)
 	for _, ref := range []DeviceRef{
-		{Kind: "watchdog"}, {Kind: "tpm"}, {Kind: "rng"}, {Kind: "filesystem", Target: "share"},
+		{Kind: "watchdog", Target: "i6300esb"}, {Kind: "tpm"}, {Kind: "rng"}, {Kind: "filesystem", Target: "share"},
 		{Kind: "hostdev-mdev", Target: id}, {Kind: "clipboard"},
 	} {
 		if !hasDevice(d.Devices, ref.Kind, ref.Target) {
@@ -227,6 +240,25 @@ func TestRemoveExtraDevice(t *testing.T) {
 	}
 	if _, err := removeExtraDevice(x, DeviceRef{Kind: "disk"}); !isInvalid(err) {
 		t.Errorf("disk is not an extra device: %v", err)
+	}
+}
+
+func TestHasVirtiofsd(t *testing.T) {
+	low, high := t.TempDir(), t.TempDir()
+	write := func(dir, name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(low, "50-qemu-gpu.json", `{"description":"QEMU vhost-user-gpu","type":"gpu","binary":"/usr/libexec/vhost-user-gpu"}`)
+	write(low, "broken.json", `{`)
+	dirs := []string{low, high, filepath.Join(high, "missing")}
+	if hasVirtiofsd(dirs) {
+		t.Error("a gpu back end is not virtiofsd")
+	}
+	write(high, "50-virtiofsd.json", `{"description":"QEMU virtiofsd vhost-user-fs","type":"fs","binary":"/usr/libexec/virtiofsd"}`)
+	if !hasVirtiofsd(dirs) {
+		t.Error("virtiofsd not found")
 	}
 }
 
