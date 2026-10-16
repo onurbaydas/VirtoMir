@@ -8,6 +8,7 @@
   import { session } from '../session.svelte'
   import { toasts } from '../toast.svelte'
   import BackupList from '../components/BackupList.svelte'
+  import OffsitePanel from '../components/OffsitePanel.svelte'
 
   import { cluster } from '../cluster.svelte'
 
@@ -62,6 +63,9 @@
     }))
   })
   let total = $derived((backups ?? []).reduce((n, b) => n + b.sizeBytes, 0))
+  let offsiteReady = $state(false)
+  // Backups on the host shown here (the off-site settings are per host).
+  let localIds = $derived(new Set((backups ?? []).filter((b) => !b.hostId || cluster.members.find((m) => m.id === b.hostId)?.self).map((b) => b.id)))
   let exists = (uuid: string) => live.snapshot?.domains.some((d) => d.uuid === uuid)
 
   async function saveDir() {
@@ -121,6 +125,8 @@
   </div>
 </section>
 
+<OffsitePanel {localIds} onchange={load} onready={(r) => (offsiteReady = r)} />
+
 {#if error}
   <div class="ui-error-box">{error}</div>
 {:else if backups === null}
@@ -155,7 +161,7 @@
         {/if}
         <span class="hint">{g.list.length} · {formatBytes(g.size)}</span>
       </header>
-      <BackupList backups={g.list} onchange={load} host={g.hostId} />
+      <BackupList backups={g.list} onchange={load} host={g.hostId} offsite={offsiteReady && (!member || member.self)} />
     </section>
   {/each}
 {/if}

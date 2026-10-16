@@ -44,6 +44,7 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - **Import**: OVA appliances, a libvirt domain XML, or a disk image already on the host
 - **Snapshots** as a tree: take, revert, delete
 - **Backups**: live (no downtime) or offline, restore as a new machine; **automatic snapshots and backups** on a schedule with retention
+- **Off-site copies** with restic — encrypted and deduplicated, to S3 (or MinIO, Wasabi, Ceph RGW …), Backblaze B2, Azure, Google Cloud Storage, SFTP, a REST server or a disk; every scheduled backup can be copied right after it is made, with its own retention, and brought back with one click
 - **Firewall per machine**: in/out rules by protocol, port and IPv4/IPv6 address, default policies and anti-spoofing — enforced on the host (libvirt network filters), so the guest cannot switch it off; applied live
 - **As code**: the new-machine form shows its exact API request (curl, Ansible) and an equivalent `virt-install`
 
@@ -184,7 +185,7 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 
 ## Roadmap
 
-SPICE console, off-site backups (restic/S3), a Turkish UI and signed apt/rpm repositories.
+SPICE console (restic/S3), a Turkish UI and signed apt/rpm repositories.
 
 ## License
 

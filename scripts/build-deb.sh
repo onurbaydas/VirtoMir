@@ -91,8 +91,8 @@ Section: admin
 Priority: optional
 Homepage: https://github.com/onurbaydas/VirtoMir
 Depends: libc6 (>= 2.34), libpam0g, libpam-runtime, libvirt-daemon-system, qemu-system-x86 | qemu-system-arm, adduser
-Recommends: qemu-utils, ovmf, swtpm, swtpm-tools, tcpdump, virtiofsd
-Suggests: ipmitool, nfs-common, open-iscsi, ceph-common, openvswitch-switch
+Recommends: qemu-utils, ovmf, swtpm, swtpm-tools, tcpdump, virtiofsd, restic
+Suggests: ipmitool, nfs-common, open-iscsi, ceph-common, openvswitch-switch, lvm2, zfsutils-linux, libvirt-daemon-driver-storage-zfs
 Description: detailed web control deck for KVM/QEMU virtual machines
  VirtoMir is a web UI and API for libvirt hosts: machines with consoles, snapshots,
  backups, templates and live metrics; storage, networks and passthrough; several

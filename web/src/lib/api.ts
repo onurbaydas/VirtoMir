@@ -363,6 +363,32 @@ export interface AlertConfig {
   smtp: SMTPConfig
 }
 
+/** Off-site target (ADR-0043); secrets come back as OFFSITE_SECRET. */
+export interface OffsiteConfig {
+  repository: string
+  password?: string
+  env?: Record<string, string>
+  afterScheduled: boolean
+  keepLast?: number
+  keepDaily?: number
+  keepWeekly?: number
+  keepMonthly?: number
+  limitUploadKiB?: number
+}
+export const OFFSITE_SECRET = '••••••••'
+
+export interface OffsiteSnapshot {
+  id: string
+  shortId: string
+  time: string
+  host: string
+  machine: string
+  domainUuid: string
+  backup: string
+  path: string
+  sizeBytes?: number
+}
+
 export interface BackupInfo {
   id: string
   domain: string
@@ -874,6 +900,13 @@ export const api = {
   restoreBackup: (id: string, name: string, pool: string, host?: string) =>
     request<Job>('POST', at(host, '/api/v1/backups/restore'), { id, name, pool }),
   backupSettings: () => request<{ backupDir: string }>('GET', '/api/v1/backups/settings'),
+  offsite: (host?: string) => request<{ config: OffsiteConfig; status: { restic?: string; configured: boolean } }>('GET', at(host, '/api/v1/offsite')),
+  saveOffsite: (c: OffsiteConfig, host?: string) =>
+    request<{ config: OffsiteConfig; status: { restic?: string; configured: boolean } }>('PUT', at(host, '/api/v1/offsite'), c),
+  checkOffsite: (init: boolean, host?: string) => request<{ message: string }>('POST', at(host, '/api/v1/offsite/check'), { init }),
+  offsiteSnapshots: async (host?: string) => (await request<{ snapshots: OffsiteSnapshot[] }>('GET', at(host, '/api/v1/offsite/snapshots'))).snapshots,
+  offsiteUpload: (backup: string, host?: string) => request<Job>('POST', at(host, '/api/v1/offsite/upload'), { backup }),
+  offsiteRestore: (snapshot: string, host?: string) => request<Job>('POST', at(host, '/api/v1/offsite/restore'), { snapshot }),
   saveBackupSettings: (backupDir: string, host?: string) =>
     request<{ backupDir: string }>('PUT', at(host, '/api/v1/backups/settings'), { backupDir }),
   schedules: async (domain?: string) =>
