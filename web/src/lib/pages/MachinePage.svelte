@@ -646,25 +646,29 @@
   }
   .tabs {
     display: flex;
-    gap: 2px;
-    margin-bottom: 22px;
+    gap: 3px;
+    margin-bottom: 0;
+    padding: 0 6px;
     overflow-x: auto;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--frame) solid var(--ink);
   }
   .tabs button {
     flex: none;
     display: flex;
     align-items: center;
     gap: 7px;
-    height: 38px;
-    margin-bottom: -1px;
-    padding: 0 12px;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    background: none;
+    height: 34px;
+    margin-bottom: -2px;
+    padding: 0 13px;
+    border: var(--frame) solid var(--ink);
+    border-bottom: 0;
+    background: var(--surface-2);
+    box-shadow: var(--bevel);
     color: var(--text-2);
-    font-size: 13.5px;
-    font-weight: 500;
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-stretch: 80%;
+    font-weight: 700;
     white-space: nowrap;
     cursor: pointer;
   }
@@ -672,16 +676,32 @@
     color: var(--text);
   }
   .tabs button.on {
-    border-bottom-color: var(--text);
-    color: var(--text);
+    position: relative;
+    z-index: 1;
+    height: 38px;
+    margin-top: -4px;
+    background: var(--invert-bg);
+    box-shadow: none;
+    color: var(--invert-fg);
+  }
+  .tabs button.on::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--invert-bg);
+  }
+  .tabs + :global(*) {
+    margin-top: 22px;
   }
   .count {
-    padding: 0 6px;
-    border-radius: 999px;
-    background: var(--surface-hover);
-    color: var(--text-2);
-    font-size: 11.5px;
-    font-weight: 500;
+    padding: 0 5px;
+    border: 1px solid currentColor;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
   }
   .grid {
     display: grid;

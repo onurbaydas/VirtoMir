@@ -29,12 +29,12 @@
     gap: 7px;
     height: 24px;
     padding: 0 9px 0 7px;
-    border: 0;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--c);
-    background: color-mix(in srgb, var(--c) 13%, transparent);
+    border: var(--frame) solid var(--ink);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--bg-elev);
     white-space: nowrap;
     transition:
       color var(--dur) var(--ease-out),
@@ -57,9 +57,9 @@
     --c: var(--text-3);
   }
   .dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
+    width: 9px;
+    height: 9px;
+    border: 1px solid var(--ink);
     background: var(--c);
     outline: 1px solid var(--ink);
   }

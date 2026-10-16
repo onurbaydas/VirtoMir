@@ -37,59 +37,64 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 16px 18px 0;
-    min-height: 148px;
+    gap: 2px;
+    padding: 0 16px;
+    min-height: 150px;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border: var(--frame) solid var(--ink);
+    box-shadow: var(--shadow-hard);
     overflow: hidden;
   }
   header {
     display: flex;
     align-items: center;
     gap: 7px;
-    margin-bottom: 6px;
-    color: var(--text-2);
-    font-size: 13px;
-    font-weight: 500;
+    margin: 0 -16px 10px;
+    padding: 4px 10px;
+    background: #000;
+    color: #f4f1e8;
+    font-family: var(--font-display);
+    font-size: 13.5px;
+    font-stretch: 80%;
+    font-weight: 800;
   }
   .icon {
     display: grid;
     place-items: center;
-    color: var(--text-3);
+    color: var(--ochre);
   }
   .value {
-    font-size: 28px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    line-height: 1.15;
+    font-family: var(--font-display);
+    font-size: 40px;
+    font-stretch: 62%;
+    font-weight: 900;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
   }
   .unit {
     margin-left: 4px;
+    font-family: var(--font-sans);
     font-size: 14px;
-    font-weight: 500;
-    letter-spacing: 0;
-    color: var(--text-3);
+    font-stretch: 100%;
+    font-weight: 400;
+    color: var(--text-2);
   }
   .sub {
-    color: var(--text-3);
+    color: var(--text-2);
     font-size: 12.5px;
   }
   .chart {
-    margin: auto -18px 0;
+    margin: auto -16px 0;
     padding-top: 10px;
   }
   .sk {
-    border-radius: var(--radius-sm);
     background: var(--skeleton);
-    animation: shimmer 1.4s ease-in-out infinite;
+    animation: shimmer 1.2s steps(2, jump-none) infinite;
   }
   .sk-value {
     width: 90px;
-    height: 32px;
+    height: 34px;
   }
   .sk-sub {
     width: 140px;

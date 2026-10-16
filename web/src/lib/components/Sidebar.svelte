@@ -80,7 +80,7 @@
 
 <aside>
   <a class="brand" href="/" onclick={router.link}>
-    <img src="/favicon.svg" alt="" width="22" height="22" />
+    <img src="/favicon.svg" alt="" width="26" height="26" />
     <span class="wordmark">VirtoMir</span>
   </a>
 
@@ -190,49 +190,72 @@
     flex: none;
     width: var(--sidebar-w);
     height: 100vh;
-    padding: 14px 10px 10px;
-    border-right: 1px solid var(--border);
-    background: var(--bg);
+    border-right: var(--frame) solid var(--ink);
+    background: var(--surface);
     overflow: hidden;
   }
   .brand {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 9px;
-    padding: 4px 8px 14px;
-    color: var(--text);
+    gap: 10px;
+    padding: 14px 14px 16px;
+    border-bottom: var(--frame) solid var(--ink);
+    background: #000;
+    color: #f4f1e8;
     text-decoration: none;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  /* A painted stroke behind the wordmark (Kline). */
+  .brand::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    right: -30px;
+    bottom: 4px;
+    width: 150px;
+    height: 16px;
+    background: var(--cadmium);
+    -webkit-mask: var(--brush-stroke) no-repeat center / 100% 100%;
+    mask: var(--brush-stroke) no-repeat center / 100% 100%;
+  }
+  .brand img {
+    border: 2px solid #f4f1e8;
   }
   .wordmark {
-    font-size: 15px;
-    font-weight: 650;
-    letter-spacing: -0.01em;
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-stretch: 62%;
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: 0.01em;
   }
   .host {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 0 4px 10px;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
+    margin: 12px 10px 8px;
+    padding: 7px 9px;
+    border: var(--frame) solid var(--ink);
+    background: var(--bg-elev);
+    box-shadow: var(--bevel-in);
   }
   .host-dot {
     flex: none;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+    width: 10px;
+    height: 10px;
+    border: 1px solid var(--ink);
     background: var(--idle);
   }
   .host-dot.up {
     background: var(--ok);
   }
   .host-dot.degraded {
-    background: var(--warn);
+    background: var(--ochre);
   }
   .host-dot.down {
-    background: var(--danger);
+    background: var(--cadmium);
   }
   .host-text {
     display: flex;
@@ -241,6 +264,7 @@
   }
   .host-name {
     overflow: hidden;
+    font-family: var(--font-mono);
     font-size: 13px;
     font-weight: 600;
     text-overflow: ellipsis;
@@ -253,39 +277,41 @@
   .hosts {
     display: flex;
     flex-direction: column;
-    margin-bottom: 8px;
+    margin: 0 10px 8px;
   }
   aside nav {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    padding: 2px 10px;
   }
   .item {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 32px;
-    padding: 0 10px;
+    min-height: 30px;
+    padding: 0 8px;
     border: 0;
-    border-radius: var(--radius-sm);
     background: none;
-    color: var(--text-2);
-    font-size: 13.5px;
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-stretch: 80%;
+    font-weight: 600;
     text-align: left;
     text-decoration: none;
     cursor: pointer;
-    transition:
-      background var(--dur-fast),
-      color var(--dur-fast);
   }
   .item:hover:not(:disabled) {
-    background: var(--surface-hover);
-    color: var(--text);
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
   }
   .item.active {
-    background: var(--surface-2);
-    color: var(--text);
-    font-weight: 500;
+    background: var(--invert-bg);
+    color: var(--invert-fg);
+  }
+  .item.active:hover {
+    text-decoration: none;
   }
   .item:disabled {
     opacity: 0.5;
@@ -295,85 +321,91 @@
     flex: 1;
   }
   .count {
-    min-width: 20px;
-    padding: 0 6px;
-    border-radius: 999px;
-    background: var(--surface-hover);
-    color: var(--text-2);
-    font-size: 11.5px;
+    min-width: 22px;
+    padding: 0 5px;
+    border: 1px solid currentColor;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
     text-align: center;
   }
   .count.alert {
-    background: color-mix(in srgb, var(--warn) 18%, transparent);
-    color: var(--warn);
+    border-color: var(--ink);
+    background: var(--ochre);
+    color: #000;
   }
   .count.alert.crit {
-    background: color-mix(in srgb, var(--danger) 18%, transparent);
-    color: var(--danger);
+    background: var(--cadmium);
+    color: #fff;
   }
   .section {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin: 18px 10px 6px;
-    color: var(--text-3);
-    font-size: 12px;
-    font-weight: 500;
+    margin: 16px 10px 4px;
+    padding: 0 8px 3px;
+    border-bottom: var(--frame) solid var(--ink);
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-stretch: 75%;
+    font-weight: 800;
   }
   .add {
     display: grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
-    border-radius: var(--radius-sm);
-    color: var(--text-3);
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--ink);
+    background: var(--surface);
+    box-shadow: var(--bevel);
+    color: var(--text);
   }
   .add:hover,
   .add.active {
-    background: var(--surface-hover);
-    color: var(--text);
+    background: var(--invert-bg);
+    color: var(--invert-fg);
   }
   .filter {
-    margin: 0 4px 6px;
-    height: 30px;
-    padding: 0 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
+    margin: 4px 10px 6px;
+    height: 28px;
+    padding: 0 8px;
+    border: var(--frame) solid var(--ink);
+    background: var(--bg-elev);
+    box-shadow: var(--bevel-in);
     color: var(--text);
     font-size: 13px;
     outline: none;
-  }
-  .filter:focus {
-    border-color: var(--accent);
   }
   .machines {
     display: flex;
     flex: 1;
     flex-direction: column;
-    gap: 1px;
     min-height: 0;
+    padding: 2px 10px;
     overflow-y: auto;
   }
   .machine {
-    min-height: 30px;
-    font-size: 13px;
+    min-height: 26px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    font-stretch: 100%;
+    font-weight: 500;
   }
   .mdot {
     flex: none;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--border-strong);
+    width: 8px;
+    height: 8px;
+    border: 1px solid var(--ink);
+    background: var(--bg-elev);
   }
   .mdot.on {
     background: var(--ok);
   }
   .mdot.paused {
-    background: var(--warn);
+    background: var(--ochre);
   }
   .mdot.crashed {
-    background: var(--danger);
+    background: var(--cadmium);
   }
   .mname {
     flex: 1;
@@ -382,36 +414,37 @@
     white-space: nowrap;
   }
   .tag {
-    color: var(--text-3);
-    font-size: 11px;
+    padding: 0 4px;
+    border: 1px solid currentColor;
+    font-size: 10px;
   }
   .empty {
-    padding: 4px 10px;
+    padding: 4px 8px;
     color: var(--text-3);
     font-size: 12.5px;
   }
   footer {
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin-top: 8px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border);
+    gap: 6px;
+    padding: 8px 10px;
+    border-top: var(--frame) solid var(--ink);
+    background: var(--surface-2);
   }
   .who {
     display: flex;
     flex: 1;
     align-items: center;
-    gap: 9px;
+    gap: 8px;
     min-width: 0;
-    padding: 5px 6px;
-    border-radius: var(--radius-sm);
+    padding: 3px 4px;
     color: var(--text);
     text-decoration: none;
   }
   .who:hover,
   .who.active {
-    background: var(--surface-hover);
+    background: var(--invert-bg);
+    color: var(--invert-fg);
   }
   .avatar {
     display: grid;
@@ -419,61 +452,58 @@
     place-items: center;
     width: 26px;
     height: 26px;
-    border-radius: 50%;
-    background: var(--surface-2);
-    color: var(--text-2);
+    border: var(--frame) solid var(--ink);
+    background: var(--ochre);
+    color: #000;
   }
   .uname {
     display: flex;
     flex-direction: column;
     min-width: 0;
     overflow: hidden;
+    font-weight: 700;
     font-size: 13px;
-    font-weight: 500;
-    line-height: 1.2;
+    line-height: 1.15;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .uname small {
-    color: var(--text-3);
-    font-size: 11.5px;
     font-weight: 400;
+    font-size: 11.5px;
+    opacity: 0.75;
   }
   .icon {
     display: grid;
     place-items: center;
     width: 28px;
     height: 28px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--text-3);
+    border: var(--frame) solid var(--ink);
+    background: var(--surface);
+    box-shadow: var(--bevel);
+    color: var(--text);
     cursor: pointer;
   }
-  .icon:hover {
-    background: var(--surface-hover);
-    color: var(--text);
+  .icon:active {
+    box-shadow: var(--bevel-in);
   }
   .themes {
     display: flex;
-    padding: 2px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border: var(--frame) solid var(--ink);
+    background: var(--bg-elev);
   }
   .themes button {
     display: grid;
     place-items: center;
     width: 24px;
-    height: 22px;
+    height: 24px;
     border: 0;
-    border-radius: 4px;
     background: none;
-    color: var(--text-3);
+    color: var(--text-2);
     cursor: pointer;
   }
   .themes button.active {
-    background: var(--surface-hover);
-    color: var(--text);
+    background: var(--invert-bg);
+    color: var(--invert-fg);
   }
   .mobile {
     display: none;
@@ -490,28 +520,29 @@
       align-items: center;
       gap: 10px;
       padding: 8px 12px;
-      border-bottom: 1px solid var(--border);
-      background: color-mix(in srgb, var(--bg) 92%, transparent);
-      backdrop-filter: blur(8px);
+      border-bottom: var(--frame) solid var(--ink);
+      background: var(--surface);
     }
     .m-nav {
       display: flex;
-      gap: 2px;
+      gap: 4px;
       overflow-x: auto;
     }
     .m-nav a {
       display: inline-flex;
       align-items: center;
-      padding: 6px 10px;
-      border-radius: var(--radius-sm);
-      color: var(--text-2);
-      font-size: 13.5px;
+      padding: 5px 9px;
+      color: var(--text);
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-stretch: 80%;
+      font-weight: 600;
       text-decoration: none;
       white-space: nowrap;
     }
     .m-nav a.active {
-      background: var(--surface-2);
-      color: var(--text);
+      background: var(--invert-bg);
+      color: var(--invert-fg);
     }
   }
 </style>

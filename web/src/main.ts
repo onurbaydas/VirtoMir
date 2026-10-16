@@ -1,5 +1,6 @@
-// Inter (SIL OFL 1.1) for text, IBM Plex Mono (OFL) for numbers and code.
-import '@fontsource-variable/inter'
+// Archivo (OFL, variable width) for headlines and controls, IBM Plex Mono (OFL) for numbers
+// and code; body text uses the system's Arial/Helvetica on purpose (ADR-0038).
+import '@fontsource-variable/archivo/standard.css'
 import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/500.css'
 import './app.css'
