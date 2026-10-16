@@ -4,6 +4,7 @@
   import Trash from '@lucide/svelte/icons/trash'
   import Zap from '@lucide/svelte/icons/zap'
   import Power from '@lucide/svelte/icons/power'
+  import CloudUpload from '@lucide/svelte/icons/cloud-upload'
   import { api, errorText, type BackupInfo, type Pool } from '../api'
   import { formatBytes } from '../format'
   import { track } from '../jobs'
@@ -15,7 +16,16 @@
   import ConfirmButton from './ConfirmButton.svelte'
 
   /** host: the cluster member the backups are on, when it is not necessarily the one shown. */
-  let { backups, onchange, host }: { backups: BackupInfo[]; onchange: () => void; host?: string } = $props()
+  /** offsite: this host copies backups off-site (ADR-0043); shows "Copy off-site". */
+  let { backups, onchange, host, offsite = false }: { backups: BackupInfo[]; onchange: () => void; host?: string; offsite?: boolean } = $props()
+  async function copyOffsite(b: BackupInfo) {
+    try {
+      const job = await api.offsiteUpload(b.id, host)
+      track(job, { success: `${b.domain}: copied off-site`, host, onSuccess: onchange })
+    } catch (err) {
+      toasts.push({ kind: 'error', title: 'Could not copy off-site', detail: errorText(err) })
+    }
+  }
 
   const when = (s: string) => new Date(s).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
   const took = (s: number) => (s < 60 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`)
@@ -67,6 +77,11 @@
         <span class="when">{when(b.created)} {#if b.automatic}<span class="tag">automatic</span>{/if}</span>
         <span class="meta">{formatBytes(b.sizeBytes)} · {b.disks.map((d) => d.target).join(', ')} · {b.live ? 'live' : 'offline'} · took {took(b.durationSec)}</span>
       </div>
+      {#if offsite}
+        <button class="ui-btn sm ghost" disabled={!session.can('admin')} title={session.why('admin') || 'Copy this backup to the off-site repository'} onclick={() => copyOffsite(b)}>
+          <CloudUpload size={14} /> Copy off-site
+        </button>
+      {/if}
       <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin') || 'Create a new machine from this backup'} onclick={() => openRestore(b)}>
         <ArchiveRestore size={14} /> Restore…
       </button>

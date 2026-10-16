@@ -29,6 +29,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/hostnet"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/live"
+	"github.com/onurbaydas/virtomir/internal/offsite"
 	"github.com/onurbaydas/virtomir/internal/quota"
 	"github.com/onurbaydas/virtomir/internal/reports"
 	"github.com/onurbaydas/virtomir/internal/respool"
@@ -134,8 +135,16 @@ func run(c config, log *slog.Logger) error {
 	watchAlerts(ctx, hub, alertEngine, client)
 
 	jobManager := jobs.New(ctx)
+	hostName := c.name
+	if hostName == "" {
+		hostName, _ = os.Hostname()
+	}
+	offsiteStore, err := offsite.Open(filepath.Join(c.stateDir, "offsite.json"), filepath.Join(c.stateDir, "restic-cache"), hostName)
+	if err != nil {
+		log.Warn("off-site copies", "err", err)
+	}
 	scheduler, err := schedule.Open(filepath.Join(c.stateDir, "schedules.json"), filepath.Join(c.stateDir, "backups"),
-		scheduleRunner{client}, jobStarter(jobManager), log)
+		scheduleRunner{client, offsiteStore}, jobStarter(jobManager), log)
 	if err != nil {
 		log.Warn("schedules", "err", err)
 	}
@@ -172,6 +181,7 @@ func run(c config, log *slog.Logger) error {
 	if os.Geteuid() == 0 { // writes /etc/netplan, /etc/systemd/network or NetworkManager connections
 		opts.HostNet = hostnet.New(c.stateDir, log, opts.HostInfo)
 	}
+	opts.Offsite = offsiteStore
 	opts.Updater = update.New(c.updateRepo, version, os.Getenv("VIRTOMIR_GITHUB_TOKEN"))
 	opts.StateDir = c.stateDir
 	if repStore, err := reports.Open(filepath.Join(c.stateDir, "reports")); err != nil {

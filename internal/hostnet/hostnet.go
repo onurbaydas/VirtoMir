@@ -37,12 +37,21 @@ var (
 	ErrRefused = errors.New("refused")
 )
 
+// classed is a sentence for the user that errors.Is matches to its class.
+type classed struct {
+	class error
+	msg   string
+}
+
+func (e classed) Error() string        { return e.msg }
+func (e classed) Is(target error) bool { return target == e.class }
+
 func invalidf(format string, a ...any) error {
-	return fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, a...))
+	return classed{ErrInvalid, fmt.Sprintf(format, a...)}
 }
 
 func refusedf(format string, a ...any) error {
-	return fmt.Errorf("%w: %s", ErrRefused, fmt.Sprintf(format, a...))
+	return classed{ErrRefused, fmt.Sprintf(format, a...)}
 }
 
 // Spec is a new host interface.
@@ -193,7 +202,7 @@ func (m *Manager) Status() Status {
 	if b, err := m.backend(); err == nil {
 		st.Backend = b.name()
 	} else {
-		st.Reason = strings.TrimPrefix(err.Error(), ErrRefused.Error()+": ")
+		st.Reason = err.Error()
 	}
 	if m.pending != nil {
 		p := *m.pending
@@ -504,7 +513,7 @@ func (m *Manager) begin(ctx context.Context, backend, what string, p plan, recs 
 	}
 	for _, c := range p.apply {
 		if _, err := m.Run(ctx, c.Args...); err != nil && !c.Optional {
-			return fail(fmt.Errorf("%w: %v — the previous configuration was restored", ErrRefused, err))
+			return fail(refusedf("%v — the previous configuration was restored", err))
 		}
 	}
 	m.timer = time.AfterFunc(time.Until(pend.Deadline), func() {

@@ -2,16 +2,22 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/onurbaydas/virtomir/internal/jobs"
+	"github.com/onurbaydas/virtomir/internal/offsite"
 	"github.com/onurbaydas/virtomir/internal/schedule"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
-// scheduleRunner lets the scheduler use the libvirt client.
-type scheduleRunner struct{ c *virt.Client }
+// scheduleRunner lets the scheduler use the libvirt client. off (may be nil) copies each
+// scheduled backup off-site when configured to (ADR-0043).
+type scheduleRunner struct {
+	c   *virt.Client
+	off *offsite.Store
+}
 
 func (r scheduleRunner) Snapshot(uuid, name, desc string) error {
 	_, err := r.c.CreateSnapshot(uuid, virt.SnapshotSpec{Name: name, Description: desc})
@@ -38,8 +44,14 @@ func (r scheduleRunner) DeleteSnapshot(uuid, name string) error {
 }
 
 func (r scheduleRunner) Backup(ctx context.Context, dir, uuid string, report func(string)) error {
-	_, err := r.c.BackupDomain(ctx, virt.BackupDir(dir), uuid, true, report)
-	return err
+	b, err := r.c.BackupDomain(ctx, virt.BackupDir(dir), uuid, true, report)
+	if err != nil || r.off == nil || !r.off.AfterScheduled() {
+		return err
+	}
+	if _, err := r.off.Upload(ctx, dir, b.ID, b.DomainUUID, b.Domain, report); err != nil {
+		return fmt.Errorf("backed up locally as %s, but the off-site copy failed: %w", b.ID, err)
+	}
+	return nil
 }
 
 func (r scheduleRunner) PruneBackups(dir, uuid string, keep int) (int, error) {

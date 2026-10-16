@@ -55,7 +55,7 @@ Summary:        Detailed web control deck for KVM/QEMU virtual machines (experim
 License:        AGPL-3.0-or-later
 URL:            https://github.com/onurbaydas/VirtoMir
 Requires:       pam, libvirt-daemon-kvm, qemu-kvm, systemd
-Recommends:     qemu-img, edk2-ovmf, swtpm, swtpm-tools, tcpdump, virtiofsd
+Recommends:     qemu-img, edk2-ovmf, swtpm, swtpm-tools, tcpdump, virtiofsd, restic
 %global debug_package %{nil}
 %global __strip /bin/true
 
