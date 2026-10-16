@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Picks the right console for a machine: graphical (VNC) or text (serial), and explains
+  // Picks the right console for a machine: graphical (VNC or SPICE) or text (serial), and explains
   // what to do when the machine is off or has no console of that kind.
   import Monitor from '@lucide/svelte/icons/monitor'
   import SquareTerminal from '@lucide/svelte/icons/square-terminal'
@@ -9,6 +9,8 @@
   import { session } from '../session.svelte'
   import VncConsole from './VncConsole.svelte'
   import SerialConsole from './SerialConsole.svelte'
+  import SpiceConsole from './SpiceConsole.svelte'
+  import { toasts } from '../toast.svelte'
 
   interface Info {
     running: boolean
@@ -16,6 +18,9 @@
     serial: string[]
     /** Monitors the screen console can show (extra ones need a restart after a change). */
     heads?: number
+    spice?: { password?: string }
+    /** Protocol in the definition: what the next start uses. */
+    display: '' | 'vnc' | 'spice'
   }
   let { d, standalone = false, head: firstHead = 0 }: { d: Domain; standalone?: boolean; head?: number } = $props()
   // svelte-ignore state_referenced_locally
@@ -36,11 +41,28 @@
       info = i
       error = ''
       if (head >= (i.heads ?? 1)) head = 0
-      if (!kind || (kind === 'vnc' && !i.vnc) || (kind === 'serial' && !i.serial.length)) kind = i.vnc ? 'vnc' : i.serial.length ? 'serial' : null
+      const screen = i.vnc || i.spice
+      if (!kind || (kind === 'vnc' && !screen) || (kind === 'serial' && !i.serial.length)) kind = screen ? 'vnc' : i.serial.length ? 'serial' : null
     } catch (e) {
       error = errorText(e)
     }
   }
+  // VNC ⇄ SPICE (ADR-0046): takes effect at the next start.
+  let switching = $state(false)
+  async function switchDisplay(to: 'vnc' | 'spice') {
+    switching = true
+    try {
+      await api.put(`/api/v1/domains/${encodeURIComponent(d.uuid)}/display`, { protocol: to })
+      toasts.push({ kind: 'info', title: `${d.name} uses ${to.toUpperCase()} from its next start`, detail: running ? 'Shut it down and start it again (a reboot inside the guest is not enough).' : undefined })
+      await load()
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'Display not changed', detail: errorText(e) })
+    } finally {
+      switching = false
+    }
+  }
+  let liveProto = $derived(info?.spice ? 'spice' : info?.vnc ? 'vnc' : '')
+
   // Reload when the machine starts or stops (ports and consoles change).
   $effect(() => {
     void running
@@ -49,16 +71,16 @@
 </script>
 
 <div class="panel" class:standalone>
-  {#if !standalone && info && (info.vnc || info.serial.length)}
+  {#if !standalone && info && (info.vnc || info.spice || info.serial.length)}
     <div class="kinds" role="tablist" aria-label="Console type">
-      <button role="tab" aria-selected={kind === 'vnc'} class:on={kind === 'vnc'} disabled={!info.vnc} onclick={() => (kind = 'vnc')}>
+      <button role="tab" aria-selected={kind === 'vnc'} class:on={kind === 'vnc'} disabled={!info.vnc && !info.spice} onclick={() => (kind = 'vnc')}>
         <Monitor size={14} /> Screen
       </button>
       <button role="tab" aria-selected={kind === 'serial'} class:on={kind === 'serial'} disabled={!info.serial.length} onclick={() => (kind = 'serial')}>
         <SquareTerminal size={14} /> Text console
       </button>
     </div>
-    {#if kind === 'vnc' && (info.heads ?? 1) > 1}
+    {#if kind === 'vnc' && !info.spice && (info.heads ?? 1) > 1}
       <div class="kinds" role="tablist" aria-label="Monitor">
         {#each Array.from({ length: info.heads ?? 1 }, (_, i) => i) as h (h)}
           <button role="tab" aria-selected={head === h} class:on={head === h} onclick={() => (head = h)}>Monitor {h + 1}</button>
@@ -80,6 +102,10 @@
         <Play size={14} /> Start
       </button>
     </div>
+  {:else if kind === 'vnc' && info.spice}
+    {#key d.uuid}
+      <SpiceConsole uuid={d.uuid} name={d.name} password={info.spice.password} {standalone} />
+    {/key}
   {:else if kind === 'vnc'}
     {#key `${d.uuid}/${head}`}
       <VncConsole uuid={d.uuid} name={d.name} password={info.vnc?.password} {head} {standalone} />
@@ -92,9 +118,33 @@
       <span>This machine has neither a VNC display nor a serial console. Add one in the XML editor (a <span class="mono">&lt;graphics type='vnc'/&gt;</span> device).</span>
     </div>
   {/if}
+  {#if !standalone && info?.display && session.can('admin')}
+    <p class="proto">
+      Screen over <b>{(liveProto || info.display).toUpperCase()}</b>{liveProto && info.display !== liveProto ? `, ${info.display.toUpperCase()} from the next start` : ''}.
+      {#if info.display === 'vnc'}
+        <button class="link" disabled={switching} onclick={() => switchDisplay('spice')}>Use SPICE</button> — the guest's resolution follows the window and the clipboard works with spice-vdagent.
+      {:else}
+        <button class="link" disabled={switching} onclick={() => switchDisplay('vnc')}>Use VNC</button> — works without any guest agent, with keyboard layouts and several monitors.
+      {/if}
+    </p>
+  {/if}
 </div>
 
 <style>
+  .proto {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-3);
+  }
+  .link {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--accent);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
   .panel {
     display: flex;
     flex-direction: column;

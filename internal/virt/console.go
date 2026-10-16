@@ -20,6 +20,10 @@ type ConsoleInfo struct {
 	Serial []string `json:"serial"`
 	// Heads is how many monitors the graphical console can show (each on its own VNC server).
 	Heads int `json:"heads"`
+	// SPICE is the graphical console when the machine uses SPICE instead of VNC (ADR-0046).
+	SPICE *SpiceInfo `json:"spice,omitempty"`
+	// Display is the protocol in the definition (vnc, spice, ""), also for a stopped machine.
+	Display string `json:"display"`
 }
 
 type VNCInfo struct {
@@ -123,6 +127,9 @@ func (c *Client) ConsoleInfo(uuid string) (ConsoleInfo, error) {
 		return ConsoleInfo{}, classify(err)
 	}
 	info := ConsoleInfo{Serial: []string{}, Running: isOn(sum.State) || sum.State == StatePaused}
+	if px, err := c.parseDomain(l, d, true); err == nil {
+		info.Display = displayProtocol(px)
+	}
 	if !info.Running {
 		return info, nil
 	}
@@ -133,6 +140,9 @@ func (c *Client) ConsoleInfo(uuid string) (ConsoleInfo, error) {
 	if t, ok := findVNC(x); ok {
 		info.VNC = &VNCInfo{Password: t.password, Keymap: t.keymap}
 		info.Heads = liveHeads(x)
+	}
+	if t, ok := findSpice(x); ok {
+		info.SPICE = &SpiceInfo{Password: t.password}
 	}
 	info.Serial = serialAliases(x)
 	return info, nil
