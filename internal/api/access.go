@@ -37,7 +37,8 @@ func requiredRole(method, path string) auth.Role {
 	case strings.HasPrefix(path, "/api/v1/tokens"), strings.HasPrefix(path, "/api/v1/account/"):
 		return auth.Viewer // everyone manages their own tokens and second factor (handlers check ownership)
 	case path == "/api/v1/activity", path == "/api/v1/signin-config", path == "/api/v1/quotas",
-		strings.HasPrefix(path, "/api/v1/twofactor/"):
+		strings.HasPrefix(path, "/api/v1/twofactor/"),
+		path == "/api/v1/host/capture": // other people's network traffic
 		return auth.Admin // who may sign in and who may create what is the admins' business
 	case strings.Contains(path, "/console/"):
 		return auth.Operator // a console is control over the machine
@@ -150,7 +151,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			return
 		}
 
-		if !unsafe || strings.HasPrefix(path, "/api/v1/auth/") {
+		if !unsafe || strings.HasPrefix(path, "/api/v1/auth/") || chatter(path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -167,6 +168,12 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			Status: rec.status, Error: rec.errorMessage(),
 		})
 	})
+}
+
+// chatter is member-to-member traffic every few seconds (HA heartbeats and definitions):
+// not a change anybody made, so it stays out of the activity log.
+func chatter(path string) bool {
+	return path == "/api/v1/cluster/peer/ha/heartbeat" || path == "/api/v1/cluster/peer/ha/replicas"
 }
 
 // authenticate resolves an API token or the session cookie. A token's role is capped by

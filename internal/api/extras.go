@@ -7,6 +7,7 @@ import (
 
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/history"
+	"github.com/onurbaydas/virtomir/internal/respool"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
@@ -54,20 +55,22 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &set) {
 		return
 	}
-	if identity(r).Role < auth.Admin { // an owner growing their machine stays within the quota
-		var vcpus int
-		var mem uint64
-		if doms, err := s.backend.ListDomains(); err == nil {
-			for _, d := range doms {
-				if strings.EqualFold(d.UUID, r.PathValue("uuid")) {
-					vcpus, mem = d.VCPUs, d.MaxMemoryKiB>>10
-				}
+	var vcpus int
+	var mem uint64
+	if doms, err := s.backend.ListDomains(); err == nil {
+		for _, d := range doms {
+			if strings.EqualFold(d.UUID, r.PathValue("uuid")) {
+				vcpus, mem = d.VCPUs, d.MaxMemoryKiB>>10
 			}
 		}
-		addCPU, addMem := int(set.MaxVCPUs)-vcpus, int64(set.MemoryMiB)-int64(mem)
-		if (addCPU > 0 || addMem > 0) && !s.checkQuota(w, r, 0, max(addCPU, 0), uint64(max(addMem, 0))) {
-			return
-		}
+	}
+	addCPU, addMem := max(int(set.MaxVCPUs)-vcpus, 0), uint64(max(int64(set.MemoryMiB)-int64(mem), 0))
+	// An owner growing their machine stays within their quota; everyone within its pool.
+	if identity(r).Role < auth.Admin && (addCPU > 0 || addMem > 0) && !s.checkQuota(w, r, 0, addCPU, addMem) {
+		return
+	}
+	if (addCPU > 0 || addMem > 0) && !s.checkRespool(w, "", r.PathValue("uuid"), respool.Demand{VCPUs: addCPU, MemoryMiB: addMem}) {
+		return
 	}
 	res, err := s.backend.SaveSettings(r.PathValue("uuid"), set)
 	if err != nil {
@@ -77,6 +80,49 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 	s.done(w, http.StatusOK, res)
 }
 
+// diskGrowth is what growing a machine's disk to sizeGiB adds to its storage pool (ok=false
+// when the disk is not a volume of a pool, so no pool limit applies).
+func (s *Server) diskGrowth(uuid, target string, sizeGiB uint64) (respool.Demand, bool) {
+	if s.respools == nil || s.respools.PoolOf(uuid) == "" {
+		return respool.Demand{}, false
+	}
+	det, err := s.backend.DomainDetail(uuid)
+	if err != nil {
+		return respool.Demand{}, false
+	}
+	var path string
+	var cur uint64
+	for _, dev := range det.Devices {
+		if dev.Target == target {
+			cur = dev.CapacityBytes
+			for _, p := range dev.Props {
+				if p.Label == "Source" {
+					path = p.Value
+				}
+			}
+		}
+	}
+	if path == "" || sizeGiB<<30 <= cur {
+		return respool.Demand{}, false
+	}
+	pools, err := s.backend.ListPools()
+	if err != nil {
+		return respool.Demand{}, false
+	}
+	for _, p := range pools {
+		vols, err := s.backend.ListVolumes(p.Name)
+		if err != nil {
+			continue
+		}
+		for _, v := range vols {
+			if v.Path == path {
+				return respool.Demand{StoragePool: p.Name, StorageBytes: sizeGiB<<30 - cur}, true
+			}
+		}
+	}
+	return respool.Demand{}, false
+}
+
 type sizeBody struct {
 	SizeGiB uint64 `json:"sizeGiB"`
 }
@@ -84,6 +130,9 @@ type sizeBody struct {
 func (s *Server) resizeDisk(w http.ResponseWriter, r *http.Request) {
 	var b sizeBody
 	if !s.decode(w, r, &b) {
+		return
+	}
+	if d, ok := s.diskGrowth(r.PathValue("uuid"), r.PathValue("target"), b.SizeGiB); ok && !s.checkRespool(w, "", r.PathValue("uuid"), d) {
 		return
 	}
 	if err := s.backend.ResizeDisk(r.PathValue("uuid"), r.PathValue("target"), b.SizeGiB); err != nil {

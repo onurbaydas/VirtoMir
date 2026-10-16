@@ -1,585 +1,760 @@
-// Package reports implements Automated Scheduled Audits & Compliance Reports (Roadmap Phase C.11).
+// Package reports writes capacity, inventory and backup-compliance reports from facts the
+// API collects on every cluster member, keeps them in -state-dir/reports, and runs report
+// schedules (ADR-0030, made real in ADR-0032). Reports only state what was measured: a
+// number VirtoMir does not know is left out, never estimated.
 package reports
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/csv"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
-	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-type ReportType string
+type Kind string
 
 const (
-	TypeCapacity           ReportType = "capacity"
-	TypeInventory          ReportType = "inventory"
-	TypeBackupSLA          ReportType = "backup_sla"
-	TypeAuditActivity      ReportType = "audit_activity"
-	TypeSecurityCompliance ReportType = "security_compliance"
+	Capacity  Kind = "capacity"
+	Inventory Kind = "inventory"
+	BackupSLA Kind = "backup_sla"
 )
 
 type Format string
 
 const (
-	FormatHTML Format = "html"
-	FormatCSV  Format = "csv"
-	FormatJSON Format = "json"
+	HTML Format = "html"
+	CSV  Format = "csv"
+	JSON Format = "json"
 )
 
-// ReportMetadata represents one generated report.
-type ReportMetadata struct {
-	ID          string     `json:"id"`
-	Type        ReportType `json:"type"`
-	Title       string     `json:"title"`
-	Format      Format     `json:"format"`
-	GeneratedAt time.Time  `json:"generatedAt"`
-	TimeRange   string     `json:"timeRange"`
-	SizeBytes   int64      `json:"sizeBytes"`
-	Summary     string     `json:"summary"`
+// Kinds and formats a request may name.
+var (
+	kindTitles = map[Kind]string{Capacity: "Capacity", Inventory: "Machine inventory", BackupSLA: "Backup compliance"}
+	formats    = map[Format]bool{HTML: true, CSV: true, JSON: true}
+)
+
+// Meta describes one stored report.
+type Meta struct {
+	ID          string    `json:"id"`
+	Kind        Kind      `json:"kind"`
+	Title       string    `json:"title"`
+	Format      Format    `json:"format"`
+	GeneratedAt time.Time `json:"generatedAt"`
+	SizeBytes   int64     `json:"sizeBytes"`
+	Summary     string    `json:"summary"`
+	// By is who asked for it, or "schedule: <name>".
+	By         string `json:"by"`
+	ScheduleID string `json:"scheduleId,omitempty"`
 }
 
-// Schedule defines an automated report cadence.
+// Schedule makes a report regularly.
 type Schedule struct {
-	ID              string     `json:"id"`
-	Name            string     `json:"name"`
-	Type            ReportType `json:"type"`
-	Format          Format     `json:"format"`
-	Cadence         string     `json:"cadence"` // "daily", "weekly", "monthly"
-	Enabled         bool       `json:"enabled"`
-	DeliveryWebhook string     `json:"deliveryWebhook,omitempty"`
-	DeliveryEmail   string     `json:"deliveryEmail,omitempty"`
-	KeepDays        int        `json:"keepDays"`
-	LastRun         time.Time  `json:"lastRun,omitempty"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Kind    Kind   `json:"kind"`
+	Format  Format `json:"format"`
+	Enabled bool   `json:"enabled"`
+	// Every: "daily", "weekly" (Mondays) or "monthly" (on the 1st), at At ("HH:MM", local).
+	Every string `json:"every"`
+	At    string `json:"at"`
+	// KeepDays deletes this schedule's reports older than that (0: keep all).
+	KeepDays int `json:"keepDays"`
+	// Notify sends the summary through the alert channels (webhook, email) when done.
+	Notify    bool       `json:"notify"`
+	LastRun   *time.Time `json:"lastRun,omitempty"`
+	LastError string     `json:"lastError,omitempty"`
+	NextRun   *time.Time `json:"nextRun,omitempty"` // computed
 }
 
-// Data models for reports
-type CapacityData struct {
-	ClusterName      string  `json:"clusterName"`
-	TotalHosts       int     `json:"totalHosts"`
-	TotalVCPUs       int     `json:"totalVcpus"`
-	AllocatedVCPUs   int     `json:"allocatedVcpus"`
-	TotalMemoryGiB   float64 `json:"totalMemoryGiB"`
-	AllocatedMemGiB  float64 `json:"allocatedMemGiB"`
-	TotalStorageGiB  float64 `json:"totalStorageGiB"`
-	AllocatedDiskGiB float64 `json:"allocatedDiskGiB"`
-	RunningVMs       int     `json:"runningVms"`
-	TotalVMs         int     `json:"totalVms"`
-	ForecastDays     int     `json:"forecastDays"`
+func (sc Schedule) validate() error {
+	if strings.TrimSpace(sc.Name) == "" {
+		return errors.New("the schedule needs a name")
+	}
+	if _, ok := kindTitles[sc.Kind]; !ok {
+		return fmt.Errorf("unknown report %q (capacity, inventory or backup_sla)", sc.Kind)
+	}
+	if !formats[sc.Format] {
+		return fmt.Errorf("unknown format %q (html, csv or json)", sc.Format)
+	}
+	switch sc.Every {
+	case "daily", "weekly", "monthly":
+	default:
+		return errors.New(`"every" must be daily, weekly or monthly`)
+	}
+	if _, err := time.Parse("15:04", sc.At); err != nil {
+		return errors.New(`"at" must be a time like 06:30`)
+	}
+	if sc.KeepDays < 0 || sc.KeepDays > 3650 {
+		return errors.New("keep between 0 (forever) and 3650 days")
+	}
+	return nil
 }
 
-type InventoryItem struct {
-	UUID        string `json:"uuid"`
-	Name        string `json:"name"`
-	State       string `json:"state"`
-	Host        string `json:"host"`
-	VCPUs       int    `json:"vcpus"`
-	MemoryMiB   uint64 `json:"memoryMiB"`
-	DisksGiB    int    `json:"disksGiB"`
-	IPAddresses string `json:"ipAddresses"`
-	OS          string `json:"os"`
+// Next is the first run after t.
+func (sc Schedule) Next(t time.Time) time.Time {
+	at, _ := time.Parse("15:04", sc.At)
+	n := time.Date(t.Year(), t.Month(), t.Day(), at.Hour(), at.Minute(), 0, 0, t.Location())
+	for !n.After(t) || (sc.Every == "weekly" && n.Weekday() != time.Monday) || (sc.Every == "monthly" && n.Day() != 1) {
+		n = n.AddDate(0, 0, 1)
+	}
+	return n
 }
 
-type BackupSLAItem struct {
-	VMName       string    `json:"vmName"`
-	LastBackup   time.Time `json:"lastBackup"`
-	Status       string    `json:"status"` // "compliant", "warning", "overdue", "no_backup"
-	BackupSizeMB int64     `json:"backupSizeMb"`
-	Target       string    `json:"target"`
+// ---- Facts --------------------------------------------------------------------------------
+
+// Facts is what the reports are made of: one entry per cluster member that answered.
+type Facts struct {
+	Hosts []HostFacts `json:"hosts"`
+	// Missing names members that did not answer; their machines are not in the report.
+	Missing []string `json:"missing,omitempty"`
 }
+
+type HostFacts struct {
+	Name      string           `json:"name"`
+	CPUs      int              `json:"cpus"`
+	MemoryKiB uint64           `json:"memoryKiB"`
+	Machines  []Machine        `json:"machines"`
+	Pools     []Pool           `json:"pools"`
+	Backups   []Backup         `json:"backups"`
+	Schedules []BackupSchedule `json:"schedules"`
+}
+
+type Machine struct {
+	UUID      string   `json:"uuid"`
+	Name      string   `json:"name"`
+	State     string   `json:"state"`
+	Owner     string   `json:"owner,omitempty"`
+	VCPUs     int      `json:"vcpus"`
+	MemoryMiB uint64   `json:"memoryMiB"`
+	DiskBytes uint64   `json:"diskBytes"` // capacity of its disks (CD-ROMs not counted)
+	Disks     int      `json:"disks"`
+	Addresses []string `json:"addresses,omitempty"`
+	Autostart bool     `json:"autostart"`
+	Template  bool     `json:"template"`
+}
+
+type Pool struct {
+	Name            string `json:"name"`
+	Type            string `json:"type"`
+	Path            string `json:"path,omitempty"`
+	Active          bool   `json:"active"`
+	CapacityBytes   uint64 `json:"capacityBytes"`
+	AllocationBytes uint64 `json:"allocationBytes"`
+	AvailableBytes  uint64 `json:"availableBytes"`
+}
+
+// Shared pools (NFS, Ceph, iSCSI, Gluster) appear on several members but hold one capacity.
+func (p Pool) shared() bool {
+	switch p.Type {
+	case "netfs", "rbd", "iscsi", "iscsi-direct", "gluster":
+		return true
+	}
+	return false
+}
+
+type Backup struct {
+	DomainUUID string    `json:"domainUuid"`
+	Created    time.Time `json:"created"`
+	SizeBytes  uint64    `json:"sizeBytes"`
+}
+
+// BackupSchedule is how often a machine is backed up automatically.
+type BackupSchedule struct {
+	DomainUUID string        `json:"domainUuid"`
+	Interval   time.Duration `json:"interval"`
+}
+
+// ---- Store --------------------------------------------------------------------------------
 
 type Store struct {
-	dir       string
-	metaPath  string
-	schedPath string
-	mu        sync.Mutex
-	reports   map[string]ReportMetadata
-	schedules map[string]Schedule
+	dir string
+	mu  sync.Mutex
+	// meta is newest first.
+	meta      []Meta
+	schedules []Schedule
+	now       func() time.Time
 }
 
 func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
 	}
-	s := &Store{
-		dir:       dir,
-		metaPath:  filepath.Join(dir, "reports_meta.json"),
-		schedPath: filepath.Join(dir, "report_schedules.json"),
-		reports:   make(map[string]ReportMetadata),
-		schedules: make(map[string]Schedule),
-	}
-
-	// Load metadata
-	if raw, err := os.ReadFile(s.metaPath); err == nil {
-		var list []ReportMetadata
-		if json.Unmarshal(raw, &list) == nil {
-			for _, m := range list {
-				s.reports[m.ID] = m
-			}
+	s := &Store{dir: dir, now: time.Now}
+	for name, v := range map[string]any{"reports.json": &s.meta, "schedules.json": &s.schedules} {
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(b, v); err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 	}
-
-	// Load schedules
-	if raw, err := os.ReadFile(s.schedPath); err == nil {
-		var list []Schedule
-		if json.Unmarshal(raw, &list) == nil {
-			for _, sc := range list {
-				s.schedules[sc.ID] = sc
-			}
-		}
-	} else if errors.Is(err, fs.ErrNotExist) {
-		// Provide default schedules
-		defaultSched := Schedule{
-			ID:       "sched-weekly-capacity",
-			Name:     "Weekly Cluster Capacity & Runway Audit",
-			Type:     TypeCapacity,
-			Format:   FormatHTML,
-			Cadence:  "weekly",
-			Enabled:  true,
-			KeepDays: 30,
-		}
-		s.schedules[defaultSched.ID] = defaultSched
-		_ = s.saveSchedules()
-	}
-
 	return s, nil
 }
 
-func (s *Store) saveMeta() error {
-	var list []ReportMetadata
-	for _, m := range s.reports {
-		list = append(list, m)
-	}
-	sort.Slice(list, func(i, j int) bool {
-		return list[i].GeneratedAt.After(list[j].GeneratedAt)
-	})
-	b, err := json.MarshalIndent(list, "", "  ")
+func (s *Store) write(name string, v any) error {
+	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := s.metaPath + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	p := filepath.Join(s.dir, name)
+	if err := os.WriteFile(p+".tmp", b, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.metaPath)
+	return os.Rename(p+".tmp", p)
 }
 
-func (s *Store) saveSchedules() error {
-	var list []Schedule
-	for _, sc := range s.schedules {
-		list = append(list, sc)
-	}
-	b, err := json.MarshalIndent(list, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := s.schedPath + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.schedPath)
-}
-
-func (s *Store) List() []ReportMetadata {
+// List is every stored report, newest first.
+func (s *Store) List() []Meta {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	var list []ReportMetadata
-	for _, m := range s.reports {
-		list = append(list, m)
-	}
-	sort.Slice(list, func(i, j int) bool {
-		return list[i].GeneratedAt.After(list[j].GeneratedAt)
-	})
-	return list
+	return append([]Meta{}, s.meta...)
 }
 
-func (s *Store) GetContent(id string) ([]byte, ReportMetadata, error) {
+var validID = regexp.MustCompile(`^[a-z0-9-]+$`)
+
+func (s *Store) file(m Meta) string { return filepath.Join(s.dir, m.ID+"."+string(m.Format)) }
+
+// Get returns a report and its content.
+func (s *Store) Get(id string) (Meta, []byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	m, ok := s.reports[id]
-	if !ok {
-		return nil, ReportMetadata{}, fmt.Errorf("report %q not found", id)
+	for _, m := range s.meta {
+		if m.ID == id && validID.MatchString(id) {
+			b, err := os.ReadFile(s.file(m))
+			return m, b, err
+		}
 	}
-	path := filepath.Join(s.dir, id+"."+string(m.Format))
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, m, err
-	}
-	return data, m, nil
+	return Meta{}, nil, os.ErrNotExist
 }
 
+// Delete removes a report.
 func (s *Store) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	m, ok := s.reports[id]
-	if !ok {
-		return fmt.Errorf("report %q not found", id)
+	for i, m := range s.meta {
+		if m.ID == id {
+			_ = os.Remove(s.file(m))
+			s.meta = append(s.meta[:i], s.meta[i+1:]...)
+			return s.write("reports.json", s.meta)
+		}
 	}
-	path := filepath.Join(s.dir, id+"."+string(m.Format))
-	_ = os.Remove(path)
-	delete(s.reports, id)
-	return s.saveMeta()
+	return os.ErrNotExist
 }
 
-func (s *Store) ListSchedules() []Schedule {
+// Generate writes a report from facts and stores it.
+func (s *Store) Generate(kind Kind, format Format, f Facts, by, scheduleID string) (Meta, error) {
+	if _, ok := kindTitles[kind]; !ok {
+		return Meta{}, fmt.Errorf("unknown report %q", kind)
+	}
+	if !formats[format] {
+		return Meta{}, fmt.Errorf("unknown format %q", format)
+	}
+	now := s.now()
+	m := Meta{Kind: kind, Format: format, GeneratedAt: now.UTC(), By: by, ScheduleID: scheduleID,
+		ID: fmt.Sprintf("%s-%s-%s", strings.ReplaceAll(string(kind), "_", "-"), now.Format("20060102-150405"), randomHex(3))}
+	m.Title = fmt.Sprintf("%s — %s", kindTitles[kind], now.Format("2006-01-02 15:04"))
+	var body []byte
+	var err error
+	switch kind {
+	case Capacity:
+		m.Summary, body, err = capacity(f, format, m.Title)
+	case Inventory:
+		m.Summary, body, err = inventory(f, format, m.Title)
+	case BackupSLA:
+		m.Summary, body, err = backupSLA(f, format, m.Title, now)
+	}
+	if err != nil {
+		return Meta{}, err
+	}
+	if len(f.Missing) > 0 {
+		m.Summary += " · not reachable: " + strings.Join(f.Missing, ", ")
+	}
+	m.SizeBytes = int64(len(body))
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	var list []Schedule
-	for _, sc := range s.schedules {
-		list = append(list, sc)
+	if err := os.WriteFile(s.file(m), body, 0o600); err != nil {
+		return Meta{}, err
 	}
-	return list
+	s.meta = append([]Meta{m}, s.meta...)
+	return m, s.write("reports.json", s.meta)
 }
 
-func (s *Store) SaveSchedule(sc Schedule) error {
+// ---- Schedules ----------------------------------------------------------------------------
+
+// Schedules lists the report schedules with their next run.
+func (s *Store) Schedules() []Schedule {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	out := append([]Schedule{}, s.schedules...)
+	for i := range out {
+		if out[i].Enabled {
+			n := out[i].Next(s.now())
+			out[i].NextRun = &n
+		}
+	}
+	return out
+}
 
+// PutSchedule adds (no ID) or replaces a schedule.
+func (s *Store) PutSchedule(sc Schedule) (Schedule, error) {
+	if err := sc.validate(); err != nil {
+		return Schedule{}, err
+	}
+	sc.NextRun = nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if sc.ID == "" {
-		sc.ID = fmt.Sprintf("sched-%d", time.Now().UnixNano())
-	}
-	if sc.KeepDays <= 0 {
-		sc.KeepDays = 30
-	}
-	s.schedules[sc.ID] = sc
-	return s.saveSchedules()
-}
-
-// GenerateCapacityReport generates a cluster capacity audit report.
-func (s *Store) GenerateCapacityReport(data CapacityData, fmtChoice Format) (ReportMetadata, error) {
-	id := fmt.Sprintf("report-cap-%d", time.Now().UnixNano())
-	title := fmt.Sprintf("Cluster Capacity & Runway Audit — %s", time.Now().Format("2006-01-02"))
-	summary := fmt.Sprintf("%d VMs (%d running) · CPU: %d/%d vCPUs · RAM: %.1f/%.1f GiB",
-		data.TotalVMs, data.RunningVMs, data.AllocatedVCPUs, data.TotalVCPUs, data.AllocatedMemGiB, data.TotalMemoryGiB)
-
-	var payload []byte
-	switch fmtChoice {
-	case FormatCSV:
-		var buf bytes.Buffer
-		w := csv.NewWriter(&buf)
-		_ = w.Write([]string{"Metric", "Value"})
-		_ = w.Write([]string{"Cluster Name", data.ClusterName})
-		_ = w.Write([]string{"Total Hosts", fmt.Sprintf("%d", data.TotalHosts)})
-		_ = w.Write([]string{"Total VMs", fmt.Sprintf("%d", data.TotalVMs)})
-		_ = w.Write([]string{"Running VMs", fmt.Sprintf("%d", data.RunningVMs)})
-		_ = w.Write([]string{"Total vCPUs", fmt.Sprintf("%d", data.TotalVCPUs)})
-		_ = w.Write([]string{"Allocated vCPUs", fmt.Sprintf("%d", data.AllocatedVCPUs)})
-		_ = w.Write([]string{"Total Memory GiB", fmt.Sprintf("%.2f", data.TotalMemoryGiB)})
-		_ = w.Write([]string{"Allocated Memory GiB", fmt.Sprintf("%.2f", data.AllocatedMemGiB)})
-		_ = w.Write([]string{"Total Storage GiB", fmt.Sprintf("%.2f", data.TotalStorageGiB)})
-		_ = w.Write([]string{"Allocated Disk GiB", fmt.Sprintf("%.2f", data.AllocatedDiskGiB)})
-		_ = w.Write([]string{"Estimated Capacity Runway (Days)", fmt.Sprintf("%d", data.ForecastDays)})
-		w.Flush()
-		payload = buf.Bytes()
-
-	case FormatJSON:
-		payload, _ = json.MarshalIndent(data, "", "  ")
-
-	case FormatHTML:
-		payload = []byte(renderSwissHTML(title, summary, fmt.Sprintf(`
-			<div class="stat-grid">
-				<div class="stat-box"><div class="label">TOTAL VMS</div><div class="val">%d</div><div class="sub">%d active</div></div>
-				<div class="stat-box"><div class="label">VCPU COMMITMENT</div><div class="val">%d / %d</div><div class="sub">%.1f%% allocated</div></div>
-				<div class="stat-box"><div class="label">RAM ALLOCATION</div><div class="val">%.1f / %.1f GiB</div><div class="sub">%.1f%% allocated</div></div>
-				<div class="stat-box"><div class="label">STORAGE ALLOCATION</div><div class="val">%.1f / %.1f GiB</div><div class="sub">%.1f%% allocated</div></div>
-			</div>
-			<div class="panel">
-				<h3>Capacity Runway Forecast</h3>
-				<p>Based on linear workload expansion rates across the last 30 days, hardware saturation is estimated at approximately <strong>%d days</strong> under current growth trends.</p>
-			</div>
-		`, data.TotalVMs, data.RunningVMs,
-			data.AllocatedVCPUs, data.TotalVCPUs, float64(data.AllocatedVCPUs)/float64(max(1, data.TotalVCPUs))*100,
-			data.AllocatedMemGiB, data.TotalMemoryGiB, data.AllocatedMemGiB/maxFloat(1.0, data.TotalMemoryGiB)*100,
-			data.AllocatedDiskGiB, data.TotalStorageGiB, data.AllocatedDiskGiB/maxFloat(1.0, data.TotalStorageGiB)*100,
-			data.ForecastDays)))
-	}
-
-	return s.saveReport(id, TypeCapacity, title, fmtChoice, summary, payload)
-}
-
-// GenerateInventoryReport generates a full workload inventory report.
-func (s *Store) GenerateInventoryReport(items []InventoryItem, fmtChoice Format) (ReportMetadata, error) {
-	id := fmt.Sprintf("report-inv-%d", time.Now().UnixNano())
-	title := fmt.Sprintf("Virtual Machine Fleet Inventory — %s", time.Now().Format("2006-01-02"))
-	summary := fmt.Sprintf("%d guest virtual machines cataloged across cluster", len(items))
-
-	var payload []byte
-	switch fmtChoice {
-	case FormatCSV:
-		var buf bytes.Buffer
-		w := csv.NewWriter(&buf)
-		_ = w.Write([]string{"Name", "State", "Host", "vCPUs", "Memory (MiB)", "Disks (GiB)", "IPs", "OS", "UUID"})
-		for _, item := range items {
-			_ = w.Write([]string{
-				item.Name, item.State, item.Host,
-				fmt.Sprintf("%d", item.VCPUs),
-				fmt.Sprintf("%d", item.MemoryMiB),
-				fmt.Sprintf("%d", item.DisksGiB),
-				item.IPAddresses, item.OS, item.UUID,
-			})
-		}
-		w.Flush()
-		payload = buf.Bytes()
-
-	case FormatJSON:
-		payload, _ = json.MarshalIndent(items, "", "  ")
-
-	case FormatHTML:
-		var rows strings.Builder
-		for _, item := range items {
-			rows.WriteString(fmt.Sprintf(`<tr>
-				<td><strong>%s</strong><br><small class="mono text-dim">%s</small></td>
-				<td><span class="badge %s">%s</span></td>
-				<td>%s</td>
-				<td class="mono">%d</td>
-				<td class="mono">%d MiB</td>
-				<td class="mono">%d GiB</td>
-				<td class="mono">%s</td>
-			</tr>`,
-				html.EscapeString(item.Name), html.EscapeString(item.UUID),
-				item.State, strings.ToUpper(item.State),
-				html.EscapeString(item.Host),
-				item.VCPUs, item.MemoryMiB, item.DisksGiB,
-				html.EscapeString(item.IPAddresses)))
-		}
-		tableHTML := fmt.Sprintf(`
-			<table class="report-table">
-				<thead>
-					<tr><th>VM NAME & UUID</th><th>STATE</th><th>NODE</th><th>VCPUS</th><th>MEMORY</th><th>STORAGE</th><th>IP ADDRESSES</th></tr>
-				</thead>
-				<tbody>%s</tbody>
-			</table>
-		`, rows.String())
-		payload = []byte(renderSwissHTML(title, summary, tableHTML))
-	}
-
-	return s.saveReport(id, TypeInventory, title, fmtChoice, summary, payload)
-}
-
-// GenerateBackupSLAReport generates a backup compliance report.
-func (s *Store) GenerateBackupSLAReport(items []BackupSLAItem, fmtChoice Format) (ReportMetadata, error) {
-	id := fmt.Sprintf("report-sla-%d", time.Now().UnixNano())
-	title := fmt.Sprintf("Backup SLA & Disaster Recovery Compliance — %s", time.Now().Format("2006-01-02"))
-
-	compliant := 0
-	for _, it := range items {
-		if it.Status == "compliant" {
-			compliant++
-		}
-	}
-	summary := fmt.Sprintf("%d/%d VMs compliant with backup retention SLAs (%.1f%%)",
-		compliant, len(items), float64(compliant)/float64(max(1, len(items)))*100)
-
-	var payload []byte
-	switch fmtChoice {
-	case FormatCSV:
-		var buf bytes.Buffer
-		w := csv.NewWriter(&buf)
-		_ = w.Write([]string{"VM Name", "Status", "Last Backup", "Size (MB)", "Target Storage"})
-		for _, item := range items {
-			_ = w.Write([]string{
-				item.VMName, item.Status, item.LastBackup.Format(time.RFC3339),
-				fmt.Sprintf("%d", item.BackupSizeMB), item.Target,
-			})
-		}
-		w.Flush()
-		payload = buf.Bytes()
-
-	case FormatJSON:
-		payload, _ = json.MarshalIndent(items, "", "  ")
-
-	case FormatHTML:
-		var rows strings.Builder
-		for _, item := range items {
-			badgeClass := "ok"
-			if item.Status == "warning" {
-				badgeClass = "warn"
-			} else if item.Status == "overdue" || item.Status == "no_backup" {
-				badgeClass = "danger"
+		sc.ID = fmt.Sprintf("rs-%d", s.now().UnixNano())
+		s.schedules = append(s.schedules, sc)
+	} else {
+		found := false
+		for i := range s.schedules {
+			if s.schedules[i].ID == sc.ID {
+				sc.LastRun, sc.LastError = s.schedules[i].LastRun, s.schedules[i].LastError
+				s.schedules[i], found = sc, true
 			}
-			rows.WriteString(fmt.Sprintf(`<tr>
-				<td><strong>%s</strong></td>
-				<td><span class="badge %s">%s</span></td>
-				<td class="mono">%s</td>
-				<td class="mono">%d MB</td>
-				<td>%s</td>
-			</tr>`,
-				html.EscapeString(item.VMName), badgeClass, strings.ToUpper(item.Status),
-				item.LastBackup.Format("2006-01-02 15:04"),
-				item.BackupSizeMB, html.EscapeString(item.Target)))
 		}
-		tableHTML := fmt.Sprintf(`
-			<table class="report-table">
-				<thead>
-					<tr><th>VM WORKLOAD</th><th>SLA STATUS</th><th>LAST BACKUP</th><th>IMAGE SIZE</th><th>STORAGE TARGET</th></tr>
-				</thead>
-				<tbody>%s</tbody>
-			</table>
-		`, rows.String())
-		payload = []byte(renderSwissHTML(title, summary, tableHTML))
+		if !found {
+			return Schedule{}, os.ErrNotExist
+		}
 	}
-
-	return s.saveReport(id, TypeBackupSLA, title, fmtChoice, summary, payload)
+	return sc, s.write("schedules.json", s.schedules)
 }
 
-func (s *Store) saveReport(id string, repType ReportType, title string, fmtChoice Format, summary string, payload []byte) (ReportMetadata, error) {
-	path := filepath.Join(s.dir, id+"."+string(fmtChoice))
-	if err := os.WriteFile(path, payload, 0o600); err != nil {
-		return ReportMetadata{}, err
-	}
-
-	meta := ReportMetadata{
-		ID:          id,
-		Type:        repType,
-		Title:       title,
-		Format:      fmtChoice,
-		GeneratedAt: time.Now(),
-		TimeRange:   "Latest Snapshot",
-		SizeBytes:   int64(len(payload)),
-		Summary:     summary,
-	}
-
+func (s *Store) DeleteSchedule(id string) error {
 	s.mu.Lock()
-	s.reports[id] = meta
-	err := s.saveMeta()
-	s.mu.Unlock()
-
-	return meta, err
+	defer s.mu.Unlock()
+	for i := range s.schedules {
+		if s.schedules[i].ID == id {
+			s.schedules = append(s.schedules[:i], s.schedules[i+1:]...)
+			return s.write("schedules.json", s.schedules)
+		}
+	}
+	return os.ErrNotExist
 }
 
-func renderSwissHTML(title, summary, body string) string {
-	return fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>%s</title>
+// Due returns the enabled schedules whose next run after their last run (or after since,
+// when they never ran) has come.
+func (s *Store) Due(since time.Time) []Schedule {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	var out []Schedule
+	for _, sc := range s.schedules {
+		from := since
+		if sc.LastRun != nil {
+			from = *sc.LastRun
+		}
+		if sc.Enabled && !sc.Next(from).After(now) {
+			out = append(out, sc)
+		}
+	}
+	return out
+}
+
+// Ran records a schedule's run and deletes its reports older than KeepDays.
+func (s *Store) Ran(id string, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	for i := range s.schedules {
+		sc := &s.schedules[i]
+		if sc.ID != id {
+			continue
+		}
+		sc.LastRun, sc.LastError = &now, ""
+		if err != nil {
+			sc.LastError = err.Error()
+		}
+		if sc.KeepDays > 0 {
+			cut := now.AddDate(0, 0, -sc.KeepDays)
+			kept := s.meta[:0]
+			for _, m := range s.meta {
+				if m.ScheduleID == id && m.GeneratedAt.Before(cut) {
+					_ = os.Remove(s.file(m))
+					continue
+				}
+				kept = append(kept, m)
+			}
+			s.meta = kept
+			_ = s.write("reports.json", s.meta)
+		}
+	}
+	_ = s.write("schedules.json", s.schedules)
+}
+
+// ---- Report bodies ------------------------------------------------------------------------
+
+func randomHex(n int) string {
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func gib(b uint64) string { return fmt.Sprintf("%.1f GiB", float64(b)/(1<<30)) }
+
+func pct(a, b float64) string {
+	if b <= 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%.0f%%", a/b*100)
+}
+
+type capRow struct {
+	Host                                    string
+	CPUs, VCPUs, VCPUsRunning, Machines, On int
+	MemKiB, MemAllocKiB, MemRunningKiB      uint64
+}
+
+// CapacityData is the capacity report's JSON form.
+type CapacityData struct {
+	Hosts []capRow `json:"hosts"`
+	Total capRow   `json:"total"`
+	Pools []Pool   `json:"pools"`
+}
+
+func capacity(f Facts, format Format, title string) (string, []byte, error) {
+	var d CapacityData
+	d.Total.Host = "Total"
+	seenShared := map[string]bool{}
+	for _, h := range f.Hosts {
+		r := capRow{Host: h.Name, CPUs: h.CPUs, MemKiB: h.MemoryKiB}
+		for _, m := range h.Machines {
+			if m.Template {
+				continue
+			}
+			r.Machines++
+			r.VCPUs += m.VCPUs
+			r.MemAllocKiB += m.MemoryMiB << 10
+			if m.State == "running" || m.State == "paused" || m.State == "blocked" {
+				r.On++
+				r.VCPUsRunning += m.VCPUs
+				r.MemRunningKiB += m.MemoryMiB << 10
+			}
+		}
+		d.Hosts = append(d.Hosts, r)
+		t := &d.Total
+		t.CPUs, t.VCPUs, t.VCPUsRunning, t.Machines, t.On = t.CPUs+r.CPUs, t.VCPUs+r.VCPUs, t.VCPUsRunning+r.VCPUsRunning, t.Machines+r.Machines, t.On+r.On
+		t.MemKiB, t.MemAllocKiB, t.MemRunningKiB = t.MemKiB+r.MemKiB, t.MemAllocKiB+r.MemAllocKiB, t.MemRunningKiB+r.MemRunningKiB
+		for _, p := range h.Pools {
+			if !p.Active {
+				continue
+			}
+			key := h.Name + "/" + p.Name
+			if p.shared() {
+				key = p.Type + ":" + p.Name + ":" + strconv.FormatUint(p.CapacityBytes, 10)
+				if seenShared[key] {
+					continue
+				}
+				seenShared[key] = true
+			} else {
+				p.Name = h.Name + " / " + p.Name
+			}
+			d.Pools = append(d.Pools, p)
+		}
+	}
+	var poolCap, poolUsed uint64
+	for _, p := range d.Pools {
+		poolCap += p.CapacityBytes
+		poolUsed += p.AllocationBytes
+	}
+	t := d.Total
+	summary := fmt.Sprintf("%d hosts · %d machines (%d on) · vCPU %d on %d CPUs · memory %s of %s allocated · storage %s of %s used",
+		len(d.Hosts), t.Machines, t.On, t.VCPUs, t.CPUs, gib(t.MemAllocKiB<<10), gib(t.MemKiB<<10), gib(poolUsed), gib(poolCap))
+	switch format {
+	case JSON:
+		b, err := json.MarshalIndent(d, "", "  ")
+		return summary, b, err
+	case CSV:
+		var buf bytes.Buffer
+		w := csv.NewWriter(&buf)
+		_ = w.Write([]string{"host", "cpus", "vcpus_allocated", "vcpus_running", "memory_gib", "memory_allocated_gib", "memory_running_gib", "machines", "machines_on"})
+		for _, r := range append(d.Hosts, d.Total) {
+			_ = w.Write([]string{r.Host, strconv.Itoa(r.CPUs), strconv.Itoa(r.VCPUs), strconv.Itoa(r.VCPUsRunning),
+				fmt.Sprintf("%.1f", float64(r.MemKiB)/(1<<20)), fmt.Sprintf("%.1f", float64(r.MemAllocKiB)/(1<<20)),
+				fmt.Sprintf("%.1f", float64(r.MemRunningKiB)/(1<<20)), strconv.Itoa(r.Machines), strconv.Itoa(r.On)})
+		}
+		_ = w.Write(nil)
+		_ = w.Write([]string{"storage_pool", "type", "capacity_gib", "used_gib", "free_gib"})
+		for _, p := range d.Pools {
+			_ = w.Write([]string{p.Name, p.Type, fmt.Sprintf("%.1f", float64(p.CapacityBytes)/(1<<30)),
+				fmt.Sprintf("%.1f", float64(p.AllocationBytes)/(1<<30)), fmt.Sprintf("%.1f", float64(p.AvailableBytes)/(1<<30))})
+		}
+		w.Flush()
+		return summary, buf.Bytes(), w.Error()
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, `<div class="stat-grid">
+<div class="stat-box"><div class="label">Machines</div><div class="val">%d</div><div class="sub">%d on</div></div>
+<div class="stat-box"><div class="label">vCPU : CPU</div><div class="val">%d : %d</div><div class="sub">%s overcommit · %d on running machines</div></div>
+<div class="stat-box"><div class="label">Memory allocated</div><div class="val">%s</div><div class="sub">of %s · %s on running machines</div></div>
+<div class="stat-box"><div class="label">Storage used</div><div class="val">%s</div><div class="sub">of %s (%s)</div></div>
+</div>`, t.Machines, t.On, t.VCPUs, t.CPUs, ratio(t.VCPUs, t.CPUs), t.VCPUsRunning,
+		gib(t.MemAllocKiB<<10), gib(t.MemKiB<<10), gib(t.MemRunningKiB<<10), gib(poolUsed), gib(poolCap), pct(float64(poolUsed), float64(poolCap)))
+	b.WriteString(`<h3>Hosts</h3><table class="report-table"><thead><tr><th>Host</th><th>CPUs</th><th>vCPUs (running)</th><th>Memory</th><th>Allocated (running)</th><th>Machines (on)</th></tr></thead><tbody>`)
+	for _, r := range d.Hosts {
+		fmt.Fprintf(&b, `<tr><td><strong>%s</strong></td><td class="mono">%d</td><td class="mono">%d (%d) · %s</td><td class="mono">%s</td><td class="mono">%s (%s) · %s</td><td class="mono">%d (%d)</td></tr>`,
+			html.EscapeString(r.Host), r.CPUs, r.VCPUs, r.VCPUsRunning, ratio(r.VCPUs, r.CPUs), gib(r.MemKiB<<10),
+			gib(r.MemAllocKiB<<10), gib(r.MemRunningKiB<<10), pct(float64(r.MemAllocKiB), float64(r.MemKiB)), r.Machines, r.On)
+	}
+	b.WriteString(`</tbody></table><h3>Storage pools</h3><table class="report-table"><thead><tr><th>Pool</th><th>Type</th><th>Capacity</th><th>Used</th><th>Free</th></tr></thead><tbody>`)
+	for _, p := range d.Pools {
+		cls := ""
+		if p.CapacityBytes > 0 && float64(p.AllocationBytes)/float64(p.CapacityBytes) > 0.85 {
+			cls = ` class="warn"`
+		}
+		fmt.Fprintf(&b, `<tr%s><td><strong>%s</strong></td><td>%s</td><td class="mono">%s</td><td class="mono">%s (%s)</td><td class="mono">%s</td></tr>`,
+			cls, html.EscapeString(p.Name), html.EscapeString(p.Type), gib(p.CapacityBytes), gib(p.AllocationBytes),
+			pct(float64(p.AllocationBytes), float64(p.CapacityBytes)), gib(p.AvailableBytes))
+	}
+	b.WriteString(`</tbody></table>`)
+	b.WriteString(missingNote(f))
+	return summary, []byte(page(title, summary, b.String())), nil
+}
+
+func ratio(v, c int) string {
+	if c == 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%.1f:1", float64(v)/float64(c))
+}
+
+func missingNote(f Facts) string {
+	if len(f.Missing) == 0 {
+		return ""
+	}
+	return `<p class="note">Not included (did not answer): ` + html.EscapeString(strings.Join(f.Missing, ", ")) + `</p>`
+}
+
+// InventoryItem is one machine of the inventory report.
+type InventoryItem struct {
+	Machine
+	Host string `json:"host"`
+}
+
+func inventory(f Facts, format Format, title string) (string, []byte, error) {
+	var items []InventoryItem
+	for _, h := range f.Hosts {
+		for _, m := range h.Machines {
+			items = append(items, InventoryItem{Machine: m, Host: h.Name})
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Name != items[j].Name {
+			return items[i].Name < items[j].Name
+		}
+		return items[i].Host < items[j].Host
+	})
+	on := 0
+	for _, it := range items {
+		if it.State == "running" {
+			on++
+		}
+	}
+	summary := fmt.Sprintf("%d machines on %d hosts, %d running", len(items), len(f.Hosts), on)
+	switch format {
+	case JSON:
+		b, err := json.MarshalIndent(items, "", "  ")
+		return summary, b, err
+	case CSV:
+		var buf bytes.Buffer
+		w := csv.NewWriter(&buf)
+		_ = w.Write([]string{"name", "uuid", "host", "state", "vcpus", "memory_mib", "disk_gib", "disks", "addresses", "owner", "autostart", "template"})
+		for _, it := range items {
+			_ = w.Write([]string{it.Name, it.UUID, it.Host, it.State, strconv.Itoa(it.VCPUs), strconv.FormatUint(it.MemoryMiB, 10),
+				fmt.Sprintf("%.1f", float64(it.DiskBytes)/(1<<30)), strconv.Itoa(it.Disks), strings.Join(it.Addresses, " "),
+				it.Owner, strconv.FormatBool(it.Autostart), strconv.FormatBool(it.Template)})
+		}
+		w.Flush()
+		return summary, buf.Bytes(), w.Error()
+	}
+	var b strings.Builder
+	b.WriteString(`<table class="report-table"><thead><tr><th>Machine</th><th>State</th><th>Host</th><th>vCPUs</th><th>Memory</th><th>Disks</th><th>Addresses</th><th>Owner</th></tr></thead><tbody>`)
+	for _, it := range items {
+		name := html.EscapeString(it.Name)
+		if it.Template {
+			name += ` <span class="badge">TEMPLATE</span>`
+		}
+		fmt.Fprintf(&b, `<tr><td><strong>%s</strong><br><small class="mono text-dim">%s</small></td><td><span class="badge %s">%s</span></td><td>%s</td><td class="mono">%d</td><td class="mono">%d MiB</td><td class="mono">%s (%d)</td><td class="mono">%s</td><td>%s</td></tr>`,
+			name, html.EscapeString(it.UUID), stateClass(it.State), html.EscapeString(strings.ToUpper(it.State)), html.EscapeString(it.Host),
+			it.VCPUs, it.MemoryMiB, gib(it.DiskBytes), it.Disks, html.EscapeString(strings.Join(it.Addresses, ", ")), html.EscapeString(it.Owner))
+	}
+	b.WriteString(`</tbody></table>`)
+	b.WriteString(missingNote(f))
+	return summary, []byte(page(title, summary, b.String())), nil
+}
+
+func stateClass(s string) string {
+	switch s {
+	case "running":
+		return "ok"
+	case "paused", "pmsuspended":
+		return "warn"
+	case "crashed":
+		return "danger"
+	}
+	return ""
+}
+
+// SLAItem is one machine of the backup compliance report.
+type SLAItem struct {
+	Machine    string     `json:"machine"`
+	UUID       string     `json:"uuid"`
+	Host       string     `json:"host"`
+	Status     string     `json:"status"` // ok, late, overdue, never, unscheduled
+	LastBackup *time.Time `json:"lastBackup,omitempty"`
+	AgeHours   float64    `json:"ageHours,omitempty"`
+	Backups    int        `json:"backups"`
+	SizeBytes  uint64     `json:"sizeBytes"` // all of its backups
+	// Interval is its backup schedule ("" without one).
+	Interval string `json:"interval,omitempty"`
+}
+
+// slaStatus: a machine with a backup schedule is "ok" while its newest backup is younger
+// than 1.5 intervals, "late" up to 3, then "overdue"; "never" if it has none at all.
+func slaStatus(interval time.Duration, last *time.Time, now time.Time) string {
+	switch {
+	case interval == 0:
+		return "unscheduled"
+	case last == nil:
+		return "never"
+	case now.Sub(*last) <= interval*3/2:
+		return "ok"
+	case now.Sub(*last) <= interval*3:
+		return "late"
+	}
+	return "overdue"
+}
+
+func backupSLA(f Facts, format Format, title string, now time.Time) (string, []byte, error) {
+	var items []SLAItem
+	counts := map[string]int{}
+	for _, h := range f.Hosts {
+		every := map[string]time.Duration{}
+		for _, sc := range h.Schedules {
+			if cur, ok := every[sc.DomainUUID]; !ok || sc.Interval < cur {
+				every[sc.DomainUUID] = sc.Interval
+			}
+		}
+		for _, m := range h.Machines {
+			if m.Template {
+				continue
+			}
+			it := SLAItem{Machine: m.Name, UUID: m.UUID, Host: h.Name}
+			for _, b := range h.Backups {
+				if !strings.EqualFold(b.DomainUUID, m.UUID) {
+					continue
+				}
+				it.Backups++
+				it.SizeBytes += b.SizeBytes
+				if it.LastBackup == nil || b.Created.After(*it.LastBackup) {
+					t := b.Created
+					it.LastBackup = &t
+				}
+			}
+			if it.LastBackup != nil {
+				it.AgeHours = float64(now.Sub(*it.LastBackup).Round(time.Minute)) / float64(time.Hour)
+			}
+			iv := every[strings.ToLower(m.UUID)]
+			if iv > 0 {
+				it.Interval = iv.String()
+			}
+			it.Status = slaStatus(iv, it.LastBackup, now)
+			counts[it.Status]++
+			items = append(items, it)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Machine < items[j].Machine })
+	scheduled := len(items) - counts["unscheduled"]
+	summary := fmt.Sprintf("%d of %d scheduled machines within their backup interval · %d late · %d overdue · %d never backed up · %d without a backup schedule",
+		counts["ok"], scheduled, counts["late"], counts["overdue"], counts["never"], counts["unscheduled"])
+	switch format {
+	case JSON:
+		b, err := json.MarshalIndent(items, "", "  ")
+		return summary, b, err
+	case CSV:
+		var buf bytes.Buffer
+		w := csv.NewWriter(&buf)
+		_ = w.Write([]string{"machine", "uuid", "host", "status", "last_backup", "age_hours", "backups", "size_gib", "schedule_interval"})
+		for _, it := range items {
+			last := ""
+			if it.LastBackup != nil {
+				last = it.LastBackup.UTC().Format(time.RFC3339)
+			}
+			_ = w.Write([]string{it.Machine, it.UUID, it.Host, it.Status, last, fmt.Sprintf("%.1f", it.AgeHours),
+				strconv.Itoa(it.Backups), fmt.Sprintf("%.2f", float64(it.SizeBytes)/(1<<30)), it.Interval})
+		}
+		w.Flush()
+		return summary, buf.Bytes(), w.Error()
+	}
+	var b strings.Builder
+	b.WriteString(`<table class="report-table"><thead><tr><th>Machine</th><th>Status</th><th>Last backup</th><th>Backups</th><th>Schedule</th><th>Host</th></tr></thead><tbody>`)
+	cls := map[string]string{"ok": "ok", "late": "warn", "overdue": "danger", "never": "danger", "unscheduled": ""}
+	for _, it := range items {
+		last := "—"
+		if it.LastBackup != nil {
+			last = it.LastBackup.Local().Format("2006-01-02 15:04") + fmt.Sprintf(" (%.0f h ago)", it.AgeHours)
+		}
+		fmt.Fprintf(&b, `<tr><td><strong>%s</strong></td><td><span class="badge %s">%s</span></td><td class="mono">%s</td><td class="mono">%d · %s</td><td class="mono">%s</td><td>%s</td></tr>`,
+			html.EscapeString(it.Machine), cls[it.Status], strings.ToUpper(it.Status), last, it.Backups, gib(it.SizeBytes),
+			html.EscapeString(orDash(it.Interval)), html.EscapeString(it.Host))
+	}
+	b.WriteString(`</tbody></table><p class="note">OK: newest backup younger than 1.5× the machine's backup interval · late: up to 3× · overdue: older.</p>`)
+	b.WriteString(missingNote(f))
+	return summary, []byte(page(title, summary, b.String())), nil
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
+}
+
+// page wraps a report body in a self-contained HTML document that prints well.
+func page(title, summary, body string) string {
+	return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>` + html.EscapeString(title) + `</title>
 <style>
-  :root {
-    --bg: #121316;
-    --surface: #181A1F;
-    --border: #2E333D;
-    --text: #E6E4DD;
-    --text-dim: #8E95A5;
-    --accent: #E55827;
-    --ok: #2BBF76;
-    --warn: #E5A93C;
-    --danger: #E53935;
-  }
-  @media print {
-    body { background: #fff !important; color: #000 !important; }
-    .stat-box, .panel, table { border-color: #000 !important; }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    padding: 32px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 13px;
-    line-height: 1.5;
-  }
-  .header {
-    border-bottom: 2px solid var(--accent);
-    padding-bottom: 16px;
-    margin-bottom: 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-  }
-  h1 { margin: 0 0 6px 0; font-size: 20px; letter-spacing: -0.02em; font-weight: 700; text-transform: uppercase; }
-  .summary { color: var(--text-dim); font-size: 13px; }
-  .logo-tag { font-family: monospace; font-size: 11px; background: var(--surface); padding: 4px 8px; border: 1px solid var(--border); }
-  .stat-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .stat-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    padding: 16px;
-  }
-  .stat-box .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; font-family: monospace; }
-  .stat-box .val { font-size: 22px; font-weight: 700; margin: 4px 0; font-family: monospace; }
-  .stat-box .sub { font-size: 11px; color: var(--text-dim); }
-  .panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    padding: 18px;
-    margin-bottom: 24px;
-  }
-  .panel h3 { margin: 0 0 8px 0; font-size: 14px; text-transform: uppercase; }
-  table.report-table {
-    width: 100%%;
-    border-collapse: collapse;
-    background: var(--surface);
-    border: 1px solid var(--border);
-  }
-  th {
-    background: #1e2128;
-    text-align: left;
-    padding: 10px 14px;
-    font-size: 11px;
-    text-transform: uppercase;
-    font-family: monospace;
-    border-bottom: 1px solid var(--border);
-  }
-  td {
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-  }
-  .mono { font-family: monospace; }
-  .text-dim { color: var(--text-dim); }
-  .badge {
-    display: inline-block;
-    padding: 2px 6px;
-    font-size: 10px;
-    font-weight: 700;
-    font-family: monospace;
-    border: 1px solid currentColor;
-  }
-  .badge.running, .badge.ok { color: var(--ok); }
-  .badge.warn { color: var(--warn); }
-  .badge.danger, .badge.shutoff { color: var(--danger); }
-</style>
-</head>
-<body>
-  <div class="header">
-    <div>
-      <h1>%s</h1>
-      <div class="summary">%s</div>
-    </div>
-    <div class="logo-tag">VIRTOMIR AUDIT SUITE · SECURE REPORT</div>
-  </div>
-  %s
-</body>
-</html>`, html.EscapeString(title), html.EscapeString(title), html.EscapeString(summary), body)
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func maxFloat(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
+  body { margin: 0; padding: 32px; font: 13px/1.5 "IBM Plex Sans", system-ui, sans-serif; background: #f7f5f0; color: #18191c; }
+  .head { border-bottom: 3px solid #c25e0e; padding-bottom: 14px; margin-bottom: 22px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+  h1 { margin: 0 0 4px; font-size: 20px; text-transform: uppercase; letter-spacing: .02em; }
+  h3 { margin: 24px 0 8px; font-size: 13px; text-transform: uppercase; }
+  .summary { color: #4a4d54; }
+  .tag { font: 11px ui-monospace, monospace; border: 1px solid #18191c; padding: 3px 8px; white-space: nowrap; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 8px; }
+  .stat-box { border: 1px solid #bdb7ac; background: #fff; padding: 12px 14px; }
+  .label { font: 11px ui-monospace, monospace; text-transform: uppercase; color: #4a4d54; }
+  .val { font: 700 20px ui-monospace, monospace; margin: 2px 0; }
+  .sub { font-size: 11px; color: #4a4d54; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #bdb7ac; }
+  th { text-align: left; padding: 8px 10px; font: 11px ui-monospace, monospace; text-transform: uppercase; background: #e5e0d8; border-bottom: 1px solid #bdb7ac; }
+  td { padding: 8px 10px; border-bottom: 1px solid #e5e0d8; vertical-align: top; }
+  tr.warn td { background: #fdf0e1; }
+  .mono { font-family: ui-monospace, monospace; }
+  .text-dim { color: #85827a; }
+  .badge { display: inline-block; padding: 1px 6px; font: 700 10px ui-monospace, monospace; border: 1px solid currentColor; }
+  .badge.ok { color: #1b6e47; } .badge.warn { color: #b35e09; } .badge.danger { color: #a32626; }
+  .note { color: #4a4d54; font-size: 12px; margin-top: 12px; }
+  @media print { body { padding: 0; background: #fff; } }
+</style></head><body>
+<div class="head"><div><h1>` + html.EscapeString(title) + `</h1><div class="summary">` + html.EscapeString(summary) + `</div></div><div class="tag">VirtoMir report</div></div>
+` + body + `
+</body></html>`
 }

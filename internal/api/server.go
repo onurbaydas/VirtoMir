@@ -19,6 +19,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/cluster"
 	"github.com/onurbaydas/virtomir/internal/confighist"
 	"github.com/onurbaydas/virtomir/internal/ha"
+	"github.com/onurbaydas/virtomir/internal/hostinfo"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/quota"
 	"github.com/onurbaydas/virtomir/internal/reports"
@@ -114,9 +115,12 @@ type Options struct {
 	HostName      string
 	ListenPort    string
 
+	// HA nil: no high availability (the manager is connected later with SetHA).
 	HA       *ha.Store
 	Reports  *reports.Store
 	Respools *respool.Store
+	// HostInfo nil: no chassis, sensors, GPU load, interfaces or packet capture.
+	HostInfo *hostinfo.Reader
 }
 
 type Server struct {
@@ -146,8 +150,10 @@ type Server struct {
 	transports   map[string]http.RoundTripper // pinned, per member certificate
 
 	ha       *ha.Store
+	haMgr    *ha.Manager
 	reports  *reports.Store
 	respools *respool.Store
+	hostinfo *hostinfo.Reader
 }
 
 func NewServer(o Options) *Server {
@@ -161,7 +167,7 @@ func NewServer(o Options) *Server {
 		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts, schedules: o.Schedules,
 		cluster: o.Cluster, fingerprint: o.Fingerprint, hostName: o.HostName, listenPort: o.ListenPort,
 		confighist: o.ConfigHistory, quotas: o.Quotas, groupsOf: o.GroupsOf,
-		ha: o.HA, reports: o.Reports, respools: o.Respools}
+		ha: o.HA, reports: o.Reports, respools: o.Respools, hostinfo: o.HostInfo}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -198,6 +204,8 @@ func (s *Server) Handler() http.Handler {
 	s.haRoutes(mux)
 	s.reportRoutes(mux)
 	s.respoolRoutes(mux)
+	s.hostInfoRoutes(mux)
+	s.firewallRoutes(mux)
 
 	spec := s.openAPI(mux.routes) // everything above, built once
 	mux.HandleFunc("GET /api/v1/openapi.json", func(w http.ResponseWriter, _ *http.Request) {
