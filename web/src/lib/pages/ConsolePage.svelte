@@ -3,14 +3,14 @@
   import { live } from '../live.svelte'
   import ConsolePanel from '../components/ConsolePanel.svelte'
 
-  let { uuid }: { uuid: string } = $props()
+  let { uuid, head = 0 }: { uuid: string; head?: number } = $props()
   let d = $derived(live.snapshot?.domains.find((x) => x.uuid === uuid))
 </script>
 
 <svelte:head><title>{d ? `${d.name} · console` : 'Console · VirtoMir'}</title></svelte:head>
 
 {#if d}
-  <ConsolePanel {d} standalone />
+  <ConsolePanel {d} {head} standalone />
 {:else if live.snapshot}
   <p class="msg">This machine does not exist (any more).</p>
 {:else}

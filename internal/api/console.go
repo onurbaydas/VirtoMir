@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/coder/websocket" // ISC
@@ -19,6 +20,7 @@ import (
 type Consoler interface {
 	ConsoleInfo(uuid string) (virt.ConsoleInfo, error)
 	DialVNC(ctx context.Context, uuid string) (net.Conn, error)
+	DialVNCHead(ctx context.Context, uuid string, head int) (net.Conn, error)
 	SerialConsole(ctx context.Context, uuid, device string, in io.Reader, out io.Writer) error
 }
 
@@ -56,7 +58,8 @@ func (s *Server) consoleVNC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uuid := r.PathValue("uuid")
-	vnc, err := c.DialVNC(r.Context(), uuid)
+	head, _ := strconv.Atoi(r.URL.Query().Get("head")) // ?head=1 for the second monitor
+	vnc, err := c.DialVNCHead(r.Context(), uuid, head)
 	if err != nil {
 		s.writeError(w, err)
 		return
