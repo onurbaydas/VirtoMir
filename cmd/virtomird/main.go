@@ -25,6 +25,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/confighist"
 	"github.com/onurbaydas/virtomir/internal/ha"
 	"github.com/onurbaydas/virtomir/internal/history"
+	"github.com/onurbaydas/virtomir/internal/hostinfo"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/live"
 	"github.com/onurbaydas/virtomir/internal/quota"
@@ -157,11 +158,13 @@ func run(c config, log *slog.Logger) error {
 	} else {
 		opts.Quotas = q
 	}
-	if haStore, err := ha.Open(filepath.Join(c.stateDir, "ha.json")); err != nil {
-		log.Warn("ha store", "err", err)
+	haStore, err := ha.Open(filepath.Join(c.stateDir, "ha.json"))
+	if err != nil {
+		log.Warn("high availability", "err", err)
 	} else {
 		opts.HA = haStore
 	}
+	opts.HostInfo = hostinfo.New()
 	if repStore, err := reports.Open(filepath.Join(c.stateDir, "reports")); err != nil {
 		log.Warn("reports store", "err", err)
 	} else {
@@ -174,6 +177,17 @@ func run(c config, log *slog.Logger) error {
 	}
 	apiServer := api.NewServer(opts)
 	go syncCluster(ctx, apiServer)
+	go apiServer.RunReportSchedules(ctx)
+	if haStore != nil {
+		mgr := ha.NewManager(haStore, apiServer.HATransport(), client, filepath.Join(c.stateDir, "ha"), log)
+		if alertEngine != nil {
+			mgr.Notify = alertEngine.Notice // failovers and fencing reach the alert channels
+		}
+		apiServer.SetHA(mgr)
+		haDone := make(chan struct{})
+		go func() { mgr.Run(ctx); close(haDone) }()
+		defer func() { <-haDone }() // disarms the watchdog before exiting
+	}
 
 	srv := &http.Server{
 		Addr:              c.listen,

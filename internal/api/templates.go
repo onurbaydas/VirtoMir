@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/onurbaydas/virtomir/internal/auth"
+	"github.com/onurbaydas/virtomir/internal/respool"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
@@ -57,23 +58,26 @@ func (s *Server) deploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uuid := r.PathValue("uuid")
-	if identity(r).Role < auth.Admin {
-		vcpus, mem := 1, uint64(1024)
-		if doms, err := s.backend.ListDomains(); err == nil {
-			for _, d := range doms {
-				if strings.EqualFold(d.UUID, uuid) {
-					vcpus, mem = d.VCPUs, d.MaxMemoryKiB>>10
-				}
+	vcpus, mem := 1, uint64(1024)
+	if doms, err := s.backend.ListDomains(); err == nil {
+		for _, d := range doms {
+			if strings.EqualFold(d.UUID, uuid) {
+				vcpus, mem = d.VCPUs, d.MaxMemoryKiB>>10
 			}
 		}
-		if !s.checkQuota(w, r, 1, vcpus, mem) {
-			return
-		}
+	}
+	if identity(r).Role < auth.Admin && !s.checkQuota(w, r, 1, vcpus, mem) {
+		return
+	}
+	rp := r.URL.Query().Get("respool") // the new machine's resource pool, if any
+	if rp != "" && !s.checkRespool(w, rp, "", respool.Demand{VCPUs: vcpus, MemoryMiB: mem}) {
+		return
 	}
 	job := s.jobs.Start("deploy", "New machine "+b.Name, func(ctx context.Context, report func(string)) (string, error) {
 		res, err := t.Deploy(ctx, uuid, b, report)
 		if err == nil {
 			s.recordOwner(r, res)
+			s.joinRespool(rp, res)
 		}
 		s.live.Refresh()
 		return res, err

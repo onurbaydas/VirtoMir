@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/onurbaydas/virtomir/internal/respool"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
@@ -48,12 +49,22 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 	if !s.checkQuota(w, r, 1, max(spec.VCPUs, 1), max(spec.MemoryMiB, 1024)) {
 		return
 	}
+	// ?respool=<id>: the machine goes into that resource pool if it fits its limits.
+	rp := r.URL.Query().Get("respool")
+	d := respool.Demand{VCPUs: max(spec.VCPUs, 1), MemoryMiB: max(spec.MemoryMiB, 1024)}
+	if spec.DiskPath == "" && spec.DiskGiB > 0 {
+		d.StoragePool, d.StorageBytes = spec.Pool, spec.DiskGiB<<30
+	}
+	if rp != "" && !s.checkRespool(w, rp, "", d) {
+		return
+	}
 	res, err := s.backend.CreateDomain(spec)
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
 	s.recordOwner(r, res.UUID)
+	s.joinRespool(rp, res.UUID)
 	s.done(w, http.StatusCreated, res)
 }
 
@@ -68,10 +79,27 @@ func (s *Server) getDomain(w http.ResponseWriter, r *http.Request) {
 
 // deleteDomain: ?storage=remove also deletes the machine's own disks.
 func (s *Server) deleteDomain(w http.ResponseWriter, r *http.Request) {
-	res, err := s.backend.Delete(r.PathValue("uuid"), r.URL.Query().Get("storage") == "remove")
+	uuid := r.PathValue("uuid")
+	res, err := s.backend.Delete(uuid, r.URL.Query().Get("storage") == "remove")
 	if err != nil {
 		s.writeError(w, err)
 		return
+	}
+	if f, ok := s.backend.(Firewaller); ok {
+		if err := f.RemoveFirewall(uuid); err != nil {
+			s.log.Warn("firewall of deleted machine", "machine", uuid, "err", err)
+		}
+	}
+	// A deleted machine leaves its resource pool, and HA must not bring it back elsewhere.
+	if s.respools != nil {
+		s.respools.Forget(uuid)
+	}
+	if s.ha != nil {
+		if _, ok := s.ha.Policy(uuid); ok {
+			if _, err := s.ha.DeletePolicy(uuid); err != nil {
+				s.log.Warn("ha policy of deleted machine", "machine", uuid, "err", err)
+			}
+		}
 	}
 	s.done(w, http.StatusOK, res)
 }
@@ -182,6 +210,9 @@ func (s *Server) changeMedia(w http.ResponseWriter, r *http.Request) {
 func (s *Server) attachDisk(w http.ResponseWriter, r *http.Request) {
 	var spec virt.DiskSpec
 	if !s.decode(w, r, &spec) {
+		return
+	}
+	if !s.checkRespool(w, "", r.PathValue("uuid"), diskDemand(spec)) {
 		return
 	}
 	target, err := s.backend.AttachDisk(r.PathValue("uuid"), spec)

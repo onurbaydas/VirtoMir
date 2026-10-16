@@ -19,11 +19,15 @@ const (
 	ActionForceOff Action = "force-off" // virDomainDestroy: pulls the plug
 	ActionPause    Action = "pause"     // virDomainSuspend: freezes vCPUs, RAM stays allocated
 	ActionResume   Action = "resume"
+	ActionReset    Action = "reset" // virDomainReset: hardware reset button, no guest involvement
+	// ActionSave writes RAM to disk and stops the machine (libvirt managed save); the next
+	// start resumes exactly where it was.
+	ActionSave Action = "save"
 )
 
 func ParseAction(s string) (Action, bool) {
 	switch a := Action(s); a {
-	case ActionStart, ActionShutdown, ActionReboot, ActionForceOff, ActionPause, ActionResume:
+	case ActionStart, ActionShutdown, ActionReboot, ActionForceOff, ActionPause, ActionResume, ActionReset, ActionSave:
 		return a, true
 	}
 	return "", false
@@ -79,6 +83,10 @@ func (c *Client) DomainAction(uuid string, action Action) error {
 		err = l.DomainSuspend(d)
 	case ActionResume:
 		err = l.DomainResume(d)
+	case ActionReset:
+		err = l.DomainReset(d, 0)
+	case ActionSave:
+		err = l.DomainManagedSave(d, 0)
 	default:
 		return fmt.Errorf("unknown action %q", action)
 	}

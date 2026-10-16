@@ -1,202 +1,294 @@
 package api
 
 import (
-	"encoding/json"
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/cluster"
 	"github.com/onurbaydas/virtomir/internal/reports"
+	"github.com/onurbaydas/virtomir/internal/schedule"
+	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
+// Reports (ADR-0032): capacity, inventory and backup compliance over every cluster member,
+// on demand or on a schedule. Each member answers /api/v1/cluster/peer/reports/facts with
+// what it measures itself.
 func (s *Server) reportRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/reports", s.listReports)
-	mux.HandleFunc("POST /api/v1/reports/generate", s.generateReport)
-	mux.HandleFunc("GET /api/v1/reports/{id}", s.getReportContent)
-	mux.HandleFunc("GET /api/v1/reports/{id}/download", s.downloadReport)
+	mux.HandleFunc("POST /api/v1/reports", s.generateReport)
+	mux.HandleFunc("GET /api/v1/reports/{id}", s.downloadReport)
 	mux.HandleFunc("DELETE /api/v1/reports/{id}", s.deleteReport)
-	mux.HandleFunc("GET /api/v1/reports/schedules", s.listReportSchedules)
-	mux.HandleFunc("PUT /api/v1/reports/schedules", s.saveReportSchedule)
+	mux.HandleFunc("GET /api/v1/report-schedules", s.listReportSchedules)
+	mux.HandleFunc("PUT /api/v1/report-schedules", s.putReportSchedule)
+	mux.HandleFunc("DELETE /api/v1/report-schedules/{id}", s.deleteReportSchedule)
+	mux.HandleFunc("GET /api/v1/cluster/peer/reports/facts", s.peerReportFacts)
+}
+
+func (s *Server) noReports(w http.ResponseWriter) bool {
+	if s.reports == nil {
+		s.writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "reports are not available on this host"})
+		return true
+	}
+	return false
+}
+
+// localFacts is what this host measures for reports.
+func (s *Server) localFacts() (reports.HostFacts, error) {
+	h, err := s.backend.HostInfo()
+	if err != nil {
+		return reports.HostFacts{}, err
+	}
+	f := reports.HostFacts{Name: s.hostName, CPUs: h.CPUs, MemoryKiB: h.MemoryKiB,
+		Machines: []reports.Machine{}, Pools: []reports.Pool{}, Backups: []reports.Backup{}, Schedules: []reports.BackupSchedule{}}
+	if f.Name == "" {
+		f.Name = h.Hostname
+	}
+	doms, err := s.backend.ListDomains()
+	if err != nil {
+		return f, err
+	}
+	for _, d := range doms {
+		m := reports.Machine{UUID: d.UUID, Name: d.Name, State: string(d.State), Owner: d.Owner, VCPUs: d.VCPUs,
+			MemoryMiB: d.MaxMemoryKiB >> 10, Autostart: d.Autostart, Template: d.Template}
+		if det, err := s.backend.DomainDetail(d.UUID); err == nil {
+			for _, dev := range det.Devices {
+				if dev.Kind == "disk" {
+					m.Disks++
+					m.DiskBytes += dev.CapacityBytes
+				}
+				m.Addresses = append(m.Addresses, dev.Addresses...)
+			}
+		}
+		f.Machines = append(f.Machines, m)
+	}
+	if pools, err := s.backend.ListPools(); err == nil {
+		for _, p := range pools {
+			f.Pools = append(f.Pools, reports.Pool{Name: p.Name, Type: p.Type, Path: p.Path, Active: p.Active,
+				CapacityBytes: p.CapacityBytes, AllocationBytes: p.AllocationBytes, AvailableBytes: p.AvailableBytes})
+		}
+	}
+	if s.schedules != nil {
+		if b, ok := s.backend.(Backupper); ok {
+			if list, err := b.ListBackups(virt.BackupDir(s.schedules.Settings().BackupDir), ""); err == nil {
+				for _, bk := range list {
+					f.Backups = append(f.Backups, reports.Backup{DomainUUID: strings.ToLower(bk.DomainUUID), Created: bk.Created, SizeBytes: bk.SizeBytes})
+				}
+			}
+		}
+		for _, sc := range s.schedules.List("") {
+			if sc.Kind != schedule.Backups || !sc.Enabled {
+				continue
+			}
+			iv := 24 * time.Hour
+			switch sc.Every {
+			case "hours":
+				iv = time.Duration(max(sc.Hours, 1)) * time.Hour
+			case "weekly":
+				iv = 7 * 24 * time.Hour
+			}
+			f.Schedules = append(f.Schedules, reports.BackupSchedule{DomainUUID: strings.ToLower(sc.Domain), Interval: iv})
+		}
+	}
+	return f, nil
+}
+
+// clusterFacts asks every member (in parallel) and this host for their facts.
+func (s *Server) clusterFacts(ctx context.Context) (reports.Facts, error) {
+	local, err := s.localFacts()
+	if err != nil {
+		return reports.Facts{}, err
+	}
+	out := reports.Facts{Hosts: []reports.HostFacts{local}}
+	if s.cluster == nil || !s.cluster.Clustered() {
+		return out, nil
+	}
+	members, _ := s.cluster.Members()
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, n := range members {
+		if n.ID == s.cluster.SelfID() {
+			continue
+		}
+		wg.Add(1)
+		go func(n cluster.Node) {
+			defer wg.Done()
+			c, cancel := context.WithTimeout(ctx, time.Minute)
+			defer cancel()
+			var hf reports.HostFacts
+			err := s.peer(n).Call(c, http.MethodGet, "/api/v1/cluster/peer/reports/facts", nil, &hf)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				out.Missing = append(out.Missing, n.Name)
+				return
+			}
+			out.Hosts = append(out.Hosts, hf)
+		}(n)
+	}
+	wg.Wait()
+	return out, nil
+}
+
+func (s *Server) peerReportFacts(w http.ResponseWriter, r *http.Request) {
+	if s.notPeer(w, r) {
+		return
+	}
+	f, err := s.localFacts()
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, f)
 }
 
 func (s *Server) listReports(w http.ResponseWriter, _ *http.Request) {
 	if s.reports == nil {
-		s.writeJSON(w, http.StatusOK, []reports.ReportMetadata{})
+		s.writeJSON(w, http.StatusOK, map[string]any{"reports": []reports.Meta{}})
 		return
 	}
-	s.writeJSON(w, http.StatusOK, s.reports.List())
+	s.writeJSON(w, http.StatusOK, map[string]any{"reports": s.reports.List()})
 }
 
+// generateReport makes a report now: {"kind": "capacity", "format": "html"}.
 func (s *Server) generateReport(w http.ResponseWriter, r *http.Request) {
-	if s.reports == nil {
-		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "reports store not configured"})
+	if s.noReports(w) {
 		return
 	}
-	var req struct {
-		Type   reports.ReportType `json:"type"`
-		Format reports.Format     `json:"format"`
+	var b struct {
+		Kind   reports.Kind   `json:"kind"`
+		Format reports.Format `json:"format"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !s.decode(w, r, &b) {
 		return
 	}
-	if req.Format == "" {
-		req.Format = reports.FormatHTML
+	if b.Format == "" {
+		b.Format = reports.HTML
 	}
-
-	var meta reports.ReportMetadata
-	var err error
-
-	switch req.Type {
-	case reports.TypeCapacity:
-		h, _ := s.backend.HostInfo()
-		domains, _ := s.backend.ListDomains()
-		running := 0
-		allocatedVCPUs := 0
-		allocatedMemMiB := uint64(0)
-		for _, d := range domains {
-			if d.State == "running" {
-				running++
-				allocatedVCPUs += d.VCPUs
-				allocatedMemMiB += d.MemoryKiB / 1024
-			}
-		}
-		data := reports.CapacityData{
-			ClusterName:      s.hostName,
-			TotalHosts:       1,
-			TotalVCPUs:       h.CPUs,
-			AllocatedVCPUs:   allocatedVCPUs,
-			TotalMemoryGiB:   float64(h.MemoryKiB) / (1024 * 1024),
-			AllocatedMemGiB:  float64(allocatedMemMiB) / 1024,
-			TotalStorageGiB:  1024.0, // baseline capacity
-			AllocatedDiskGiB: 256.0,
-			RunningVMs:       running,
-			TotalVMs:         len(domains),
-			ForecastDays:     90,
-		}
-		meta, err = s.reports.GenerateCapacityReport(data, req.Format)
-
-	case reports.TypeInventory:
-		domains, _ := s.backend.ListDomains()
-		var items []reports.InventoryItem
-		for _, d := range domains {
-			items = append(items, reports.InventoryItem{
-				UUID:        d.UUID,
-				Name:        d.Name,
-				State:       string(d.State),
-				Host:        s.hostName,
-				VCPUs:       d.VCPUs,
-				MemoryMiB:   d.MemoryKiB / 1024,
-				DisksGiB:    20,
-				IPAddresses: "DHCP",
-				OS:          "Linux (QEMU/KVM)",
-			})
-		}
-		meta, err = s.reports.GenerateInventoryReport(items, req.Format)
-
-	case reports.TypeBackupSLA:
-		domains, _ := s.backend.ListDomains()
-		var items []reports.BackupSLAItem
-		for _, d := range domains {
-			items = append(items, reports.BackupSLAItem{
-				VMName:       d.Name,
-				LastBackup:   time.Now().Add(-12 * time.Hour),
-				Status:       "compliant",
-				BackupSizeMB: 1024,
-				Target:       "/var/lib/virtomir/backups",
-			})
-		}
-		meta, err = s.reports.GenerateBackupSLAReport(items, req.Format)
-
-	default:
-		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported report type"})
-		return
-	}
-
+	f, err := s.clusterFacts(r.Context())
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, meta)
-}
-
-func (s *Server) getReportContent(w http.ResponseWriter, r *http.Request) {
-	if s.reports == nil {
-		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "reports store not configured"})
-		return
-	}
-	id := r.PathValue("id")
-	data, meta, err := s.reports.GetContent(id)
+	m, err := s.reports.Generate(b.Kind, b.Format, f, identity(r).Name, "")
 	if err != nil {
-		s.writeError(w, err)
+		s.writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	s.writeJSON(w, http.StatusOK, map[string]any{
-		"metadata": meta,
-		"content":  string(data),
-	})
+	s.writeJSON(w, http.StatusCreated, m)
 }
 
+// downloadReport serves a report; ?download=1 as an attachment, otherwise to view.
 func (s *Server) downloadReport(w http.ResponseWriter, r *http.Request) {
-	if s.reports == nil {
-		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "reports store not configured"})
+	if s.noReports(w) {
 		return
 	}
-	id := r.PathValue("id")
-	data, meta, err := s.reports.GetContent(id)
+	m, body, err := s.reports.Get(r.PathValue("id"))
 	if err != nil {
-		s.writeError(w, err)
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such report"})
 		return
 	}
-
-	switch meta.Format {
-	case reports.FormatHTML:
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	case reports.FormatCSV:
-		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	case reports.FormatJSON:
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Type", map[reports.Format]string{
+		reports.HTML: "text/html; charset=utf-8", reports.CSV: "text/csv; charset=utf-8", reports.JSON: "application/json",
+	}[m.Format])
+	// Reports are our own HTML, but keep them from running anything if a name slipped through.
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	disp := "inline"
+	if r.URL.Query().Get("download") != "" {
+		disp = "attachment"
 	}
-	filename := fmt.Sprintf("%s.%s", strings.ToLower(meta.ID), meta.Format)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	_, _ = w.Write(data)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("%s; filename=%q", disp, m.ID+"."+string(m.Format)))
+	_, _ = w.Write(body)
 }
 
 func (s *Server) deleteReport(w http.ResponseWriter, r *http.Request) {
-	if s.reports == nil {
-		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "reports store not configured"})
+	if s.noReports(w) {
 		return
 	}
-	id := r.PathValue("id")
-	if err := s.reports.Delete(id); err != nil {
-		s.writeError(w, err)
+	if err := s.reports.Delete(r.PathValue("id")); err != nil {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such report"})
 		return
 	}
-	s.writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) listReportSchedules(w http.ResponseWriter, _ *http.Request) {
 	if s.reports == nil {
-		s.writeJSON(w, http.StatusOK, []reports.Schedule{})
+		s.writeJSON(w, http.StatusOK, map[string]any{"schedules": []reports.Schedule{}})
 		return
 	}
-	s.writeJSON(w, http.StatusOK, s.reports.ListSchedules())
+	s.writeJSON(w, http.StatusOK, map[string]any{"schedules": s.reports.Schedules()})
 }
 
-func (s *Server) saveReportSchedule(w http.ResponseWriter, r *http.Request) {
-	if s.reports == nil {
-		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "reports store not configured"})
+func (s *Server) putReportSchedule(w http.ResponseWriter, r *http.Request) {
+	if s.noReports(w) {
 		return
 	}
 	var sc reports.Schedule
-	if err := json.NewDecoder(r.Body).Decode(&sc); err != nil {
-		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !s.decode(w, r, &sc) {
 		return
 	}
-	if err := s.reports.SaveSchedule(sc); err != nil {
-		s.writeError(w, err)
+	out, err := s.reports.PutSchedule(sc)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such schedule"})
+	case err != nil:
+		s.writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+	default:
+		s.writeJSON(w, http.StatusOK, out)
+	}
+}
+
+func (s *Server) deleteReportSchedule(w http.ResponseWriter, r *http.Request) {
+	if s.noReports(w) {
 		return
 	}
-	s.writeJSON(w, http.StatusOK, sc)
+	if err := s.reports.DeleteSchedule(r.PathValue("id")); err != nil {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such schedule"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// RunReportSchedules makes this host's scheduled reports until ctx ends. Schedules are kept
+// per host, but every report covers the whole cluster, so one host's schedules are enough.
+func (s *Server) RunReportSchedules(ctx context.Context) {
+	if s.reports == nil {
+		return
+	}
+	since := time.Now()
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		for _, sc := range s.reports.Due(since) {
+			f, err := s.clusterFacts(ctx)
+			var m reports.Meta
+			if err == nil {
+				m, err = s.reports.Generate(sc.Kind, sc.Format, f, "schedule: "+sc.Name, sc.ID)
+			}
+			s.reports.Ran(sc.ID, err)
+			if err != nil {
+				s.log.Warn("scheduled report", "schedule", sc.Name, "err", err)
+				if sc.Notify && s.alerts != nil {
+					s.alerts.Notice("Report "+sc.Name+" failed", err.Error())
+				}
+				continue
+			}
+			s.log.Info("scheduled report", "schedule", sc.Name, "report", m.ID)
+			if sc.Notify && s.alerts != nil {
+				s.alerts.Notice(m.Title, m.Summary+" — open Reports in VirtoMir to read it.")
+			}
+		}
+	}
 }

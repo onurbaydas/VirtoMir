@@ -13,6 +13,7 @@ import (
 	"net/smtp"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -23,6 +24,9 @@ const (
 	Firing        EventType = "firing"
 	ResolvedEvent EventType = "resolved"
 	TestEvent     EventType = "test"
+	// NoticeEvent is news that is not an alert: a scheduled report is ready, HA restarted a
+	// machine. It goes to every enabled channel.
+	NoticeEvent EventType = "notice"
 )
 
 // Event is one notification to deliver.
@@ -98,7 +102,7 @@ func (c Channel) wants(ev Event) bool {
 	if !c.Enabled || (ev.Type == ResolvedEvent && !c.Resolved) {
 		return false
 	}
-	return ev.Type == TestEvent || c.MinSeverity == Warning || ev.Alert.Severity == Critical
+	return ev.Type == TestEvent || ev.Type == NoticeEvent || c.MinSeverity == Warning || ev.Alert.Severity == Critical
 }
 
 // send delivers an event to every channel that wants it (in the background).
@@ -113,6 +117,19 @@ func (e *Engine) send(ev Event) {
 			}
 		}()
 	}
+}
+
+// Notice sends news (not an alert) to every enabled channel, in the background.
+func (e *Engine) Notice(subject, message string) {
+	if e == nil || e.notify == nil {
+		return
+	}
+	e.mu.Lock()
+	channels, smtp := slices.Clone(e.cfg.Channels), e.cfg.SMTP
+	e.mu.Unlock()
+	e.notify(Event{Type: NoticeEvent, channels: channels, smtp: smtp, Alert: Alert{
+		ID: "notice", Kind: "notice", Severity: Warning, Subject: subject, Message: message, Started: time.Now().UTC(),
+	}})
 }
 
 // Test sends a test notification through one channel and reports the outcome.
@@ -134,11 +151,11 @@ func (e *Engine) Test(ch Channel) error {
 // Text is the one-line summary used by chat formats and email subjects.
 func (ev Event) Text() string {
 	host, _ := os.Hostname()
-	icon := map[EventType]string{Firing: "🔴", ResolvedEvent: "✅", TestEvent: "🔔"}[ev.Type]
+	icon := map[EventType]string{Firing: "🔴", ResolvedEvent: "✅", TestEvent: "🔔", NoticeEvent: "ℹ️"}[ev.Type]
 	if ev.Type == Firing && ev.Alert.Severity == Warning {
 		icon = "🟠"
 	}
-	state := map[EventType]string{Firing: strings.ToUpper(string(ev.Alert.Severity)), ResolvedEvent: "RESOLVED", TestEvent: "TEST"}[ev.Type]
+	state := map[EventType]string{Firing: strings.ToUpper(string(ev.Alert.Severity)), ResolvedEvent: "RESOLVED", TestEvent: "TEST", NoticeEvent: "INFO"}[ev.Type]
 	return fmt.Sprintf("%s [%s] %s — %s (VirtoMir on %s)", icon, state, ev.Alert.Subject, ev.Alert.Message, host)
 }
 
@@ -176,7 +193,7 @@ func webhook(ch Channel, ev Event) error {
 			prio = "low"
 		}
 		headers.Set("Priority", prio)
-		headers.Set("Tags", map[EventType]string{Firing: "rotating_light", ResolvedEvent: "white_check_mark", TestEvent: "bell"}[ev.Type])
+		headers.Set("Tags", map[EventType]string{Firing: "rotating_light", ResolvedEvent: "white_check_mark", TestEvent: "bell", NoticeEvent: "information_source"}[ev.Type])
 	default:
 		body, _ = json.Marshal(map[string]any{"event": ev.Type, "alert": ev.Alert, "text": ev.Text()})
 	}
