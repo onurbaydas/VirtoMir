@@ -22,8 +22,6 @@ type Consoler interface {
 	ConsoleInfo(uuid string) (virt.ConsoleInfo, error)
 	DialVNC(ctx context.Context, uuid string) (net.Conn, error)
 	DialVNCHead(ctx context.Context, uuid string, head int) (net.Conn, error)
-	DialSPICE(ctx context.Context, uuid string) (net.Conn, error)
-	SetDisplay(uuid, protocol string) error
 	SerialConsole(ctx context.Context, uuid, device string, in io.Reader, out io.Writer) error
 }
 
@@ -33,6 +31,21 @@ func (s *Server) consoleRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/console/serial", s.consoleSerial)
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/console/spice", s.consoleSPICE)
 	mux.HandleFunc("PUT /api/v1/domains/{uuid}/display", s.putDisplay)
+}
+
+// Spicer is the SPICE part of the backend (ADR-0046); a backend without it keeps VNC and
+// the serial console.
+type Spicer interface {
+	DialSPICE(ctx context.Context, uuid string) (net.Conn, error)
+	SetDisplay(uuid, protocol string) error
+}
+
+func (s *Server) spicer(w http.ResponseWriter) (Spicer, bool) {
+	c, ok := s.backend.(Spicer)
+	if !ok {
+		s.writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "SPICE is not available"})
+	}
+	return c, ok
 }
 
 func (s *Server) consoler() (Consoler, bool) {
@@ -96,9 +109,8 @@ func (s *Server) consoleVNC(w http.ResponseWriter, r *http.Request) {
 // local SPICE server. spice-html5 opens one per SPICE channel (main, display, inputs,
 // cursor, playback); only the main one, which comes first, is written to the activity log.
 func (s *Server) consoleSPICE(w http.ResponseWriter, r *http.Request) {
-	c, ok := s.consoler()
+	c, ok := s.spicer(w)
 	if !ok {
-		s.writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "consoles are not available"})
 		return
 	}
 	uuid := r.PathValue("uuid")
@@ -155,9 +167,8 @@ func (s *Server) firstSpiceChannel(user, uuid string) bool {
 
 // putDisplay switches a machine's console between VNC and SPICE (from its next start).
 func (s *Server) putDisplay(w http.ResponseWriter, r *http.Request) {
-	c, ok := s.consoler()
+	c, ok := s.spicer(w)
 	if !ok {
-		s.writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "consoles are not available"})
 		return
 	}
 	var body struct {
