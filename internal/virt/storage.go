@@ -170,6 +170,9 @@ func (c *Client) CreateVolume(pool string, spec VolumeSpec) (Volume, error) {
 		return Volume{}, err
 	}
 	format := orDefault(spec.Format, "qcow2")
+	if !poolKeepsFiles(l, pool) {
+		format = "raw" // LVM, ZFS and Ceph volumes are block storage with no format of their own
+	}
 	vol, _, err := createVolume(l, pool, spec.Name, spec.SizeGiB<<30, format)
 	if err != nil {
 		return Volume{}, err
@@ -189,10 +192,16 @@ func createVolume(l *libvirt.Libvirt, pool, name string, bytes uint64, format st
 	if _, err := l.StorageVolLookupByName(p, name); err == nil {
 		return libvirt.StorageVol{}, "", refusedf("Pool %s already has a volume named %s.", pool, name)
 	}
+	// Thin everywhere except LVM: there a smaller allocation makes libvirt create a sparse
+	// snapshot volume that breaks once the guest writes more than that.
+	var alloc uint64
+	if poolTypeOf(l, p) == "logical" {
+		alloc = bytes
+	}
 	x := libvirtxml.StorageVolume{
 		Name:       name,
 		Capacity:   &libvirtxml.StorageVolumeSize{Unit: "bytes", Value: bytes},
-		Allocation: &libvirtxml.StorageVolumeSize{Unit: "bytes", Value: 0},
+		Allocation: &libvirtxml.StorageVolumeSize{Unit: "bytes", Value: alloc},
 		Target:     &libvirtxml.StorageVolumeTarget{Format: &libvirtxml.StorageVolumeTargetFormat{Type: format}},
 	}
 	doc, err := x.Marshal()
@@ -238,22 +247,31 @@ func cephSecret(l *libvirt.Libvirt, pool, key string) (string, error) {
 	return formatUUID(sec.UUID), nil
 }
 
+// poolTypeOf returns a pool's libvirt type (dir, netfs, logical, …), or "" if unknown.
+func poolTypeOf(l *libvirt.Libvirt, p libvirt.StoragePool) string {
+	raw, err := l.StoragePoolGetXMLDesc(p, 0)
+	if err != nil {
+		return ""
+	}
+	var x libvirtxml.StoragePool
+	if x.Unmarshal(raw) != nil {
+		return ""
+	}
+	return x.Type
+}
+
 // poolKeepsFiles reports whether a pool's volumes are plain files a disk can point at;
-// otherwise (iSCSI, Ceph, LVM) disks refer to them as <source pool= volume=>.
+// otherwise (iSCSI, Ceph, LVM, ZFS) disks refer to them as <source pool= volume=>.
 func poolKeepsFiles(l *libvirt.Libvirt, pool string) bool {
 	p, err := l.StoragePoolLookupByName(pool)
 	if err != nil {
 		return true
 	}
-	raw, err := l.StoragePoolGetXMLDesc(p, 0)
-	if err != nil {
+	switch poolTypeOf(l, p) {
+	case "", "dir", "fs", "netfs":
 		return true
 	}
-	var x libvirtxml.StoragePool
-	if x.Unmarshal(raw) != nil {
-		return true
-	}
-	return x.Type == "dir" || x.Type == "fs" || x.Type == "netfs"
+	return false
 }
 
 func volumePath(l *libvirt.Libvirt, pool, name string) (path, format string, err error) {
@@ -394,7 +412,8 @@ func (c *Client) SetPoolAutostart(name string, on bool) error {
 	return classify(l.StoragePoolSetAutostart(p, boolInt(on)))
 }
 
-// PoolSpec describes a new directory pool.
+// PoolSpec describes a new pool: a directory, NFS share, iSCSI target, Ceph pool, LVM
+// volume group or ZFS pool.
 type PoolSpec struct {
 	Name string `json:"name"`
 	Path string `json:"path"` // directory, or where an NFS share is mounted
@@ -411,7 +430,21 @@ type PoolSpec struct {
 	CephPool string   `json:"cephPool,omitempty"`
 	CephUser string   `json:"cephUser,omitempty"`
 	CephKey  string   `json:"cephKey,omitempty"`
+	// logical (LVM): Source is the volume group. With Devices, a new volume group is made
+	// from those empty disks; without, an existing one is used. zfs: Source is an existing
+	// zpool (or dataset); VirtoMir never creates a zpool.
+	Source  string   `json:"source,omitempty"`
+	Devices []string `json:"devices,omitempty"`
 }
+
+// lvmNameRE is what LVM accepts for a volume group (and ZFS for a pool, minus the dataset
+// slashes allowed separately).
+var lvmNameRE = regexp.MustCompile(`^[A-Za-z0-9+_.][A-Za-z0-9+_.-]*$`)
+
+var zfsNameRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.:-]*(/[A-Za-z0-9_.:-]+)*$`)
+
+// blockDevRE: a whole disk or partition by a stable path; nothing outside /dev.
+var blockDevRE = regexp.MustCompile(`^/dev/[A-Za-z0-9][A-Za-z0-9/_.:+-]*$`)
 
 var iqnRE = regexp.MustCompile(`^(iqn\.[0-9]{4}-[0-9]{2}\.[a-z0-9.-]+(:[^\s]+)?|eui\.[0-9A-Fa-f]{16})$`)
 
@@ -475,14 +508,43 @@ func poolXML(spec PoolSpec) (libvirtxml.StoragePool, error) {
 			src.Host = append(src.Host, libvirtxml.StoragePoolSourceHost{Name: host, Port: port})
 		}
 		x.Source = src
+	case "logical":
+		if !lvmNameRE.MatchString(spec.Source) || spec.Source == "." || spec.Source == ".." || len(spec.Source) > 127 {
+			return x, invalidf("Enter the volume group name as vgs shows it, e.g. vg-fast.")
+		}
+		x.Type = "logical"
+		x.Source = &libvirtxml.StoragePoolSource{Name: spec.Source, Format: &libvirtxml.StoragePoolSourceFormat{Type: "lvm2"}}
+		seen := map[string]bool{}
+		for _, d := range spec.Devices {
+			d = strings.TrimSpace(d)
+			if !blockDevRE.MatchString(d) || strings.Contains(d, "..") {
+				return x, invalidf("%q is not a disk; use a path like /dev/sdb or /dev/disk/by-id/….", d)
+			}
+			if seen[d] {
+				return x, invalidf("%s is listed twice.", d)
+			}
+			seen[d] = true
+			x.Source.Device = append(x.Source.Device, libvirtxml.StoragePoolSourceDevice{Path: d})
+		}
+		x.Target = &libvirtxml.StoragePoolTarget{Path: "/dev/" + spec.Source}
+	case "zfs":
+		if !zfsNameRE.MatchString(spec.Source) || len(spec.Source) > 255 || slices.ContainsFunc(strings.Split(spec.Source, "/"), func(p string) bool { return p == "." || p == ".." }) {
+			return x, invalidf("Enter the zpool (or dataset) name as zfs list shows it, e.g. tank/vms.")
+		}
+		if len(spec.Devices) > 0 {
+			return x, invalidf("VirtoMir uses an existing zpool; create it with zpool create first.")
+		}
+		x.Type = "zfs"
+		x.Source = &libvirtxml.StoragePoolSource{Name: spec.Source}
+		x.Target = nil
 	default:
-		return x, invalidf("Unknown pool type %q (dir, netfs, iscsi or rbd).", spec.Type)
+		return x, invalidf("Unknown pool type %q (dir, netfs, iscsi, rbd, logical or zfs).", spec.Type)
 	}
 	return x, nil
 }
 
-// CreatePool defines, builds (creates the directory or mount point), starts (mounts) and
-// autostarts a pool.
+// CreatePool defines, builds (creates the directory, mount point or volume group), starts
+// (mounts) and autostarts a pool.
 func (c *Client) CreatePool(spec PoolSpec) error {
 	x, err := poolXML(spec)
 	if err != nil {
@@ -506,12 +568,25 @@ func (c *Client) CreatePool(spec PoolSpec) error {
 	}
 	p, err := l.StoragePoolDefineXML(doc, 0)
 	if err != nil {
+		if strings.Contains(err.Error(), "missing backend for pool type") {
+			return refusedf("This host's libvirt cannot use %s pools yet: install its storage driver (e.g. libvirt-daemon-driver-storage-%s on Debian/Ubuntu) and restart libvirtd.", x.Type, x.Type)
+		}
 		return classify(err)
 	}
-	// Only directory-like pools have something to build (iSCSI and Ceph exist already).
-	if x.Type == "dir" || x.Type == "netfs" {
-		if err := l.StoragePoolBuild(p, libvirt.StoragePoolBuildNew); err != nil {
+	// Only directory-like pools and a new volume group have something to build (iSCSI,
+	// Ceph, ZFS and an existing volume group exist already). For LVM, NoOverwrite makes
+	// libvirt refuse any disk that carries a partition table, file system or LVM label.
+	build := x.Type == "dir" || x.Type == "netfs" || (x.Type == "logical" && len(x.Source.Device) > 0)
+	if build {
+		flags := libvirt.StoragePoolBuildNew
+		if x.Type == "logical" {
+			flags = libvirt.StoragePoolBuildNoOverwrite
+		}
+		if err := l.StoragePoolBuild(p, flags); err != nil {
 			_ = l.StoragePoolUndefine(p)
+			if x.Type == "logical" && strings.Contains(err.Error(), "already built") {
+				return refusedf("A disk is not empty (it has a partition table, file system or LVM label), so it was left untouched. Wipe it yourself if you are sure (wipefs -a), or use its existing volume group. libvirt: %v", err)
+			}
 			return classify(err)
 		}
 	}

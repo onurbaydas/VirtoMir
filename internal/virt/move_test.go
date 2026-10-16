@@ -119,6 +119,41 @@ func TestPoolXMLSAN(t *testing.T) {
 	}
 }
 
+func TestPoolXMLLocalBlock(t *testing.T) {
+	x, err := poolXML(PoolSpec{Name: "fast", Type: "logical", Source: "vg-fast", Devices: []string{"/dev/sdb", "/dev/disk/by-id/nvme-X_1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := x.Marshal()
+	for _, want := range []string{`type="logical"`, `<name>vg-fast</name>`, `<format type="lvm2">`, `<device path="/dev/sdb">`, `<device path="/dev/disk/by-id/nvme-X_1">`, `<path>/dev/vg-fast</path>`} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("logical: missing %s in\n%s", want, doc)
+		}
+	}
+	x, err = poolXML(PoolSpec{Name: "tank", Type: "zfs", Source: "tank/vms"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _ = x.Marshal()
+	if !strings.Contains(doc, `type="zfs"`) || !strings.Contains(doc, `<name>tank/vms</name>`) || strings.Contains(doc, "<target>") {
+		t.Errorf("zfs:\n%s", doc)
+	}
+	for _, bad := range []PoolSpec{
+		{Name: "a", Type: "logical"},
+		{Name: "a", Type: "logical", Source: "vg/x"},
+		{Name: "a", Type: "logical", Source: ".."},
+		{Name: "a", Type: "logical", Source: "vg", Devices: []string{"/etc/passwd"}},
+		{Name: "a", Type: "logical", Source: "vg", Devices: []string{"/dev/../etc/shadow"}},
+		{Name: "a", Type: "logical", Source: "vg", Devices: []string{"/dev/sdb", "/dev/sdb"}},
+		{Name: "a", Type: "zfs", Source: "tank/../x"},
+		{Name: "a", Type: "zfs", Source: "tank", Devices: []string{"/dev/sdb"}},
+	} {
+		if _, err := poolXML(bad); err == nil {
+			t.Errorf("accepted %+v", bad)
+		}
+	}
+}
+
 func TestNetworkVLAN(t *testing.T) {
 	x, err := buildNetwork(NetworkSpec{Name: "lab10", Mode: "bridge", Bridge: "ovsbr0", OVS: true, VLAN: 10})
 	if err != nil {

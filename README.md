@@ -9,7 +9,7 @@ VirtoMir is a modern web control panel for **KVM / QEMU / libvirt** that tries t
 
 It installs on the Linux host you already have (Debian, Ubuntu, Fedora, …) as a single binary. No dedicated distribution, no database, no agents.
 
-> 🚧 **Status: early release (0.4).** Used and tested on single hosts and small clusters; high availability has not been tried on real BMC hardware yet. Test it before you trust it with production.
+> 🚧 **Status: early release (0.5).** Used and tested on single hosts and small clusters; high availability has not been tried on real BMC hardware yet. Test it before you trust it with production.
 
 ![Overview](docs/screenshots/overview.png)
 
@@ -66,6 +66,7 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - **Packet capture** on any host interface (tcpdump): watch it live or download a `.pcap` for Wireshark
 - **Download images from a URL** straight into a pool, verified against a SHA-256; find **unused disk images**
 - **NFS, iSCSI and Ceph RBD storage**, and one pool on every host of a cluster in a single step
+- **LVM and ZFS**: use an existing volume group or zpool, or build a new volume group from empty disks (a disk with data on it is refused, never overwritten)
 - **VLANs** on Open vSwitch bridges (per network or per adapter), and one network on every host in a single step
 
 ### Several hosts
@@ -132,8 +133,8 @@ Requirements: a Linux host with **libvirt + QEMU/KVM** running and **systemd**.
 sudo apt install qemu-system-x86 libvirt-daemon-system ovmf swtpm
 
 # Download a release, unpack it and run the installer
-tar xzf virtomir_v0.1.0_linux_amd64.tar.gz
-sudo ./virtomir_v0.1.0_linux_amd64/install.sh
+tar xzf virtomir_v0.5.0_linux_amd64.tar.gz
+sudo ./virtomir_v0.5.0_linux_amd64/install.sh
 ```
 
 The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pam.d/virtomir`) and a systemd unit, starts it and prints the address — usually `https://<host>:8420/`. Your browser asks you to accept the self-signed certificate once.
@@ -166,7 +167,7 @@ git clone https://github.com/onurbaydas/VirtoMir && cd VirtoMir
 (cd web && npm ci && npm run build)                            # web UI, embedded into the binary
 CGO_ENABLED=1 go build -tags pam -o virtomird ./cmd/virtomird  # needs gcc + libpam0g-dev
 # or everything incl. a release tarball:
-sh scripts/build-release.sh v0.1.0-dev
+sh scripts/build-release.sh v0.5.0-dev
 ```
 
 Without `-tags pam` the binary builds anywhere (also cross-compiled from Windows/macOS), but can only run with `-auth none`.
@@ -182,7 +183,7 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 
 ## Roadmap
 
-SPICE console, IPv6 networks and firewall rules, creating bonds and bridges on the host, ZFS/LVM pools, off-site backups (restic/S3), a Turkish UI and signed apt/rpm repositories.
+SPICE console, IPv6 networks and firewall rules, creating bonds and bridges on the host, off-site backups (restic/S3), a Turkish UI and signed apt/rpm repositories.
 
 ## License
 
