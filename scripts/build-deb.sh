@@ -37,7 +37,10 @@ cat >"$PKG/etc/default/virtomird" <<'EOF'
 # -listen 127.0.0.1:8420   only local access (e.g. behind a reverse proxy)
 # -tls files -tls-cert /etc/ssl/… -tls-key /etc/ssl/…   your own certificate
 # -auth-group libvirt      members of this group (and root) are admins
+# -update-repo ""          turn off the update check (Account → Updates)
 VIRTOMIRD_ARGS="-listen 0.0.0.0:8420"
+# Only for a private release repository: a GitHub token that may read it.
+#VIRTOMIR_GITHUB_TOKEN=
 EOF
 
 cat >"$PKG/lib/systemd/system/virtomird.service" <<'EOF'
@@ -64,6 +67,7 @@ WantedBy=multi-user.target
 EOF
 
 cp "$ROOT/README.md" "$PKG/usr/share/doc/virtomir/README.md"
+cp "$ROOT/LICENSE" "$PKG/usr/share/doc/virtomir/LICENSE"
 cat >"$PKG/usr/share/doc/virtomir/copyright" <<'EOF'
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: VirtoMir
@@ -71,9 +75,9 @@ Source: https://github.com/onurbaydas/VirtoMir
 
 Files: *
 Copyright: Onur Baydas
-License: not yet decided
- The license of VirtoMir has not been chosen yet (see .ai/context/open-questions.md, Q7).
- Until it is, all rights are reserved; this package is for testing.
+License: AGPL-3.0-or-later
+ On Debian systems the full text is in /usr/share/common-licenses/AGPL-3 if present,
+ and at https://www.gnu.org/licenses/agpl-3.0.html.
 EOF
 
 SIZE=$(du -sk "$PKG" | cut -f1)

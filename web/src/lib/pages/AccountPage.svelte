@@ -3,6 +3,7 @@
   import SigninCard from '../components/SigninCard.svelte'
   import IntegrationsCard from '../components/IntegrationsCard.svelte'
   import TwoFactorCard from '../components/TwoFactorCard.svelte'
+  import UpdatesCard from '../components/UpdatesCard.svelte'
   import KeyRound from '@lucide/svelte/icons/key-round'
   import Plus from '@lucide/svelte/icons/plus'
   import Trash from '@lucide/svelte/icons/trash'
@@ -97,6 +98,7 @@
   </div>
 </section>
 
+{#if session.can('admin')}<UpdatesCard />{/if}
 <TwoFactorCard />
 <QuotasCard />
 {#if session.can('admin')}<SigninCard />{/if}

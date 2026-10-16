@@ -25,6 +25,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/reports"
 	"github.com/onurbaydas/virtomir/internal/respool"
 	"github.com/onurbaydas/virtomir/internal/schedule"
+	"github.com/onurbaydas/virtomir/internal/update"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
@@ -121,6 +122,9 @@ type Options struct {
 	Respools *respool.Store
 	// HostInfo nil: no chassis, sensors, GPU load, interfaces or packet capture.
 	HostInfo *hostinfo.Reader
+	// Updater nil: no update check. StateDir is where downloads go.
+	Updater  *update.Checker
+	StateDir string
 }
 
 type Server struct {
@@ -154,6 +158,8 @@ type Server struct {
 	reports  *reports.Store
 	respools *respool.Store
 	hostinfo *hostinfo.Reader
+	updater  *update.Checker
+	stateDir string
 }
 
 func NewServer(o Options) *Server {
@@ -167,7 +173,7 @@ func NewServer(o Options) *Server {
 		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts, schedules: o.Schedules,
 		cluster: o.Cluster, fingerprint: o.Fingerprint, hostName: o.HostName, listenPort: o.ListenPort,
 		confighist: o.ConfigHistory, quotas: o.Quotas, groupsOf: o.GroupsOf,
-		ha: o.HA, reports: o.Reports, respools: o.Respools, hostinfo: o.HostInfo}
+		ha: o.HA, reports: o.Reports, respools: o.Respools, hostinfo: o.HostInfo, updater: o.Updater, stateDir: o.StateDir}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -206,6 +212,7 @@ func (s *Server) Handler() http.Handler {
 	s.respoolRoutes(mux)
 	s.hostInfoRoutes(mux)
 	s.firewallRoutes(mux)
+	s.updateRoutes(mux)
 
 	spec := s.openAPI(mux.routes) // everything above, built once
 	mux.HandleFunc("GET /api/v1/openapi.json", func(w http.ResponseWriter, _ *http.Request) {

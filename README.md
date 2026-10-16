@@ -9,7 +9,7 @@ VirtoMir is a modern web control panel for **KVM / QEMU / libvirt** that tries t
 
 It installs on the Linux host you already have (Debian, Ubuntu, Fedora, …) as a single binary. No dedicated distribution, no database, no agents.
 
-> 🚧 **Status: pre-alpha.** Under active development; expect rough edges. Don't run it on hosts you can't afford to break yet.
+> 🚧 **Status: early release (0.2).** Used and tested on single hosts and small clusters; high availability has not been tried on real BMC hardware yet. Test it before you trust it with production.
 
 ![Overview](docs/screenshots/overview.png)
 
@@ -29,7 +29,7 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 
 - Live overview of host and machines, updated every second
 - New-machine wizard: install from an ISO, start from a **cloud image with cloud-init** (user, password, SSH keys), or boot an existing disk. Linux, Windows (UEFI + Secure Boot + TPM 2.0) and "other" profiles with sensible defaults
-- Start, shut down, reboot, pause, force off — one by one or **in bulk**
+- Start, shut down, reboot, pause, force off, hard reset, **save to disk** (resume exactly where it was) — one by one or **in bulk**
 - Rename, **clone** (full copies, new identity, runs in the background), delete (optionally with its own disks — never shared ones)
 - **Templates**: turn a prepared machine into a template and create new machines from it in seconds — **linked clones** (store only their own changes) or full copies, with optional cloud-init
 - **Console in the browser**: graphical (noVNC) and serial, also full-screen
@@ -44,6 +44,8 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - **Import**: OVA appliances, a libvirt domain XML, or a disk image already on the host
 - **Snapshots** as a tree: take, revert, delete
 - **Backups**: live (no downtime) or offline, restore as a new machine; **automatic snapshots and backups** on a schedule with retention
+- **Firewall per machine**: in/out rules by protocol, port and address, default policies and anti-spoofing — enforced on the host (libvirt network filters), so the guest cannot switch it off; applied live
+- **As code**: the new-machine form shows its exact API request (curl, Ansible) and an equivalent `virt-install`
 
 ### Monitoring
 
@@ -52,11 +54,17 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - **History** for 1 h, 6 h, 24 h, 7 days and 30 days — kept by VirtoMir itself, no Prometheus needed
 - …and a **Prometheus endpoint** (`/api/v1/metrics`) for those who have one; the whole API is described by **OpenAPI** (`/api/v1/openapi.json`)
 - **Alerts** with sensible defaults (host overloaded, machine crashed, pool filling up, libvirt down) — to a webhook, Slack, Discord, ntfy or e-mail
+- **Host hardware**: vendor, model, BIOS, temperatures, fans and power from the host's own sensors; GPUs with load, memory, temperature and power (NVIDIA, AMD)
+- **Busiest machines** right now, and "would N more machines fit?" from live numbers (with an N+1 check in a cluster)
+- **Reports**: capacity, machine inventory and backup compliance over the whole cluster — HTML (prints to PDF), CSV or JSON, on demand or on a schedule
 
 ### Storage & networks
 
 - Storage pools and volumes, **ISO / cloud image upload** with progress, grow volumes
 - Virtual networks (NAT, isolated, routed, bridged), DHCP leases with machine names, **reserved addresses**
+- **Host wiring** at a glance: physical ports, bonds, VLANs, bridges and which machines are plugged in
+- **Packet capture** on any host interface (tcpdump): watch it live or download a `.pcap` for Wireshark
+- **Download images from a URL** straight into a pool, verified against a SHA-256; find **unused disk images**
 - **NFS, iSCSI and Ceph RBD storage**, and one pool on every host of a cluster in a single step
 - **VLANs** on Open vSwitch bridges (per network or per adapter), and one network on every host in a single step
 
@@ -68,6 +76,9 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - Alerts, activity and backups of all hosts in one place, history charts of every host side by side; roles apply on every host
 - Alert rules, notifications and the backup location saved **the same on every host** in one step
 - A **CPU model every host supports**, so machines can live-migrate between different CPUs
+- **High availability**: protected machines are restarted on another host when theirs dies — with quorum (and an optional witness), and only after the dead host is certainly off: through its BMC (IPMI or Redfish), its hardware watchdog, or an admin's confirmation. Priorities, preferred hosts, a "what if this host died" preview
+- **Maintenance**: move every running machine off a host in one go
+- **Resource pools**: nested limits on vCPUs, memory and disk space per storage pool, enforced on every create, resize and move
 
 ### Security
 
@@ -79,24 +90,30 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - **API tokens** for scripts and automation, limited to their owner's role
 - HTTPS by default (self-signed certificate created on first start, or your own)
 - Session timeouts, lockout after failed sign-ins, CSRF protection, **activity log** of every change (CSV export)
+- **Updates** from the GitHub releases in the UI (Account → Updates): downloaded, checked against the published SHA-256 and installed with apt
 
 | | |
 |---|---|
-| ![Machine performance](docs/screenshots/machine-performance.png) | ![Settings with XML diff](docs/screenshots/settings-diff.png) |
-| ![New machine wizard](docs/screenshots/new-machine.png) | ![Snapshots](docs/screenshots/snapshots.png) |
+| ![Machine performance](docs/screenshots/machine-performance.png) | ![Machine settings](docs/screenshots/settings.png) |
+| ![Machine firewall](docs/screenshots/firewall.png) | ![Snapshots](docs/screenshots/snapshots.png) |
+| ![High availability](docs/screenshots/ha.png) | ![Resource pools](docs/screenshots/pools.png) |
+| ![Reports](docs/screenshots/reports.png) | ![New machine](docs/screenshots/new-machine.png) |
 | ![Storage](docs/screenshots/storage.png) | ![Networks](docs/screenshots/networks.png) |
+| ![Light theme](docs/screenshots/light-theme.png) | ![Updates](docs/screenshots/updates.png) |
 
-<sub>Screenshots use sample data. Dark, light and "match system" themes; works on phones too.</sub>
+<p align="center"><img src="docs/screenshots/mobile.png" alt="On a phone" width="260"></p>
+
+<sub>Screenshots from VirtoMir 0.2.0 on a test host (Ubuntu 26.04, libvirt 12) with real, small machines; the host name is shown as hv-01. Dark, light and "match system" themes; works on phones too.</sub>
 
 ## Install
 
 ### Debian / Ubuntu package
 
 ```sh
-sudo apt install ./virtomir_0.2.0~rc1_amd64.deb   # pulls libvirt and QEMU if missing
+sudo apt install ./virtomir_0.2.0_amd64.deb   # pulls libvirt and QEMU if missing
 ```
 
-It starts `virtomird` right away on port 8420 (self-signed HTTPS). Sign in with a Linux account in the `libvirt` group (admins), `virtomir-operator` or `virtomir-viewer`. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
+It starts `virtomird` right away on port 8420 (self-signed HTTPS). Sign in with a Linux account in the `libvirt` group (admins), `virtomir-operator` or `virtomir-viewer`. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Later versions install from the UI (Account → Updates). Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
 
 ### Tarball
 
@@ -157,8 +174,10 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 
 ## Roadmap
 
-High availability (restart machines of a failed host on another one), scheduled reports, per-tenant disk quotas.
+SPICE console and keyboard layouts, IPv6 networks and firewall rules, creating bonds and bridges on the host, ZFS/LVM pools, off-site backups (restic/S3), a Turkish UI, .rpm packages and a signed apt repository. See [`.ai/context/roadmap.md`](.ai/context/roadmap.md).
 
 ## License
 
-Not decided yet.
+VirtoMir is free software: **GNU Affero General Public License v3.0 or later** — see [LICENSE](LICENSE). You may use, study, change and share it; if you offer a changed VirtoMir to others over a network, you must offer them its source code too.
+
+Copyright © 2026 Onur Baydas. For a commercial license without the AGPL's obligations, contact the author through GitHub.
