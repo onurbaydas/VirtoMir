@@ -1,6 +1,7 @@
 name: Release
 
-# Push a tag like v0.1.0 to build and publish a release.
+# Push a tag like v0.1.0 to build and publish a release: a tarball and a .deb for amd64 and
+# arm64 (each built natively, PAM needs cgo), plus an experimental .rpm for each.
 on:
   push:
     tags: ['v*']
@@ -10,7 +11,10 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -26,21 +30,42 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libpam0g-dev
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libpam0g-dev rpm
 
       - name: Test
         run: go test ./...
 
-      - name: Build linux/amd64 with PAM
+      - name: Tarball with PAM
         run: sh scripts/build-release.sh "${GITHUB_REF_NAME}"
 
       - name: Debian package
         run: SKIP_WEB=1 sh scripts/build-deb.sh "${GITHUB_REF_NAME}"
 
+      - name: RPM package (experimental)
+        run: SKIP_WEB=1 sh scripts/build-rpm.sh "${GITHUB_REF_NAME}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: out-${{ matrix.runner }}
+          path: |
+            out/*.tar.gz
+            out/*.deb
+            out/*.rpm
+            out/*.sha256
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" out/*.tar.gz out/*.deb out/*.sha256 \
+          gh release create "${GITHUB_REF_NAME}" out/* --repo "${GITHUB_REPOSITORY}" \
             --title "VirtoMir ${GITHUB_REF_NAME}" --generate-notes \
             $([[ "${GITHUB_REF_NAME}" == *-* ]] && echo --prerelease)
