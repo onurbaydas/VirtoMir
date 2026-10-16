@@ -48,3 +48,10 @@ jobs:
 
       - name: Shell scripts
         run: shellcheck -s sh scripts/install.sh scripts/build-release.sh scripts/build-repos.sh
+
+      - name: Terraform provider
+        working-directory: integrations/terraform-provider-virtomir
+        run: |
+          go vet ./...
+          go test ./...
+          go build -o /tmp/terraform-provider-virtomir .
