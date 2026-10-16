@@ -159,6 +159,7 @@ type Manager struct {
 	mu         sync.Mutex
 	seen       map[string]time.Time // member ID → last heartbeat answer
 	reports    map[string]Report
+	mine       Report             // this member's last heartbeat, shown on its own row
 	replicas   map[string]Replica // by machine UUID
 	recoveries map[string]*recovery
 	confirmed  map[string]time.Time // admin confirmed member is off
@@ -295,6 +296,9 @@ func (m *Manager) Tick(ctx context.Context) {
 
 	// 1. Heartbeats, in parallel, each bounded by the interval.
 	mine := m.report(cfg)
+	m.mu.Lock()
+	m.mine = mine
+	m.mu.Unlock()
 	type answer struct {
 		n   Node
 		rep Report
@@ -722,6 +726,10 @@ func (m *Manager) Status() Status {
 		ns := NodeState{Node: n, Self: n.ID == self, Machines: count[n.ID]}
 		if ns.Self {
 			ns.Status, ns.LastSeen = "online", now
+			if m.mine.NodeID != "" {
+				r := m.mine
+				ns.Report = &r
+			}
 		} else {
 			t, ok := m.seen[n.ID]
 			ns.LastSeen = t

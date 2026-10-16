@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,10 @@ type Reader struct {
 	Root string
 	// Command runs a helper program (nvidia-smi); nil: exec.CommandContext. Tests replace it.
 	Command func(ctx context.Context, name string, args ...string) ([]byte, error)
+
+	mu         sync.Mutex
+	prevStat   map[int]cpuTimes // the last /proc/stat sample, for CPU load between looks
+	prevStatAt time.Time
 }
 
 // New reads the real host.
