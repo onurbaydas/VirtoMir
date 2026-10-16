@@ -14,8 +14,12 @@
     running: boolean
     vnc?: { password?: string }
     serial: string[]
+    /** Monitors the screen console can show (extra ones need a restart after a change). */
+    heads?: number
   }
-  let { d, standalone = false }: { d: Domain; standalone?: boolean } = $props()
+  let { d, standalone = false, head: firstHead = 0 }: { d: Domain; standalone?: boolean; head?: number } = $props()
+  // svelte-ignore state_referenced_locally
+  let head = $state(firstHead)
 
   let info = $state<Info | null>(null)
   let error = $state('')
@@ -31,6 +35,7 @@
       })) as Info
       info = i
       error = ''
+      if (head >= (i.heads ?? 1)) head = 0
       if (!kind || (kind === 'vnc' && !i.vnc) || (kind === 'serial' && !i.serial.length)) kind = i.vnc ? 'vnc' : i.serial.length ? 'serial' : null
     } catch (e) {
       error = errorText(e)
@@ -53,6 +58,13 @@
         <SquareTerminal size={14} /> Text console
       </button>
     </div>
+    {#if kind === 'vnc' && (info.heads ?? 1) > 1}
+      <div class="kinds" role="tablist" aria-label="Monitor">
+        {#each Array.from({ length: info.heads ?? 1 }, (_, i) => i) as h (h)}
+          <button role="tab" aria-selected={head === h} class:on={head === h} onclick={() => (head = h)}>Monitor {h + 1}</button>
+        {/each}
+      </div>
+    {/if}
   {/if}
 
   {#if error}
@@ -69,8 +81,8 @@
       </button>
     </div>
   {:else if kind === 'vnc'}
-    {#key d.uuid}
-      <VncConsole uuid={d.uuid} name={d.name} password={info.vnc?.password} {standalone} />
+    {#key `${d.uuid}/${head}`}
+      <VncConsole uuid={d.uuid} name={d.name} password={info.vnc?.password} {head} {standalone} />
     {/key}
   {:else if kind === 'serial'}
     <SerialConsole uuid={d.uuid} devices={info.serial} {standalone} />

@@ -20,15 +20,18 @@
   import type RFBType from '@novnc/novnc'
   import { onDestroy } from 'svelte'
   import { toasts } from '../toast.svelte'
+  import { LAYOUTS, guessLayout, keysym, strokeFor, type LayoutId } from '../keymaps'
 
   interface Props {
     uuid: string
     name: string
     password?: string
+    /** Monitor to show (0 = the first); extra monitors have VNC servers of their own. */
+    head?: number
     /** Full-window layout (pop-out page). */
     standalone?: boolean
   }
-  let { uuid, name, password, standalone = false }: Props = $props()
+  let { uuid, name, password, head = 0, standalone = false }: Props = $props()
 
   type ConnState = 'connecting' | 'connected' | 'disconnected' | 'error'
   let conn = $state<ConnState>('connecting')
@@ -121,7 +124,7 @@
     message = ''
     const { default: RFB } = await import('@novnc/novnc')
     if (destroyed) return
-    const url = wsURL(`/api/v1/domains/${encodeURIComponent(uuid)}/console/vnc`)
+    const url = wsURL(`/api/v1/domains/${encodeURIComponent(uuid)}/console/vnc${head ? `?head=${head}` : ''}`)
     const r = new RFB(screen, url, { shared: true, wsProtocols: ['binary'], credentials: password ? { password } : undefined })
     rfb = r
     r.background = 'var(--bg)'
@@ -214,19 +217,35 @@
     { label: 'Ctrl + Esc', keys: [K.ctrl, K.esc] },
   ]
 
-  // Typing: each character becomes a key press. Works without guest tools (installers,
-  // BIOS, login prompts); uses the US key positions QEMU expects for plain keysyms.
+  // Typing: each character becomes the key (and Shift/AltGr) that produces it on the
+  // guest's keyboard layout, sent as a physical key position (P6: correct layouts, also for
+  // Turkish). Works without guest tools: installers, BIOS, login prompts.
   let typing = $state(false)
+  // The console is created per machine, so the initial uuid is the one that counts.
+  // svelte-ignore state_referenced_locally
+  let guestLayout = $state<LayoutId>(load(`virtomir.console.layout.${uuid}`, guessLayout()) as LayoutId)
+  $effect(() => save(`virtomir.console.layout.${uuid}`, guestLayout))
+  const press = (r: RFBType, sym: number, code: string, down: boolean) => r.sendKey(sym, code, down)
   async function typeText(text: string) {
     if (!rfb || !text) return
     typing = true
     const r = rfb
     for (const ch of text.replace(/\r\n/g, '\n')) {
       if (destroyed || rfb !== r) break
-      const cp = ch.codePointAt(0)!
-      const sym = ch === '\n' ? 0xff0d : ch === '\t' ? 0xff09 : cp < 0x100 ? cp : 0x01000000 + cp
-      r.sendKey(sym, null, true)
-      r.sendKey(sym, null, false)
+      const k = strokeFor(guestLayout, ch)
+      const sym = keysym(ch)
+      if (!k) {
+        // Not on this layout's keys: send the character itself and let QEMU map it.
+        r.sendKey(sym, null, true)
+        r.sendKey(sym, null, false)
+      } else {
+        if (k.shift) press(r, 0xffe1, 'ShiftLeft', true)
+        if (k.altgr) press(r, 0xfe03, 'AltRight', true)
+        press(r, sym, k.code, true)
+        press(r, sym, k.code, false)
+        if (k.altgr) press(r, 0xfe03, 'AltRight', false)
+        if (k.shift) press(r, 0xffe1, 'ShiftLeft', false)
+      }
       await new Promise((res) => setTimeout(res, 12)) // guests drop keys that come too fast
     }
     typing = false
@@ -252,7 +271,8 @@
   }
 
   function popOut() {
-    window.open(`/console/${uuid}`, `virtomir-console-${uuid}`, 'popup,width=1100,height=760')
+    // One window per monitor, so a two-monitor guest can span two real screens.
+    window.open(`/console/${uuid}${head ? `#${head + 1}` : ''}`, `virtomir-console-${uuid}-${head}`, 'popup,width=1100,height=760')
   }
 
   // Close the little menus when clicking elsewhere.
@@ -309,7 +329,9 @@
             <textarea class="ui-input mono" rows="4" bind:value={clipText} placeholder="Paste a password, a command, a long URL…" autofocus></textarea>
           </label>
           <div class="clip-actions">
-            <span class="hint">Typed key by key — works in installers and login screens, no guest tools needed.</span>
+            <select class="ui-input layout" bind:value={guestLayout} title="Keyboard layout inside the machine">
+              {#each LAYOUTS as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+            </select>
             <button class="ui-btn sm primary" disabled={!clipText || typing} onclick={() => typeText(clipText)}>{typing ? 'Typing…' : 'Type it'}</button>
           </div>
           {#if guestClip}
@@ -508,6 +530,10 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+  }
+  .layout {
+    width: auto;
+    height: 28px;
   }
   .clip-actions {
     display: flex;

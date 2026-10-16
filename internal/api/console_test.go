@@ -32,6 +32,10 @@ func (c consoleBackend) DialVNC(ctx context.Context, _ string) (net.Conn, error)
 	return d.DialContext(ctx, "tcp", c.vncAddr)
 }
 
+func (c consoleBackend) DialVNCHead(ctx context.Context, uuid string, _ int) (net.Conn, error) {
+	return c.DialVNC(ctx, uuid)
+}
+
 func (c consoleBackend) SerialConsole(ctx context.Context, _, _ string, in io.Reader, out io.Writer) error {
 	_, _ = out.Write([]byte("login: "))
 	buf := make([]byte, 64)

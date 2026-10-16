@@ -91,7 +91,7 @@
 {:else if !session.ready}
   <Login />
 {:else if route.name === 'console'}
-  <ConsolePage uuid={route.uuid} />
+  <ConsolePage uuid={route.uuid} head={route.head} />
 {:else}
   <div class="app" data-page={route.name}>
     <Sidebar />

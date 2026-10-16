@@ -272,6 +272,8 @@ func addExtraDevice(x *libvirtxml.Domain, spec DeviceSpec, running bool, mdevUse
 		} else {
 			dev.Videos = append(dev.Videos, v)
 		}
+		// Every extra monitor gets a VNC server of its own, so the browser console shows it.
+		syncHeadArgs(x, heads)
 	default:
 		return "", invalidf("Unknown device kind %q.", spec.Kind)
 	}
