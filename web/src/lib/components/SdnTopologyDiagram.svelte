@@ -1,263 +1,100 @@
 <script lang="ts">
+  // How this host's network is wired, read from /sys: physical ports, bonds, VLANs, bridges
+  // and the machines' adapters (tap devices) plugged into them.
   import Network from '@lucide/svelte/icons/network'
-  import Cable from '@lucide/svelte/icons/cable'
-  import Layers from '@lucide/svelte/icons/layers'
-  import Monitor from '@lucide/svelte/icons/monitor'
-  import Tag from '@lucide/svelte/icons/tag'
+  import RefreshCw from '@lucide/svelte/icons/refresh-cw'
+  import { errorText } from '../api'
+  import { ent, type HostInterface } from '../enterprise'
+  import { live } from '../live.svelte'
 
-  interface Props {
-    netName?: string
+  let ifs = $state<HostInterface[]>([])
+  let error = $state('')
+  async function load() {
+    try {
+      ifs = await ent.interfaces()
+      error = ''
+    } catch (e) {
+      error = errorText(e)
+    }
   }
-  let { netName = 'default' }: Props = $props()
+  $effect(() => {
+    void load()
+  })
+
+  let byName = $derived(new Map(ifs.map((i) => [i.name, i])))
+  // tap device → machine, from the live samples.
+  let vmOf = $derived.by(() => {
+    const m = new Map<string, string>()
+    for (const d of live.snapshot?.domains ?? []) for (const n of d.nets ?? []) m.set(n.name, d.name)
+    return m
+  })
+  let bridges = $derived(ifs.filter((i) => i.kind === 'bridge'))
+  // Uplinks (physical, bond, VLAN) not inside a bridge: still worth seeing.
+  let loose = $derived(ifs.filter((i) => (i.kind === 'physical' || i.kind === 'bond' || i.kind === 'vlan') && !i.master))
+
+  const speed = (i?: HostInterface) => (i?.speedMbps ? (i.speedMbps >= 1000 ? `${i.speedMbps / 1000}G` : `${i.speedMbps}M`) : '')
+  const down = (i?: HostInterface) => !!i && i.state !== 'up' && i.state !== 'unknown'
+  function describe(name: string): string {
+    const i = byName.get(name)
+    if (!i) return name
+    switch (i.kind) {
+      case 'tap': return vmOf.get(name) ? `${vmOf.get(name)} (${name})` : name
+      case 'bond': return `${name} · bond ${i.bondMode ?? ''} of ${(i.members ?? []).map((m) => `${m}${speed(byName.get(m)) ? ' ' + speed(byName.get(m)) : ''}`).join(' + ')}`
+      case 'vlan': return `${name} · VLAN ${i.vlanId} on ${describe(i.parent ?? '')}`
+      case 'physical': return `${name}${speed(i) ? ' · ' + speed(i) : ''}${i.driver ? ' · ' + i.driver : ''}`
+    }
+    return `${name} · ${i.kind}`
+  }
+  const isVM = (name: string) => byName.get(name)?.kind === 'tap'
 </script>
 
-<div class="sdn-topology ui-panel">
-  <div class="sdn-header mono">
-    <div class="title-wrap">
-      <Cable size={15} />
-      <span>ORTHOGONAL SDN TOPOLOGY CIRCUIT (90° WIRING DIAGRAM)</span>
-    </div>
-    <span class="l2-status">L2 / L3 PACKET FABRIC ACTIVE</span>
-  </div>
-
-  <div class="topology-diagram mono">
-    <!-- Tier 1: Physical Uplinks -->
-    <div class="tier-col">
-      <div class="tier-label">01 // PHYSICAL NICS</div>
-      <div class="node-box active">
-        <div class="box-head">
-          <span class="led ok"></span>
-          <span>eno1 (10G SFP+)</span>
+<section class="ui-panel topo">
+  <header>
+    <h2><Network size={16} /> Host wiring</h2>
+    <button class="ui-btn sm ghost" onclick={load}><RefreshCw size={13} /> Refresh</button>
+  </header>
+  {#if error}
+    <div class="ui-error-box">{error}</div>
+  {:else if !ifs.length}
+    <p class="muted">Reading the interfaces…</p>
+  {:else}
+    <div class="grid">
+      {#each bridges as b (b.name)}
+        <div class="br" class:down={down(b)}>
+          <div class="head mono"><b>{b.name}</b> <span class="muted">bridge{b.mtu ? ` · MTU ${b.mtu}` : ''}{b.state !== 'up' ? ` · ${b.state}` : ''}</span></div>
+          {#if b.addresses?.length}<div class="addr mono">{b.addresses.join(', ')}</div>{/if}
+          <ul>
+            {#each (b.members ?? []).filter((m) => !isVM(m)) as m (m)}<li class="up mono" class:down={down(byName.get(m))}>⇅ {describe(m)}</li>{/each}
+            {#each (b.members ?? []).filter(isVM) as m (m)}<li class="vm mono" class:down={down(byName.get(m))}>▣ {describe(m)}</li>{/each}
+            {#if !b.members?.length}<li class="muted">nothing plugged in</li>{/if}
+          </ul>
         </div>
-        <span class="meta">MAC: 00:1E:67:D2:A4:01</span>
-        <span class="speed">10 Gbps Full-Duplex</span>
-      </div>
-
-      <div class="node-box active">
-        <div class="box-head">
-          <span class="led ok"></span>
-          <span>eno2 (10G SFP+)</span>
+      {/each}
+      {#if loose.length}
+        <div class="br">
+          <div class="head mono"><b>Not in a bridge</b></div>
+          <ul>
+            {#each loose as i (i.name)}<li class="up mono" class:down={down(i)}>{describe(i.name)}{i.addresses?.length ? ` · ${i.addresses.join(', ')}` : ''}</li>{/each}
+          </ul>
         </div>
-        <span class="meta">MAC: 00:1E:67:D2:A4:02</span>
-        <span class="speed">10 Gbps Full-Duplex</span>
-      </div>
+      {/if}
     </div>
-
-    <!-- Orthogonal Bus 1: Bonding -->
-    <div class="ortho-bus">
-      <svg class="bus-svg" viewBox="0 0 40 180" preserveAspectRatio="none">
-        <path d="M 0 45 L 20 45 L 20 90 L 40 90" class="wire" />
-        <path d="M 0 135 L 20 135 L 20 90 L 40 90" class="wire" />
-      </svg>
-    </div>
-
-    <!-- Tier 2: Bond Layer (LACP 802.3ad) -->
-    <div class="tier-col">
-      <div class="tier-label">02 // LACP AGGREGATE</div>
-      <div class="node-box active bond">
-        <div class="box-head">
-          <span class="led ok"></span>
-          <span>bond0 [LACP 802.3ad]</span>
-        </div>
-        <span class="meta">Mode: 4 (802.3ad) · Hash: L2+L3</span>
-        <span class="speed">20 Gbps Aggregate Trunk</span>
-      </div>
-    </div>
-
-    <!-- Orthogonal Bus 2: Bridge -->
-    <div class="ortho-bus">
-      <svg class="bus-svg" viewBox="0 0 40 180" preserveAspectRatio="none">
-        <path d="M 0 90 L 40 90" class="wire" />
-      </svg>
-    </div>
-
-    <!-- Tier 3: Linux Bridge / OVS -->
-    <div class="tier-col">
-      <div class="tier-label">03 // VIRTUAL SWITCH</div>
-      <div class="node-box active bridge">
-        <div class="box-head">
-          <span class="led ok"></span>
-          <span>vmbr0 / virbr0</span>
-        </div>
-        <span class="meta">STP: ON · Forward Delay: 0</span>
-        <span class="speed">Subnet: 192.168.100.0/24</span>
-      </div>
-    </div>
-
-    <!-- Orthogonal Bus 3: VLAN Demux -->
-    <div class="ortho-bus">
-      <svg class="bus-svg" viewBox="0 0 40 180" preserveAspectRatio="none">
-        <path d="M 0 90 L 20 90 L 20 45 L 40 45" class="wire" />
-        <path d="M 0 90 L 20 90 L 20 135 L 40 135" class="wire" />
-      </svg>
-    </div>
-
-    <!-- Tier 4: VLAN / VXLAN VPAs -->
-    <div class="tier-col">
-      <div class="tier-label">04 // ISOLATION TAG</div>
-      <div class="node-box vlan">
-        <div class="box-head">
-          <Tag size={12} />
-          <span>VLAN 100 (PROD)</span>
-        </div>
-        <span class="meta">CIDR: 192.168.100.0/24</span>
-      </div>
-
-      <div class="node-box vlan">
-        <div class="box-head">
-          <Tag size={12} />
-          <span>VLAN 200 (MGMT)</span>
-        </div>
-        <span class="meta">CIDR: 10.10.200.0/24</span>
-      </div>
-    </div>
-
-    <!-- Orthogonal Bus 4: Virtual NICs -->
-    <div class="ortho-bus">
-      <svg class="bus-svg" viewBox="0 0 40 180" preserveAspectRatio="none">
-        <path d="M 0 45 L 40 45" class="wire" />
-        <path d="M 0 135 L 40 135" class="wire" />
-      </svg>
-    </div>
-
-    <!-- Tier 5: VM Endpoints -->
-    <div class="tier-col">
-      <div class="tier-label">05 // GUEST VNICS</div>
-      <div class="node-box guest">
-        <div class="box-head">
-          <Monitor size={12} />
-          <span>vnet0 → prod-db-01</span>
-        </div>
-        <span class="meta">IP: 192.168.100.15</span>
-      </div>
-
-      <div class="node-box guest">
-        <div class="box-head">
-          <Monitor size={12} />
-          <span>vnet1 → k8s-node-02</span>
-        </div>
-        <span class="meta">IP: 10.10.200.42</span>
-      </div>
-    </div>
-  </div>
-</div>
+    <p class="muted small">⇅ uplink · ▣ machine adapter · grey: link down. Bonds and bridges are created with the host's own network tools (or a VLAN network in VirtoMir).</p>
+  {/if}
+</section>
 
 <style>
-  .sdn-topology {
-    margin-bottom: 24px;
-    padding: 0;
-    overflow: hidden;
-    border: 1px solid var(--border-strong);
-    background: var(--surface);
-    box-shadow: 2px 2px 0 var(--ink);
-  }
-  .sdn-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 14px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border-strong);
-  }
-  .title-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 11.5px;
-    font-weight: 700;
-    color: var(--text);
-  }
-  .l2-status {
-    font-size: 10px;
-    color: var(--ok);
-    font-weight: 700;
-  }
-  .topology-diagram {
-    display: flex;
-    align-items: center;
-    padding: 20px 16px;
-    overflow-x: auto;
-    background: var(--bg-surface, var(--bg));
-    gap: 0;
-  }
-  .tier-col {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-width: 170px;
-    flex-shrink: 0;
-  }
-  .tier-label {
-    font-size: 9.5px;
-    font-weight: 700;
-    color: var(--text-3);
-    letter-spacing: 0.08em;
-    padding-bottom: 4px;
-    border-bottom: 1px solid var(--border);
-  }
-  .node-box {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding: 8px 10px;
-    background: var(--surface);
-    border: 1px solid var(--border-strong);
-    box-shadow: var(--bevel);
-    font-size: 11px;
-  }
-  .node-box.active {
-    border-color: var(--border-strong);
-  }
-  .box-head {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-weight: 700;
-    color: var(--text);
-  }
-  .led {
-    width: 6px;
-    height: 6px;
-    background: #444;
-  }
-  .led.ok {
-    background: var(--ok);
-    box-shadow: 0 0 4px var(--ok);
-  }
-  .meta {
-    font-size: 9.5px;
-    color: var(--text-3);
-  }
-  .speed {
-    font-size: 9.5px;
-    color: var(--accent);
-    font-weight: 700;
-  }
-  .node-box.bond {
-    border-color: var(--accent);
-  }
-  .node-box.bridge {
-    border-color: #4a9eff;
-  }
-  .node-box.vlan {
-    border-left: 3px solid var(--warn);
-  }
-  .node-box.guest {
-    border-left: 3px solid var(--ok);
-  }
-  .ortho-bus {
-    width: 40px;
-    height: 180px;
-    flex-shrink: 0;
-  }
-  .bus-svg {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-  .wire {
-    fill: none;
-    stroke: var(--border-strong);
-    stroke-width: 1.5;
-  }
+  .topo { padding: 14px 16px; margin: 14px 0; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  h2 { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 15px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+  .br { border: var(--frame) solid var(--border); padding: 8px 10px; background: var(--bg-elev); }
+  .head { font-size: 13px; border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 4px; }
+  .addr { font-size: 12px; color: var(--accent); margin-bottom: 4px; }
+  ul { list-style: none; margin: 0; padding: 0; font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
+  .up { color: var(--text); }
+  .vm { color: var(--accent-2); }
+  .down { opacity: 0.45; }
+  .muted { color: var(--text-2); }
+  .small { font-size: 12px; margin: 8px 0 0; }
 </style>

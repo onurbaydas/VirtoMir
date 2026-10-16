@@ -1,559 +1,345 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { api } from '../api'
-  import { toasts } from '../toast.svelte'
-  import ShieldAlert from '@lucide/svelte/icons/shield-alert'
+  // High availability (ADR-0031): what every member sees, how each is fenced, which machines
+  // are protected and where they run, and what HA did. All of it comes from /ha/status.
   import ShieldCheck from '@lucide/svelte/icons/shield-check'
-  import Zap from '@lucide/svelte/icons/zap'
-  import RefreshCw from '@lucide/svelte/icons/refresh-cw'
-  import Play from '@lucide/svelte/icons/play'
-  import Settings from '@lucide/svelte/icons/settings'
-  import Server from '@lucide/svelte/icons/server'
+  import ShieldAlert from '@lucide/svelte/icons/shield-alert'
+  import Power from '@lucide/svelte/icons/power'
+  import FlaskConical from '@lucide/svelte/icons/flask-conical'
+  import Save from '@lucide/svelte/icons/save'
+  import Trash from '@lucide/svelte/icons/trash'
+  import { errorText } from '../api'
+  import { ent, PRIORITIES, type FenceAgent, type HASettings, type HAStatus, type Simulation } from '../enterprise'
+  import { session } from '../session.svelte'
+  import { toasts } from '../toast.svelte'
+  import { formatKiB } from '../format'
+  import ConfirmButton from './ConfirmButton.svelte'
   import Dialog from './Dialog.svelte'
 
-  interface QuorumState {
-    quorate: boolean
-    totalNodes: number
-    activeNodes: number
-    requiredQuorum: number
-    witnessEnabled: boolean
-    witnessIp?: string
-    witnessReachable: boolean
-    lastEvaluated: string
-  }
-
-  interface NodeHeartbeat {
-    nodeId: string
-    nodeName: string
-    address: string
-    lastSeen: string
-    status: 'online' | 'degraded' | 'dead'
-    fenced: boolean
-    fenceTime?: string
-  }
-
-  interface FenceAgent {
-    nodeId: string
-    driver: string
-    endpoint: string
-    status: string
-  }
-
-  interface VMHAPolicy {
-    uuid: string
-    name: string
-    enabled: boolean
-    priority: 'critical' | 'high' | 'normal' | 'low'
-    restartDelaySec: number
-    maxRetries: number
-    targetNode?: string
-  }
-
-  interface HAStatus {
-    quorum: QuorumState
-    heartbeats: NodeHeartbeat[]
-    config: {
-      autoFailover: boolean
-      heartbeatIntervalSec: number
-      failoverTimeoutSec: number
-      fencingEnabled: boolean
-      witnessIp?: string
-      fenceAgents: Record<string, FenceAgent>
-    }
-    policies: VMHAPolicy[]
-  }
-
-  interface PlanStep {
-    order: number
-    vmUuid: string
-    vmName: string
-    priority: string
-    delaySec: number
-    targetNode: string
-    action: string
-  }
-
-  interface FailoverSimulation {
-    deadNodeId: string
-    deadNodeName?: string
-    survivingNodes: string[]
-    hasQuorum: boolean
-    canSafelyFailover: boolean
-    failoverPlan: PlanStep[]
-  }
-
   let status = $state<HAStatus | null>(null)
-  let loading = $state(true)
-  let simModalOpen = $state(false)
-  let simDeadNode = $state('')
-  let simulation = $state<FailoverSimulation | null>(null)
-  let simLoading = $state(false)
+  let error = $state('')
+  let form = $state<HASettings | null>(null)
+  let dirty = $state(false)
+  let saving = $state(false)
+  let sim = $state<Simulation | null>(null)
+  let simError = $state('')
+  let busyNode = $state('')
 
-  async function loadStatus() {
-    loading = true
+  async function load() {
     try {
-      status = await api.get<HAStatus>('/api/v1/ha/status')
-    } catch (e: any) {
-      toasts.push({ kind: 'error', title: 'Failed to load HA status', detail: e.message })
-    } finally {
-      loading = false
+      status = await ent.haStatus()
+      error = ''
+      if (!dirty) form = toForm(status)
+    } catch (e) {
+      error = errorText(e)
     }
   }
 
-  onMount(() => {
-    loadStatus()
-    const timer = setInterval(loadStatus, 5000)
-    return () => clearInterval(timer)
+  function toForm(s: HAStatus): HASettings {
+    const agents: Record<string, FenceAgent> = {}
+    for (const n of s.nodes) agents[n.id] = s.config.fenceAgents[n.id] ? { ...s.config.fenceAgents[n.id] } : { driver: '', endpoint: '' }
+    return {
+      autoFailover: s.config.autoFailover,
+      heartbeatIntervalSec: s.config.heartbeatIntervalSec,
+      failoverTimeoutSec: s.config.failoverTimeoutSec,
+      witness: s.config.witness ?? '',
+      watchdog: s.config.watchdog,
+      watchdogTimeoutSec: s.config.watchdogTimeoutSec,
+      fenceAgents: agents,
+    }
+  }
+
+  $effect(() => {
+    void load()
+    const t = setInterval(() => void load(), 3000)
+    return () => clearInterval(t)
   })
 
-  async function toggleAutoFailover() {
-    if (!status) return
-    const next = !status.config.autoFailover
+  async function save() {
+    if (!form) return
+    saving = true
     try {
-      await api.put('/api/v1/ha/config', {
-        ...status.config,
-        autoFailover: next,
-      })
-      status.config.autoFailover = next
-      toasts.push({
-        kind: next ? 'info' : 'warn',
-        title: next ? 'AUTO-FAILOVER ARMED' : 'AUTO-FAILOVER DISABLED',
-        detail: next ? 'Quorum-driven automatic VM restart active.' : 'Manual operator failover required.',
-      })
-    } catch (e: any) {
-      toasts.push({ kind: 'error', title: 'Config update failed', detail: e.message })
-    }
-  }
-
-  async function triggerFence(nodeId: string) {
-    if (!confirm(`EMERGENCY STONITH: Are you sure you want to trigger power-cut fence on node ${nodeId}?`)) return
-    try {
-      const res = await api.post<any>(`/api/v1/ha/fence/${nodeId}`, { action: 'poweroff' })
-      toasts.push({ kind: 'warn', title: 'FENCE COMMAND SENT', detail: res.message })
-      await loadStatus()
-    } catch (e: any) {
-      toasts.push({ kind: 'error', title: 'Fence failed', detail: e.message })
-    }
-  }
-
-  async function toggleVMPolicy(policy: VMHAPolicy) {
-    const updated = { ...policy, enabled: !policy.enabled }
-    try {
-      await api.put(`/api/v1/ha/vms/${policy.uuid}`, updated)
-      policy.enabled = updated.enabled
-      toasts.push({
-        kind: 'info',
-        title: `HA Protection ${updated.enabled ? 'Enabled' : 'Disabled'}`,
-        detail: policy.name,
-      })
-    } catch (e: any) {
-      toasts.push({ kind: 'error', title: 'Failed to update HA policy', detail: e.message })
-    }
-  }
-
-  async function runSimulation() {
-    if (!simDeadNode) return
-    simLoading = true
-    try {
-      simulation = await api.post<FailoverSimulation>('/api/v1/ha/simulate-failover', { deadNodeId: simDeadNode })
-    } catch (e: any) {
-      toasts.push({ kind: 'error', title: 'Simulation failed', detail: e.message })
+      status = await ent.haSettings(form)
+      dirty = false
+      form = toForm(status)
+      toasts.push({ kind: 'info', title: 'HA settings saved', detail: 'Every member picks them up with its next heartbeat.' })
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'Not saved', detail: errorText(e) })
     } finally {
-      simLoading = false
+      saving = false
     }
   }
+
+  async function fence(node: string, action: 'status' | 'off' | 'reboot') {
+    busyNode = node
+    try {
+      const r = await ent.haFence(node, action)
+      toasts.push({ kind: 'info', title: `Fence ${action}`, detail: r.message })
+    } catch (e) {
+      toasts.push({ kind: 'error', title: `Fence ${action} failed`, detail: errorText(e) })
+    } finally {
+      busyNode = ''
+      void load()
+    }
+  }
+
+  async function confirmOff(node: string) {
+    try {
+      await ent.haConfirmOff(node)
+      toasts.push({ kind: 'warn', title: 'Confirmed off', detail: 'The coordinator restarts its machines elsewhere now.' })
+      void load()
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'Not confirmed', detail: errorText(e) })
+    }
+  }
+
+  async function simulate(node: string) {
+    simError = ''
+    try {
+      sim = await ent.haSimulate(node)
+    } catch (e) {
+      simError = errorText(e)
+    }
+  }
+
+  async function unprotect(uuid: string, name: string) {
+    try {
+      await ent.haDeletePolicy(uuid)
+      toasts.push({ kind: 'info', title: `${name} is no longer protected` })
+      void load()
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'Not changed', detail: errorText(e) })
+    }
+  }
+
+  const ago = (t?: string) => {
+    if (!t) return 'never'
+    const s = Math.max(0, Math.round((Date.now() - Date.parse(t)) / 1000))
+    return s < 90 ? `${s}s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : new Date(t).toLocaleString()
+  }
+  const recoveryText: Record<string, string> = {
+    fencing: 'Fencing through its BMC…',
+    'waiting-confirmation': 'Waiting for an admin to confirm it is off',
+    'waiting-watchdog': 'Waiting for its watchdog to reset it',
+    'waiting-auto': 'Automatic failover is off',
+    restarting: 'Restarting its machines elsewhere…',
+    done: 'Its machines run elsewhere',
+    failed: 'Recovery failed (see the log)',
+  }
+  let admin = $derived(session.can('admin'))
+  let nameOf = $derived((id?: string) => status?.nodes.find((n) => n.id === id)?.name ?? id ?? '—')
 </script>
 
-<div class="ha-deck">
-  <!-- Quorum & Engine Status Header -->
-  <div class="ha-top-grid">
-    <div class="ui-panel quorum-card" class:quorate={status?.quorum.quorate} class:lost={status && !status.quorum.quorate}>
-      <div class="q-icon">
-        {#if status?.quorum.quorate}
-          <ShieldCheck size={32} />
-        {:else}
-          <ShieldAlert size={32} />
-        {/if}
-      </div>
-      <div class="q-info">
-        <div class="q-title mono">
-          {status?.quorum.quorate ? 'CLUSTER QUORATE' : 'QUORUM COMPROMISED'}
-        </div>
-        <div class="q-detail">
-          Active nodes: <strong>{status?.quorum.activeNodes ?? 1} / {status?.quorum.totalNodes ?? 1}</strong>
-          (Required Quorum: {status?.quorum.requiredQuorum ?? 1})
-        </div>
-        {#if status?.quorum.witnessEnabled}
-          <div class="witness-tag mono">
-            WITNESS ({status.quorum.witnessIp}): {status.quorum.witnessReachable ? 'REACHABLE' : 'UNREACHABLE'}
-          </div>
-        {/if}
-      </div>
-      <div class="q-actions">
-        <button
-          class="ui-btn mono"
-          class:danger={status?.config.autoFailover}
-          class:primary={!status?.config.autoFailover}
-          onclick={toggleAutoFailover}
-        >
-          <Zap size={14} />
-          {status?.config.autoFailover ? 'DISARM AUTO-FAILOVER' : 'ARM AUTO-FAILOVER'}
-        </button>
-        <button class="ui-btn mono" onclick={() => { simModalOpen = true; if (status?.heartbeats.length) simDeadNode = status.heartbeats[0].nodeId; runSimulation() }}>
-          <Play size={14} /> SIMULATE FAILURE
-        </button>
-      </div>
+{#if error}
+  <div class="ui-error-box">{error}</div>
+{:else if !status || !form}
+  <p class="muted">Reading the HA state…</p>
+{:else}
+  {@const q = status.quorum}
+  <section class="ui-panel banner" class:ok={q.quorate} class:bad={!q.quorate && status.clustered}>
+    {#if q.quorate || !status.clustered}<ShieldCheck size={22} />{:else}<ShieldAlert size={22} />{/if}
+    <div>
+      {#if !status.clustered}
+        <strong>Standalone host</strong>
+        <span>HA needs at least two members (Cluster → Add a host). Protected machines here are still started again after this host reboots.</span>
+      {:else if q.quorate}
+        <strong>Quorum: {q.votes} of {q.totalVotes} votes</strong>
+        <span>
+          {q.required} needed · coordinator {nameOf(q.coordinator)}
+          {#if q.witness}· witness {q.witness} {q.witnessReachable ? 'reachable' : 'NOT reachable'}{/if}
+          · automatic failover {status.config.autoFailover ? 'on' : 'off'}
+        </span>
+      {:else}
+        <strong>No quorum: this host sees {q.votes} of {q.totalVotes} votes ({q.required} needed)</strong>
+        <span>It has stopped its protected machines; the members that still have quorum restart them.</span>
+      {/if}
     </div>
-  </div>
+    {#if status.watchdogArmed}<span class="chip mono">WATCHDOG ARMED</span>{/if}
+  </section>
+  {#if status.watchdogError}<div class="ui-error-box">Watchdog: {status.watchdogError}</div>{/if}
 
-  <!-- Cluster Node Heartbeats & Fencing Agents -->
-  <section class="ui-panel">
-    <div class="panel-head">
-      <div class="ph-title mono">NODE HEARTBEATS & STONITH FENCE AGENTS</div>
-      <button class="ui-btn icon-only" onclick={loadStatus} title="Refresh pulse"><RefreshCw size={14} /></button>
-    </div>
-    <div class="table-wrap">
-      <table class="data-table mono">
-        <thead>
+  <h2 class="sub">Members and fencing</h2>
+  <section class="ui-panel table-wrap">
+    <table class="t">
+      <thead><tr><th>Host</th><th>State</th><th>Protected</th><th>Memory free</th><th>Fencing</th><th></th></tr></thead>
+      <tbody>
+        {#each status.nodes as n (n.id)}
+          {@const a = form.fenceAgents[n.id]}
           <tr>
-            <th>NODE</th>
-            <th>STATUS</th>
-            <th>ADDRESS</th>
-            <th>LAST SEEN</th>
-            <th>FENCE DRIVER</th>
-            <th>STONITH STATUS</th>
-            <th>ACTIONS</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#if !status?.heartbeats.length}
-            <tr><td colspan="7" class="empty">No remote cluster heartbeats recorded yet.</td></tr>
-          {:else}
-            {#each status.heartbeats as hb (hb.nodeId)}
-              {@const agent = status.config.fenceAgents[hb.nodeId]}
-              <tr>
-                <td><strong>{hb.nodeName}</strong><br><small class="text-dim">{hb.nodeId}</small></td>
-                <td><span class="status-dot {hb.status}"></span> {hb.status.toUpperCase()}</td>
-                <td>{hb.address}</td>
-                <td>{new Date(hb.lastSeen).toLocaleTimeString()}</td>
-                <td>{agent?.driver ?? 'manual (admin ack)'}</td>
-                <td>
-                  {#if hb.fenced}
-                    <span class="badge danger">FENCED (POWER-OFF)</span>
-                  {:else}
-                    <span class="badge ok">STANDBY</span>
+            <td><b>{n.name}</b>{#if n.self} <span class="muted">(this host)</span>{/if}{#if q.coordinator === n.id} <span class="chip mono">COORDINATOR</span>{/if}</td>
+            <td>
+              <span class="dot {n.status}"></span>{n.status}
+              <div class="muted small">{n.self ? '' : `heartbeat ${ago(n.lastSeen)}`}</div>
+              {#if n.recovery}<div class="rec {n.recovery}">{recoveryText[n.recovery] ?? n.recovery}</div>{/if}
+              {#if n.fence}<div class="muted small mono">{n.fence.message}</div>{/if}
+            </td>
+            <td class="mono">{n.machines}</td>
+            <td class="mono">{n.report?.memTotalKiB ? `${formatKiB(n.report.memFreeKiB)} / ${formatKiB(n.report.memTotalKiB)}` : '—'}</td>
+            <td class="agent">
+              {#if a}
+                <select class="ui-input" bind:value={a.driver} disabled={!admin} onchange={() => (dirty = true)}>
+                  <option value="">None (watchdog or confirmation)</option>
+                  <option value="ipmi">IPMI (ipmitool)</option>
+                  <option value="redfish">Redfish</option>
+                  <option value="manual">Manual confirmation</option>
+                </select>
+                {#if a.driver === 'ipmi' || a.driver === 'redfish'}
+                  <input class="ui-input mono" placeholder={a.driver === 'ipmi' ? 'BMC address (host[:port])' : 'https://bmc-address'} bind:value={a.endpoint} oninput={() => (dirty = true)} disabled={!admin} />
+                  <div class="row2">
+                    <input class="ui-input" placeholder="user" bind:value={a.username} oninput={() => (dirty = true)} disabled={!admin} autocomplete="off" />
+                    <input class="ui-input" type="password" placeholder="password" bind:value={a.password} oninput={() => (dirty = true)} disabled={!admin} autocomplete="new-password" />
+                  </div>
+                  {#if a.driver === 'redfish'}
+                    <label class="ui-switch small"><input type="checkbox" bind:checked={a.insecureTls} onchange={() => (dirty = true)} disabled={!admin} /> Accept self-signed certificate</label>
                   {/if}
-                </td>
-                <td>
-                  <button class="ui-btn danger small mono" onclick={() => triggerFence(hb.nodeId)} title="Trigger STONITH Power-Cut">
-                    <Zap size={12} /> FENCE
-                  </button>
-                </td>
-              </tr>
-            {/each}
-          {/if}
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- Protected VMs & Failover Priority Matrix -->
-  <section class="ui-panel">
-    <div class="panel-head">
-      <div class="ph-title mono">VM HIGH AVAILABILITY PROTECTION MATRIX</div>
-      <span class="count-badge mono">{status?.policies.filter(p => p.enabled).length ?? 0} PROTECTED</span>
-    </div>
-    <div class="table-wrap">
-      <table class="data-table mono">
-        <thead>
-          <tr>
-            <th>PROTECTION</th>
-            <th>VM WORKLOAD</th>
-            <th>PRIORITY</th>
-            <th>RESTART ORDER</th>
-            <th>RESTART DELAY</th>
-            <th>MAX RETRIES</th>
-            <th>PREFERRED NODE</th>
+                {/if}
+              {/if}
+            </td>
+            <td class="acts">
+              {#if admin && !n.self}
+                {#if status.config.fenceAgents[n.id]?.driver === 'ipmi' || status.config.fenceAgents[n.id]?.driver === 'redfish'}
+                  <button class="ui-btn sm" disabled={busyNode === n.id} onclick={() => fence(n.id, 'status')}>Test BMC</button>
+                  <ConfirmButton label="Power off" confirm="Really power it off?" icon={Power} run={() => fence(n.id, 'off')} />
+                {/if}
+                {#if n.status === 'dead'}
+                  <ConfirmButton label="Confirm it is off" confirm="I checked: it is powered off" run={() => confirmOff(n.id)} />
+                {/if}
+              {/if}
+              <button class="ui-btn sm ghost" onclick={() => simulate(n.id)}><FlaskConical size={13} /> If it died…</button>
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          {#if !status?.policies.length}
-            <tr><td colspan="7" class="empty">No VM HA policies defined. Protect machines in VM Settings -> HA.</td></tr>
-          {:else}
-            {#each status.policies as pol (pol.uuid)}
-              <tr class:row-disabled={!pol.enabled}>
-                <td>
-                  <button class="toggle-btn" class:on={pol.enabled} onclick={() => toggleVMPolicy(pol)}>
-                    {pol.enabled ? 'ENABLED' : 'DISABLED'}
-                  </button>
-                </td>
-                <td><strong>{pol.name}</strong><br><small class="text-dim">{pol.uuid.slice(0, 8)}</small></td>
-                <td><span class="priority-badge {pol.priority}">{pol.priority.toUpperCase()}</span></td>
-                <td>{pol.priority === 'critical' ? '#1 FIRST' : pol.priority === 'high' ? '#2 SECOND' : '#3 NORMAL'}</td>
-                <td>+{pol.restartDelaySec}s</td>
-                <td>{pol.maxRetries} tries</td>
-                <td>{pol.targetNode || 'ANY SURVIVING'}</td>
-              </tr>
-            {/each}
-          {/if}
-        </tbody>
-      </table>
-    </div>
+        {/each}
+      </tbody>
+    </table>
   </section>
-</div>
 
-<!-- Simulation Modal -->
-<Dialog title="HA FAILOVER WHAT-IF SIMULATOR" bind:open={simModalOpen}>
-  <div class="sim-modal">
-    <p class="sim-intro">
-      Select a cluster node to simulate an unexpected hardware crash. VirtoMir will evaluate quorum health, STONITH fencing, and calculate the exact VM failover restart sequence.
-    </p>
-
-    <div class="sim-controls">
-      <label class="mono">
-        SIMULATE FAILURE OF NODE:
-        <select bind:value={simDeadNode} onchange={runSimulation}>
-          {#if status?.heartbeats}
-            {#each status.heartbeats as hb}
-              <option value={hb.nodeId}>{hb.nodeName} ({hb.nodeId})</option>
-            {/each}
-          {/if}
-          <option value="node-mock-fail">Simulate Local Host (HV-01)</option>
-        </select>
-      </label>
-      <button class="ui-btn primary mono" onclick={runSimulation} disabled={simLoading}>
-        <RefreshCw size={14} class={simLoading ? 'spin' : ''} /> RE-RUN SIMULATION
-      </button>
+  <h2 class="sub">Settings <span class="muted">· the same on every member (version {status.config.version})</span></h2>
+  <section class="ui-panel settings">
+    <label class="ui-switch"><input type="checkbox" bind:checked={form.autoFailover} onchange={() => (dirty = true)} disabled={!admin} /> Restart the machines of a dead host automatically</label>
+    <div class="grid">
+      <label class="ui-field"><span class="label">Heartbeat every (s)</span>
+        <input class="ui-input" type="number" min="1" max="30" bind:value={form.heartbeatIntervalSec} oninput={() => (dirty = true)} disabled={!admin} /></label>
+      <label class="ui-field"><span class="label">Dead after silence of (s)</span>
+        <input class="ui-input" type="number" min="10" bind:value={form.failoverTimeoutSec} oninput={() => (dirty = true)} disabled={!admin} />
+        <span class="hint">Shorter fails over faster, but also on a short network hiccup.</span></label>
+      <label class="ui-field"><span class="label">Witness (host:port)</span>
+        <input class="ui-input mono" placeholder="10.0.0.9:22" bind:value={form.witness} oninput={() => (dirty = true)} disabled={!admin} />
+        <span class="hint">An extra vote: lets two hosts keep quorum when one dies. Any machine that accepts TCP on that port.</span></label>
     </div>
-
-    {#if simulation}
-      <div class="sim-summary ui-panel" class:ok={simulation.canSafelyFailover} class:danger={!simulation.canSafelyFailover}>
-        <div class="sim-stat">
-          <span class="lbl mono">QUORUM STATE:</span>
-          <strong>{simulation.hasQuorum ? 'QUORATE (SAFE)' : 'SPLIT-BRAIN RISK (NO QUORUM)'}</strong>
-        </div>
-        <div class="sim-stat">
-          <span class="lbl mono">FAILOVER ELIGIBILITY:</span>
-          <strong>{simulation.canSafelyFailover ? 'PERMITTED' : 'BLOCKED (PREVENTS CORRUPTION)'}</strong>
-        </div>
-        <div class="sim-stat">
-          <span class="lbl mono">SURVIVING TARGETS:</span>
-          <strong>{simulation.survivingNodes.join(', ') || 'NONE'}</strong>
-        </div>
+    <label class="ui-switch"><input type="checkbox" bind:checked={form.watchdog} onchange={() => (dirty = true)} disabled={!admin} /> Arm the hardware watchdog on hosts with protected machines</label>
+    {#if form.watchdog}
+      <div class="grid">
+        <label class="ui-field"><span class="label">Watchdog timeout (s)</span>
+          <input class="ui-input" type="number" min="10" max="600" bind:value={form.watchdogTimeoutSec} oninput={() => (dirty = true)} disabled={!admin} /></label>
+        <p class="hint warn">A host that hangs, or loses quorum and cannot stop its machines, <b>resets itself</b>. Needs /dev/watchdog (a board watchdog, or <span class="mono">modprobe softdog</span>). This is what makes failover safe without a BMC.</p>
       </div>
+    {/if}
+    <p class="hint">
+      Before restarting machines elsewhere, the coordinator makes sure the dead host is off: through its BMC, by waiting for its armed watchdog, or by an admin confirming it.
+      Machines are restarted from the definition every member keeps; their disks must be on storage all members reach (NFS, Ceph, iSCSI).
+    </p>
+    {#if admin}
+      <div class="actions"><button class="ui-btn primary" disabled={!dirty || saving} onclick={save}><Save size={14} /> {saving ? 'Saving…' : 'Save settings'}</button>
+        {#if dirty}<button class="ui-btn ghost" onclick={() => { dirty = false; form = toForm(status!) }}>Discard</button>{/if}</div>
+    {/if}
+  </section>
 
-      <div class="plan-head mono">CALCULATED FAILOVER EXECUTION SEQUENCE</div>
-      <table class="data-table mono sim-table">
-        <thead>
-          <tr>
-            <th>ORDER</th>
-            <th>VM NAME</th>
-            <th>PRIORITY</th>
-            <th>DELAY</th>
-            <th>TARGET NODE</th>
-            <th>FAILOVER ACTION</th>
-          </tr>
-        </thead>
+  <h2 class="sub">Protected machines</h2>
+  <section class="ui-panel table-wrap">
+    {#if status.machines.length === 0}
+      <p class="muted pad">No machine is protected. Protect one on its Settings tab (High availability).</p>
+    {:else}
+      <table class="t">
+        <thead><tr><th>Machine</th><th>Priority</th><th>Runs on</th><th>Preferred host</th><th>Definition copied</th><th></th></tr></thead>
         <tbody>
-          {#if !simulation.failoverPlan.length}
-            <tr><td colspan="6" class="empty">No HA-enabled workloads affected on this node.</td></tr>
-          {:else}
-            {#each simulation.failoverPlan as step}
-              <tr>
-                <td>#{step.order}</td>
-                <td><strong>{step.vmName}</strong></td>
-                <td><span class="priority-badge {step.priority}">{step.priority.toUpperCase()}</span></td>
-                <td>+{step.delaySec}s</td>
-                <td><strong>{step.targetNode}</strong></td>
-                <td><span class="action-tag">{step.action}</span></td>
-              </tr>
-            {/each}
-          {/if}
+          {#each status.machines as m (m.uuid)}
+            <tr>
+              <td><b>{m.name || m.uuid}</b>{#if !m.enabled} <span class="muted">(off)</span>{/if}</td>
+              <td><span class="prio {m.priority}">{m.priority}</span>{#if m.restartDelaySec} <span class="muted small">+{m.restartDelaySec}s</span>{/if}</td>
+              <td>{m.ownerName ?? '—'} {#if m.known}<span class="muted small">{m.running ? 'running' : 'stopped'}</span>{/if}</td>
+              <td>{m.targetNode ? nameOf(m.targetNode) : 'most free memory'}</td>
+              <td class="muted small">{m.known ? ago(m.updated) : 'not yet — it cannot be recovered until its host sends it'}</td>
+              <td>{#if admin}<ConfirmButton label="Unprotect" confirm="Stop protecting it?" icon={Trash} run={() => unprotect(m.uuid, m.name)} />{/if}</td>
+            </tr>
+          {/each}
         </tbody>
       </table>
     {/if}
-  </div>
+  </section>
+
+  <h2 class="sub">What HA did <span class="muted">· on this host</span></h2>
+  <section class="ui-panel log mono">
+    {#each status.events.slice(0, 60) as e, i (i)}
+      <div class="ev {e.level}"><span class="t">{new Date(e.time).toLocaleString()}</span>{#if e.node}<span class="who">{e.node}</span>{/if}<span>{e.message}</span></div>
+    {:else}
+      <p class="muted">Nothing yet.</p>
+    {/each}
+  </section>
+{/if}
+
+<Dialog open={!!sim || !!simError} title={sim ? `If ${sim.node.name} died now` : 'Simulation'} onclose={() => { sim = null; simError = '' }} width={620}>
+  {#if simError}
+    <div class="ui-error-box">{simError}</div>
+  {:else if sim}
+    <ul class="facts">
+      <li class:bad={!sim.quorate}>The others {sim.quorate ? 'keep' : 'would NOT have'} quorum.</li>
+      <li>It would be fenced: {sim.fencing}.</li>
+      <li class:bad={!sim.canRecover}>{sim.canRecover ? 'Its protected machines would be restarted as below.' : 'Its machines would NOT all be restarted automatically.'}</li>
+    </ul>
+    {#if sim.steps?.length}
+      <table class="t">
+        <thead><tr><th>#</th><th>Machine</th><th>Priority</th><th>Restarts on</th></tr></thead>
+        <tbody>
+          {#each sim.steps as s (s.uuid)}
+            <tr><td>{s.order}</td><td>{s.name}</td><td>{s.priority}</td><td class:bad={!!s.problem}>{s.target ?? s.problem}</td></tr>
+          {/each}
+        </tbody>
+      </table>
+    {:else}
+      <p class="muted">No protected machine runs there: nothing would be fenced or restarted.</p>
+    {/if}
+  {/if}
 </Dialog>
 
 <style>
-  .ha-deck {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-  .ha-top-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  .quorum-card {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    padding: 20px 24px;
-    background: var(--surface-1);
-    border: 1px solid var(--border-strong);
-    box-shadow: 2px 2px 0 0 var(--border-strong);
-  }
-  .quorum-card.quorate {
-    border-left: 6px solid var(--ok);
-  }
-  .quorum-card.lost {
-    border-left: 6px solid var(--danger);
-  }
-  .q-icon {
-    color: var(--ok);
-  }
-  .quorum-card.lost .q-icon {
-    color: var(--danger);
-  }
-  .q-info {
-    flex: 1;
-  }
-  .q-title {
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-  }
-  .q-detail {
-    font-size: 13px;
-    color: var(--text-dim);
-    margin-top: 2px;
-  }
-  .witness-tag {
-    font-size: 11px;
-    color: var(--accent);
-    margin-top: 4px;
-  }
-  .q-actions {
-    display: flex;
-    gap: 10px;
-  }
-  .panel-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 18px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface-2);
-  }
-  .ph-title {
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-  }
-  .table-wrap {
-    overflow-x: auto;
-  }
-  .data-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-  }
-  .data-table th {
-    text-align: left;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--border);
-    color: var(--text-dim);
-    font-weight: 600;
-  }
-  .data-table td {
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--border-soft);
-  }
-  .empty {
-    text-align: center;
-    color: var(--text-dim);
-    padding: 24px !important;
-  }
-  .status-dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    margin-right: 6px;
-  }
-  .status-dot.online { background: var(--ok); }
-  .status-dot.degraded { background: var(--warn); }
-  .status-dot.dead { background: var(--danger); }
-  .badge {
-    padding: 2px 6px;
-    font-size: 10px;
-    border: 1px solid currentColor;
-  }
-  .badge.ok { color: var(--ok); }
-  .badge.danger { color: var(--danger); }
-  .priority-badge {
-    padding: 2px 6px;
-    font-size: 10px;
-    font-weight: 700;
-  }
-  .priority-badge.critical { background: var(--danger); color: #fff; }
-  .priority-badge.high { background: var(--accent); color: #fff; }
-  .priority-badge.normal { background: var(--surface-3); color: var(--text); }
-  .priority-badge.low { background: var(--surface-2); color: var(--text-dim); }
-  .toggle-btn {
-    padding: 3px 8px;
-    font-family: inherit;
-    font-size: 10px;
-    font-weight: 700;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    cursor: pointer;
-  }
-  .toggle-btn.on {
-    background: var(--ok);
-    color: #000;
-    border-color: var(--ok);
-  }
-  .row-disabled td {
-    opacity: 0.6;
-  }
-  .sim-intro {
-    font-size: 13px;
-    color: var(--text-dim);
-    margin-bottom: 16px;
-  }
-  .sim-controls {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 16px;
-  }
-  .sim-controls select {
-    padding: 6px 10px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-  }
-  .sim-summary {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    padding: 14px;
-    margin-bottom: 16px;
-    border-left: 4px solid var(--border);
-  }
-  .sim-summary.ok { border-left-color: var(--ok); }
-  .sim-summary.danger { border-left-color: var(--danger); }
-  .sim-stat .lbl {
-    font-size: 10px;
-    color: var(--text-dim);
-    display: block;
-  }
-  .plan-head {
-    font-size: 12px;
-    font-weight: 700;
-    margin-bottom: 8px;
-  }
-  .action-tag {
-    color: var(--ok);
-  }
-  .spin {
-    animation: spin 1s linear infinite;
-  }
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
+  .banner { display: flex; gap: 12px; align-items: center; padding: 14px 16px; margin-bottom: 12px; border-left: 4px solid var(--idle); }
+  .banner.ok { border-left-color: var(--ok); }
+  .banner.bad { border-left-color: var(--danger); background: var(--danger-soft); }
+  .banner div { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+  .banner span { color: var(--text-2); font-size: 13px; }
+  .sub { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; margin: 20px 0 8px; }
+  .table-wrap { overflow-x: auto; padding: 0; }
+  .t { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .t th { text-align: left; font: 600 11px var(--font-mono); text-transform: uppercase; color: var(--text-2); padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .t td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; background: var(--idle); }
+  .dot.online { background: var(--ok); }
+  .dot.suspect { background: var(--warn); }
+  .dot.dead { background: var(--danger); }
+  .rec { font-size: 12px; margin-top: 4px; color: var(--warn); }
+  .rec.done { color: var(--ok); }
+  .rec.failed, .rec.waiting-confirmation { color: var(--danger); font-weight: 600; }
+  .agent { min-width: 240px; display: flex; flex-direction: column; gap: 4px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .acts { white-space: nowrap; }
+  .acts :global(.ui-btn) { margin: 0 4px 4px 0; }
+  .settings { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .hint { color: var(--text-2); font-size: 12px; margin: 0; }
+  .hint.warn { color: var(--warn); }
+  .actions { display: flex; gap: 8px; }
+  .prio { font: 600 11px var(--font-mono); text-transform: uppercase; }
+  .prio.critical { color: var(--danger); }
+  .prio.high { color: var(--warn); }
+  .small { font-size: 11px; }
+  .pad { padding: 14px; margin: 0; }
+  .log { max-height: 320px; overflow: auto; font-size: 12px; padding: 8px 12px; }
+  .ev { display: flex; gap: 10px; padding: 3px 0; border-bottom: 1px dashed var(--border); }
+  .ev .t { color: var(--text-2); white-space: nowrap; }
+  .ev .who { font-weight: 600; }
+  .ev.warn { color: var(--warn); }
+  .ev.error { color: var(--danger); }
+  .facts { margin: 0 0 12px; padding-left: 18px; }
+  .bad { color: var(--danger); font-weight: 600; }
+  .chip { border: 1px solid currentColor; padding: 1px 6px; font-size: 10px; }
+  .muted { color: var(--text-2); }
 </style>

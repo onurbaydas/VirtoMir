@@ -1,5 +1,6 @@
 // Types + calls for the virtomird API (/api/v1). Mirrors internal/virt and internal/live.
 
+import { apiLog } from './apilog.svelte'
 import { router } from './router.svelte'
 
 export type DomainState =
@@ -12,7 +13,7 @@ export type DomainState =
   | 'crashed'
   | 'pm-suspended'
 
-export type Action = 'start' | 'shutdown' | 'reboot' | 'force-off' | 'pause' | 'resume'
+export type Action = 'start' | 'shutdown' | 'reboot' | 'force-off' | 'pause' | 'resume' | 'reset' | 'save'
 
 export interface HostInfo {
   hostname: string
@@ -220,11 +221,14 @@ async function send(method: string, path: string, opts: SendOpts = {}): Promise<
     body = JSON.stringify(opts.json)
   } else if (opts.contentType) headers['Content-Type'] = opts.contentType
   let res: Response
+  const started = performance.now()
   try {
     res = await fetch(path, { method, headers, body })
   } catch {
+    apiLog.add({ time: Date.now(), method, path, status: 0, ms: Math.round(performance.now() - started) })
     throw new ApiError('VirtoMir is not reachable', 0)
   }
+  apiLog.add({ time: Date.now(), method, path, status: res.status, ms: Math.round(performance.now() - started) })
   if (!res.ok) {
     let msg = res.statusText
     try {
@@ -881,7 +885,8 @@ export const api = {
   saveXML: async (uuid: string, xml: string): Promise<DefineResult> =>
     (await send('PUT', `${domainPath(uuid)}/xml`, { body: xml, contentType: 'application/xml' })).json(),
   action: (uuid: string, action: Action) => request<void>('POST', `${domainPath(uuid)}/actions/${action}`),
-  create: (spec: CreateSpec) => request<{ uuid: string; startError?: string }>('POST', '/api/v1/domains', spec),
+  create: (spec: CreateSpec, respool?: string) =>
+    request<{ uuid: string; startError?: string }>('POST', `/api/v1/domains${respool ? `?respool=${enc(respool)}` : ''}`, spec),
   setTemplate: (uuid: string, template: boolean) => request<void>('PUT', `${domainPath(uuid)}/template`, { template }),
   deploy: (uuid: string, spec: DeploySpec) => request<Job>('POST', `${domainPath(uuid)}/deploy`, spec),
   setAutostart: (uuid: string, enabled: boolean) => request<void>('PUT', `${domainPath(uuid)}/autostart`, { enabled }),

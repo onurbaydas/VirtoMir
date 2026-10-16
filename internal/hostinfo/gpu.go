@@ -32,7 +32,8 @@ type GPU struct {
 	MIG string `json:"mig,omitempty"`
 }
 
-var gpuVendors = map[string]string{"0x10de": "NVIDIA", "0x1002": "AMD", "0x8086": "Intel", "0x1af4": "Virtio", "0x1234": "QEMU", "0x15ad": "VMware", "0x1b36": "Red Hat"}
+var gpuVendors = map[string]string{"0x10de": "NVIDIA", "0x1002": "AMD", "0x8086": "Intel", "0x1af4": "Virtio", "0x1234": "QEMU",
+	"0x15ad": "VMware", "0x1b36": "Red Hat", "0x1414": "Microsoft", "0x1013": "Cirrus", "0x80ee": "VirtualBox"}
 
 // GPUs lists PCI class 03 (display) devices with whatever load data their driver offers.
 func (r *Reader) GPUs(ctx context.Context) []GPU {

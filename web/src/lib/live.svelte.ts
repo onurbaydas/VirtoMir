@@ -35,6 +35,8 @@ export const ACTIONS: Record<Action, { label: string; progress: string }> = {
   'force-off': { label: 'Force off', progress: 'Powering off…' },
   pause: { label: 'Pause', progress: 'Pausing…' },
   resume: { label: 'Resume', progress: 'Resuming…' },
+  reset: { label: 'Reset', progress: 'Resetting…' },
+  save: { label: 'Save to disk', progress: 'Saving memory…' },
 }
 
 /** State an action is finished at; reboot has no visible end state. */
@@ -44,6 +46,7 @@ const TARGET: Partial<Record<Action, DomainState[]>> = {
   'force-off': ['shutoff'],
   pause: ['paused'],
   resume: ['running', 'blocked'],
+  save: ['shutoff'],
 }
 
 /** A guest that ignores ACPI shutdown for this long gets a "force off?" nudge. */

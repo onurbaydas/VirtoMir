@@ -13,7 +13,7 @@
   import type { HistoryRange } from '../api'
   import Plus from '@lucide/svelte/icons/plus'
   import { router } from '../router.svelte'
-  import RackChassisCard from '../components/RackChassisCard.svelte'
+  import HostChassisCard from '../components/HostChassisCard.svelte'
   import NoisyNeighborsPanel from '../components/NoisyNeighborsPanel.svelte'
   import CapacitySimulator from '../components/CapacitySimulator.svelte'
 
@@ -61,7 +61,7 @@
   </div>
 </header>
 
-<RackChassisCard hostname={host?.hostname ?? 'HV-NODE-01'} model={host?.cpuModel ?? '2U HCI NODE'} />
+<HostChassisCard hostname={host?.hostname ?? ''} />
 
 <section class="stats">
   <StatCard label="Host CPU" icon={Cpu} value={formatPercent(snap?.host.cpuPercent ?? 0)} unit="%" sub={topology} {loading}>

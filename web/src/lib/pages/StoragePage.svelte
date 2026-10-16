@@ -230,10 +230,10 @@
   </div>
   <div class="head-right">
     <button class="ui-btn" onclick={() => (orphanedOpen = true)} title="Find disks not attached to any VM">
-      <HardDrive size={15} /> Orphaned Disks
+      <HardDrive size={15} /> Unused disks
     </button>
-    <button class="ui-btn" onclick={() => (isoOpen = true)} title="Direct stream download ISO to pool">
-      <Download size={15} /> Pull ISO from URL
+    <button class="ui-btn" onclick={() => (isoOpen = true)} title="The host downloads an image from a URL into a pool">
+      <Download size={15} /> Download from URL
     </button>
     <button class="ui-btn primary" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((pName = ''), (pPath = ''), (pErr = ''), (poolDlg = true))}>
       <FolderPlus size={15} /> New pool

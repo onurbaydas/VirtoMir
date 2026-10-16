@@ -1,521 +1,255 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { api } from '../api'
-  import { toasts } from '../toast.svelte'
-  import { live } from '../live.svelte'
-  import Layers from '@lucide/svelte/icons/layers'
+  // Resource pools (ADR-0032): machines grouped under hard limits that VirtoMir checks on
+  // every create, resize and move. Pools nest; a child counts against its parents.
   import Plus from '@lucide/svelte/icons/plus'
-  import Trash2 from '@lucide/svelte/icons/trash-2'
-  import Edit3 from '@lucide/svelte/icons/edit-3'
-  import Box from '@lucide/svelte/icons/box'
-  import HardDrive from '@lucide/svelte/icons/hard-drive'
-  import Cpu from '@lucide/svelte/icons/cpu'
-  import Database from '@lucide/svelte/icons/database'
+  import Trash from '@lucide/svelte/icons/trash'
+  import Pencil from '@lucide/svelte/icons/pencil'
+  import { api, errorText, type Pool } from '../api'
+  import { ent, gib, type PoolView, type ResourcePool } from '../enterprise'
+  import { live } from '../live.svelte'
+  import { session } from '../session.svelte'
+  import { toasts } from '../toast.svelte'
+  import ConfirmButton from './ConfirmButton.svelte'
   import Dialog from './Dialog.svelte'
 
-  interface ResourcePool {
-    id: string
-    name: string
-    parentId?: string
-    description?: string
-    cpuShares: number
-    cpuLimit: number
-    cpuReservation: number
-    memoryLimitMiB: number
-    memoryReservationMiB: number
-    storagePoolQuotas: Record<string, number>
-    iopsLimit: number
-    assignedVms: string[]
-    owners: string[]
+  let pools = $state<PoolView[]>([])
+  let storage = $state<Pool[]>([])
+  let error = $state('')
+  let loaded = $state(false)
+
+  async function load() {
+    try {
+      ;[pools, storage] = await Promise.all([ent.respools(), api.pools()])
+      error = ''
+    } catch (e) {
+      error = errorText(e)
+    } finally {
+      loaded = true
+    }
   }
-
-  interface PoolUsage {
-    poolId: string
-    vmCount: number
-    usedVcpus: number
-    usedMemoryMiB: number
-    usedStorageBytes: Record<string, number>
-  }
-
-  let pools = $state<ResourcePool[]>([])
-  let usages = $state<PoolUsage[]>([])
-  let loading = $state(true)
-
-  let createModalOpen = $state(false)
-  let assignModalOpen = $state(false)
-  let selectedPool = $state<ResourcePool | null>(null)
-
-  let newPool = $state({
-    name: '',
-    parentId: '',
-    description: '',
-    cpuShares: 1000,
-    cpuLimit: 0,
-    cpuReservation: 0,
-    memoryLimitGiB: 0,
-    memoryReservationGiB: 0,
-    storageQuotaGiB: 0,
+  $effect(() => {
+    void load()
   })
 
-  let vmToAssign = $state('')
-
-  async function loadData() {
-    loading = true
-    try {
-      const [p, u] = await Promise.all([
-        api.get<ResourcePool[]>('/api/v1/respools'),
-        api.get<PoolUsage[]>('/api/v1/respools/usage'),
-      ])
-      pools = p
-      usages = u
-    } catch (e: any) {
-      toasts.push({ kind: 'error', title: 'Failed to load Resource Pools', detail: e.message })
-    } finally {
-      loading = false
+  // Tree order: roots by name, each followed by its children.
+  let tree = $derived.by(() => {
+    const out: { p: PoolView; depth: number }[] = []
+    const walk = (parent: string | undefined, depth: number) => {
+      for (const p of pools.filter((x) => (x.parentId ?? '') === (parent ?? '')).sort((a, b) => a.name.localeCompare(b.name))) {
+        out.push({ p, depth })
+        walk(p.id, depth + 1)
+      }
     }
-  }
-
-  onMount(loadData)
-
-  async function handleCreatePool() {
-    if (!newPool.name.trim()) return
-    try {
-      await api.post('/api/v1/respools', {
-        name: newPool.name.trim(),
-        parentId: newPool.parentId || undefined,
-        description: newPool.description,
-        cpuShares: newPool.cpuShares,
-        cpuLimit: newPool.cpuLimit,
-        cpuReservation: newPool.cpuReservation,
-        memoryLimitMiB: newPool.memoryLimitGiB * 1024,
-        memoryReservationMiB: newPool.memoryReservationGiB * 1024,
-        storagePoolQuotas: newPool.storageQuotaGiB > 0 ? { default: newPool.storageQuotaGiB * 1024 * 1024 * 1024 } : {},
-      })
-      createModalOpen = false
-      newPool.name = ''
-      newPool.description = ''
-      toasts.push({ kind: 'info', title: 'Resource Pool Created' })
-      await loadData()
-    } catch (e: any) {
-      toasts.push({ kind: 'error', title: 'Failed to create pool', detail: e.message })
-    }
-  }
-
-  async function handleDeletePool(id: string) {
-    if (!confirm('Are you sure you want to delete this resource pool?')) return
-    try {
-      await api.delete(`/api/v1/respools/${id}`)
-      toasts.push({ kind: 'info', title: 'Resource Pool Deleted' })
-      await loadData()
-    } catch (e: any) {
-      toasts.push({ kind: 'error', title: 'Failed to delete pool', detail: e.message })
-    }
-  }
-
-  async function handleAssignVM() {
-    if (!selectedPool || !vmToAssign) return
-    try {
-      await api.post(`/api/v1/respools/${selectedPool.id}/assign`, { vmUuid: vmToAssign })
-      assignModalOpen = false
-      vmToAssign = ''
-      toasts.push({ kind: 'info', title: 'VM Assigned to Pool', detail: selectedPool.name })
-      await loadData()
-    } catch (e: any) {
-      toasts.push({ kind: 'error', title: 'Assignment failed', detail: e.message })
-    }
-  }
-
-  async function handleUnassignVM(poolId: string, vmUuid: string) {
-    try {
-      await api.post(`/api/v1/respools/${poolId}/assign`, { vmUuid, unassign: true })
-      toasts.push({ kind: 'info', title: 'VM Removed from Pool' })
-      await loadData()
-    } catch (e: any) {
-      toasts.push({ kind: 'error', title: 'Unassign failed', detail: e.message })
-    }
-  }
-
-  function getUsage(poolId: string): PoolUsage {
-    return usages.find(u => u.poolId === poolId) ?? {
-      poolId,
-      vmCount: 0,
-      usedVcpus: 0,
-      usedMemoryMiB: 0,
-      usedStorageBytes: {},
-    }
-  }
-
+    walk(undefined, 0)
+    return out
+  })
   let domains = $derived(live.snapshot?.domains ?? [])
+  let nameOf = (uuid: string) => domains.find((d) => d.uuid.toLowerCase() === uuid)?.name ?? uuid.slice(0, 8)
+  let poolOf = $derived((uuid: string) => pools.find((p) => p.machines.includes(uuid.toLowerCase()))?.id ?? '')
+  let admin = $derived(session.can('admin'))
+
+  // ---- Create / edit --------------------------------------------------------------------
+  interface Form {
+    id?: string
+    name: string
+    parentId: string
+    description: string
+    cpuLimit: number
+    memoryGiB: number
+    storageGiB: Record<string, number>
+  }
+  let editing = $state<Form | null>(null)
+  let saving = $state(false)
+
+  function openNew() {
+    editing = { name: '', parentId: '', description: '', cpuLimit: 0, memoryGiB: 0, storageGiB: {} }
+  }
+  function openEdit(p: ResourcePool) {
+    const sg: Record<string, number> = {}
+    for (const [k, v] of Object.entries(p.storageLimits ?? {})) sg[k] = Math.round(v / 2 ** 30)
+    editing = { id: p.id, name: p.name, parentId: p.parentId ?? '', description: p.description ?? '', cpuLimit: p.cpuLimit, memoryGiB: Math.round(p.memoryLimitMiB / 1024), storageGiB: sg }
+  }
+  async function saveForm() {
+    if (!editing) return
+    saving = true
+    const limits: Record<string, number> = {}
+    for (const [k, v] of Object.entries(editing.storageGiB)) if (v > 0) limits[k] = v * 2 ** 30
+    const body = {
+      name: editing.name, parentId: editing.parentId || undefined, description: editing.description,
+      cpuLimit: editing.cpuLimit || 0, memoryLimitMiB: (editing.memoryGiB || 0) * 1024, storageLimits: limits,
+    }
+    try {
+      if (editing.id) await ent.updateRespool({ ...(pools.find((p) => p.id === editing!.id) as ResourcePool), ...body, id: editing.id })
+      else await ent.createRespool(body)
+      toasts.push({ kind: 'info', title: editing.id ? 'Pool saved' : 'Pool created' })
+      editing = null
+      await load()
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'Not saved', detail: errorText(e) })
+    } finally {
+      saving = false
+    }
+  }
+
+  async function remove(p: ResourcePool) {
+    await ent.deleteRespool(p.id)
+    toasts.push({ kind: 'info', title: `${p.name} deleted` })
+    await load()
+  }
+
+  // ---- Machines -------------------------------------------------------------------------
+  let adding = $state<PoolView | null>(null)
+  let pick = $state('')
+  async function assign(uuid: string, pool: string) {
+    try {
+      await ent.assignRespool(uuid, pool)
+      toasts.push({ kind: 'info', title: pool ? `${nameOf(uuid.toLowerCase())} moved into the pool` : `${nameOf(uuid.toLowerCase())} taken out of the pool` })
+      adding = null
+      pick = ''
+      await load()
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'Not moved', detail: errorText(e) })
+    }
+  }
+
+  function pct(used: number, limit: number) {
+    return limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0
+  }
 </script>
 
-<div class="pools-deck">
-  <div class="deck-actions">
-    <div>
-      <h2 class="title mono">HIERARCHICAL RESOURCE POOLS & MULTI-TENANCY</h2>
-      <div class="sub">Organize guest VMs into bounded compute, memory, and storage resource quotas.</div>
-    </div>
-    <button class="ui-btn primary mono" onclick={() => createModalOpen = true}>
-      <Plus size={14} /> NEW RESOURCE POOL
-    </button>
-  </div>
+<header class="head">
+  <p class="lead">
+    Group machines and cap what they may take together: vCPUs, memory and disk space per storage pool. VirtoMir refuses a new machine, a bigger machine,
+    a new disk or a move that would break a limit — for admins too. Pools nest: a team pool inside a department pool counts against both.
+    Pools are kept per host.
+  </p>
+  {#if admin}<button class="ui-btn primary" onclick={openNew}><Plus size={14} /> New pool</button>{/if}
+</header>
 
-  {#if !pools.length}
-    <div class="ui-panel empty-deck">
-      <Layers size={36} />
-      <h3>No Resource Pools Configured</h3>
-      <p>Resource pools allow allocating hierarchical compute shares and storage caps across departments or tenants.</p>
-      <button class="ui-btn primary mono" onclick={() => createModalOpen = true}>
-        <Plus size={14} /> CREATE FIRST POOL
-      </button>
-    </div>
-  {:else}
-    <div class="pools-grid">
-      {#each pools as p (p.id)}
-        {@const u = getUsage(p.id)}
-        {@const vcpuPct = p.cpuLimit > 0 ? Math.min(100, (u.usedVcpus / p.cpuLimit) * 100) : 0}
-        {@const memLimitGiB = p.memoryLimitMiB / 1024}
-        {@const usedMemGiB = u.usedMemoryMiB / 1024}
-        {@const memPct = memLimitGiB > 0 ? Math.min(100, (usedMemGiB / memLimitGiB) * 100) : 0}
-
-        <div class="ui-panel pool-card">
-          <header class="p-header">
-            <div>
-              <div class="p-title mono">
-                <Layers size={16} />
-                <span>{p.name}</span>
-                {#if p.parentId}
-                  <span class="sub-tag mono">SUB-POOL</span>
-                {/if}
-              </div>
-              <div class="p-desc">{p.description || 'No description provided.'}</div>
-            </div>
-            <div class="p-acts">
-              <button
-                class="ui-btn small mono"
-                onclick={() => { selectedPool = p; assignModalOpen = true }}
-                title="Assign VM to this pool"
-              >
-                + ASSIGN VM
-              </button>
-              <button
-                class="ui-btn danger small icon-only"
-                onclick={() => handleDeletePool(p.id)}
-                title="Delete Resource Pool"
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          </header>
-
-          <div class="meters">
-            <!-- CPU Meter -->
-            <div class="meter-box">
-              <div class="m-head mono">
-                <span class="m-label"><Cpu size={12} /> VCPUS</span>
-                <span class="m-val">{u.usedVcpus} / {p.cpuLimit > 0 ? p.cpuLimit : '∞'}</span>
-              </div>
-              <div class="meter-bar">
-                <div class="meter-fill" style="width: {p.cpuLimit > 0 ? vcpuPct : 10}%"></div>
-              </div>
-              <div class="m-foot mono">Shares: {p.cpuShares} · Min: {p.cpuReservation}</div>
-            </div>
-
-            <!-- Memory Meter -->
-            <div class="meter-box">
-              <div class="m-head mono">
-                <span class="m-label"><Database size={12} /> MEMORY</span>
-                <span class="m-val">{usedMemGiB.toFixed(1)} / {memLimitGiB > 0 ? memLimitGiB.toFixed(0) : '∞'} GiB</span>
-              </div>
-              <div class="meter-bar">
-                <div class="meter-fill warn" style="width: {memLimitGiB > 0 ? memPct : 10}%"></div>
-              </div>
-              <div class="m-foot mono">Min Reserved: {(p.memoryReservationMiB/1024).toFixed(1)} GiB</div>
-            </div>
-          </div>
-
-          <!-- Assigned VMs List -->
-          <div class="assigned-vms">
-            <div class="av-head mono">
-              <span>ASSIGNED WORKLOADS ({p.assignedVms.length})</span>
-            </div>
-            {#if !p.assignedVms.length}
-              <div class="empty-vms mono">No virtual machines currently assigned to this pool.</div>
-            {:else}
-              <div class="vms-list">
-                {#each p.assignedVms as vmUuid}
-                  {@const vm = domains.find(d => d.uuid === vmUuid)}
-                  <div class="vm-chip mono">
-                    <Box size={12} />
-                    <span class="vm-name">{vm?.name ?? vmUuid.slice(0, 8)}</span>
-                    <button class="remove-btn" onclick={() => handleUnassignVM(p.id, vmUuid)} title="Remove from pool">×</button>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </div>
+{#if error}
+  <div class="ui-error-box">{error}</div>
+{:else if !loaded}
+  <p class="muted">Loading…</p>
+{:else if tree.length === 0}
+  <section class="ui-panel empty"><p class="muted">No resource pools yet. Machines outside pools are not limited (apart from user quotas).</p></section>
+{:else}
+  {#each tree as { p, depth } (p.id)}
+    <section class="ui-panel pool" style="margin-left: {depth * 24}px">
+      <header>
+        <div>
+          <h3>{depth ? '└ ' : ''}{p.name}</h3>
+          {#if p.description}<p class="muted">{p.description}</p>{/if}
         </div>
-      {/each}
+        {#if admin}
+          <div class="acts">
+            <button class="ui-btn sm" onclick={() => (adding = p)}><Plus size={13} /> Add machine</button>
+            <button class="ui-btn sm ghost" onclick={() => openEdit(p)}><Pencil size={13} /> Edit</button>
+            <ConfirmButton label="Delete" confirm="Delete this pool?" icon={Trash} run={() => remove(p)} />
+          </div>
+        {/if}
+      </header>
+      <div class="meters">
+        <div class="meter">
+          <span class="lbl">vCPUs</span>
+          <span class="val mono">{p.usage.vcpus}{p.cpuLimit ? ` / ${p.cpuLimit}` : ''}</span>
+          {#if p.cpuLimit}<div class="bar"><i style="width: {pct(p.usage.vcpus, p.cpuLimit)}%" class:hot={pct(p.usage.vcpus, p.cpuLimit) > 90}></i></div>{:else}<span class="muted small">no limit</span>{/if}
+        </div>
+        <div class="meter">
+          <span class="lbl">Memory</span>
+          <span class="val mono">{(p.usage.memoryMiB / 1024).toFixed(1)}{p.memoryLimitMiB ? ` / ${(p.memoryLimitMiB / 1024).toFixed(0)}` : ''} GiB</span>
+          {#if p.memoryLimitMiB}<div class="bar"><i style="width: {pct(p.usage.memoryMiB, p.memoryLimitMiB)}%" class:hot={pct(p.usage.memoryMiB, p.memoryLimitMiB) > 90}></i></div>{:else}<span class="muted small">no limit</span>{/if}
+        </div>
+        {#each Object.entries(p.storageLimits ?? {}) as [sp, max] (sp)}
+          <div class="meter">
+            <span class="lbl">Disk on {sp}</span>
+            <span class="val mono">{gib(p.usage.storageBytes[sp] ?? 0)} / {gib(max)}</span>
+            <div class="bar"><i style="width: {pct(p.usage.storageBytes[sp] ?? 0, max)}%" class:hot={pct(p.usage.storageBytes[sp] ?? 0, max) > 90}></i></div>
+          </div>
+        {/each}
+      </div>
+      <div class="machines">
+        {#each p.machines as uuid (uuid)}
+          <span class="vm">{nameOf(uuid)}{#if admin}<button class="x" title="Take it out of the pool" onclick={() => assign(uuid, '')}>×</button>{/if}</span>
+        {:else}
+          <span class="muted small">No machines directly in this pool{p.usage.machines ? ` (${p.usage.machines} in its sub-pools)` : ''}.</span>
+        {/each}
+      </div>
+    </section>
+  {/each}
+{/if}
+
+<Dialog open={!!editing} title={editing?.id ? 'Edit pool' : 'New resource pool'} onclose={() => (editing = null)} width={560}>
+  {#if editing}
+    <div class="form">
+      <label class="ui-field"><span class="label">Name</span><input class="ui-input" bind:value={editing.name} /></label>
+      <label class="ui-field"><span class="label">Inside</span>
+        <select class="ui-input" bind:value={editing.parentId}>
+          <option value="">— (top level)</option>
+          {#each pools.filter((p) => p.id !== editing?.id) as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+        </select>
+        <span class="hint">A pool inside another must set every limit its parent has, at most as high.</span>
+      </label>
+      <label class="ui-field"><span class="label">Description</span><input class="ui-input" bind:value={editing.description} /></label>
+      <div class="two">
+        <label class="ui-field"><span class="label">vCPU limit (0 = none)</span><input class="ui-input" type="number" min="0" bind:value={editing.cpuLimit} /></label>
+        <label class="ui-field"><span class="label">Memory limit, GiB (0 = none)</span><input class="ui-input" type="number" min="0" bind:value={editing.memoryGiB} /></label>
+      </div>
+      <span class="label">Disk limits per storage pool, GiB (empty = none)</span>
+      <div class="two">
+        {#each storage as sp (sp.name)}
+          <label class="ui-field"><span class="hint">{sp.name} ({sp.type})</span>
+            <input class="ui-input" type="number" min="0" placeholder="no limit" bind:value={editing.storageGiB[sp.name]} /></label>
+        {/each}
+      </div>
     </div>
   {/if}
-</div>
-
-<!-- Create Pool Modal -->
-<Dialog title="NEW RESOURCE POOL" bind:open={createModalOpen}>
-  <form class="create-form" onsubmit={(e) => { e.preventDefault(); handleCreatePool() }}>
-    <div class="field">
-      <label class="mono" for="pool-name">POOL NAME</label>
-      <input id="pool-name" type="text" bind:value={newPool.name} placeholder="e.g. Production-Cluster" required />
-    </div>
-
-    <div class="field">
-      <label class="mono" for="parent-pool">PARENT POOL (OPTIONAL HIERARCHY)</label>
-      <select id="parent-pool" bind:value={newPool.parentId}>
-        <option value="">None (Top-Level Pool)</option>
-        {#each pools as p}
-          <option value={p.id}>{p.name}</option>
-        {/each}
-      </select>
-    </div>
-
-    <div class="field">
-      <label class="mono" for="pool-desc">DESCRIPTION</label>
-      <input id="pool-desc" type="text" bind:value={newPool.description} placeholder="Workload isolation notes..." />
-    </div>
-
-    <div class="grid-2">
-      <div class="field">
-        <label class="mono" for="cpu-limit">VCPU HARD LIMIT (0 = UNLIMITED)</label>
-        <input id="cpu-limit" type="number" min="0" bind:value={newPool.cpuLimit} />
-      </div>
-      <div class="field">
-        <label class="mono" for="cpu-res">VCPU RESERVATION</label>
-        <input id="cpu-res" type="number" min="0" bind:value={newPool.cpuReservation} />
-      </div>
-    </div>
-
-    <div class="grid-2">
-      <div class="field">
-        <label class="mono" for="mem-limit">MEMORY LIMIT (GIB, 0 = UNLIMITED)</label>
-        <input id="mem-limit" type="number" min="0" bind:value={newPool.memoryLimitGiB} />
-      </div>
-      <div class="field">
-        <label class="mono" for="mem-res">MEMORY RESERVATION (GIB)</label>
-        <input id="mem-res" type="number" min="0" bind:value={newPool.memoryReservationGiB} />
-      </div>
-    </div>
-
-    <div class="field">
-      <label class="mono" for="storage-quota">STORAGE QUOTA ON DEFAULT POOL (GIB, 0 = UNLIMITED)</label>
-      <input id="storage-quota" type="number" min="0" bind:value={newPool.storageQuotaGiB} />
-    </div>
-
-    <div class="form-actions">
-      <button type="button" class="ui-btn mono" onclick={() => createModalOpen = false}>CANCEL</button>
-      <button type="submit" class="ui-btn primary mono">CREATE RESOURCE POOL</button>
-    </div>
-  </form>
+  {#snippet footer()}
+    <button class="ui-btn ghost" onclick={() => (editing = null)}>Cancel</button>
+    <button class="ui-btn primary" disabled={saving || !editing?.name.trim()} onclick={saveForm}>{saving ? 'Saving…' : 'Save'}</button>
+  {/snippet}
 </Dialog>
 
-<!-- Assign VM Modal -->
-<Dialog title="ASSIGN VM TO RESOURCE POOL" bind:open={assignModalOpen}>
-  <form class="create-form" onsubmit={(e) => { e.preventDefault(); handleAssignVM() }}>
-    <div class="field">
-      <label class="mono" for="assign-vm">SELECT VIRTUAL MACHINE</label>
-      <select id="assign-vm" bind:value={vmToAssign} required>
-        <option value="">-- Choose Virtual Machine --</option>
-        {#each domains as d}
-          <option value={d.uuid}>{d.name} ({d.vcpus} vCPUs, {(d.memoryKiB/1024/1024).toFixed(1)} GiB RAM)</option>
-        {/each}
-      </select>
-    </div>
-    <div class="form-actions">
-      <button type="button" class="ui-btn mono" onclick={() => assignModalOpen = false}>CANCEL</button>
-      <button type="submit" class="ui-btn primary mono">ASSIGN TO POOL</button>
-    </div>
-  </form>
+<Dialog open={!!adding} title={adding ? `Add a machine to ${adding.name}` : ''} onclose={() => (adding = null)}>
+  <label class="ui-field">
+    <span class="label">Machine</span>
+    <select class="ui-input" bind:value={pick}>
+      <option value="">Choose…</option>
+      {#each domains.filter((d) => !d.template) as d (d.uuid)}
+        <option value={d.uuid}>{d.name} · {d.vcpus} vCPU · {Math.round(d.maxMemoryKiB / 1048576)} GiB{poolOf(d.uuid) ? ` (now in ${pools.find((p) => p.id === poolOf(d.uuid))?.name})` : ''}</option>
+      {/each}
+    </select>
+    <span class="hint">It leaves any other pool. Refused if it does not fit the limits.</span>
+  </label>
+  {#snippet footer()}
+    <button class="ui-btn ghost" onclick={() => (adding = null)}>Cancel</button>
+    <button class="ui-btn primary" disabled={!pick} onclick={() => adding && assign(pick, adding.id)}>Add</button>
+  {/snippet}
 </Dialog>
 
 <style>
-  .pools-deck {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-  .deck-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .title {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-  }
-  .sub {
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-top: 2px;
-  }
-  .empty-deck {
-    text-align: center;
-    padding: 48px;
-    color: var(--text-dim);
-  }
-  .empty-deck h3 {
-    margin: 12px 0 6px;
-    color: var(--text);
-  }
-  .pools-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-    gap: 16px;
-  }
-  .pool-card {
-    padding: 16px;
-    background: var(--surface-1);
-    border: 1px solid var(--border-strong);
-    box-shadow: 2px 2px 0 0 var(--border-strong);
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .p-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-  }
-  .p-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    font-weight: 700;
-  }
-  .sub-tag {
-    font-size: 9px;
-    padding: 1px 4px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-  }
-  .p-desc {
-    font-size: 11px;
-    color: var(--text-dim);
-    margin-top: 3px;
-  }
-  .p-acts {
-    display: flex;
-    gap: 6px;
-  }
-  .meters {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-  .meter-box {
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    padding: 8px 10px;
-  }
-  .m-head {
-    display: flex;
-    justify-content: space-between;
-    font-size: 10px;
-    margin-bottom: 4px;
-  }
-  .m-label {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--text-dim);
-  }
-  .meter-bar {
-    height: 6px;
-    background: var(--surface-3);
-    overflow: hidden;
-  }
-  .meter-fill {
-    height: 100%;
-    background: var(--ok);
-  }
-  .meter-fill.warn {
-    background: var(--accent);
-  }
-  .m-foot {
-    font-size: 9px;
-    color: var(--text-dim);
-    margin-top: 4px;
-  }
-  .assigned-vms {
-    border-top: 1px solid var(--border);
-    padding-top: 10px;
-  }
-  .av-head {
-    font-size: 10px;
-    color: var(--text-dim);
-    margin-bottom: 8px;
-  }
-  .empty-vms {
-    font-size: 11px;
-    color: var(--text-dim);
-    font-style: italic;
-  }
-  .vms-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .vm-chip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px 6px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    font-size: 11px;
-  }
-  .remove-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-dim);
-    cursor: pointer;
-    font-size: 12px;
-    padding: 0;
-  }
-  .remove-btn:hover {
-    color: var(--danger);
-  }
-  .create-form {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .field label {
-    font-size: 11px;
-    color: var(--text-dim);
-  }
-  .field input, .field select {
-    padding: 8px 10px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: inherit;
-    font-size: 13px;
-  }
-  .grid-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-  .form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 8px;
-  }
+  .head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 12px; }
+  .lead { margin: 0; color: var(--text-2); max-width: 760px; font-size: 13px; }
+  .empty { padding: 16px; }
+  .pool { padding: 14px 16px; margin-bottom: 10px; }
+  .pool header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .pool h3 { margin: 0; font-size: 15px; }
+  .pool p { margin: 2px 0 0; font-size: 12px; }
+  .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .meters { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 12px 0; }
+  .meter { display: flex; flex-direction: column; gap: 3px; }
+  .lbl { font: 600 11px var(--font-mono); text-transform: uppercase; color: var(--text-2); }
+  .val { font-size: 13px; }
+  .bar { height: 6px; background: var(--bg-elev); box-shadow: var(--bevel-in); }
+  .bar i { display: block; height: 100%; background: var(--ok); }
+  .bar i.hot { background: var(--danger); }
+  .machines { display: flex; flex-wrap: wrap; gap: 6px; }
+  .vm { border: 1px solid var(--border); padding: 2px 8px; font-size: 12px; display: inline-flex; gap: 6px; align-items: center; }
+  .x { background: none; border: 0; color: var(--text-2); cursor: pointer; font-size: 14px; padding: 0; }
+  .x:hover { color: var(--danger); }
+  .form { display: flex; flex-direction: column; gap: 10px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .hint { color: var(--text-2); font-size: 12px; }
+  .label { font-size: 12px; font-weight: 600; }
+  .muted { color: var(--text-2); }
+  .small { font-size: 12px; }
 </style>

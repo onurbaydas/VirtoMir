@@ -16,6 +16,7 @@
   import { machineHref, router } from '../router.svelte'
   import { toasts } from '../toast.svelte'
   import IaCPanel from '../components/IaCPanel.svelte'
+  import { ent, type PoolView } from '../enterprise'
 
   type OS = CreateSpec['os']
   const OSES: { key: OS; label: string; hint: string }[] = [
@@ -131,34 +132,43 @@
   let busy = $state(false)
   let error = $state('')
 
+  // Resource pools of this host (ADR-0032): a new machine may go into one, within its limits.
+  let respools = $state<PoolView[]>([])
+  let respool = $state('')
+  $effect(() => {
+    void ent.respools().then((p) => (respools = p)).catch(() => {})
+  })
+
+  // The request exactly as sent (also shown as code next to the form).
+  let spec = $derived<CreateSpec>({
+    name,
+    os,
+    vcpus,
+    memoryMiB: Math.round(memGiB * 1024),
+    firmware,
+    secureBoot: firmware === 'uefi' && secureBoot,
+    tpm,
+    pool,
+    diskGiB: source === 'cloud' ? Math.max(diskGiB, baseCapGiB) : source === 'iso' && withDisk ? diskGiB : 0,
+    iso: source === 'iso' ? iso || undefined : undefined,
+    baseImage: source === 'cloud' ? baseImage : undefined,
+    diskPath: source === 'disk' ? existingDisk : undefined,
+    cloudInit: source === 'cloud' ? { user: ciUser, password: ciPassword || undefined, sshKeys: keys } : undefined,
+    network: netChoice.startsWith('network:')
+      ? { network: netChoice.slice(8) }
+      : netChoice === 'bridge'
+        ? { bridge }
+        : undefined,
+    start,
+  })
+
   async function create(e: SubmitEvent) {
     e.preventDefault()
     if (!canCreate) return
     busy = true
     error = ''
-    const spec: CreateSpec = {
-      name,
-      os,
-      vcpus,
-      memoryMiB: Math.round(memGiB * 1024),
-      firmware,
-      secureBoot: firmware === 'uefi' && secureBoot,
-      tpm,
-      pool,
-      diskGiB: source === 'cloud' ? Math.max(diskGiB, baseCapGiB) : source === 'iso' && withDisk ? diskGiB : 0,
-      iso: source === 'iso' ? iso || undefined : undefined,
-      baseImage: source === 'cloud' ? baseImage : undefined,
-      diskPath: source === 'disk' ? existingDisk : undefined,
-      cloudInit: source === 'cloud' ? { user: ciUser, password: ciPassword || undefined, sshKeys: keys } : undefined,
-      network: netChoice.startsWith('network:')
-        ? { network: netChoice.slice(8) }
-        : netChoice === 'bridge'
-          ? { bridge }
-          : undefined,
-      start,
-    }
     try {
-      const res = await api.create(spec)
+      const res = await api.create(spec, respool || undefined)
       if (res.startError) toasts.push({ kind: 'warn', title: `${name} was created but did not start`, detail: res.startError })
       else toasts.push({ kind: 'info', title: start ? `${name} is starting` : `${name} created` })
       router.navigate(machineHref(res.uuid))
@@ -411,6 +421,15 @@
       <dt>Network</dt><dd>{netChoice.startsWith('network:') ? netChoice.slice(8) : netChoice === 'bridge' ? bridge : 'None'}</dd>
       <dt>Firmware</dt><dd>{firmware === 'uefi' ? 'UEFI' : 'BIOS'}{secureBoot && firmware === 'uefi' ? ', Secure Boot' : ''}{tpm ? ', TPM' : ''}</dd>
     </dl>
+    {#if respools.length}
+      <label class="ui-field">
+        <span class="label">Resource pool</span>
+        <select class="ui-input" bind:value={respool}>
+          <option value="">None</option>
+          {#each respools as rp (rp.id)}<option value={rp.id}>{rp.name}</option>{/each}
+        </select>
+      </label>
+    {/if}
     <label class="ui-switch"><input type="checkbox" bind:checked={start} /> Start it right away</label>
     {#if error}<div class="ui-error-box">{error}</div>{/if}
     {#if !session.canCreate}<p class="error">{session.why('admin')} Operators can create machines when an admin gives them a quota.</p>{/if}
@@ -423,18 +442,7 @@
     </button>
     {#if !bootable}<span class="error">Add a disk or installation media.</span>{/if}
 
-    <IaCPanel
-      {name}
-      {os}
-      {vcpus}
-      {memGiB}
-      {diskGiB}
-      {pool}
-      {firmware}
-      {secureBoot}
-      {tpm}
-      {netChoice}
-    />
+    <IaCPanel {spec} />
   </aside>
 </form>
 

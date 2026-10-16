@@ -11,7 +11,6 @@
   import { isActive, live } from '../live.svelte'
   import { session } from '../session.svelte'
   import DestructiveGuardrailModal from './DestructiveGuardrailModal.svelte'
-  import { toasts } from '../toast.svelte'
 
   interface Props {
     d: Domain
@@ -73,22 +72,12 @@
       return
     }
 
-    if (act === 'hibernate') {
-      toasts.push({ kind: 'info', title: 'Hibernate state dump initiated', detail: `Saving RAM snapshot for ${d.name}...` })
-      live.act(d, 'pause')
-      return
-    }
-
-    live.act(d, act)
+    live.act(d, act === 'hibernate' ? 'save' : act)
   }
 
   function onGuardrailConfirm() {
     guardrailOpen = false
-    if (guardrailAction === 'force-off') {
-      live.act(d, 'force-off')
-    } else {
-      live.act(d, 'reboot')
-    }
+    live.act(d, guardrailAction === 'force-off' ? 'force-off' : 'reset')
   }
 </script>
 
@@ -157,16 +146,16 @@
         <button class="menu-item" onclick={() => handleAction('pause')}>
           <Pause size={13} />
           <div class="item-text">
-            <strong>SUSPEND TO RAM</strong>
-            <span class="sub">Freeze CPU cycles (QEMU pause)</span>
+            <strong>PAUSE</strong>
+            <span class="sub">Freeze the vCPUs; memory stays in use</span>
           </div>
         </button>
 
         <button class="menu-item" onclick={() => handleAction('hibernate')}>
           <HardDriveDownload size={13} />
           <div class="item-text">
-            <strong>HIBERNATE TO DISK</strong>
-            <span class="sub">Dump active memory to image</span>
+            <strong>SAVE TO DISK</strong>
+            <span class="sub">Write memory to disk and stop; next start resumes</span>
           </div>
         </button>
 
@@ -176,7 +165,7 @@
           <RotateCw size={13} />
           <div class="item-text">
             <strong>HARD RESET (COLD)</strong>
-            <span class="sub">Instant CPU vector reset</span>
+            <span class="sub">Like the reset button: no shutdown</span>
           </div>
         </button>
 
@@ -184,15 +173,15 @@
           <Zap size={13} />
           <div class="item-text">
             <strong>FORCE STOP / PULL PLUG</strong>
-            <span class="sub">SIGKILL destroy (loss of unsaved data)</span>
+            <span class="sub">Like pulling the plug: unsaved data is lost</span>
           </div>
         </button>
       {:else}
-        <button class="menu-item" onclick={() => handleAction('shutdown')}>
+        <button class="menu-item" onclick={handlePrimary}>
           <Play size={13} />
           <div class="item-text">
-            <strong>NORMAL POWER ON</strong>
-            <span class="sub">Initialize QEMU process</span>
+            <strong>{paused ? 'RESUME' : 'START'}</strong>
+            <span class="sub">{paused ? 'Continue where it was frozen' : 'Boot (or resume a machine saved to disk)'}</span>
           </div>
         </button>
       {/if}

@@ -1,523 +1,163 @@
 <script lang="ts">
+  // A machine's firewall (ADR-0033): a libvirt network filter on the host side of its network
+  // adapters, so the guest cannot switch it off. IPv4, stateful (replies are let through).
   import Shield from '@lucide/svelte/icons/shield'
   import Plus from '@lucide/svelte/icons/plus'
   import Trash from '@lucide/svelte/icons/trash'
-  import ArrowDownLeft from '@lucide/svelte/icons/arrow-down-left'
-  import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right'
-  import Dialog from './Dialog.svelte'
+  import ArrowUp from '@lucide/svelte/icons/arrow-up'
+  import ArrowDown from '@lucide/svelte/icons/arrow-down'
+  import Save from '@lucide/svelte/icons/save'
+  import { errorText } from '../api'
+  import { ent, type Firewall, type FirewallRule } from '../enterprise'
+  import { session } from '../session.svelte'
   import { toasts } from '../toast.svelte'
 
-  interface Props {
-    uuid: string
-    name: string
-    active: boolean
-  }
-  let { uuid, name, active }: Props = $props()
+  let { uuid, name, active }: { uuid: string; name: string; active: boolean } = $props()
 
-  interface Rule {
-    id: string
-    direction: 'IN' | 'OUT'
-    proto: 'TCP' | 'UDP' | 'ICMP' | 'ANY'
-    source: string
-    dest: string
-    port: string
-    action: 'ACCEPT' | 'DROP' | 'REJECT'
-    log: boolean
-    enabled: boolean
-    packets: number
-    bytes: number
-  }
+  let fw = $state<Firewall | null>(null)
+  let error = $state('')
+  let dirty = $state(false)
+  let saving = $state(false)
 
-  let rules = $state<Rule[]>([
-    {
-      id: 'r1',
-      direction: 'IN',
-      proto: 'TCP',
-      source: '192.168.1.0/24',
-      dest: '10.0.0.15',
-      port: '22',
-      action: 'ACCEPT',
-      log: true,
-      enabled: true,
-      packets: 14208,
-      bytes: 1840290,
-    },
-    {
-      id: 'r2',
-      direction: 'IN',
-      proto: 'TCP',
-      source: '0.0.0.0/0',
-      dest: '10.0.0.15',
-      port: '80, 443',
-      action: 'ACCEPT',
-      log: false,
-      enabled: true,
-      packets: 849201,
-      bytes: 129482100,
-    },
-    {
-      id: 'r3',
-      direction: 'IN',
-      proto: 'ICMP',
-      source: '192.168.1.0/24',
-      dest: '10.0.0.15',
-      port: 'echo-request',
-      action: 'ACCEPT',
-      log: false,
-      enabled: true,
-      packets: 412,
-      bytes: 34608,
-    },
-    {
-      id: 'r4',
-      direction: 'IN',
-      proto: 'ANY',
-      source: '0.0.0.0/0',
-      dest: '10.0.0.15',
-      port: 'ANY',
-      action: 'DROP',
-      log: true,
-      enabled: true,
-      packets: 39401,
-      bytes: 3120490,
-    },
-    {
-      id: 'r5',
-      direction: 'OUT',
-      proto: 'ANY',
-      source: '10.0.0.15',
-      dest: '0.0.0.0/0',
-      port: 'ANY',
-      action: 'ACCEPT',
-      log: false,
-      enabled: true,
-      packets: 984021,
-      bytes: 847291040,
-    },
-  ])
-
-  let addOpen = $state(false)
-  let dir = $state<'IN' | 'OUT'>('IN')
-  let proto = $state<'TCP' | 'UDP' | 'ICMP' | 'ANY'>('TCP')
-  let source = $state('0.0.0.0/0')
-  let dest = $state('GUEST_IP')
-  let port = $state('80')
-  let action = $state<'ACCEPT' | 'DROP' | 'REJECT'>('ACCEPT')
-  let log = $state(false)
-
-  function applyPreset(preset: 'ssh' | 'web' | 'block-in') {
-    if (preset === 'ssh') {
-      dir = 'IN'
-      proto = 'TCP'
-      source = '192.168.1.0/24'
-      port = '22'
-      action = 'ACCEPT'
-      log = true
-    } else if (preset === 'web') {
-      dir = 'IN'
-      proto = 'TCP'
-      source = '0.0.0.0/0'
-      port = '80, 443'
-      action = 'ACCEPT'
-      log = false
-    } else if (preset === 'block-in') {
-      dir = 'IN'
-      proto = 'ANY'
-      source = '0.0.0.0/0'
-      port = 'ANY'
-      action = 'DROP'
-      log = true
+  async function load() {
+    try {
+      fw = await ent.firewall(uuid)
+      dirty = false
+      error = ''
+    } catch (e) {
+      error = errorText(e)
     }
   }
+  $effect(() => {
+    void uuid
+    void load()
+  })
 
-  function addRule() {
-    rules = [
-      ...rules,
-      {
-        id: `r-${Date.now()}`,
-        direction: dir,
-        proto,
-        source: source.trim() || '0.0.0.0/0',
-        dest: dest.trim() || 'GUEST_IP',
-        port: port.trim() || 'ANY',
-        action,
-        log,
-        enabled: true,
-        packets: 0,
-        bytes: 0,
-      },
-    ]
-    addOpen = false
-    toasts.push({ kind: 'info', title: 'Firewall rule applied to nftables filter' })
+  const PRESETS: { label: string; rule: FirewallRule }[] = [
+    { label: 'SSH (22)', rule: { direction: 'in', action: 'accept', protocol: 'tcp', ports: '22' } },
+    { label: 'Web (80, 443)', rule: { direction: 'in', action: 'accept', protocol: 'tcp', ports: '80' } },
+    { label: 'RDP (3389)', rule: { direction: 'in', action: 'accept', protocol: 'tcp', ports: '3389' } },
+    { label: 'Ping', rule: { direction: 'in', action: 'accept', protocol: 'icmp' } },
+  ]
+
+  function add(r?: FirewallRule) {
+    if (!fw) return
+    fw.rules.push(r ? { ...r } : { direction: 'in', action: 'accept', protocol: 'tcp', ports: '', remote: '', comment: '' })
+    if (r?.ports === '80') fw.rules.push({ ...r, ports: '443' })
+    dirty = true
+  }
+  function move(i: number, d: number) {
+    if (!fw) return
+    const j = i + d
+    if (j < 0 || j >= fw.rules.length) return
+    ;[fw.rules[i], fw.rules[j]] = [fw.rules[j], fw.rules[i]]
+    dirty = true
+  }
+  function del(i: number) {
+    fw?.rules.splice(i, 1)
+    dirty = true
   }
 
-  function deleteRule(id: string) {
-    rules = rules.filter((r) => r.id !== id)
-    toasts.push({ kind: 'info', title: 'Firewall rule removed' })
+  async function save() {
+    if (!fw) return
+    saving = true
+    try {
+      const clean = { ...fw, rules: fw.rules.map((r) => ({ ...r, ports: r.protocol === 'tcp' || r.protocol === 'udp' ? r.ports || undefined : undefined, remote: r.remote || undefined, comment: r.comment || undefined })) }
+      const res = await ent.saveFirewall(uuid, clean)
+      toasts.push({
+        kind: res.liveError ? 'warn' : 'info',
+        title: fw.enabled ? `Firewall of ${name} saved` : `Firewall of ${name} off`,
+        detail: res.liveError ?? (active ? 'In effect now.' : 'In effect from the next start.'),
+      })
+      await load()
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'Not saved', detail: errorText(e) })
+    } finally {
+      saving = false
+    }
   }
-
-  function toggleRule(id: string) {
-    rules = rules.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r))
-  }
-
-  function formatBytes(b: number): string {
-    if (b < 1024) return `${b} B`
-    if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`
-    if (b < 1024 * 1024 * 1024) return `${(b / (1024 * 1024)).toFixed(1)} MB`
-    return `${(b / (1024 * 1024 * 1024)).toFixed(2)} GB`
-  }
+  let admin = $derived(session.can('admin'))
 </script>
 
-<div class="firewall-panel">
-  <!-- Top Action & Overview Bar -->
-  <div class="fw-topbar">
-    <div class="left-info">
-      <div class="engine-pill mono">
-        <span class="dot">●</span>
-        <span>ENGINE: NFTABLES HOOKED</span>
+{#if error}
+  <div class="ui-error-box">{error}</div>
+{:else if !fw}
+  <p class="muted">Reading the firewall…</p>
+{:else}
+  <section class="ui-panel fw">
+    <header>
+      <h2><Shield size={16} /> Firewall</h2>
+      <label class="ui-switch"><input type="checkbox" bind:checked={fw.enabled} onchange={() => (dirty = true)} disabled={!admin} /> {fw.enabled ? 'On' : 'Off'}</label>
+    </header>
+    <p class="muted">
+      Enforced on this host, in front of the machine's network adapters: the guest cannot turn it off. Rules are checked top to bottom; the first match wins.
+      Allowing a connection also lets its replies back. IPv4 only for now.
+    </p>
+    {#if fw.adapters?.length === 0}<div class="ui-error-box">This machine has no adapter the firewall can apply to.</div>{/if}
+    {#if fw.unsupported?.length}<p class="warn">Not covered: {fw.unsupported.join(', ')} (macvtap/direct or passthrough adapters bypass host filters).</p>{/if}
+
+    {#if fw.enabled}
+      <div class="defaults">
+        <label class="ui-field"><span class="label">Incoming, when no rule matches</span>
+          <select class="ui-input" bind:value={fw.defaultIn} onchange={() => (dirty = true)} disabled={!admin}><option value="accept">Allow</option><option value="drop">Block</option></select></label>
+        <label class="ui-field"><span class="label">Outgoing, when no rule matches</span>
+          <select class="ui-input" bind:value={fw.defaultOut} onchange={() => (dirty = true)} disabled={!admin}><option value="accept">Allow</option><option value="drop">Block</option></select></label>
+        <label class="ui-switch"><input type="checkbox" bind:checked={fw.antiSpoof} onchange={() => (dirty = true)} disabled={!admin} /> Anti-spoofing: only its own MAC and IP (libvirt clean-traffic)</label>
       </div>
-      <span class="summary-text mono">
-        {rules.filter((r) => r.enabled).length} ACTIVE RULES · {rules.length} TOTAL
-      </span>
-    </div>
 
-    <div class="right-actions">
-      <button class="ui-btn primary" onclick={() => (addOpen = true)}>
-        <Plus size={14} />
-        <span>+ ADD FIREWALL RULE</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Rules Table -->
-  <div class="table-frame">
-    <table class="fw-table mono">
-      <thead>
-        <tr>
-          <th style="width: 50px;">STATE</th>
-          <th style="width: 70px;">DIR</th>
-          <th style="width: 80px;">PROTO</th>
-          <th>SOURCE</th>
-          <th>DESTINATION</th>
-          <th>PORT</th>
-          <th style="width: 90px;">ACTION</th>
-          <th style="width: 70px;">LOG</th>
-          <th style="width: 140px;">MATCH TELEMETRY</th>
-          <th style="width: 50px;"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each rules as r (r.id)}
-          <tr class:disabled={!r.enabled}>
-            <td>
-              <input
-                type="checkbox"
-                class="rule-check"
-                checked={r.enabled}
-                onchange={() => toggleRule(r.id)}
-                title="Enable / Disable Rule"
-              />
-            </td>
-            <td>
-              <span class="dir-badge" class:in={r.direction === 'IN'} class:out={r.direction === 'OUT'}>
-                {#if r.direction === 'IN'}
-                  <ArrowDownLeft size={11} /> IN
-                {:else}
-                  <ArrowUpRight size={11} /> OUT
-                {/if}
-              </span>
-            </td>
-            <td>
-              <span class="proto-badge">{r.proto}</span>
-            </td>
-            <td><span class="ip-text">{r.source}</span></td>
-            <td><span class="ip-text">{r.dest}</span></td>
-            <td><span class="port-text">{r.port}</span></td>
-            <td>
-              <span class="act-badge {r.action.toLowerCase()}">
-                {r.action}
-              </span>
-            </td>
-            <td>
-              <span class="log-pill" class:on={r.log}>{r.log ? 'ON' : 'OFF'}</span>
-            </td>
-            <td class="telemetry-cell">
-              <span class="pkts">{r.packets.toLocaleString()} pkts</span>
-              <span class="bytes">{formatBytes(r.bytes)}</span>
-            </td>
-            <td>
-              <button class="trash-btn" onclick={() => deleteRule(r.id)} title="Delete Rule">
-                <Trash size={13} />
-              </button>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Add Rule Dialog -->
-<Dialog open={addOpen} title="Add Firewall Rule for {name}" onclose={() => (addOpen = false)} width={560}>
-  <div class="rule-dialog form">
-    <div class="preset-strip mono">
-      <span class="preset-label">QUICK TEMPLATES:</span>
-      <button class="preset-btn" onclick={() => applyPreset('ssh')}>SSH Management Only</button>
-      <button class="preset-btn" onclick={() => applyPreset('web')}>Open Web (80/443)</button>
-      <button class="preset-btn" onclick={() => applyPreset('block-in')}>Drop All Inbound</button>
-    </div>
-
-    <div class="fields-grid mono">
-      <label class="ui-field">
-        <span class="label">Direction</span>
-        <select class="ui-input" bind:value={dir}>
-          <option value="IN">INBOUND (Traffic to Guest)</option>
-          <option value="OUT">OUTBOUND (Traffic from Guest)</option>
-        </select>
-      </label>
-
-      <label class="ui-field">
-        <span class="label">Protocol</span>
-        <select class="ui-input" bind:value={proto}>
-          <option value="TCP">TCP</option>
-          <option value="UDP">UDP</option>
-          <option value="ICMP">ICMP</option>
-          <option value="ANY">ANY PROTOCOL</option>
-        </select>
-      </label>
-
-      <label class="ui-field">
-        <span class="label">Source IP / CIDR</span>
-        <input class="ui-input" type="text" bind:value={source} placeholder="0.0.0.0/0" />
-      </label>
-
-      <label class="ui-field">
-        <span class="label">Destination IP / CIDR</span>
-        <input class="ui-input" type="text" bind:value={dest} placeholder="GUEST_IP" />
-      </label>
-
-      <label class="ui-field">
-        <span class="label">Port / Range</span>
-        <input class="ui-input" type="text" bind:value={port} placeholder="80, 443 or 8000-8080" />
-      </label>
-
-      <label class="ui-field">
-        <span class="label">Action</span>
-        <select class="ui-input" bind:value={action}>
-          <option value="ACCEPT">ACCEPT (Allow packet)</option>
-          <option value="DROP">DROP (Silently discard)</option>
-          <option value="REJECT">REJECT (Send TCP RST / ICMP error)</option>
-        </select>
-      </label>
-    </div>
-
-    <label class="log-switch mono">
-      <input type="checkbox" bind:checked={log} />
-      <span>Enable kernel packet match logging (dmesg / systemd-journald)</span>
-    </label>
-  </div>
-
-  {#snippet footer()}
-    <button class="ui-btn" onclick={() => (addOpen = false)}>Cancel</button>
-    <button class="ui-btn primary mono" onclick={addRule}>INSERT RULE</button>
-  {/snippet}
-</Dialog>
+      <table class="t">
+        <thead><tr><th></th><th>Direction</th><th>Action</th><th>Protocol</th><th>Port(s)</th><th>Remote address</th><th>Comment</th><th></th></tr></thead>
+        <tbody>
+          {#each fw.rules as r, i (i)}
+            <tr>
+              <td class="mono muted">{i + 1}</td>
+              <td><select class="ui-input" bind:value={r.direction} onchange={() => (dirty = true)} disabled={!admin}><option value="in">In</option><option value="out">Out</option></select></td>
+              <td><select class="ui-input act {r.action}" bind:value={r.action} onchange={() => (dirty = true)} disabled={!admin}><option value="accept">Allow</option><option value="drop">Drop</option><option value="reject">Reject</option></select></td>
+              <td><select class="ui-input" bind:value={r.protocol} onchange={() => (dirty = true)} disabled={!admin}><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option><option value="all">Any</option></select></td>
+              <td><input class="ui-input mono" placeholder={r.protocol === 'tcp' || r.protocol === 'udp' ? 'any' : '—'} disabled={!admin || (r.protocol !== 'tcp' && r.protocol !== 'udp')} bind:value={r.ports} oninput={() => (dirty = true)} /></td>
+              <td><input class="ui-input mono" placeholder="anyone (or 10.0.0.0/8)" bind:value={r.remote} oninput={() => (dirty = true)} disabled={!admin} /></td>
+              <td><input class="ui-input" bind:value={r.comment} oninput={() => (dirty = true)} disabled={!admin} /></td>
+              <td class="row-acts">{#if admin}
+                <button class="ui-btn sm ghost" title="Up" onclick={() => move(i, -1)}><ArrowUp size={12} /></button>
+                <button class="ui-btn sm ghost" title="Down" onclick={() => move(i, 1)}><ArrowDown size={12} /></button>
+                <button class="ui-btn sm ghost" title="Remove" onclick={() => del(i)}><Trash size={12} /></button>
+              {/if}</td>
+            </tr>
+          {:else}
+            <tr><td colspan="8" class="muted">No rules: only the defaults above apply.</td></tr>
+          {/each}
+        </tbody>
+      </table>
+      {#if admin}
+        <div class="adds">
+          <button class="ui-btn sm" onclick={() => add()}><Plus size={13} /> Rule</button>
+          {#each PRESETS as p (p.label)}<button class="ui-btn sm ghost" onclick={() => add(p.rule)}>+ {p.label}</button>{/each}
+        </div>
+      {/if}
+    {/if}
+    {#if admin}
+      <footer>
+        <button class="ui-btn primary" disabled={!dirty || saving} onclick={save}><Save size={14} /> {saving ? 'Saving…' : 'Save firewall'}</button>
+        {#if dirty}<button class="ui-btn ghost" onclick={load}>Discard</button>{/if}
+      </footer>
+    {/if}
+  </section>
+{/if}
 
 <style>
-  .firewall-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-  .fw-topbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 14px;
-    background: var(--surface);
-    border: 1px solid var(--border-strong);
-    box-shadow: 2px 2px 0 var(--ink);
-  }
-  .left-info {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-  .engine-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--ok);
-    background: color-mix(in srgb, var(--ok) 12%, var(--surface));
-    padding: 3px 8px;
-    border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
-  }
-  .engine-pill .dot {
-    font-size: 9px;
-  }
-  .summary-text {
-    font-size: 11.5px;
-    color: var(--text-2);
-  }
-  .table-frame {
-    border: 1px solid var(--border-strong);
-    background: var(--bg);
-    overflow-x: auto;
-  }
-  .fw-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 11.5px;
-    text-align: left;
-  }
-  .fw-table th {
-    background: var(--surface);
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border-strong);
-    color: var(--text-3);
-    font-weight: 700;
-    letter-spacing: 0.05em;
-  }
-  .fw-table td {
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
-  }
-  .fw-table tr:hover {
-    background: var(--surface);
-  }
-  .fw-table tr.disabled {
-    opacity: 0.45;
-  }
-  .rule-check {
-    width: 15px;
-    height: 15px;
-    accent-color: var(--accent);
-    cursor: pointer;
-  }
-  .dir-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 5px;
-    border: 1px solid var(--border);
-  }
-  .dir-badge.in {
-    background: color-mix(in srgb, var(--accent) 15%, var(--surface));
-    color: var(--accent);
-    border-color: var(--accent);
-  }
-  .dir-badge.out {
-    background: var(--surface);
-    color: var(--text-2);
-  }
-  .proto-badge {
-    display: inline-block;
-    padding: 1px 5px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    font-weight: 700;
-    font-size: 10.5px;
-  }
-  .ip-text,
-  .port-text {
-    color: var(--text);
-  }
-  .act-badge {
-    display: inline-block;
-    padding: 2px 6px;
-    font-size: 10.5px;
-    font-weight: 700;
-  }
-  .act-badge.accept {
-    background: color-mix(in srgb, var(--ok) 18%, var(--surface));
-    color: var(--ok);
-    border: 1px solid var(--ok);
-  }
-  .act-badge.drop {
-    background: color-mix(in srgb, var(--danger) 18%, var(--surface));
-    color: var(--danger);
-    border: 1px solid var(--danger);
-  }
-  .act-badge.reject {
-    background: color-mix(in srgb, var(--warn) 18%, var(--surface));
-    color: var(--warn);
-    border: 1px solid var(--warn);
-  }
-  .log-pill {
-    font-size: 10px;
-    padding: 1px 5px;
-    border: 1px solid var(--border);
-    color: var(--text-3);
-  }
-  .log-pill.on {
-    color: var(--accent);
-    border-color: var(--accent);
-  }
-  .telemetry-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    font-size: 10.5px;
-  }
-  .telemetry-cell .bytes {
-    color: var(--text-3);
-  }
-  .trash-btn {
-    background: none;
-    border: none;
-    color: var(--text-3);
-    cursor: pointer;
-    padding: 4px;
-  }
-  .trash-btn:hover {
-    color: var(--danger);
-  }
-
-  /* Preset strip */
-  .preset-strip {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    padding: 8px 10px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    font-size: 11px;
-    margin-bottom: 12px;
-  }
-  .preset-label {
-    color: var(--text-3);
-    font-weight: 700;
-  }
-  .preset-btn {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    padding: 3px 8px;
-    color: var(--text);
-    font-size: 10.5px;
-    cursor: pointer;
-  }
-  .preset-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .fields-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-  .log-switch {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 14px;
-    font-size: 11.5px;
-    color: var(--text-2);
-    cursor: pointer;
-  }
+  .fw { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  header { display: flex; justify-content: space-between; align-items: center; }
+  h2 { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 15px; }
+  .muted { color: var(--text-2); font-size: 13px; margin: 0; }
+  .warn { color: var(--warn); font-size: 13px; margin: 0; }
+  .defaults { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; align-items: end; }
+  .t { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .t th { text-align: left; font: 600 11px var(--font-mono); text-transform: uppercase; color: var(--text-2); padding: 6px; border-bottom: 1px solid var(--border); }
+  .t td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  .t .ui-input { min-width: 70px; }
+  .act.accept { color: var(--ok); }
+  .act.drop, .act.reject { color: var(--danger); }
+  .row-acts { white-space: nowrap; }
+  .adds, footer { display: flex; gap: 6px; flex-wrap: wrap; }
+  @media (max-width: 900px) { .t { display: block; overflow-x: auto; } }
 </style>

@@ -5,19 +5,56 @@
   import { alerts } from '../alerts.svelte'
   import { theme } from '../theme.svelte'
   import { toasts } from '../toast.svelte'
+  import { api } from '../api'
+  import { ent } from '../enterprise'
   import Sun from '@lucide/svelte/icons/sun'
   import Moon from '@lucide/svelte/icons/moon'
   import ShieldAlert from '@lucide/svelte/icons/shield-alert'
   import ShieldCheck from '@lucide/svelte/icons/shield-check'
   import Plus from '@lucide/svelte/icons/plus'
-  import Box from '@lucide/svelte/icons/box'
-  import Layers from '@lucide/svelte/icons/layers'
-  import Download from '@lucide/svelte/icons/download'
-  import X from '@lucide/svelte/icons/x'
 
-  type Density = 'compact' | 'standard' | 'relaxed'
-  let density = $state<Density>('standard')
-  let safeMode = $state(false)
+  // Real health: daemon version, HA quorum (clustered only), storage pools, live data age.
+  let version = $state('')
+  let quorum = $state<{ votes: number; total: number; ok: boolean } | null>(null)
+  let storage = $state<{ ok: boolean; text: string } | null>(null)
+  let now = $state(Date.now())
+
+  $effect(() => {
+    void api.get<{ version: string }>('/api/v1/version').then((v) => (version = v.version)).catch(() => {})
+    const tick = setInterval(() => (now = Date.now()), 1000)
+    const poll = async () => {
+      try {
+        const pools = await api.pools()
+        const stopped = pools.filter((p) => !p.active)
+        const full = pools.filter((p) => p.active && p.capacityBytes > 0 && p.allocationBytes / p.capacityBytes > 0.9)
+        storage = stopped.length || full.length
+          ? { ok: false, text: stopped.length ? `${stopped.length} POOL STOPPED` : `${full[0].name} ${Math.round((full[0].allocationBytes / full[0].capacityBytes) * 100)}% FULL` }
+          : { ok: true, text: `${pools.length} POOLS OK` }
+      } catch {
+        storage = null
+      }
+      if (cluster.clustered) {
+        try {
+          const s = await ent.haStatus()
+          quorum = { votes: s.quorum.votes, total: s.quorum.totalVotes, ok: s.quorum.quorate }
+        } catch {
+          quorum = null
+        }
+      } else quorum = null
+    }
+    void poll()
+    const t = setInterval(() => void poll(), 15_000)
+    return () => {
+      clearInterval(t)
+      clearInterval(tick)
+    }
+  })
+  let age = $derived(live.lastUpdate ? Math.max(0, Math.round((now - live.lastUpdate) / 1000)) : null)
+
+  let safeMode = $state(localStorage.getItem('virtomir.safemode') === 'true')
+  $effect(() => {
+    document.documentElement.dataset.safemode = String(safeMode)
+  })
 
   // Pinned workspace tabs
   interface PinnedTab {
@@ -26,12 +63,9 @@
     href: string
     type: 'vm' | 'node' | 'pool' | 'net'
   }
-  let pinnedTabs = $state<PinnedTab[]>([
-    { id: 'overview', title: 'HOST: ' + (live.host?.hostname ?? 'LOCAL'), href: '/', type: 'node' }
-  ])
+  let pinnedTabs = $state<PinnedTab[]>([{ id: 'overview', title: 'HOST', href: '/', type: 'node' }])
 
   $effect(() => {
-    // Sync current route to pinned tabs
     const r = router.route
     if (r.name === 'machine' && r.uuid) {
       const d = (live.snapshot?.domains ?? []).find((x) => x.uuid === r.uuid)
@@ -42,7 +76,7 @@
     } else if (r.name === 'machines') {
       const id = 'vms-list'
       if (!pinnedTabs.some((t) => t.id === id)) {
-        pinnedTabs = [...pinnedTabs, { id, title: 'VMS INVENTORY', href: '/machines', type: 'vm' }]
+        pinnedTabs = [...pinnedTabs, { id, title: 'MACHINES', href: '/machines', type: 'vm' }]
       }
     } else if (r.name === 'storage' && r.pool) {
       const id = `pool-${r.pool}`
@@ -53,25 +87,23 @@
   })
 
   function closePinned(id: string, e: MouseEvent) {
+    e.preventDefault()
     e.stopPropagation()
     pinnedTabs = pinnedTabs.filter((t) => t.id !== id)
   }
 
-  function cycleDensity() {
-    const next: Record<Density, Density> = { compact: 'standard', standard: 'relaxed', relaxed: 'compact' }
-    density = next[density]
-    document.documentElement.dataset.density = density
-    toasts.push({ kind: 'info', title: `Density: ${density.toUpperCase()}` })
-  }
-
   function toggleSafeMode() {
     safeMode = !safeMode
-    document.documentElement.dataset.safemode = String(safeMode)
-    if (safeMode) {
-      toasts.push({ kind: 'warn', title: 'SAFE-MODE ARMED', detail: 'Destructive power and disk deletions are locked.' })
-    } else {
-      toasts.push({ kind: 'info', title: 'SAFE-MODE OFF', detail: 'Standard operator safeguards active.' })
+    try {
+      localStorage.setItem('virtomir.safemode', String(safeMode))
+    } catch {
+      /* private window */
     }
+    toasts.push(
+      safeMode
+        ? { kind: 'warn', title: 'Safe mode on', detail: 'Every power action asks you to type the machine name first.' }
+        : { kind: 'info', title: 'Safe mode off', detail: 'Only force off and hard reset ask for the machine name.' },
+    )
   }
 
   function openCommandPalette() {
@@ -85,13 +117,13 @@
     <a class="deck-logo" href="/" onclick={router.link} title="VirtoMir Control Deck">
       <span class="logo-box"></span>
       <span class="logo-text">VIRTOMIR</span>
-      <span class="logo-badge mono">v3.4-PRO</span>
+      {#if version}<span class="logo-badge mono">{version}</span>{/if}
     </a>
 
     <div class="breadcrumbs mono">
-      <span class="crumb">[DC: {cluster.clustered ? 'CLUSTER' : 'LOCAL-DC'}]</span>
+      <span class="crumb">[{cluster.clustered ? `CLUSTER: ${cluster.members.length} HOSTS` : 'STANDALONE'}]</span>
       <span class="sep">/</span>
-      <span class="crumb">[NODE: {live.host?.hostname ?? 'HV-01'}]</span>
+      <span class="crumb">[HOST: {live.host?.hostname?.split('.')[0] ?? '…'}]</span>
       {#if router.route.name === 'machines'}
         <span class="sep">/</span>
         <span class="crumb active">[WORKLOADS: VMS]</span>
@@ -113,14 +145,18 @@
 
   <!-- Right Section: Cluster Health & Controls -->
   <div class="right-group mono">
-    <div class="health-block ok" title="Quorum Consensus Status">
-      <span class="dot">●</span>
-      <span>Q: 5/5 OK</span>
-    </div>
+    {#if quorum}
+      <a class="health-block" class:ok={quorum.ok} class:warn={!quorum.ok} href="/cluster" onclick={router.link} title="HA quorum: votes this host sees">
+        <span class="dot">●</span>
+        <span>Q: {quorum.votes}/{quorum.total} {quorum.ok ? 'OK' : 'LOST'}</span>
+      </a>
+    {/if}
 
-    <div class="health-block ok" title="Storage Fabric Health">
-      <span>STOR: HEALTH_OK</span>
-    </div>
+    {#if storage}
+      <a class="health-block" class:ok={storage.ok} class:warn={!storage.ok} href="/storage" onclick={router.link} title="Storage pools of this host">
+        <span>STOR: {storage.text}</span>
+      </a>
+    {/if}
 
     {#if alerts.open > 0}
       <a class="health-block warn" href="/alerts" onclick={router.link} title="{alerts.open} unacknowledged alerts">
@@ -132,14 +168,14 @@
       </div>
     {/if}
 
-    <div class="health-block" title="WebSocket Latency">
-      <span>WS: 2ms</span>
+    <div class="health-block" class:warn={age !== null && age > 5} title="Age of the newest live sample (updated every second)">
+      <span>LIVE: {age === null ? '—' : `${age}s`}</span>
     </div>
 
     <!-- Global Actions -->
     <a class="action-btn accent" href="/machines/new" onclick={router.link}>
       <Plus size={13} />
-      <span>+ NEW VM</span>
+      <span>NEW VM</span>
     </a>
 
     <!-- Theme Switch -->
@@ -155,13 +191,8 @@
       {/if}
     </button>
 
-    <!-- Density Switch -->
-    <button class="control-btn" onclick={cycleDensity} title="Cycle Density (Compact / Standard / Relaxed)">
-      <span>[{density.slice(0, 3).toUpperCase()}]</span>
-    </button>
-
     <!-- Safe-Mode Lock -->
-    <button class="control-btn safe-btn" class:armed={safeMode} onclick={toggleSafeMode} title="Emergency Safe-Mode Lock">
+    <button class="control-btn safe-btn" class:armed={safeMode} onclick={toggleSafeMode} title="Safe mode: every power action asks for the machine name">
       {#if safeMode}
         <ShieldCheck size={13} />
         <span>SAFE: ON</span>
@@ -248,6 +279,10 @@
   }
   .crumb {
     padding: 2px 6px;
+    white-space: nowrap;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
     background: var(--bg-elev);
     border: 1px solid var(--border);
   }
@@ -265,6 +300,8 @@
   }
   .cmd-palette-btn {
     width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -306,6 +343,7 @@
   .health-block {
     display: flex;
     align-items: center;
+    white-space: nowrap;
     gap: 5px;
     padding: 3px 7px;
     background: var(--bg-elev);

@@ -1,319 +1,114 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  // Packet capture on a host interface: tcpdump on the host, its lines streamed here, or the
+  // raw capture as a .pcap file for Wireshark. Admins only (it shows other people's traffic).
   import Dialog from './Dialog.svelte'
-  import Download from '@lucide/svelte/icons/download'
   import Play from '@lucide/svelte/icons/play'
   import Square from '@lucide/svelte/icons/square'
-  import Radio from '@lucide/svelte/icons/radio'
-  import { toasts } from '../toast.svelte'
+  import Download from '@lucide/svelte/icons/download'
+  import { errorText } from '../api'
+  import { ent, type HostInterface } from '../enterprise'
+  import { live } from '../live.svelte'
 
-  interface Props {
-    open: boolean
-    onclose: () => void
-  }
-  let { open, onclose }: Props = $props()
+  let { open, onclose }: { open: boolean; onclose: () => void } = $props()
 
-  let iface = $state('vmbr0')
-  let filter = $state('tcp port 80 or tcp port 443')
-  let capturing = $state(false)
-  let packetCount = $state(0)
-  let bytesCount = $state(0)
-  let timer: ReturnType<typeof setInterval> | undefined
+  let ifs = $state<HostInterface[]>([])
+  let iface = $state('')
+  let filter = $state('')
+  let count = $state(500)
+  let seconds = $state(30)
+  let lines = $state<string[]>([])
+  let status = $state('')
+  let running = $state(false)
+  let ctrl: AbortController | null = null
 
-  interface PacketSample {
-    time: string
-    src: string
-    dst: string
-    proto: string
-    len: number
-    info: string
-  }
-  let samplePackets = $state<PacketSample[]>([])
+  $effect(() => {
+    if (!open) return
+    void ent.interfaces().then((l) => {
+      ifs = l.filter((i) => i.kind !== 'loopback')
+      if (!iface) iface = ifs.find((i) => i.kind === 'bridge')?.name ?? ifs[0]?.name ?? ''
+    }).catch((e) => (status = errorText(e)))
+  })
 
-  function startCapture() {
-    capturing = true
-    packetCount = 0
-    bytesCount = 0
-    samplePackets = []
-    toasts.push({ kind: 'info', title: `PCAP live capture started on ${iface}` })
+  let vmOf = $derived.by(() => {
+    const m = new Map<string, string>()
+    for (const d of live.snapshot?.domains ?? []) for (const n of d.nets ?? []) m.set(n.name, d.name)
+    return m
+  })
 
-    timer = setInterval(() => {
-      const added = Math.floor(Math.random() * 8) + 2
-      packetCount += added
-      bytesCount += added * 128
-      const now = new Date().toISOString().slice(11, 23)
-      const sample: PacketSample = {
-        time: now,
-        src: `192.168.100.${Math.floor(Math.random() * 50) + 10}:49${Math.floor(Math.random() * 800)}`,
-        dst: `10.0.0.1:443`,
-        proto: 'TCP',
-        len: 128,
-        info: 'ACK, PSH Seq=12048 Ack=8920 Win=64240',
+  async function start() {
+    lines = []
+    status = 'Capturing…'
+    running = true
+    ctrl = new AbortController()
+    try {
+      const res = await fetch(ent.captureURL(iface, filter, count, seconds), { signal: ctrl.signal, headers: { Accept: 'text/event-stream' } })
+      if (!res.ok || !res.body) {
+        let msg = res.statusText
+        try { msg = (await res.json()).error ?? msg } catch { /* not JSON */ }
+        throw new Error(msg)
       }
-      samplePackets = [sample, ...samplePackets.slice(0, 19)]
-    }, 400)
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+      let buf = ''
+      for (;;) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buf += value
+        let i
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const ev = buf.slice(0, i)
+          buf = buf.slice(i + 2)
+          const kind = /^event: (.*)$/m.exec(ev)?.[1]
+          const data = /^data: (.*)$/m.exec(ev)?.[1] ?? ''
+          if (kind === 'packet') lines = [...lines.slice(-1999), data]
+          else if (kind === 'end') status = data === 'finished' ? `Finished: ${lines.length} packets` : data
+        }
+      }
+    } catch (e) {
+      status = (e as Error).name === 'AbortError' ? `Stopped: ${lines.length} packets` : errorText(e)
+    } finally {
+      running = false
+      ctrl = null
+    }
   }
-
-  function stopCapture() {
-    capturing = false
-    clearInterval(timer)
+  function stop() {
+    ctrl?.abort()
   }
-
-  function downloadPcap() {
-    stopCapture()
-    const content = `PCAP-DUMP-BINARY-MOCK-${Date.now()}`
-    const blob = new Blob([content], { type: 'application/vnd.tcpdump.pcap' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `capture-${iface}-${Date.now()}.pcap`
-    a.click()
-    URL.revokeObjectURL(url)
-    toasts.push({ kind: 'info', title: 'PCAP file downloaded', detail: `${packetCount} packets saved.` })
+  function close() {
+    stop()
+    onclose()
   }
-
-  onDestroy(() => clearInterval(timer))
 </script>
 
-<Dialog {open} title="" {onclose} width={640}>
-  <div class="sniffer-dialog">
-    <div class="sniffer-header mono">
-      <div class="title-wrap">
-        <Radio size={16} />
-        <span>LIVE PCAP PACKET SNIFFER & WIRE INSPECTOR</span>
-      </div>
-      {#if capturing}
-        <span class="live-tag"><span class="dot"></span>CAPTURING</span>
-      {/if}
-    </div>
-
-    <div class="sniffer-body mono">
-      <div class="control-row">
-        <label class="param-field">
-          <span class="lbl">CAPTURE INTERFACE:</span>
-          <select class="ui-input" bind:value={iface} disabled={capturing}>
-            <option value="vmbr0">vmbr0 (Linux Bridge Aggregate)</option>
-            <option value="eno1">eno1 (10G SFP+ Uplink 1)</option>
-            <option value="eno2">eno2 (10G SFP+ Uplink 2)</option>
-            <option value="virbr0">virbr0 (NAT Network)</option>
-            <option value="vnet0">vnet0 (Virtual Guest NIC)</option>
-          </select>
-        </label>
-
-        <label class="param-field">
-          <span class="lbl">BPF FILTER EXPRESSION:</span>
-          <input
-            type="text"
-            class="ui-input"
-            bind:value={filter}
-            placeholder="e.g. tcp port 80 or icmp"
-            disabled={capturing}
-          />
-        </label>
-      </div>
-
-      <!-- Live Counters Deck -->
-      <div class="counters-deck">
-        <div class="counter-box">
-          <span class="c-title">PACKETS CAPTURED</span>
-          <span class="c-val">{packetCount.toLocaleString()}</span>
-        </div>
-        <div class="counter-box">
-          <span class="c-title">BUFFER ACCUMULATED</span>
-          <span class="c-val">{(bytesCount / 1024).toFixed(1)} KiB</span>
-        </div>
-        <div class="counter-box">
-          <span class="c-title">SOCKET STATUS</span>
-          <span class="c-val ok">{capturing ? 'SOCK_RAW PROMISC' : 'IDLE'}</span>
-        </div>
-      </div>
-
-      <!-- Live Sample Feed -->
-      <div class="stream-box">
-        <div class="stream-head">LIVE FRAME TELEMETRY PREVIEW:</div>
-        <div class="stream-scroll">
-          {#each samplePackets as p (p.time + p.src)}
-            <div class="packet-line">
-              <span class="time">{p.time}</span>
-              <span class="flow">{p.src} → {p.dst}</span>
-              <span class="proto">{p.proto}</span>
-              <span class="info">{p.info}</span>
-            </div>
-          {:else}
-            <div class="empty-feed">Press START to initiate packet sniffing on {iface}...</div>
-          {/each}
-        </div>
-      </div>
-    </div>
-
-    <div class="sniffer-footer mono">
-      <button class="ui-btn" onclick={onclose}>CLOSE</button>
-      {#if !capturing}
-        <button class="ui-btn primary" onclick={startCapture}>
-          <Play size={13} />
-          <span>START CAPTURE</span>
-        </button>
-      {:else}
-        <button class="ui-btn warn" onclick={stopCapture}>
-          <Square size={13} />
-          <span>STOP</span>
-        </button>
-      {/if}
-      <button class="ui-btn accent" disabled={packetCount === 0} onclick={downloadPcap}>
-        <Download size={13} />
-        <span>DOWNLOAD .PCAP</span>
-      </button>
-    </div>
+<Dialog {open} title="Packet capture" subtitle="tcpdump on this host" width={860} onclose={close}>
+  <div class="form">
+    <label class="ui-field"><span class="label">Interface</span>
+      <select class="ui-input mono" bind:value={iface} disabled={running}>
+        {#each ifs as i (i.name)}<option value={i.name}>{i.name} · {i.kind}{vmOf.get(i.name) ? ` · ${vmOf.get(i.name)}` : ''}</option>{/each}
+      </select></label>
+    <label class="ui-field grow"><span class="label">Filter (tcpdump syntax)</span>
+      <input class="ui-input mono" placeholder="e.g. tcp port 443 and host 10.0.0.5" bind:value={filter} disabled={running} /></label>
+    <label class="ui-field"><span class="label">Packets</span><input class="ui-input" type="number" min="1" max="20000" bind:value={count} disabled={running} /></label>
+    <label class="ui-field"><span class="label">Seconds</span><input class="ui-input" type="number" min="1" max="120" bind:value={seconds} disabled={running} /></label>
   </div>
+  <div class="bar">
+    {#if running}
+      <button class="ui-btn danger-soft" onclick={stop}><Square size={13} /> Stop</button>
+    {:else}
+      <button class="ui-btn primary" disabled={!iface} onclick={start}><Play size={13} /> Capture here</button>
+      <a class="ui-btn" class:disabled={!iface} href={iface ? ent.captureURL(iface, filter, count, seconds, true) : undefined} download><Download size={13} /> Save as .pcap</a>
+    {/if}
+    <span class="status">{status}</span>
+  </div>
+  <pre class="out mono">{lines.join('\n') || 'No packets yet.'}</pre>
+  <p class="hint">The .pcap download starts when the capture ends ({count} packets or {seconds} s). Needs tcpdump on the host.</p>
 </Dialog>
 
 <style>
-  .sniffer-dialog {
-    display: flex;
-    flex-direction: column;
-    margin: -16px -20px;
-    background: var(--bg);
-    border: 1px solid var(--border-strong);
-  }
-  .sniffer-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 18px;
-    background: var(--surface);
-    border-bottom: 2px solid var(--ink);
-  }
-  .title-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    font-weight: 800;
-    color: var(--accent);
-  }
-  .live-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--danger);
-  }
-  .dot {
-    width: 6px;
-    height: 6px;
-    background: var(--danger);
-    box-shadow: 0 0 6px var(--danger);
-    animation: blink 0.8s infinite;
-  }
-  @keyframes blink {
-    50% { opacity: 0.3; }
-  }
-  .sniffer-body {
-    padding: 16px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    font-size: 11px;
-  }
-  .control-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-  .param-field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .lbl {
-    font-size: 10px;
-    color: var(--text-3);
-    font-weight: 700;
-  }
-  .counters-deck {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-  }
-  .counter-box {
-    padding: 8px 10px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-  .c-title {
-    font-size: 9.5px;
-    color: var(--text-3);
-    font-weight: 700;
-  }
-  .c-val {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text);
-  }
-  .c-val.ok {
-    color: var(--ok);
-  }
-  .stream-box {
-    border: 1px solid var(--border-strong);
-    background: #0d0e11;
-    display: flex;
-    flex-direction: column;
-  }
-  .stream-head {
-    padding: 6px 10px;
-    background: #18191e;
-    border-bottom: 1px solid #2d2f35;
-    font-size: 10px;
-    color: var(--text-3);
-    font-weight: 700;
-  }
-  .stream-scroll {
-    height: 150px;
-    overflow-y: auto;
-    padding: 6px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .packet-line {
-    display: flex;
-    gap: 8px;
-    font-size: 10px;
-    line-height: 1.4;
-  }
-  .time {
-    color: var(--text-3);
-  }
-  .flow {
-    color: #4a9eff;
-  }
-  .proto {
-    color: var(--warn);
-    font-weight: 700;
-  }
-  .info {
-    color: var(--text-2);
-  }
-  .empty-feed {
-    text-align: center;
-    padding: 40px;
-    color: var(--text-3);
-  }
-  .sniffer-footer {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 20px;
-    background: var(--surface);
-    border-top: 1px solid var(--border-strong);
-  }
-  .ui-btn.warn {
-    background: var(--warn);
-    color: #000;
-  }
+  .form { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  .grow { flex: 1; min-width: 240px; }
+  .bar { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+  .status { color: var(--text-2); font-size: 13px; }
+  .out { height: 340px; overflow: auto; background: var(--bg-elev); border: 1px solid var(--border); padding: 8px; font-size: 11.5px; margin: 0; white-space: pre; }
+  .hint { color: var(--text-2); font-size: 12px; margin: 8px 0 0; }
+  .disabled { pointer-events: none; opacity: 0.5; }
 </style>
