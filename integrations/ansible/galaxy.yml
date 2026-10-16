@@ -1,0 +1,10 @@
+namespace: onurbaydas
+name: virtomir
+version: 0.6.0
+readme: README.md
+authors: [Onur Baydas <onurbaydas1@gmail.com>]
+description: Manage KVM/QEMU/libvirt machines through VirtoMir.
+license: [GPL-3.0-or-later]
+tags: [virtualization, kvm, libvirt, cloud]
+repository: https://github.com/onurbaydas/VirtoMir
+build_ignore: ['*.tar.gz', tests]
