@@ -162,65 +162,71 @@
 <style>
   .drawer {
     position: fixed;
-    right: 16px;
-    bottom: 16px;
-    left: calc(var(--sidebar-w) + 16px);
+    right: 18px;
+    bottom: 18px;
+    left: calc(var(--sidebar-w) + 18px);
     z-index: 30;
     display: flex;
     flex-direction: column;
     max-height: 46vh;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
+    border: var(--frame) solid var(--ink);
     background: var(--surface);
-    box-shadow: var(--shadow);
+    box-shadow: 8px 8px 0 var(--ink);
   }
   header {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 12px;
-    padding: 8px 10px 8px 14px;
-    border-bottom: 1px solid var(--border);
+    padding: 6px 6px 0 10px;
+    border-bottom: var(--frame) solid var(--ink);
+    background: #000;
+    color: #f4f1e8;
   }
   .tabs {
     display: flex;
     flex: 1;
-    gap: 2px;
+    gap: 3px;
   }
   .tabs button {
-    padding: 5px 10px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--text-2);
-    font-size: 13px;
+    padding: 4px 10px 5px;
+    border: var(--frame) solid #f4f1e8;
+    border-bottom: 0;
+    background: #000;
+    color: #f4f1e8;
+    font-family: var(--font-display);
+    font-size: 13.5px;
+    font-stretch: 80%;
+    font-weight: 700;
     cursor: pointer;
   }
   .tabs button.on {
-    background: var(--surface-hover);
+    background: var(--surface);
     color: var(--text);
-    font-weight: 500;
   }
   .hint {
-    color: var(--text-3);
-    font-size: 12px;
+    align-self: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    opacity: 0.7;
   }
   .close {
     display: grid;
+    align-self: center;
     place-items: center;
-    width: 28px;
-    height: 28px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--text-2);
+    width: 24px;
+    height: 24px;
+    margin-bottom: 4px;
+    border: var(--frame) solid #f4f1e8;
+    background: #000;
+    color: #f4f1e8;
     cursor: pointer;
   }
   .close:hover {
-    background: var(--surface-hover);
+    background: var(--cadmium);
   }
   .body {
     overflow: auto;
-    padding: 6px 14px 14px;
+    padding: 8px 12px 12px;
   }
   table {
     width: 100%;
@@ -228,41 +234,42 @@
     font-size: 13px;
   }
   th {
-    padding: 8px 8px 6px;
-    color: var(--text-3);
-    font-size: 12px;
-    font-weight: 500;
+    padding: 4px 6px;
+    border-bottom: var(--frame) solid var(--ink);
+    font-family: var(--font-display);
+    font-stretch: 80%;
+    font-weight: 800;
     text-align: left;
   }
   td {
-    padding: 7px 8px;
-    border-top: 1px solid var(--border);
+    padding: 5px 6px;
+    border-bottom: 1px solid var(--border);
     vertical-align: top;
   }
   .muted {
     color: var(--text-3);
   }
   .st {
-    padding: 1px 8px;
-    border-radius: 999px;
-    background: var(--surface-2);
-    color: var(--text-2);
-    font-size: 12px;
+    padding: 0 6px;
+    border: 1px solid var(--ink);
+    background: var(--bg-elev);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
   }
   .st.succeeded {
-    background: color-mix(in srgb, var(--ok) 14%, transparent);
-    color: var(--ok);
+    background: var(--ok);
+    color: #fff;
   }
   .st.failed {
-    background: color-mix(in srgb, var(--danger) 14%, transparent);
-    color: var(--danger);
+    background: var(--cadmium);
+    color: #fff;
   }
   .st.running {
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--ochre);
+    color: #000;
   }
   .empty {
-    margin: 14px 0;
+    margin: 12px 0;
     color: var(--text-3);
   }
   .more {
@@ -274,20 +281,21 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 9px 0;
-    border-top: 1px solid var(--border);
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
     font-size: 13px;
   }
   .sev {
-    padding: 1px 8px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--warn) 14%, transparent);
-    color: var(--warn);
-    font-size: 12px;
+    padding: 0 6px;
+    border: 1px solid var(--ink);
+    background: var(--ochre);
+    color: #000;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
   }
   .alert.crit .sev {
-    background: color-mix(in srgb, var(--danger) 14%, transparent);
-    color: var(--danger);
+    background: var(--cadmium);
+    color: #fff;
   }
   .text {
     flex: 1;

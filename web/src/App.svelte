@@ -93,7 +93,7 @@
 {:else if route.name === 'console'}
   <ConsolePage uuid={route.uuid} />
 {:else}
-  <div class="app">
+  <div class="app" data-page={route.name}>
     <Sidebar />
 
     <div class="deck-workspace">
@@ -161,7 +161,7 @@
     flex: 1;
     min-width: 0;
     max-width: 1440px;
-    padding: 24px 32px 64px;
+    padding: 34px 36px 72px;
   }
   .splash {
     display: grid;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Composition from '../components/Composition.svelte'
   import LogIn from '@lucide/svelte/icons/log-in'
   import KeyRound from '@lucide/svelte/icons/key-round'
   import ShieldCheck from '@lucide/svelte/icons/shield-check'
@@ -57,6 +58,7 @@
 <svelte:head><title>Sign in · VirtoMir</title></svelte:head>
 
 <div class="wrap">
+  <div class="art"><Composition /><div class="claim">Every<br />setting.<br />Nothing<br />hidden.</div></div>
   <form class="card" onsubmit={submit}>
     <div class="brand">
       <img src="/favicon.svg" alt="" width="40" height="40" />
@@ -110,37 +112,74 @@
 <style>
   .wrap {
     display: grid;
-    place-items: center;
+    grid-template-columns: minmax(0, 1.15fr) minmax(360px, 1fr);
     min-height: 100vh;
-    padding: 24px 16px;
-    background: radial-gradient(60rem 30rem at 50% -10%, var(--accent-soft), transparent 70%), var(--bg);
+    background: var(--bg);
+  }
+  .art {
+    position: relative;
+    min-height: 260px;
+    border-right: var(--frame) solid var(--ink);
+    overflow: hidden;
+  }
+  .claim {
+    position: absolute;
+    left: 36px;
+    top: 30px;
+    color: #f4f1e8;
+    font-family: var(--font-display);
+    font-size: clamp(34px, 4.6vw, 64px);
+    font-stretch: 62%;
+    font-weight: 900;
+    line-height: 0.88;
+    text-shadow: 4px 4px 0 #000;
   }
   .card {
     display: flex;
     flex-direction: column;
+    align-self: center;
+    justify-self: center;
     gap: 14px;
-    width: min(380px, 100%);
-    padding: 28px 28px 22px;
+    width: min(380px, calc(100% - 32px));
+    margin: 32px 0;
+    padding: 0 22px 20px;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow);
+    border: var(--frame) solid var(--ink);
+    box-shadow: var(--bevel), 8px 8px 0 var(--ink);
   }
   .brand {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin: 0 0 10px;
+    margin: 0 -22px 6px;
+    padding: 12px 22px;
+    border-bottom: var(--frame) solid var(--ink);
+    background: #000;
+    color: #f4f1e8;
+  }
+  .brand img {
+    border: 2px solid #f4f1e8;
   }
   .wordmark {
-    font-size: 20px;
-    font-weight: 650;
-    line-height: 1.2;
-    letter-spacing: -0.01em;
+    font-family: var(--font-display);
+    font-size: 30px;
+    font-stretch: 62%;
+    font-weight: 900;
+    line-height: 1;
   }
   .tagline {
-    color: var(--text-3);
-    font-size: 13px;
+    font-size: 12.5px;
+    opacity: 0.8;
+  }
+  @media (max-width: 820px) {
+    .wrap {
+      grid-template-columns: 1fr;
+    }
+    .art {
+      height: 220px;
+      border-right: 0;
+      border-bottom: var(--frame) solid var(--ink);
+    }
   }
   .submit {
     height: 38px;
@@ -157,8 +196,8 @@
   .or::after {
     content: '';
     flex: 1;
-    height: 1px;
-    background: var(--border);
+    height: 2px;
+    background: var(--ink);
   }
   .sso {
     justify-content: center;

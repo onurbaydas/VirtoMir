@@ -114,59 +114,58 @@
     z-index: 15;
     display: flex;
     align-items: center;
-    gap: 16px;
-    height: 52px;
-    padding: 0 28px;
-    border-bottom: 1px solid var(--border);
-    background: color-mix(in srgb, var(--bg) 88%, transparent);
-    backdrop-filter: blur(10px);
+    gap: 14px;
+    height: 50px;
+    padding: 0 20px;
+    border-bottom: var(--frame) solid var(--ink);
+    background: var(--surface);
   }
   .crumbs {
     display: flex;
     flex: 1 1 0;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
     overflow: hidden;
-    color: var(--text-3);
-    font-size: 13.5px;
+    font-family: var(--font-mono);
+    font-size: 13px;
     white-space: nowrap;
   }
   .crumbs a {
-    color: var(--text-2);
-    text-decoration: none;
-  }
-  .crumbs a:hover {
     color: var(--text);
   }
   .host {
     color: var(--text-2);
   }
+  .sep {
+    color: var(--text-3);
+  }
   .here {
     overflow: hidden;
-    color: var(--text);
-    font-weight: 500;
+    padding: 1px 6px;
+    background: var(--invert-bg);
+    color: var(--invert-fg);
+    font-weight: 600;
     text-overflow: ellipsis;
   }
   .search {
     display: flex;
-    flex: 0 1 360px;
+    flex: 0 1 380px;
     align-items: center;
     gap: 8px;
     min-width: 0;
     height: 32px;
-    padding: 0 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
+    padding: 0 8px;
+    border: var(--frame) solid var(--ink);
+    background: var(--bg-elev);
+    box-shadow: var(--bevel-in);
     color: var(--text-3);
-    font-size: 13px;
+    font-size: 13.5px;
     cursor: pointer;
     white-space: nowrap;
   }
   .search:hover {
-    border-color: var(--border-strong);
-    color: var(--text-2);
+    color: var(--text);
   }
   .search span {
     flex: 1;
@@ -175,10 +174,12 @@
     text-overflow: ellipsis;
   }
   kbd {
-    padding: 1px 6px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-family: var(--font-sans);
+    padding: 0 5px;
+    border: 1px solid var(--ink);
+    background: var(--surface);
+    box-shadow: var(--bevel);
+    color: var(--text);
+    font-family: var(--font-mono);
     font-size: 11px;
   }
   .right {
@@ -194,25 +195,26 @@
     align-items: center;
     gap: 6px;
     height: 28px;
-    padding: 0 10px;
-    border-radius: 999px;
-    background: var(--surface-2);
-    color: var(--text-2);
-    font-size: 12.5px;
-    font-weight: 500;
+    padding: 0 8px;
+    border: var(--frame) solid var(--ink);
+    background: var(--bg-elev);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
     text-decoration: none;
   }
   .signal.accent {
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-contrast);
   }
   .signal.warn {
-    background: color-mix(in srgb, var(--warn) 14%, transparent);
-    color: var(--warn);
+    background: var(--ochre);
+    color: #000;
   }
   .signal.danger {
-    background: color-mix(in srgb, var(--danger) 14%, transparent);
-    color: var(--danger);
+    background: var(--cadmium);
+    color: #fff;
   }
   .icon-btn {
     position: relative;
@@ -220,29 +222,29 @@
     place-items: center;
     width: 32px;
     height: 32px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--text-2);
+    border: var(--frame) solid var(--ink);
+    background: var(--surface);
+    box-shadow: var(--bevel);
+    color: var(--text);
     cursor: pointer;
   }
-  .icon-btn:hover {
-    background: var(--surface-hover);
-    color: var(--text);
+  .icon-btn:active {
+    box-shadow: var(--bevel-in);
   }
   .dot-count {
     position: absolute;
-    top: 2px;
-    right: 1px;
-    min-width: 15px;
-    height: 15px;
-    padding: 0 4px;
-    border-radius: 999px;
-    background: var(--accent);
-    color: var(--accent-contrast);
+    top: -8px;
+    right: -8px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 3px;
+    border: var(--frame) solid var(--ink);
+    background: var(--ochre);
+    color: #000;
+    font-family: var(--font-mono);
     font-size: 10px;
-    font-weight: 600;
-    line-height: 15px;
+    font-weight: 700;
+    line-height: 13px;
   }
   @media (max-width: 1100px) {
     .search span {

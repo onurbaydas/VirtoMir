@@ -9,7 +9,7 @@ VirtoMir is a modern web control panel for **KVM / QEMU / libvirt** that tries t
 
 It installs on the Linux host you already have (Debian, Ubuntu, Fedora, …) as a single binary. No dedicated distribution, no database, no agents.
 
-> 🚧 **Status: early release (0.3).** Used and tested on single hosts and small clusters; high availability has not been tried on real BMC hardware yet. Test it before you trust it with production.
+> 🚧 **Status: early release (0.4).** Used and tested on single hosts and small clusters; high availability has not been tried on real BMC hardware yet. Test it before you trust it with production.
 
 ![Overview](docs/screenshots/overview.png)
 
@@ -103,14 +103,14 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 
 <p align="center"><img src="docs/screenshots/mobile.png" alt="On a phone" width="260"></p>
 
-<sub>Screenshots from VirtoMir 0.3.0 on a test host (Ubuntu 26.04, libvirt 12) with real, small machines; the host name is shown as hv-01. Dark, light and "match system" themes; works on phones too.</sub>
+<sub>Screenshots from VirtoMir 0.4.0 on a test host (Ubuntu 26.04, libvirt 12) with real, small machines; the host name is shown as hv-01. Dark, light and "match system" themes; works on phones too.</sub>
 
 ## Install
 
 ### Debian / Ubuntu package
 
 ```sh
-sudo apt install ./virtomir_0.3.0_amd64.deb   # from the latest release; pulls libvirt and QEMU if missing
+sudo apt install ./virtomir_0.4.0_amd64.deb   # from the latest release; pulls libvirt and QEMU if missing
 ```
 
 It starts `virtomird` right away on port 8420 (self-signed HTTPS). Sign in with a Linux account in the `libvirt` group (admins), `virtomir-operator` or `virtomir-viewer`. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Later versions install from the UI (Account → Updates). Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).

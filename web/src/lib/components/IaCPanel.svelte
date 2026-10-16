@@ -145,7 +145,7 @@ EOF`
   .formats button {
     padding: 3px 9px;
     border: 0;
-    border-radius: 4px;
+    border-radius: 0;
     background: none;
     color: var(--text-2);
     font-size: 12px;
