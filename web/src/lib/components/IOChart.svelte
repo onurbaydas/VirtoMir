@@ -165,7 +165,7 @@
     background: var(--surface);
     place-items: center;
     border: 1px dashed var(--border);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     color: var(--text-3);
     font-size: 12.5px;
   }

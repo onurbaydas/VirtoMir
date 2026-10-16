@@ -104,7 +104,7 @@
 
 <style>
   .t { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .t th { text-align: left; font: 600 11px var(--font-mono); text-transform: uppercase; color: var(--text-2); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .t th { text-align: left; font: 500 12px var(--font-sans); color: var(--text-2); padding: 6px 8px; border-bottom: 1px solid var(--border); }
   .t td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
   h3 { font-size: 13px; margin: 14px 0 4px; }
   .muted { color: var(--text-2); }

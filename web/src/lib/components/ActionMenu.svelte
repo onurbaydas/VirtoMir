@@ -113,7 +113,7 @@
     width: 32px;
     height: 32px;
     border: 1px solid transparent;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-2);
     cursor: pointer;
@@ -137,7 +137,7 @@
     padding: 3px;
     background: var(--surface);
     border: var(--frame) solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     box-shadow:
       var(--bevel),
       var(--shadow-pop);
@@ -157,7 +157,7 @@
     height: 34px;
     padding: 0 10px;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text);
     font-size: 13.5px;

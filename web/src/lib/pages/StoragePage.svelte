@@ -521,7 +521,7 @@
     display: flex;
     gap: 4px;
     padding: 3px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
     box-shadow: var(--bevel-in);
@@ -530,7 +530,7 @@
     flex: 1;
     height: 32px;
     border: none;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: none;
     color: var(--text-2);
     font: inherit;
@@ -576,7 +576,7 @@
     padding: 14px 16px;
     min-height: 104px;
     border: var(--frame) solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface);
     text-align: left;
     cursor: pointer;
@@ -626,7 +626,7 @@
   .bar {
     display: block;
     height: 5px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     overflow: hidden;
   }
@@ -680,7 +680,7 @@
     padding: 10px 12px;
     margin-bottom: 10px;
     border: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--bg-elev);
     font-size: 13px;
   }
@@ -703,8 +703,6 @@
     color: var(--text-3);
     font-size: 11.5px;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
   }
   .name {
     display: flex;

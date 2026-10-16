@@ -67,7 +67,7 @@
   .gpu { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
   header { display: flex; flex-direction: column; }
   .m { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; font-size: 12px; }
-  .lbl { font: 600 11px var(--font-mono); text-transform: uppercase; color: var(--text-2); }
+  .lbl { font: 500 12px var(--font-sans); color: var(--text-2); }
   .bar { height: 6px; background: var(--bg-elev); }
   .bar i { display: block; height: 100%; background: var(--accent); }
   .used { color: var(--accent-2); margin: 0; font-size: 13px; }

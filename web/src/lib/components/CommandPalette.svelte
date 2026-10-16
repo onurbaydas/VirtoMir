@@ -54,7 +54,7 @@
   interface PaletteItem {
     id: string
     title: string
-    category: 'VM' | 'PAGE' | 'COMMAND'
+    category: 'VM' | 'Page' | 'Command'
     detail: string
     badge?: string
     run: () => void | Promise<void>
@@ -84,7 +84,7 @@
       list.push({
         id: `page-${p.path}`,
         title: p.title,
-        category: 'PAGE',
+        category: 'Page',
         detail: p.detail,
         run: () => {
           router.navigate(p.path)
@@ -101,7 +101,7 @@
         title: d.name,
         category: 'VM',
         detail: `State: ${d.state} · ${d.vcpus} vCPU · ${Math.round(d.memoryKiB / 1024)} MB`,
-        badge: active ? 'ONLINE' : 'STOPPED',
+        badge: active ? 'Running' : 'Stopped',
         run: () => {
           router.navigate(machineHref(d.uuid))
           close()
@@ -113,9 +113,9 @@
         list.push({
           id: `cmd-start-${d.uuid}`,
           title: `> start ${d.name}`,
-          category: 'COMMAND',
+          category: 'Command',
           detail: `Power on virtual machine ${d.name}`,
-          badge: 'ACTION',
+          badge: 'Action',
           run: () => {
             close()
             live.act(d, 'start')
@@ -125,9 +125,9 @@
         list.push({
           id: `cmd-reboot-${d.uuid}`,
           title: `> reboot ${d.name}`,
-          category: 'COMMAND',
+          category: 'Command',
           detail: `ACPI reboot signal to ${d.name}`,
-          badge: 'ACTION',
+          badge: 'Action',
           run: () => {
             close()
             live.act(d, 'reboot')
@@ -136,9 +136,9 @@
         list.push({
           id: `cmd-stop-${d.uuid}`,
           title: `> shutdown ${d.name}`,
-          category: 'COMMAND',
+          category: 'Command',
           detail: `Clean ACPI shutdown of ${d.name}`,
-          badge: 'ACTION',
+          badge: 'Action',
           run: () => {
             close()
             live.act(d, 'shutdown')
@@ -151,9 +151,9 @@
     list.push({
       id: 'theme-dark',
       title: '> theme dark',
-      category: 'COMMAND',
+      category: 'Command',
       detail: 'Switch to Matte Obsidian dark theme',
-      badge: 'THEME',
+      badge: 'Theme',
       run: () => {
         theme.set('dark')
         close()
@@ -162,9 +162,9 @@
     list.push({
       id: 'theme-light',
       title: '> theme light',
-      category: 'COMMAND',
+      category: 'Command',
       detail: 'Switch to Warm Limestone light theme',
-      badge: 'THEME',
+      badge: 'Theme',
       run: () => {
         theme.set('light')
         close()
@@ -219,7 +219,7 @@
           bind:this={inputEl}
           bind:value={query}
           onkeydown={onKey}
-          placeholder="SEARCH RESOURCES OR TYPE COMMAND (> start, > shutdown, > theme)..."
+          placeholder="Search machines and pages, or type > start, > shutdown, > theme…"
           spellcheck="false"
           autocomplete="off"
         />
@@ -243,7 +243,7 @@
               <span class="detail">{item.detail}</span>
             </div>
             {#if item.badge}
-              <span class="tag-badge" class:online={item.badge === 'ONLINE'} class:action={item.badge === 'ACTION'}>
+              <span class="tag-badge" class:online={item.badge === 'Running'} class:action={item.badge === 'Action'}>
                 [{item.badge}]
               </span>
             {/if}
@@ -302,7 +302,7 @@
     border-bottom: 1px solid var(--border);
   }
   .prompt {
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-weight: 700;
     font-size: 14px;
     color: var(--accent);
@@ -314,7 +314,7 @@
     border: none;
     outline: none;
     color: var(--text);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: 13px;
   }
   input::placeholder {
@@ -327,7 +327,7 @@
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--text-3);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: 10px;
     cursor: pointer;
   }
@@ -356,7 +356,7 @@
     border: 1px solid var(--border);
     background: var(--bg-elev);
     color: var(--text-3);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: 9.5px;
     font-weight: 700;
   }
@@ -367,7 +367,7 @@
     flex-direction: column;
   }
   .title {
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-weight: 600;
     font-size: 13px;
     color: var(--text);
@@ -380,7 +380,7 @@
     text-overflow: ellipsis;
   }
   .tag-badge {
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: 10px;
     font-weight: 700;
     color: var(--text-3);
@@ -395,7 +395,7 @@
     padding: 24px;
     text-align: center;
     color: var(--text-3);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: 12px;
   }
   .footer {
@@ -405,7 +405,7 @@
     padding: 6px 14px;
     background: var(--bg-elev);
     border-top: 1px solid var(--border);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: 10.5px;
     color: var(--text-3);
   }

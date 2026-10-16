@@ -94,7 +94,7 @@
   <ConsolePage uuid={route.uuid} />
 {:else}
   <div class="app">
-    <Sidebar {version} />
+    <Sidebar />
 
     <div class="deck-workspace">
       <GlobalTopBar />

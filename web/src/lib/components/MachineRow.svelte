@@ -90,7 +90,7 @@
     place-items: center;
     width: 34px;
     height: 34px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-3);
     transition:

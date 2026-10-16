@@ -22,13 +22,13 @@
       <Boxes size={22} />
       <h1>Virtual Machines</h1>
     </div>
-    <div class="chips mono">
+    <div class="chips">
       <span class="chip on" title="Running machines">● {running.length} RUNNING</span>
       {#if paused.length}
         <span class="chip paused" title="Paused machines">⏸ {paused.length} PAUSED</span>
       {/if}
       <span class="chip" title="Stopped machines">○ {stopped.length} STOPPED</span>
-      <span class="chip mono" title="Total defined guests">{domains.length} TOTAL</span>
+      <span class="chip" title="Total defined guests">{domains.length} TOTAL</span>
     </div>
   </div>
   <div class="head-right">

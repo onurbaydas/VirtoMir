@@ -143,7 +143,7 @@
     --cols: minmax(200px, 1.6fr) 150px 80px 120px minmax(140px, 1.2fr) 190px;
     background: var(--surface);
     border: var(--frame) solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     box-shadow:
       var(--bevel),
       var(--shadow-hard);
@@ -165,7 +165,7 @@
     gap: 2px;
     padding: 3px;
     background: var(--surface-2);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
   }
   .tabs button {
     display: flex;
@@ -174,7 +174,7 @@
     height: 28px;
     padding: 0 11px;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-2);
     font-size: 13px;
@@ -205,7 +205,7 @@
     height: 34px;
     padding: 0 11px;
     border: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--bg-elev);
     color: var(--text-3);
     transition: border-color var(--dur-fast);
@@ -264,8 +264,6 @@
     color: var(--text-3);
     font-size: 11.5px;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
   }
   .sr {
     position: absolute;
@@ -283,7 +281,7 @@
   }
   .sk {
     height: 14px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--skeleton);
     animation: shimmer 1.4s ease-in-out infinite;
   }

@@ -89,8 +89,10 @@ func TestResourcePoolLimitsAreEnforced(t *testing.T) {
 		t.Fatalf("list: %s", rec.Body)
 	}
 	u := list.Pools[0].Usage
-	if u.VCPUs != 4 || u.MemoryMiB != 8192 || u.StorageBytes["default"] != 40<<30 || len(list.Pools[0].Machines) != 2 {
-		t.Errorf("usage = %+v machines %v (the new machine is in the pool but not on this fake host)", u, list.Pools[0].Machines)
+	// The new machine does not exist on this fake host, so listing drops it from the pool
+	// (as for a machine deleted with virsh).
+	if u.VCPUs != 4 || u.MemoryMiB != 8192 || u.StorageBytes["default"] != 40<<30 || len(list.Pools[0].Machines) != 1 {
+		t.Errorf("usage = %+v machines %v", u, list.Pools[0].Machines)
 	}
 }
 

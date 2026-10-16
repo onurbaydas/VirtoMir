@@ -8,8 +8,7 @@
   import { router } from '../router.svelte'
   import { session } from '../session.svelte'
   import { toasts } from '../toast.svelte'
-  import ChevronUp from '@lucide/svelte/icons/chevron-up'
-  import ChevronDown from '@lucide/svelte/icons/chevron-down'
+  import X from '@lucide/svelte/icons/x'
 
   type DrawerTab = 'tasks' | 'events' | 'alerts' | 'inspector'
 
@@ -37,10 +36,13 @@
         toggle()
       }
     }
+    const onToggle = () => toggle()
     window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('toggle-drawer', onToggle)
     return () => {
       clearInterval(timer)
       window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('toggle-drawer', onToggle)
     }
   })
 
@@ -69,262 +71,232 @@
   }
 </script>
 
-<footer class="bottom-drawer" class:expanded={isOpen}>
-  <div class="drawer-bar">
-    <div class="tabs">
-      <button class="tab-btn" class:active={activeTab === 'tasks'} onclick={() => show('tasks')}>[TASKS{running ? ` (${running} RUNNING)` : ''}]</button>
-      {#if session.can('admin')}<button class="tab-btn" class:active={activeTab === 'events'} onclick={() => show('events')}>[RECENT CHANGES]</button>{/if}
-      <button class="tab-btn" class:active={activeTab === 'alerts'} onclick={() => show('alerts')}>[ALERTS ({alerts.open})]</button>
-      <button class="tab-btn" class:active={activeTab === 'inspector'} onclick={() => show('inspector')}>[API CALLS]</button>
-    </div>
-    <div class="controls">
-      <span class="shortcut-hint">` (BACKTICK)</span>
-      <button class="toggle-btn" onclick={toggle} title="Toggle Drawer">
-        {#if isOpen}<ChevronDown size={14} /><span>COLLAPSE</span>{:else}<ChevronUp size={14} /><span>EXPAND</span>{/if}
-      </button>
-    </div>
-  </div>
+{#if isOpen}
+  <section class="drawer" aria-label="Tasks and activity">
+    <header>
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected={activeTab === 'tasks'} class:on={activeTab === 'tasks'} onclick={() => show('tasks')}>Tasks{running ? ` · ${running} running` : ''}</button>
+        {#if session.can('admin')}<button role="tab" aria-selected={activeTab === 'events'} class:on={activeTab === 'events'} onclick={() => show('events')}>Recent changes</button>{/if}
+        <button role="tab" aria-selected={activeTab === 'alerts'} class:on={activeTab === 'alerts'} onclick={() => show('alerts')}>Alerts{alerts.open ? ` · ${alerts.open}` : ''}</button>
+        <button role="tab" aria-selected={activeTab === 'inspector'} class:on={activeTab === 'inspector'} onclick={() => show('inspector')}>API calls</button>
+      </div>
+      <span class="hint">Press ` to toggle</span>
+      <button class="close" onclick={toggle} aria-label="Close"><X size={16} /></button>
+    </header>
 
-  {#if isOpen}
-    <div class="drawer-body">
+    <div class="body">
       {#if activeTab === 'tasks'}
-        <div class="pane">
-          {#if jobs.length === 0}
-            <div class="empty-state"><span>NO BACKGROUND TASKS SINCE VIRTOMIRD STARTED</span></div>
-          {:else}
-            <table class="brutal-table">
-              <thead><tr><th>STARTED</th><th>KIND</th><th>TASK</th><th>DETAIL</th><th>STATUS</th></tr></thead>
-              <tbody>
-                {#each jobs.slice().sort((a, b) => Date.parse(b.started) - Date.parse(a.started)) as j (j.id)}
-                  <tr>
-                    <td class="mono text-muted">{new Date(j.started).toLocaleTimeString()}</td>
-                    <td class="mono font-bold text-accent">{j.kind}</td>
-                    <td>{j.title}</td>
-                    <td class="mono text-muted">{j.state === 'running' ? j.message || 'Working…' : j.state === 'failed' ? j.message : (j.result ?? '')}</td>
-                    <td class="mono"><span class="status-pill" class:ok={j.state === 'succeeded'} class:warn={j.state !== 'succeeded'}>[{j.state.toUpperCase()}]</span></td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          {/if}
-        </div>
-      {:else if activeTab === 'events'}
-        <div class="pane">
-          {#if activities.length === 0}
-            <div class="empty-state"><span>NO RECENT CHANGES</span></div>
-          {:else}
-            <table class="brutal-table">
-              <thead><tr><th>TIME</th><th>USER</th><th>FROM</th><th>METHOD</th><th>PATH</th><th>STATUS</th></tr></thead>
-              <tbody>
-                {#each activities as a, idx (idx)}
-                  <tr>
-                    <td class="mono text-muted">{new Date(a.time).toLocaleTimeString()}</td>
-                    <td class="mono font-bold">{a.user}</td>
-                    <td class="mono text-muted">{a.remote ?? ''}</td>
-                    <td class="mono font-bold">{a.method}</td>
-                    <td class="mono">{a.path}{#if a.error}<div class="text-muted">{a.error}</div>{/if}</td>
-                    <td class="mono"><span class="status-pill" class:ok={a.status < 300} class:warn={a.status >= 400}>[{a.status}]</span></td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-            <a class="more mono" href="/activity" onclick={router.link}>ALL ACTIVITY →</a>
-          {/if}
-        </div>
-      {:else if activeTab === 'alerts'}
-        <div class="pane">
-          {#if alerts.active.length === 0}
-            <div class="empty-state ok"><span>● NO ACTIVE ALERTS</span></div>
-          {:else}
-            <div class="alerts-list">
-              {#each alerts.active as a (a.key)}
-                <div class="alert-item" class:warn={a.severity === 'warning'} class:crit={a.severity === 'critical'}>
-                  <span class="mono font-bold">[{a.severity.toUpperCase()}]</span>
-                  <span class="text">{a.hostName ? `${a.hostName}: ` : ''}{a.subject} — {a.message}</span>
-                  {#if a.ackedBy}<span class="mono text-muted">acked by {a.ackedBy}</span>
-                  {:else if session.can('operator')}<button class="action-btn" onclick={() => ack(a.id, a.hostId)}>[ACKNOWLEDGE]</button>{/if}
-                </div>
+        {#if jobs.length === 0}
+          <p class="empty">No background tasks since VirtoMir started.</p>
+        {:else}
+          <table>
+            <thead><tr><th>Started</th><th>Task</th><th>Detail</th><th>Status</th></tr></thead>
+            <tbody>
+              {#each jobs.slice().sort((a, b) => Date.parse(b.started) - Date.parse(a.started)) as j (j.id)}
+                <tr>
+                  <td class="muted">{new Date(j.started).toLocaleTimeString()}</td>
+                  <td>{j.title}</td>
+                  <td class="muted">{j.state === 'running' ? j.message || 'Working…' : j.state === 'failed' ? j.message : (j.result ?? '')}</td>
+                  <td><span class="st {j.state}">{j.state}</span></td>
+                </tr>
               {/each}
+            </tbody>
+          </table>
+        {/if}
+      {:else if activeTab === 'events'}
+        {#if activities.length === 0}
+          <p class="empty">No recent changes.</p>
+        {:else}
+          <table>
+            <thead><tr><th>Time</th><th>User</th><th>Change</th><th>Status</th></tr></thead>
+            <tbody>
+              {#each activities as a, idx (idx)}
+                <tr>
+                  <td class="muted">{new Date(a.time).toLocaleTimeString()}</td>
+                  <td>{a.user}</td>
+                  <td class="mono">{a.method} {a.path}{#if a.error}<div class="muted">{a.error}</div>{/if}</td>
+                  <td><span class="st" class:succeeded={a.status < 300} class:failed={a.status >= 400}>{a.status}</span></td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+          <a class="more" href="/activity" onclick={router.link}>All activity →</a>
+        {/if}
+      {:else if activeTab === 'alerts'}
+        {#if alerts.active.length === 0}
+          <p class="empty">No active alerts.</p>
+        {:else}
+          {#each alerts.active as a (a.key)}
+            <div class="alert" class:crit={a.severity === 'critical'}>
+              <span class="sev">{a.severity}</span>
+              <span class="text">{a.hostName ? `${a.hostName}: ` : ''}{a.subject} — {a.message}</span>
+              {#if a.ackedBy}<span class="muted">acknowledged by {a.ackedBy}</span>
+              {:else if session.can('operator')}<button class="ui-btn sm" onclick={() => ack(a.id, a.hostId)}>Acknowledge</button>{/if}
             </div>
-          {/if}
-        </div>
+          {/each}
+        {/if}
       {:else}
-        <div class="pane">
-          {#if apiLog.calls.length === 0}
-            <div class="empty-state"><span>NO API CALLS RECORDED YET (THE LIVE STREAM AND POLLING ARE NOT LISTED)</span></div>
-          {:else}
-            <table class="brutal-table">
-              <thead><tr><th>TIME</th><th>CALL</th><th>STATUS</th><th>MS</th><th>AS CURL</th></tr></thead>
-              <tbody>
-                {#each apiLog.calls as c, idx (idx)}
-                  <tr>
-                    <td class="mono text-muted">{new Date(c.time).toLocaleTimeString()}</td>
-                    <td class="mono font-bold text-accent">{c.method} {c.path}</td>
-                    <td class="mono"><span class="status-pill" class:ok={c.status > 0 && c.status < 300} class:warn={c.status === 0 || c.status >= 400}>[{c.status || 'NET'}]</span></td>
-                    <td class="mono text-muted">{c.ms}</td>
-                    <td><button class="action-btn" onclick={() => copy(asCurl(c))}>[COPY]</button></td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          {/if}
-        </div>
+        {#if apiLog.calls.length === 0}
+          <p class="empty">No API calls recorded yet (the live stream and polling are not listed).</p>
+        {:else}
+          <table>
+            <thead><tr><th>Time</th><th>Call</th><th>Status</th><th>ms</th><th></th></tr></thead>
+            <tbody>
+              {#each apiLog.calls as c, idx (idx)}
+                <tr>
+                  <td class="muted">{new Date(c.time).toLocaleTimeString()}</td>
+                  <td class="mono">{c.method} {c.path}</td>
+                  <td><span class="st" class:succeeded={c.status > 0 && c.status < 300} class:failed={c.status === 0 || c.status >= 400}>{c.status || 'network'}</span></td>
+                  <td class="muted">{c.ms}</td>
+                  <td><button class="ui-btn sm ghost" onclick={() => copy(asCurl(c))}>Copy as curl</button></td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {/if}
       {/if}
     </div>
-  {/if}
-</footer>
+  </section>
+{/if}
 
 <style>
-  .bottom-drawer {
+  .drawer {
     position: fixed;
-    bottom: 0;
-    left: var(--sidebar-w);
-    right: 0;
-    z-index: 1000;
-    background: var(--surface);
-    border-top: var(--frame) solid var(--border-strong);
-    box-shadow: 0 -2px 0 var(--border);
-    transition: height 120ms var(--ease-out);
+    right: 16px;
+    bottom: 16px;
+    left: calc(var(--sidebar-w) + 16px);
+    z-index: 30;
     display: flex;
     flex-direction: column;
+    max-height: 46vh;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow);
   }
-  @media (max-width: 900px) {
-    .bottom-drawer {
-      left: 0;
-    }
-  }
-  .drawer-bar {
-    height: 34px;
-    background: var(--bg-elev);
-    border-bottom: 1px solid var(--border);
+  header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0 10px;
+    gap: 12px;
+    padding: 8px 10px 8px 14px;
+    border-bottom: 1px solid var(--border);
   }
   .tabs {
     display: flex;
+    flex: 1;
     gap: 2px;
-    height: 100%;
-    align-items: center;
   }
-  .tab-btn {
-    height: 26px;
-    padding: 0 10px;
-    border: 1px solid var(--border);
-    background: var(--surface);
+  .tabs button {
+    padding: 5px 10px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
     color: var(--text-2);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 13px;
     cursor: pointer;
   }
-  .tab-btn.active {
-    background: var(--accent);
-    color: var(--accent-contrast);
-    border-color: var(--accent);
-  }
-  .controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-  }
-  .shortcut-hint {
-    color: var(--text-3);
-  }
-  .toggle-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    height: 24px;
-    padding: 0 8px;
-    border: 1px solid var(--border);
-    background: var(--surface);
+  .tabs button.on {
+    background: var(--surface-hover);
     color: var(--text);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 700;
+    font-weight: 500;
+  }
+  .hint {
+    color: var(--text-3);
+    font-size: 12px;
+  }
+  .close {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-2);
     cursor: pointer;
   }
-  .toggle-btn:hover {
-    border-color: var(--accent);
+  .close:hover {
+    background: var(--surface-hover);
   }
-  .drawer-body {
-    height: 220px;
-    overflow-y: auto;
-    background: var(--bg);
+  .body {
+    overflow: auto;
+    padding: 6px 14px 14px;
   }
-  .pane {
-    padding: 10px;
-    height: 100%;
-    overflow-y: auto;
-  }
-  .empty-state {
-    padding: 24px;
-    text-align: center;
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    color: var(--text-3);
-  }
-  .empty-state.ok {
-    color: var(--ok);
-  }
-  .brutal-table {
+  table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 11.5px;
+    font-size: 13px;
   }
-  .brutal-table th {
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    background: var(--surface-2);
-    color: var(--text-2);
-    font-family: var(--font-display);
-    font-size: 11px;
-    font-weight: 700;
+  th {
+    padding: 8px 8px 6px;
+    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 500;
     text-align: left;
-    letter-spacing: 0.05em;
   }
-  .brutal-table td {
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
+  td {
+    padding: 7px 8px;
+    border-top: 1px solid var(--border);
+    vertical-align: top;
   }
-  .text-accent {
-    color: var(--accent);
-  }
-  .text-muted {
+  .muted {
     color: var(--text-3);
   }
-  .status-pill {
-    padding: 1px 6px;
-    border: 1px solid var(--border);
-    font-size: 10px;
-    font-weight: 700;
+  .st {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: 12px;
   }
-  .status-pill.ok {
-    border-color: var(--ok);
+  .st.succeeded {
+    background: color-mix(in srgb, var(--ok) 14%, transparent);
     color: var(--ok);
   }
-  .status-pill.warn {
-    border-color: var(--warn);
-    color: var(--warn);
+  .st.failed {
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
+    color: var(--danger);
   }
-  .action-btn {
-    padding: 3px 8px;
-    border: 1px solid var(--border);
-    background: var(--surface-2);
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-  .action-btn:hover {
-    border-color: var(--accent);
+  .st.running {
+    background: var(--accent-soft);
     color: var(--accent);
+  }
+  .empty {
+    margin: 14px 0;
+    color: var(--text-3);
+  }
+  .more {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 13px;
+  }
+  .alert {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 0;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .sev {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--warn) 14%, transparent);
+    color: var(--warn);
+    font-size: 12px;
+  }
+  .alert.crit .sev {
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
+    color: var(--danger);
+  }
+  .text {
+    flex: 1;
+  }
+  @media (max-width: 900px) {
+    .drawer {
+      left: 8px;
+      right: 8px;
+      bottom: 8px;
+    }
   }
 </style>

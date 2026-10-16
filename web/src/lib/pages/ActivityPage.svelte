@@ -165,7 +165,7 @@
   .host-chip {
     margin-right: 4px;
     padding: 1px 8px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11px;
@@ -192,8 +192,6 @@
     color: var(--text-3);
     font-size: 12px;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
   }
   .list {
     margin: 0;
@@ -243,7 +241,7 @@
     gap: 4px;
     margin-left: 6px;
     padding: 0 7px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-3);
     font-size: 11.5px;

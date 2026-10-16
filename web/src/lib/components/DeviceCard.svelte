@@ -138,7 +138,7 @@
   .device {
     background: var(--surface);
     border: var(--frame) solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     overflow: hidden;
     box-shadow:
       var(--bevel),
@@ -165,7 +165,7 @@
     place-items: center;
     width: 32px;
     height: 32px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-2);
   }
@@ -184,7 +184,7 @@
   }
   .badge {
     padding: 1px 7px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--accent-soft);
     color: var(--accent);
     font-size: 11px;
@@ -214,7 +214,7 @@
   .bar {
     height: 3px;
     margin: -4px 14px 10px 58px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     overflow: hidden;
   }
@@ -231,7 +231,7 @@
   }
   .addr {
     padding: 2px 8px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text);
     font-size: 12px;

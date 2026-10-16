@@ -129,6 +129,14 @@ func (s *Server) listRespools(w http.ResponseWriter, _ *http.Request) {
 		s.writeError(w, err)
 		return
 	}
+	// Machines deleted outside VirtoMir (virsh) leave their pool here.
+	for _, p := range s.respools.List() {
+		for _, m := range p.Machines {
+			if _, ok := uses[m]; !ok {
+				s.respools.Forget(m)
+			}
+		}
+	}
 	usage := s.usagesWithout(uses, "")
 	pools := s.respools.List()
 	out := make([]PoolView, len(pools))

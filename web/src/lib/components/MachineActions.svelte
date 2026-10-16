@@ -48,8 +48,6 @@
     font-family: var(--font-display);
     font-size: 12.5px;
     font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
     white-space: nowrap;
     cursor: pointer;
     transition: background var(--dur-fast);

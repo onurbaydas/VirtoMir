@@ -232,7 +232,7 @@
     place-items: center;
     width: 44px;
     height: 44px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--accent-soft);
     color: var(--accent);
   }
@@ -288,8 +288,6 @@
     color: var(--text-3);
     font-size: 11.5px;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
   }
   .tname {
     display: flex;
@@ -299,7 +297,7 @@
   }
   .badge {
     padding: 1px 8px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11.5px;
@@ -351,7 +349,7 @@
     gap: 2px;
     padding: 10px 12px;
     border: 1px solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     cursor: pointer;
   }
   .role-opt input {
@@ -385,7 +383,7 @@
     width: 100%;
     padding: 10px 12px;
     border: 1px dashed var(--accent);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--bg);
     font-size: 12.5px;
     overflow-wrap: anywhere;
@@ -395,7 +393,7 @@
     width: 100%;
     margin: 0;
     padding: 8px 10px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11.5px;

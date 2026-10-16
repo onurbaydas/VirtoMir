@@ -180,7 +180,7 @@
   .dot {
     width: 8px;
     height: 8px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--danger);
   }
   .dot.ok {
@@ -204,7 +204,7 @@
   }
   .bar {
     height: 6px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     overflow: hidden;
   }
@@ -227,7 +227,7 @@
   }
   .pill {
     padding: 1px 8px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11px;
@@ -290,8 +290,6 @@
     color: var(--text-3);
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
   }
   td {
     padding: 10px 16px;

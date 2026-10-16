@@ -575,7 +575,7 @@
     display: flex;
     gap: 4px;
     padding: 3px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
     box-shadow: var(--bevel-in);
@@ -584,7 +584,7 @@
     flex: 1;
     height: 32px;
     border: none;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: none;
     color: var(--text-2);
     font: inherit;
@@ -609,7 +609,7 @@
     gap: 10px;
     padding: 8px 10px;
     border: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     cursor: pointer;
   }
   .hd.off {
@@ -652,7 +652,7 @@
     display: grid;
     gap: 4px;
     padding: 10px 12px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 12.5px;
@@ -685,7 +685,7 @@
     gap: 12px;
     padding: 6px 10px;
     border: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     font-size: 12.5px;
     transition:
       border-color var(--dur-fast),
@@ -718,7 +718,7 @@
     display: flex;
     gap: 2px;
     padding: 3px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
     box-shadow: var(--bevel-in);
@@ -728,7 +728,7 @@
     display: grid;
     place-items: center;
     height: 30px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     color: var(--text-2);
     font-size: 13px;
     font-weight: 500;

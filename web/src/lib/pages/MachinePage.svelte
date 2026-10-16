@@ -646,11 +646,10 @@
   }
   .tabs {
     display: flex;
-    margin-bottom: 18px;
+    gap: 2px;
+    margin-bottom: 22px;
     overflow-x: auto;
-    border: var(--frame) solid var(--border-strong);
-    background: var(--bg-elev);
-    box-shadow: var(--bevel-in);
+    border-bottom: 1px solid var(--border);
   }
   .tabs button {
     flex: none;
@@ -658,36 +657,31 @@
     align-items: center;
     gap: 7px;
     height: 38px;
-    padding: 0 16px;
+    margin-bottom: -1px;
+    padding: 0 12px;
     border: 0;
-    border-right: 1px solid var(--border-strong);
-    background: var(--metal);
-    box-shadow: var(--bevel);
+    border-bottom: 2px solid transparent;
+    background: none;
     color: var(--text-2);
-    font-family: var(--font-display);
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    font-size: 13.5px;
+    font-weight: 500;
     white-space: nowrap;
     cursor: pointer;
   }
   .tabs button:hover {
-    background: var(--metal-hover);
     color: var(--text);
   }
   .tabs button.on {
-    background: var(--metal-accent);
-    color: var(--accent-contrast);
+    border-bottom-color: var(--text);
+    color: var(--text);
   }
   .count {
-    padding: 0 5px;
-    border: 1px solid currentColor;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0;
-    opacity: 0.85;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--surface-hover);
+    color: var(--text-2);
+    font-size: 11.5px;
+    font-weight: 500;
   }
   .grid {
     display: grid;
@@ -703,7 +697,7 @@
     padding: 16px 18px 12px;
     background: var(--surface);
     border: var(--frame) solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     box-shadow:
       var(--bevel),
       var(--shadow-hard);
@@ -718,8 +712,6 @@
     background: var(--metal-head);
     font-size: 14px;
     font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
   }
   .panel h2::before,
   .group h2::before {
@@ -739,8 +731,6 @@
     border-bottom: var(--frame) solid var(--border-strong);
     font-size: 14px;
     font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
   }
   .sub-block {
     margin-top: 10px;
@@ -752,8 +742,6 @@
     color: var(--text-2);
     font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
   }
   .boot {
     margin: 0 0 4px;
@@ -821,8 +809,6 @@
     font-family: var(--font-display);
     font-size: 12.5px;
     font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
     cursor: pointer;
   }
   .more:hover {
@@ -865,7 +851,7 @@
   .sk {
     display: block;
     height: 14px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--skeleton);
     animation: shimmer 1.4s ease-in-out infinite;
   }
@@ -877,7 +863,7 @@
   }
   .sk.card {
     height: 128px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
   }
   @keyframes shimmer {
     50% {

@@ -36,7 +36,7 @@
     height: 26px;
     padding: 0 10px;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-2);
     font-family: var(--font-mono);

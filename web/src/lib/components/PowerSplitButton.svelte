@@ -94,13 +94,13 @@
     >
       {#if active}
         <Power size={size === 'lg' ? 15 : 13} />
-        <span>ACPI SHUTDOWN</span>
+        <span>Shut down</span>
       {:else if paused}
         <Play size={size === 'lg' ? 15 : 13} />
-        <span>RESUME</span>
+        <span>Resume</span>
       {:else}
         <Play size={size === 'lg' ? 15 : 13} />
-        <span>START MACHINE</span>
+        <span>Start</span>
       {/if}
     </button>
 
@@ -121,16 +121,16 @@
 
   <!-- Neo-Brutalist Dropdown Menu -->
   {#if open}
-    <div class="power-dropdown mono">
+    <div class="power-dropdown">
       <div class="dropdown-header">
-        <span>POWER ENGINE CONTROL</span>
+        <span>Power</span>
       </div>
 
       {#if active}
         <button class="menu-item" onclick={() => handleAction('shutdown')}>
           <Power size={13} />
           <div class="item-text">
-            <strong>ACPI SHUTDOWN</strong>
+            <strong>Shut down</strong>
             <span class="sub">Graceful in-guest OS signal</span>
           </div>
         </button>
@@ -138,7 +138,7 @@
         <button class="menu-item" onclick={() => handleAction('reboot')}>
           <RotateCw size={13} />
           <div class="item-text">
-            <strong>SOFT REBOOT</strong>
+            <strong>Reboot</strong>
             <span class="sub">Standard OS restart</span>
           </div>
         </button>
@@ -146,7 +146,7 @@
         <button class="menu-item" onclick={() => handleAction('pause')}>
           <Pause size={13} />
           <div class="item-text">
-            <strong>PAUSE</strong>
+            <strong>Pause</strong>
             <span class="sub">Freeze the vCPUs; memory stays in use</span>
           </div>
         </button>
@@ -154,7 +154,7 @@
         <button class="menu-item" onclick={() => handleAction('hibernate')}>
           <HardDriveDownload size={13} />
           <div class="item-text">
-            <strong>SAVE TO DISK</strong>
+            <strong>Save to disk</strong>
             <span class="sub">Write memory to disk and stop; next start resumes</span>
           </div>
         </button>
@@ -164,7 +164,7 @@
         <button class="menu-item warn-item" onclick={() => handleAction('hard-reset')}>
           <RotateCw size={13} />
           <div class="item-text">
-            <strong>HARD RESET (COLD)</strong>
+            <strong>Hard reset</strong>
             <span class="sub">Like the reset button: no shutdown</span>
           </div>
         </button>
@@ -172,7 +172,7 @@
         <button class="menu-item danger-item" onclick={() => handleAction('force-off')}>
           <Zap size={13} />
           <div class="item-text">
-            <strong>FORCE STOP / PULL PLUG</strong>
+            <strong>Force off</strong>
             <span class="sub">Like pulling the plug: unsaved data is lost</span>
           </div>
         </button>
@@ -180,7 +180,7 @@
         <button class="menu-item" onclick={handlePrimary}>
           <Play size={13} />
           <div class="item-text">
-            <strong>{paused ? 'RESUME' : 'START'}</strong>
+            <strong>{paused ? 'Resume' : 'Start'}</strong>
             <span class="sub">{paused ? 'Continue where it was frozen' : 'Boot (or resume a machine saved to disk)'}</span>
           </div>
         </button>
@@ -221,7 +221,6 @@
     font-family: var(--font-display);
     font-size: 12.5px;
     font-weight: 700;
-    letter-spacing: 0.06em;
     cursor: pointer;
   }
   .lg .main-act-btn {
@@ -293,7 +292,6 @@
     font-weight: 700;
     color: var(--text-3);
     border-bottom: 1px solid var(--border);
-    letter-spacing: 0.08em;
   }
   .menu-item {
     display: flex;
@@ -319,7 +317,6 @@
   .item-text strong {
     font-size: 11.5px;
     font-weight: 700;
-    letter-spacing: 0.04em;
   }
   .item-text .sub {
     font-size: 10px;

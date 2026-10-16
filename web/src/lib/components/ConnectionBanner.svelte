@@ -57,7 +57,7 @@
     padding: 11px 16px;
     margin-bottom: 20px;
     border: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: color-mix(in srgb, var(--c) 10%, var(--surface));
     color: var(--c);
     animation: slide var(--dur) var(--ease-out);
@@ -85,7 +85,7 @@
     height: 14px;
     border: 2px solid currentColor;
     border-right-color: transparent;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin {

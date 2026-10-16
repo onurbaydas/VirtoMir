@@ -163,7 +163,7 @@
       {#if parseError}{parseError}{:else if dirty}Unsaved changes · Ctrl+S to save{:else}No changes{/if}
     </span>
     <button class="ui-btn ghost mono" class:active={showDiff} onclick={() => (showDiff = !showDiff)} disabled={!dirty} title="Toggle visual diff">
-      <Split size={14} /> {showDiff ? 'EDIT CODE' : 'SHOW DIFF'}
+      <Split size={14} /> {showDiff ? 'Edit' : 'Show changes'}
     </button>
     <button class="ui-btn ghost" onclick={() => (text = original ?? '')} disabled={!dirty || saving}><Undo2 size={14} /> Reset</button>
     <button class="ui-btn ghost" onclick={cancel} disabled={saving}>Cancel</button>

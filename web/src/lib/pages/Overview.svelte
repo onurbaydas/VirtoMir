@@ -57,7 +57,6 @@
     {#if live.streamOpen && snap?.connected}
       <span class="live" title="Updated every second"><span class="live-dot"></span>Live</span>
     {/if}
-    {#if session.canCreate}<a class="ui-btn primary" href="/machines/new" onclick={router.link}><Plus size={15} /> New machine</a>{/if}
   </div>
 </header>
 
@@ -124,22 +123,6 @@
   </section>
 {/if}
 
-<div class="workloads-banner ui-panel">
-  <div class="wb-left">
-    <Boxes size={22} />
-    <div>
-      <div class="wb-title mono">GUEST WORKLOADS // {domains.length} VIRTUAL MACHINES</div>
-      <div class="wb-sub">
-        {running.length} Running · {paused} Paused · {domains.length - running.length - paused} Stopped · {plural(vcpusInUse, 'vCPU')} in use
-      </div>
-    </div>
-  </div>
-  <a class="ui-btn primary mono" href="/machines" onclick={router.link}>
-    <Boxes size={14} />
-    <span>MANAGE VIRTUAL MACHINES ({domains.length}) →</span>
-  </a>
-</div>
-
 <NoisyNeighborsPanel />
 
 <CapacitySimulator />
@@ -181,34 +164,6 @@
 </section>
 
 <style>
-  .workloads-banner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 16px 20px;
-    margin-bottom: 20px;
-    background: var(--surface-1);
-    border: 1px solid var(--border-strong);
-    box-shadow: 2px 2px 0 0 var(--border-strong);
-  }
-  .wb-left {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    color: var(--accent);
-  }
-  .wb-title {
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    color: var(--text-strong);
-  }
-  .wb-sub {
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-top: 2px;
-  }
   .head-right {
     display: flex;
     align-items: center;
@@ -267,7 +222,7 @@
   .cell {
     width: 14px;
     height: 14px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
     transition: background var(--dur);

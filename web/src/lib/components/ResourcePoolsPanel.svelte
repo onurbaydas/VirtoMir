@@ -237,7 +237,7 @@
   .acts { display: flex; gap: 6px; flex-wrap: wrap; }
   .meters { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 12px 0; }
   .meter { display: flex; flex-direction: column; gap: 3px; }
-  .lbl { font: 600 11px var(--font-mono); text-transform: uppercase; color: var(--text-2); }
+  .lbl { font: 500 12px var(--font-sans); color: var(--text-2); }
   .val { font-size: 13px; }
   .bar { height: 6px; background: var(--bg-elev); box-shadow: var(--bevel-in); }
   .bar i { display: block; height: 100%; background: var(--ok); }

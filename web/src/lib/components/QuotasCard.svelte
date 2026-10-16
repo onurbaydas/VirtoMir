@@ -145,8 +145,6 @@
   .th {
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
     color: var(--text-3);
   }
   .actions {
@@ -172,7 +170,7 @@
   }
   .bar {
     height: 6px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     overflow: hidden;
   }

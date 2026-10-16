@@ -96,7 +96,7 @@
     align-self: flex-start;
     gap: 2px;
     padding: 3px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
   }
   .kinds button {
@@ -106,7 +106,7 @@
     height: 28px;
     padding: 0 12px;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-2);
     font-size: 13px;
@@ -140,7 +140,7 @@
     height: 22px;
     border: 2.5px solid var(--accent);
     border-right-color: transparent;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin {
