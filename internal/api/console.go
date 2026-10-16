@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket" // ISC
@@ -21,6 +22,8 @@ type Consoler interface {
 	ConsoleInfo(uuid string) (virt.ConsoleInfo, error)
 	DialVNC(ctx context.Context, uuid string) (net.Conn, error)
 	DialVNCHead(ctx context.Context, uuid string, head int) (net.Conn, error)
+	DialSPICE(ctx context.Context, uuid string) (net.Conn, error)
+	SetDisplay(uuid, protocol string) error
 	SerialConsole(ctx context.Context, uuid, device string, in io.Reader, out io.Writer) error
 }
 
@@ -28,6 +31,8 @@ func (s *Server) consoleRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/console/info", s.consoleInfo)
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/console/vnc", s.consoleVNC)
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/console/serial", s.consoleSerial)
+	mux.HandleFunc("GET /api/v1/domains/{uuid}/console/spice", s.consoleSPICE)
+	mux.HandleFunc("PUT /api/v1/domains/{uuid}/display", s.putDisplay)
 }
 
 func (s *Server) consoler() (Consoler, bool) {
@@ -85,6 +90,87 @@ func (s *Server) consoleVNC(w http.ResponseWriter, r *http.Request) {
 	case <-errc:
 	case <-ctx.Done():
 	}
+}
+
+// consoleSPICE bridges one WebSocket of spice-html5 (subprotocol "binary") to the machine's
+// local SPICE server. spice-html5 opens one per SPICE channel (main, display, inputs,
+// cursor, playback); only the main one, which comes first, is written to the activity log.
+func (s *Server) consoleSPICE(w http.ResponseWriter, r *http.Request) {
+	c, ok := s.consoler()
+	if !ok {
+		s.writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "consoles are not available"})
+		return
+	}
+	uuid := r.PathValue("uuid")
+	sp, err := c.DialSPICE(r.Context(), uuid)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	defer sp.Close()
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{"binary"}})
+	if err != nil {
+		return
+	}
+	ws.SetReadLimit(-1)
+	if s.firstSpiceChannel(identity(r).Name, uuid) {
+		s.recordConsole(r, uuid, "spice")
+	}
+
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	go s.watchSession(ctx, cancel, r)
+	conn := websocket.NetConn(ctx, ws, websocket.MessageBinary)
+	defer conn.Close()
+
+	errc := make(chan error, 2)
+	go func() { _, err := io.Copy(sp, conn); errc <- err }()
+	go func() { _, err := io.Copy(conn, sp); errc <- err }()
+	select {
+	case <-errc:
+	case <-ctx.Done():
+	}
+}
+
+var (
+	spiceSeenMu sync.Mutex
+	spiceSeen   = map[string]time.Time{}
+)
+
+// firstSpiceChannel: the first channel of a SPICE session by user on uuid (others follow
+// within seconds).
+func (s *Server) firstSpiceChannel(user, uuid string) bool {
+	spiceSeenMu.Lock()
+	defer spiceSeenMu.Unlock()
+	k, now := user+"/"+uuid, time.Now()
+	for key, t := range spiceSeen {
+		if now.Sub(t) > time.Minute {
+			delete(spiceSeen, key)
+		}
+	}
+	first := now.Sub(spiceSeen[k]) > 10*time.Second
+	spiceSeen[k] = now
+	return first
+}
+
+// putDisplay switches a machine's console between VNC and SPICE (from its next start).
+func (s *Server) putDisplay(w http.ResponseWriter, r *http.Request) {
+	c, ok := s.consoler()
+	if !ok {
+		s.writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "consoles are not available"})
+		return
+	}
+	var body struct {
+		Protocol string `json:"protocol"`
+	}
+	if !s.decode(w, r, &body) {
+		return
+	}
+	if err := c.SetDisplay(r.PathValue("uuid"), body.Protocol); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.done(w, http.StatusNoContent, nil)
 }
 
 // consoleSerial bridges a WebSocket (xterm.js) to a text console. ?device=<alias> picks one.

@@ -32,7 +32,7 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - Start, shut down, reboot, pause, force off, hard reset, **save to disk** (resume exactly where it was) — one by one or **in bulk**
 - Rename, **clone** (full copies, new identity, runs in the background), delete (optionally with its own disks — never shared ones)
 - **Templates**: turn a prepared machine into a template and create new machines from it in seconds — **linked clones** (store only their own changes) or full copies, with optional cloud-init
-- **Console in the browser**: graphical (noVNC) and serial, also full-screen
+- **Console in the browser**: graphical over VNC (noVNC) or **SPICE** (spice-html5: resolution follows the window, shared clipboard with the guest agent) and serial, also full-screen
 - **Settings form** for CPU (topology, model), memory (balloon), boot order, firmware — with a **"review changes" XML diff** before saving; vCPUs and memory are applied live where possible
 - **Tuning**: CPU and emulator pinning, huge pages, NUMA memory policy
 - **XML editor** for everything else, validated by libvirt
@@ -185,7 +185,7 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 
 ## Roadmap
 
-SPICE console (restic/S3), a Turkish UI and signed apt/rpm repositories.
+A Turkish UI and signed apt/rpm repositories.
 
 ## License
 
