@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/onurbaydas/virtomir/internal/hostinfo"
+	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
 // Host facts libvirt does not have: chassis and sensors, GPUs with their load, and the
@@ -21,6 +22,31 @@ func (s *Server) hostInfoRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/host/gpus", s.hostGPUs)
 	mux.HandleFunc("GET /api/v1/host/interfaces", s.hostInterfaces)
 	mux.HandleFunc("GET /api/v1/host/capture", s.hostCapture)
+	mux.HandleFunc("GET /api/v1/host/topology", s.hostTopology)
+}
+
+// Placer reports where running machines' vCPUs sit (for the topology view).
+type Placer interface {
+	Placements() ([]virt.Placement, error)
+}
+
+// hostTopology is the host's NUMA nodes, sockets, cores and threads with their load, and the
+// running machines' vCPUs on top: the picture to pin by (P5).
+func (s *Server) hostTopology(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.hostReader(w)
+	if !ok {
+		return
+	}
+	out := struct {
+		hostinfo.Topology
+		Machines []virt.Placement `json:"machines"`
+	}{Topology: h.Topology(r.Context()), Machines: []virt.Placement{}}
+	if p, ok := s.backend.(Placer); ok {
+		if m, err := p.Placements(); err == nil {
+			out.Machines = m
+		}
+	}
+	s.writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) hostReader(w http.ResponseWriter) (*hostinfo.Reader, bool) {

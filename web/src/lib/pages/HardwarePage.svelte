@@ -13,6 +13,7 @@
   import { toasts } from '../toast.svelte'
   import ConfirmButton from '../components/ConfirmButton.svelte'
   import GpuPoolPanel from '../components/GpuPoolPanel.svelte'
+  import HostTopologyPanel from '../components/HostTopologyPanel.svelte'
 
   let hw = $state<HostHardware | null>(null)
   let error = $state('')
@@ -72,7 +73,7 @@
 <header class="page-head">
   <div>
     <h1>Host hardware</h1>
-    <p class="lead">PCI and USB devices of this host, and which of them can be given to a machine (Hardware tab → Add host device).</p>
+    <p class="lead">CPU and memory layout, PCI and USB devices of this host, and which of them can be given to a machine.</p>
   </div>
   <label class="ui-switch"><input type="checkbox" bind:checked={showBridges} /> Show bridges</label>
 </header>
@@ -94,6 +95,8 @@
       {/if}
     </div>
   </section>
+
+  <HostTopologyPanel />
 
   <GpuPoolPanel pci={hw.pci} />
 

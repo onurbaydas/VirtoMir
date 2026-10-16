@@ -234,6 +234,13 @@ export interface Chassis {
   bmc?: { driver: string; url: string }
 }
 
+/** Host CPUs and memory nodes, with the running machines' vCPUs on top (P5). */
+export interface Topology {
+  nodes: { id: number; cpus: number[]; memTotalKiB: number; memFreeKiB: number }[]
+  cpus: { id: number; node: number; socket: number; core: number; online: boolean; siblings: number[]; loadPercent?: number }[]
+  machines: { uuid: string; name: string; numaNodes?: string; vcpus: { cpu: number; pinned?: string; pinnedCpus?: number[] }[] }[]
+}
+
 export interface GPU {
   address: string
   vendorId: string
@@ -318,6 +325,7 @@ export const ent = {
   deleteReportSchedule: (id: string) => api.delete<void>(`/api/v1/report-schedules/${enc(id)}`),
 
   chassis: () => api.get<Chassis>('/api/v1/host/chassis'),
+  topology: () => api.get<Topology>('/api/v1/host/topology'),
   gpus: async () => (await api.get<{ gpus: GPU[] }>('/api/v1/host/gpus')).gpus,
   interfaces: async () => (await api.get<{ interfaces: HostInterface[] }>('/api/v1/host/interfaces')).interfaces,
   /** Server-sent "packet" events (one tcpdump line each), then "end". */
