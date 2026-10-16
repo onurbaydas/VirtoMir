@@ -276,6 +276,34 @@ export interface HostInterface {
   txBytes: number
 }
 
+// ---- Host network changes (ADR-0042) ---------------------------------------------------------
+
+export interface HostIfSpec {
+  kind: 'bridge' | 'bond' | 'vlan'
+  name: string
+  ports?: string[]
+  bondMode?: string
+  stp?: boolean
+  parent?: string
+  vlan?: number
+  takeAddressFrom?: string
+}
+
+export interface HostNetPending {
+  id: string
+  what: string
+  backend: string
+  started: string
+  deadline: string
+}
+
+export interface HostNetStatus {
+  backend: '' | 'netplan' | 'networkmanager' | 'networkd'
+  reason?: string
+  pending?: HostNetPending
+  created: (HostIfSpec & { backend: string; created: string })[]
+}
+
 // ---- Firewall -------------------------------------------------------------------------------
 
 export interface FirewallRule {
@@ -328,6 +356,11 @@ export const ent = {
   topology: () => api.get<Topology>('/api/v1/host/topology'),
   gpus: async () => (await api.get<{ gpus: GPU[] }>('/api/v1/host/gpus')).gpus,
   interfaces: async () => (await api.get<{ interfaces: HostInterface[] }>('/api/v1/host/interfaces')).interfaces,
+  hostNet: () => api.get<HostNetStatus>('/api/v1/host/network'),
+  createHostIf: (s: HostIfSpec) => api.post<HostNetPending>('/api/v1/host/network/interfaces', s),
+  deleteHostIf: (name: string) => api.delete<HostNetPending>(`/api/v1/host/network/interfaces/${enc(name)}`),
+  confirmHostNet: (id: string) => api.post<HostNetStatus>(`/api/v1/host/network/pending/${enc(id)}/confirm`),
+  rollbackHostNet: (id: string) => api.post<HostNetStatus>(`/api/v1/host/network/pending/${enc(id)}/rollback`),
   /** Server-sent "packet" events (one tcpdump line each), then "end". */
   captureURL: (iface: string, filter: string, count: number, seconds: number, pcap = false) =>
     scoped(`/api/v1/host/capture?${new URLSearchParams({ iface, filter, count: String(count), seconds: String(seconds), ...(pcap ? { format: 'pcap' } : {}) })}`),

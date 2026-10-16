@@ -20,6 +20,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/confighist"
 	"github.com/onurbaydas/virtomir/internal/ha"
 	"github.com/onurbaydas/virtomir/internal/hostinfo"
+	"github.com/onurbaydas/virtomir/internal/hostnet"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/quota"
 	"github.com/onurbaydas/virtomir/internal/reports"
@@ -125,6 +126,8 @@ type Options struct {
 	// Updater nil: no update check. StateDir is where downloads go.
 	Updater  *update.Checker
 	StateDir string
+	// HostNet nil: no bridges, bonds or VLAN interfaces from the UI (ADR-0042).
+	HostNet *hostnet.Manager
 }
 
 type Server struct {
@@ -160,6 +163,7 @@ type Server struct {
 	hostinfo *hostinfo.Reader
 	updater  *update.Checker
 	stateDir string
+	hostnet  *hostnet.Manager
 }
 
 func NewServer(o Options) *Server {
@@ -173,7 +177,7 @@ func NewServer(o Options) *Server {
 		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts, schedules: o.Schedules,
 		cluster: o.Cluster, fingerprint: o.Fingerprint, hostName: o.HostName, listenPort: o.ListenPort,
 		confighist: o.ConfigHistory, quotas: o.Quotas, groupsOf: o.GroupsOf,
-		ha: o.HA, reports: o.Reports, respools: o.Respools, hostinfo: o.HostInfo, updater: o.Updater, stateDir: o.StateDir}
+		ha: o.HA, reports: o.Reports, respools: o.Respools, hostinfo: o.HostInfo, updater: o.Updater, stateDir: o.StateDir, hostnet: o.HostNet}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -211,6 +215,7 @@ func (s *Server) Handler() http.Handler {
 	s.reportRoutes(mux)
 	s.respoolRoutes(mux)
 	s.hostInfoRoutes(mux)
+	s.hostNetRoutes(mux)
 	s.firewallRoutes(mux)
 	s.updateRoutes(mux)
 	s.objectXMLRoutes(mux)

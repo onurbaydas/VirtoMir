@@ -6,6 +6,7 @@
   import { errorText } from '../api'
   import { ent, type HostInterface } from '../enterprise'
   import { live } from '../live.svelte'
+  import HostNetEditor from './HostNetEditor.svelte'
 
   let ifs = $state<HostInterface[]>([])
   let error = $state('')
@@ -53,6 +54,7 @@
     <h2><Network size={16} /> Host wiring</h2>
     <button class="ui-btn sm ghost" onclick={load}><RefreshCw size={13} /> Refresh</button>
   </header>
+  <HostNetEditor {ifs} onchanged={load} />
   {#if error}
     <div class="ui-error-box">{error}</div>
   {:else if !ifs.length}
@@ -79,7 +81,7 @@
         </div>
       {/if}
     </div>
-    <p class="muted small">⇅ uplink · ▣ machine adapter · grey: link down. Bonds and bridges are created with the host's own network tools (or a VLAN network in VirtoMir).</p>
+    <p class="muted small">⇅ uplink · ▣ machine adapter · grey: link down. New bridges, bonds and VLAN interfaces are made with the host's own network tools, and kept only once you confirm them.</p>
   {/if}
 </section>
 

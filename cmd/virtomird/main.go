@@ -26,6 +26,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/ha"
 	"github.com/onurbaydas/virtomir/internal/history"
 	"github.com/onurbaydas/virtomir/internal/hostinfo"
+	"github.com/onurbaydas/virtomir/internal/hostnet"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/live"
 	"github.com/onurbaydas/virtomir/internal/quota"
@@ -168,6 +169,9 @@ func run(c config, log *slog.Logger) error {
 		opts.HA = haStore
 	}
 	opts.HostInfo = hostinfo.New()
+	if os.Geteuid() == 0 { // writes /etc/netplan, /etc/systemd/network or NetworkManager connections
+		opts.HostNet = hostnet.New(c.stateDir, log, opts.HostInfo)
+	}
 	opts.Updater = update.New(c.updateRepo, version, os.Getenv("VIRTOMIR_GITHUB_TOKEN"))
 	opts.StateDir = c.stateDir
 	if repStore, err := reports.Open(filepath.Join(c.stateDir, "reports")); err != nil {
