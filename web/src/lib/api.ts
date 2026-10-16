@@ -573,6 +573,9 @@ export interface VNetwork {
   dhcpStart?: string
   dhcpEnd?: string
   domain?: string
+  subnet6?: string
+  dhcp6Start?: string
+  dhcp6End?: string
   usedBy: string[]
   dhcpHosts: DHCPHost[]
 }
@@ -586,6 +589,9 @@ export interface NetworkSpec {
   /** Bridge mode: the host bridge is Open vSwitch; vlan tags every machine on it. */
   ovs?: boolean
   vlan?: number
+  /** IPv6 /64 (nat, route, isolated): SLAAC from the host; dhcp6 adds DHCPv6. */
+  subnet6?: string
+  dhcp6?: boolean
 }
 
 export interface Lease {

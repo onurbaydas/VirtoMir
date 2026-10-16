@@ -1,6 +1,6 @@
 <script lang="ts">
   // A machine's firewall (ADR-0033): a libvirt network filter on the host side of its network
-  // adapters, so the guest cannot switch it off. IPv4, stateful (replies are let through).
+  // adapters, so the guest cannot switch it off. IPv4 and IPv6, stateful (replies are let through).
   import Shield from '@lucide/svelte/icons/shield'
   import Plus from '@lucide/svelte/icons/plus'
   import Trash from '@lucide/svelte/icons/trash'
@@ -89,7 +89,7 @@
       <h2><Shield size={16} /> Firewall</h2>
       <label class="ui-switch"><input type="checkbox" bind:checked={fw.enabled} onchange={() => (dirty = true)} disabled={!admin} /> {fw.enabled ? 'On' : 'Off'}</label>
     </header>
-    <p class="muted">Enforced on the host; the first matching rule wins. IPv4 only.</p>
+    <p class="muted">Enforced on the host; the first matching rule wins. A rule without an address applies to IPv4 and IPv6.</p>
     {#if fw.enabled && !fw.rules.length && fw.defaultIn === 'accept' && fw.defaultOut === 'accept'}
       <p class="warn">On, but with no rules and both defaults on Allow it blocks nothing.</p>
     {:else if fw.enabled && fw.defaultOut === 'drop' && !fw.rules.some((r) => r.direction === 'out' && r.action === 'accept')}
@@ -117,7 +117,7 @@
               <td><select class="ui-input act {r.action}" bind:value={r.action} onchange={() => (dirty = true)} disabled={!admin}><option value="accept">Allow</option><option value="drop">Drop</option><option value="reject">Reject</option></select></td>
               <td><select class="ui-input" bind:value={r.protocol} onchange={() => (dirty = true)} disabled={!admin}><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option><option value="all">Any</option></select></td>
               <td><input class="ui-input mono" placeholder={r.protocol === 'tcp' || r.protocol === 'udp' ? 'any' : '—'} disabled={!admin || (r.protocol !== 'tcp' && r.protocol !== 'udp')} bind:value={r.ports} oninput={() => (dirty = true)} /></td>
-              <td><input class="ui-input mono" placeholder="anyone (or 10.0.0.0/8)" bind:value={r.remote} oninput={() => (dirty = true)} disabled={!admin} /></td>
+              <td><input class="ui-input mono" placeholder="anyone (or 10.0.0.0/8, 2001:db8::/32)" bind:value={r.remote} oninput={() => (dirty = true)} disabled={!admin} /></td>
               <td><input class="ui-input" bind:value={r.comment} oninput={() => (dirty = true)} disabled={!admin} /></td>
               <td class="row-acts">{#if admin}
                 <button class="ui-btn sm ghost" title="Up" onclick={() => move(i, -1)}><ArrowUp size={12} /></button>

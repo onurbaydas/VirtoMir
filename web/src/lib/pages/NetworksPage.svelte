@@ -74,19 +74,37 @@
   }
   const modeLabel = (m: string) => MODE[m]?.label ?? m
   const netLine = (n: VNetwork) =>
-    [n.subnet, n.bridge && `bridge ${n.bridge}`, n.dhcpStart && `DHCP ${n.dhcpStart} – ${n.dhcpEnd}`].filter(Boolean).join(' · ')
+    [
+      n.subnet,
+      n.subnet6,
+      n.bridge && `bridge ${n.bridge}`,
+      n.dhcpStart && `DHCP ${n.dhcpStart} – ${n.dhcpEnd}`,
+      n.subnet6 && (n.dhcp6Start ? 'DHCPv6' : 'SLAAC'),
+    ]
+      .filter(Boolean)
+      .join(' · ')
 
   // ---- New network ------------------------------------------------------------------
   let dlg = $state(false)
   let spec = $state<NetworkSpec>({ name: '', mode: 'nat', subnet: '192.168.100.0/24', dhcp: true, bridge: '' })
   let busy = $state(false)
   let formErr = $state('')
+  let withV4 = $state(true)
+  let withV6 = $state(false)
+  // A random unique local /64 (RFC 4193): fdXX:XXXX:XXXX:1::/64.
+  function randomULA() {
+    const b = crypto.getRandomValues(new Uint8Array(5))
+    const h = (i: number) => b[i].toString(16).padStart(2, '0')
+    return `fd${h(0)}:${h(1)}${h(2)}:${h(3)}${h(4)}:1::/64`.replace(/:0+([0-9a-f])/g, ':$1')
+  }
   function openNew() {
     // Suggest a free 192.168.X.0/24.
     const used = new Set((nets ?? []).map((n) => n.subnet?.split('.').slice(0, 3).join('.')))
     let x = 100
     while (used.has(`192.168.${x}`) && x < 250) x++
-    spec = { name: '', mode: 'nat', subnet: `192.168.${x}.0/24`, dhcp: true, bridge: '' }
+    spec = { name: '', mode: 'nat', subnet: `192.168.${x}.0/24`, dhcp: true, bridge: '', subnet6: randomULA(), dhcp6: false }
+    withV4 = true
+    withV6 = false
     formErr = ''
     dlg = true
   }
@@ -99,7 +117,16 @@
       const body: NetworkSpec =
         spec.mode === 'bridge'
           ? { name: spec.name, mode: 'bridge', bridge: spec.bridge, dhcp: false, ovs: spec.ovs, vlan: spec.ovs && spec.vlan ? Number(spec.vlan) : undefined }
-          : { ...spec, bridge: undefined, ovs: undefined, vlan: undefined }
+          : {
+              ...spec,
+              bridge: undefined,
+              ovs: undefined,
+              vlan: undefined,
+              subnet: withV4 ? spec.subnet : undefined,
+              dhcp: withV4 && spec.dhcp,
+              subnet6: withV6 ? spec.subnet6?.trim() : undefined,
+              dhcp6: withV6 && spec.dhcp6,
+            }
       if (cluster.clustered && everywhere) {
         const res = await api.createClusterNetwork(body)
         const failed = res.filter((r) => !r.ok)
@@ -383,12 +410,25 @@
         <span class="hint">VLANs on a plain Linux bridge: create a bridge on the VLAN interface (e.g. br0.10) and use that.</span>
       {/if}
     {:else}
-      <label class="ui-field">
-        <span class="label">Subnet</span>
-        <input class="ui-input mono" bind:value={spec.subnet} placeholder="192.168.100.0/24" required />
-        <span class="hint">The host becomes .1; with DHCP, machines get the rest.</span>
-      </label>
-      <label class="ui-switch"><input type="checkbox" bind:checked={spec.dhcp} /> Hand out addresses with DHCP</label>
+      <label class="ui-switch"><input type="checkbox" bind:checked={withV4} /> IPv4</label>
+      {#if withV4}
+        <label class="ui-field">
+          <span class="label">Subnet</span>
+          <input class="ui-input mono" bind:value={spec.subnet} placeholder="192.168.100.0/24" required />
+          <span class="hint">The host becomes .1; with DHCP, machines get the rest.</span>
+        </label>
+        <label class="ui-switch"><input type="checkbox" bind:checked={spec.dhcp} /> Hand out addresses with DHCP</label>
+      {/if}
+      <label class="ui-switch"><input type="checkbox" bind:checked={withV6} /> IPv6</label>
+      {#if withV6}
+        <label class="ui-field">
+          <span class="label">IPv6 subnet</span>
+          <input class="ui-input mono" bind:value={spec.subnet6} placeholder="fd12:3456:789a:1::/64" required />
+          <span class="hint">A /64. The host becomes ::1 and announces the prefix, so machines configure themselves (SLAAC){spec.mode === 'nat' ? '; their IPv6 traffic is translated to the host’s address (NAT66)' : ''}. A random private (fd…) prefix is filled in; use your own global prefix for routed networks.</span>
+        </label>
+        <label class="ui-switch"><input type="checkbox" bind:checked={spec.dhcp6} /> Also hand out addresses with DHCPv6 (::100 – ::ffff)</label>
+      {/if}
+      {#if !withV4 && !withV6}<div class="ui-error-box">Choose IPv4, IPv6 or both.</div>{/if}
     {/if}
     {#if cluster.clustered}
       <label class="ui-switch"><input type="checkbox" bind:checked={everywhere} /> Create it on every host of the cluster (machines keep their network when they move)</label>

@@ -41,6 +41,46 @@ func TestFirewallRoundTrip(t *testing.T) {
 	}
 }
 
+func TestFirewallIPv6(t *testing.T) {
+	fw := Firewall{Enabled: true, DefaultIn: "drop", DefaultOut: "accept", Rules: []FirewallRule{
+		{Direction: "in", Action: "accept", Protocol: "tcp", Ports: "22"},                           // both families
+		{Direction: "in", Action: "accept", Protocol: "tcp", Ports: "443", Remote: "2001:db8::/32"}, // IPv6 only
+		{Direction: "out", Action: "drop", Protocol: "all", Remote: "fd00::1"},                      // IPv6 only
+		{Direction: "in", Action: "accept", Protocol: "icmp"},                                       // icmp + icmpv6
+		{Direction: "in", Action: "accept", Protocol: "udp", Ports: "53", Remote: "10.0.0.0/8"},     // IPv4 only
+	}}
+	doc, err := buildFilter("virtomir-v6", fw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`<tcp-ipv6 dstportstart="22"`, `<tcp dstportstart="22"`,
+		`<tcp-ipv6 srcipaddr="2001:db8::" srcipmask="32" dstportstart="443"`,
+		`<all-ipv6 dstipaddr="fd00::1"`, `<icmpv6>`, `<icmp>`,
+		`type="135"`, `dstportstart="547"`,
+		`<all-ipv6 comment="VirtoMir default in"`,
+	} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("filter lacks %s:\n%s", want, doc)
+		}
+	}
+	if strings.Contains(doc, `<tcp srcipaddr="2001`) || strings.Contains(doc, `<udp-ipv6 srcipaddr="10.`) {
+		t.Errorf("an address rule leaked into the other family:\n%s", doc)
+	}
+	back, err := parseFilter(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(back, fw) {
+		t.Errorf("round trip:\n got %+v\nwant %+v", back, fw)
+	}
+	// Accept-all defaults need no IPv6 basics.
+	doc, _ = buildFilter("x", Firewall{Enabled: true, DefaultIn: "accept", DefaultOut: "accept"})
+	if strings.Contains(doc, "neighbor discovery") {
+		t.Errorf("basics without a drop policy:\n%s", doc)
+	}
+}
+
 func TestFirewallValidation(t *testing.T) {
 	for _, r := range []FirewallRule{
 		{Direction: "sideways", Action: "accept", Protocol: "tcp"},
@@ -49,7 +89,8 @@ func TestFirewallValidation(t *testing.T) {
 		{Direction: "in", Action: "accept", Protocol: "icmp", Ports: "22"},
 		{Direction: "in", Action: "accept", Protocol: "tcp", Ports: "70000"},
 		{Direction: "in", Action: "accept", Protocol: "tcp", Ports: "90-80"},
-		{Direction: "in", Action: "accept", Protocol: "tcp", Remote: "fe80::1"},
+		{Direction: "in", Action: "accept", Protocol: "tcp", Remote: "fe80::zz"},
+		{Direction: "in", Action: "accept", Protocol: "tcp", Remote: "2001:db8::/129"},
 		{Direction: "in", Action: "accept", Protocol: "tcp", Remote: "not-an-ip"},
 		{Direction: "in", Action: "accept", Protocol: "tcp", Comment: `say "hi"`},
 	} {
