@@ -1,48 +1,30 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  // Deleting a machine is the one action that asks for its name (P1: friction only where
+  // the loss is permanent). Force off and hard reset confirm with a second click instead.
   import Dialog from './Dialog.svelte'
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert'
   import Trash from '@lucide/svelte/icons/trash'
-  import Zap from '@lucide/svelte/icons/zap'
 
   interface Props {
     open: boolean
-    action: 'delete' | 'force-off' | 'hard-reset'
     targetName: string
     targetUuid?: string
     onconfirm: (opts: { purgeDisks: boolean }) => void
     onclose: () => void
   }
 
-  let { open, action, targetName, targetUuid, onconfirm, onclose }: Props = $props()
+  let { open, targetName, targetUuid, onconfirm, onclose }: Props = $props()
 
   let typedName = $state('')
   let purgeDisks = $state(false)
-  let countdown = $state(5)
-  let timer: ReturnType<typeof setInterval> | undefined
-
   $effect(() => {
     if (open) {
       typedName = ''
       purgeDisks = false
-      countdown = 5
-      clearInterval(timer)
-      timer = setInterval(() => {
-        if (countdown > 0) {
-          countdown -= 1
-        } else {
-          clearInterval(timer)
-        }
-      }, 1000)
-    } else {
-      clearInterval(timer)
     }
   })
 
-  onDestroy(() => clearInterval(timer))
-
-  let nameMatches = $derived(typedName.trim() === targetName.trim())
-  let canConfirm = $derived(countdown === 0 && nameMatches)
+  let canConfirm = $derived(typedName.trim() === targetName.trim())
 
   function confirm() {
     if (!canConfirm) return
@@ -62,31 +44,11 @@
 
     <div class="guardrail-body">
       <div class="action-alert">
-        {#if action === 'delete'}
-          <p class="lead-warn">
-            You are about to <strong>delete</strong> machine
-            <span class="target-chip">{targetName}</span>.
-          </p>
-          <p class="sub-warn">
-            This cannot be undone: its definition, snapshots and (if ticked) its disk images are removed. Backups stay.
-          </p>
-        {:else if action === 'force-off'}
-          <p class="lead-warn">
-            You are about to <strong>force off</strong>
-            <span class="target-chip">{targetName}</span>.
-          </p>
-          <p class="sub-warn">
-            The machine stops at once, without shutting down: data the guest has not written to disk yet is lost.
-          </p>
-        {:else}
-          <p class="lead-warn">
-            You are about to <strong>hard reset</strong>
-            <span class="target-chip">{targetName}</span>.
-          </p>
-          <p class="sub-warn">
-            Like pressing the reset button: the guest restarts at once, without shutting down.
-          </p>
-        {/if}
+        <p class="lead-warn">
+          You are about to <strong>delete</strong> machine
+          <span class="target-chip">{targetName}</span>.
+        </p>
+        <p class="sub-warn">Its definition, snapshots and (if ticked) its disk images are removed. Backups stay.</p>
       </div>
 
       {#if targetUuid}
@@ -96,14 +58,12 @@
         </div>
       {/if}
 
-      {#if action === 'delete'}
-        <div class="checkbox-group">
-          <label class="check-row">
-            <input type="checkbox" bind:checked={purgeDisks} />
-            <span>Also delete its own disk images (shared images, ISOs and template disks are kept)</span>
-          </label>
-        </div>
-      {/if}
+      <div class="checkbox-group">
+        <label class="check-row">
+          <input type="checkbox" bind:checked={purgeDisks} />
+          <span>Also delete its own disk images (shared images, ISOs and template disks are kept)</span>
+        </label>
+      </div>
 
       <div class="verification-box">
         <label for="verify-input" class="verify-label">
@@ -125,22 +85,14 @@
       <button class="ui-btn" onclick={onclose}>Cancel</button>
       <button
         class="ui-btn danger-confirm"
-        class:locked={!canConfirm}
         disabled={!canConfirm}
         onclick={confirm}
       >
-        {#if countdown > 0}
-          <span class="timer-badge">Wait {countdown}s</span>
-        {:else if !nameMatches}
+        {#if !canConfirm}
           <span>Type the name to continue</span>
         {:else}
-          {#if action === 'delete'}
-            <Trash size={14} />
-            <span>Delete for good</span>
-          {:else}
-            <Zap size={14} />
-            <span>Do it</span>
-          {/if}
+          <Trash size={14} />
+          <span>Delete for good</span>
         {/if}
       </button>
     </div>
@@ -263,7 +215,7 @@
     align-items: center;
     gap: 12px;
     padding: 14px 24px;
-    background: var(--bg-surface, var(--surface));
+    background: var(--surface);
     border-top: 1px solid var(--border-strong);
   }
   .danger-confirm {
@@ -280,7 +232,6 @@
     font-size: 12px;
     cursor: pointer;
   }
-  .danger-confirm.locked,
   .danger-confirm:disabled {
     opacity: 0.5;
     background: var(--metal);
@@ -288,9 +239,5 @@
     cursor: not-allowed;
     border-color: var(--border-strong);
     box-shadow: none;
-  }
-  .timer-badge {
-    color: var(--warn);
-    font-weight: 800;
   }
 </style>

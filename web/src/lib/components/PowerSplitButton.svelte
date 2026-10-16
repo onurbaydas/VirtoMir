@@ -10,7 +10,6 @@
   import type { Domain } from '../api'
   import { isActive, live } from '../live.svelte'
   import { session } from '../session.svelte'
-  import DestructiveGuardrailModal from './DestructiveGuardrailModal.svelte'
 
   interface Props {
     d: Domain
@@ -20,16 +19,14 @@
 
   let open = $state(false)
   let menuRef = $state<HTMLDivElement>()
-  let guardrailOpen = $state(false)
-  let guardrailAction = $state<'force-off' | 'hard-reset'>('force-off')
+  // Force off and hard reset lose unsaved guest data: the first click arms the item, a
+  // second click within a few seconds does it (P1: no name typing for these).
+  let armed = $state<'force-off' | 'hard-reset' | null>(null)
+  let armTimer: ReturnType<typeof setTimeout> | undefined
 
   let active = $derived(isActive(d.state))
   let paused = $derived(d.state === 'paused')
   let pending = $derived(live.pending[d.uuid])
-
-  function isSafeMode(): boolean {
-    return typeof document !== 'undefined' && document.documentElement.dataset.safemode === 'true'
-  }
 
   function toggleMenu(e: MouseEvent) {
     e.stopPropagation()
@@ -38,16 +35,19 @@
 
   function closeMenu() {
     open = false
+    armed = null
+    clearTimeout(armTimer)
   }
 
   onMount(() => {
     function onDocClick(e: MouseEvent) {
-      if (menuRef && !menuRef.contains(e.target as Node)) {
-        open = false
-      }
+      if (menuRef && !menuRef.contains(e.target as Node)) closeMenu()
     }
     window.addEventListener('click', onDocClick)
-    return () => window.removeEventListener('click', onDocClick)
+    return () => {
+      window.removeEventListener('click', onDocClick)
+      clearTimeout(armTimer)
+    }
   })
 
   function handlePrimary() {
@@ -63,21 +63,15 @@
   }
 
   function handleAction(act: 'shutdown' | 'reboot' | 'pause' | 'force-off' | 'hard-reset' | 'hibernate') {
-    closeMenu()
     if (!session.can('operator')) return
-
-    if (act === 'force-off' || act === 'hard-reset' || (isSafeMode() && (act === 'shutdown' || act === 'reboot'))) {
-      guardrailAction = act === 'hard-reset' ? 'hard-reset' : 'force-off'
-      guardrailOpen = true
+    if ((act === 'force-off' || act === 'hard-reset') && armed !== act) {
+      armed = act
+      clearTimeout(armTimer)
+      armTimer = setTimeout(() => (armed = null), 4000)
       return
     }
-
-    live.act(d, act === 'hibernate' ? 'save' : act)
-  }
-
-  function onGuardrailConfirm() {
-    guardrailOpen = false
-    live.act(d, guardrailAction === 'force-off' ? 'force-off' : 'reset')
+    closeMenu()
+    live.act(d, act === 'hibernate' ? 'save' : act === 'hard-reset' ? 'reset' : act)
   }
 </script>
 
@@ -161,18 +155,18 @@
 
         <div class="menu-divider"></div>
 
-        <button class="menu-item warn-item" onclick={() => handleAction('hard-reset')}>
+        <button class="menu-item warn-item" class:armed={armed === 'hard-reset'} onclick={() => handleAction('hard-reset')}>
           <RotateCw size={13} />
           <div class="item-text">
-            <strong>Hard reset</strong>
+            <strong>{armed === 'hard-reset' ? `Click again to reset ${d.name}` : 'Hard reset'}</strong>
             <span class="sub">Like the reset button: no shutdown</span>
           </div>
         </button>
 
-        <button class="menu-item danger-item" onclick={() => handleAction('force-off')}>
+        <button class="menu-item danger-item" class:armed={armed === 'force-off'} onclick={() => handleAction('force-off')}>
           <Zap size={13} />
           <div class="item-text">
-            <strong>Force off</strong>
+            <strong>{armed === 'force-off' ? `Click again to force off ${d.name}` : 'Force off'}</strong>
             <span class="sub">Like pulling the plug: unsaved data is lost</span>
           </div>
         </button>
@@ -188,15 +182,6 @@
     </div>
   {/if}
 </div>
-
-<DestructiveGuardrailModal
-  open={guardrailOpen}
-  action={guardrailAction}
-  targetName={d.name}
-  targetUuid={d.uuid}
-  onconfirm={onGuardrailConfirm}
-  onclose={() => (guardrailOpen = false)}
-/>
 
 <style>
   .power-split-wrap {
@@ -340,5 +325,13 @@
   .danger-item:hover .sub,
   .warn-item:hover .sub {
     color: var(--text-2);
+  }
+  .menu-item.armed {
+    background: var(--danger);
+    border-color: var(--ink);
+    color: #fff;
+  }
+  .menu-item.armed .sub {
+    color: #fff;
   }
 </style>

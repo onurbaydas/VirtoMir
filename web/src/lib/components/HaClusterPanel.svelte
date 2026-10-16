@@ -127,6 +127,23 @@
   }
   let admin = $derived(session.can('admin'))
   let nameOf = $derived((id?: string) => status?.nodes.find((n) => n.id === id)?.name ?? id ?? '—')
+
+  // What would go wrong if a host died now, worked out from the saved settings (P3: say it
+  // where it matters instead of explaining HA in general).
+  let risks = $derived.by(() => {
+    if (!status?.clustered) return []
+    const c = status.config
+    const out: string[] = []
+    if (status.nodes.length === 2 && !c.witness)
+      out.push('Two hosts and no witness: when one dies, the other has no quorum and restarts nothing. Add a witness below.')
+    for (const n of status.nodes) {
+      const d = c.fenceAgents[n.id]?.driver ?? ''
+      if (n.machines && (d === '' || d === 'manual') && !c.watchdog)
+        out.push(`${n.name}: no BMC and no watchdog. If it dies, its ${n.machines} protected machine${n.machines === 1 ? '' : 's'} wait${n.machines === 1 ? 's' : ''} until an admin confirms it is off.`)
+    }
+    if (!c.autoFailover && status.machines.some((m) => m.enabled)) out.push('Automatic failover is off: machines of a dead host are only restarted by hand.')
+    return out
+  })
 </script>
 
 {#if error}
@@ -156,6 +173,7 @@
     {#if status.watchdogArmed}<span class="chip mono">Watchdog armed</span>{/if}
   </section>
   {#if status.watchdogError}<div class="ui-error-box">Watchdog: {status.watchdogError}</div>{/if}
+  {#each risks as r (r)}<p class="risk">{r}</p>{/each}
 
   <h2 class="sub">Members and fencing</h2>
   <section class="ui-panel table-wrap">
@@ -220,23 +238,20 @@
         <input class="ui-input" type="number" min="1" max="30" bind:value={form.heartbeatIntervalSec} oninput={() => (dirty = true)} disabled={!admin} /></label>
       <label class="ui-field"><span class="label">Dead after silence of (s)</span>
         <input class="ui-input" type="number" min="10" bind:value={form.failoverTimeoutSec} oninput={() => (dirty = true)} disabled={!admin} />
-        <span class="hint">Shorter fails over faster, but also on a short network hiccup.</span></label>
+        <span class="hint">Shorter also fails over on a network hiccup.</span></label>
       <label class="ui-field"><span class="label">Witness (host:port)</span>
         <input class="ui-input mono" placeholder="10.0.0.9:22" bind:value={form.witness} oninput={() => (dirty = true)} disabled={!admin} />
-        <span class="hint">An extra vote: lets two hosts keep quorum when one dies. Any machine that accepts TCP on that port.</span></label>
+        <span class="hint">An extra vote: any machine that accepts TCP on that port.</span></label>
     </div>
     <label class="ui-switch"><input type="checkbox" bind:checked={form.watchdog} onchange={() => (dirty = true)} disabled={!admin} /> Arm the hardware watchdog on hosts with protected machines</label>
     {#if form.watchdog}
       <div class="grid">
         <label class="ui-field"><span class="label">Watchdog timeout (s)</span>
           <input class="ui-input" type="number" min="10" max="600" bind:value={form.watchdogTimeoutSec} oninput={() => (dirty = true)} disabled={!admin} /></label>
-        <p class="hint warn">A host that hangs, or loses quorum and cannot stop its machines, <b>resets itself</b>. Needs /dev/watchdog (a board watchdog, or <span class="mono">modprobe softdog</span>). This is what makes failover safe without a BMC.</p>
+        <p class="hint warn">A host that hangs or loses quorum <b>resets itself</b>. Needs /dev/watchdog (or <span class="mono">modprobe softdog</span>).</p>
       </div>
     {/if}
-    <p class="hint">
-      Before restarting machines elsewhere, the coordinator makes sure the dead host is off: through its BMC, by waiting for its armed watchdog, or by an admin confirming it.
-      Machines are restarted from the definition every member keeps; their disks must be on storage all members reach (NFS, Ceph, iSCSI).
-    </p>
+    <p class="hint">Protected machines' disks must be on storage every member reaches.</p>
     {#if admin}
       <div class="actions"><button class="ui-btn primary" disabled={!dirty || saving} onclick={save}><Save size={14} /> {saving ? 'Saving…' : 'Save settings'}</button>
         {#if dirty}<button class="ui-btn ghost" onclick={() => { dirty = false; form = toForm(status!) }}>Discard</button>{/if}</div>
@@ -326,6 +341,7 @@
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
   .hint { color: var(--text-2); font-size: 12px; margin: 0; }
   .hint.warn { color: var(--warn); }
+  .risk { margin: 0 0 8px; padding: 8px 12px; border: 2px solid var(--warn); font-size: 13px; }
   .actions { display: flex; gap: 8px; }
   .prio { font: 500 12px var(--font-sans); }
   .prio.critical { color: var(--danger); }
