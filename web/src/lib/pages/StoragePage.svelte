@@ -1,4 +1,7 @@
 <script lang="ts">
+  import ObjectXmlDialog from '../components/ObjectXmlDialog.svelte'
+  import FileCode from '@lucide/svelte/icons/file-code'
+  let xmlPool = $state<string | null>(null)
   import { session } from '../session.svelte'
   import HardDrive from '@lucide/svelte/icons/hard-drive'
   import Plus from '@lucide/svelte/icons/plus'
@@ -221,6 +224,18 @@
   const fmtLabel = (v: Volume) => (v.format === 'iso' ? 'ISO image' : v.format ? v.format.toUpperCase() : v.type)
 </script>
 
+<ObjectXmlDialog
+  open={!!xmlPool}
+  title="Storage pool {xmlPool ?? ''}"
+  kind="storage pool"
+  load={() => api.poolXML(xmlPool!)}
+  save={(x) => api.savePoolXML(xmlPool!, x)}
+  onclose={(saved) => {
+    xmlPool = null
+    if (saved) void loadPools()
+  }}
+/>
+
 <svelte:head><title>Storage · VirtoMir</title></svelte:head>
 
 <header class="page-head">
@@ -286,6 +301,7 @@
           </label>
         </div>
         <div class="v-actions" inert={!session.can('admin')} title={session.why('admin')}>
+          <button class="ui-btn sm ghost" onclick={() => (xmlPool = current!.name)}><FileCode size={14} /> XML</button>
           {#if current.active}
             <button class="ui-btn sm ghost" onclick={() => poolAction(current!, 'refresh')} title="Rescan the directory for files added outside VirtoMir">
               <RefreshCw size={14} /> Rescan

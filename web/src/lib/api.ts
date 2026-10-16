@@ -953,6 +953,12 @@ export const api = {
   createClusterPool: async (spec: PoolSpec) =>
     (await request<{ results: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/cluster/pools', spec)).results,
   deletePool: (name: string) => request<void>('DELETE', poolPath(name)),
+  poolXML: async (name: string) => (await send('GET', `${poolPath(name)}/xml`, { accept: 'application/xml' })).text(),
+  savePoolXML: async (name: string, xml: string): Promise<{ restartNeeded: boolean }> =>
+    (await send('PUT', `${poolPath(name)}/xml`, { body: xml, contentType: 'application/xml' })).json(),
+  networkXML: async (name: string) => (await send('GET', `${netPath(name)}/xml`, { accept: 'application/xml' })).text(),
+  saveNetworkXML: async (name: string, xml: string): Promise<{ restartNeeded: boolean }> =>
+    (await send('PUT', `${netPath(name)}/xml`, { body: xml, contentType: 'application/xml' })).json(),
   poolAction: (name: string, action: 'start' | 'stop' | 'refresh') => request<void>('POST', `${poolPath(name)}/actions/${action}`),
   poolAutostart: (name: string, enabled: boolean) => request<void>('PUT', `${poolPath(name)}/autostart`, { enabled }),
   volumes: async (pool: string) => (await request<{ volumes: Volume[] }>('GET', `${poolPath(pool)}/volumes`)).volumes,
