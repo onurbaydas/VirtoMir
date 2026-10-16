@@ -112,6 +112,24 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 
 ## Install
 
+### Signed package repository (apt / dnf)
+
+Releases are published to a signed repository, so updates come with `apt upgrade` / `dnf upgrade`:
+
+```sh
+# Debian / Ubuntu
+sudo install -d -m 0755 /etc/apt/keyrings
+sudo curl -fsSL -o /etc/apt/keyrings/virtomir.asc https://onurbaydas.github.io/VirtoMir/virtomir.asc
+echo "deb [signed-by=/etc/apt/keyrings/virtomir.asc] https://onurbaydas.github.io/VirtoMir/apt stable main" | sudo tee /etc/apt/sources.list.d/virtomir.list
+sudo apt update && sudo apt install virtomir
+
+# Fedora / RHEL 10 (experimental)
+sudo curl -fsSL -o /etc/yum.repos.d/virtomir.repo https://onurbaydas.github.io/VirtoMir/virtomir.repo
+sudo dnf install virtomir
+```
+
+The repository is built by `scripts/build-repos.sh` in the release workflow (`InRelease` and `repomd.xml` signed, every `.rpm` signed).
+
 ### Debian / Ubuntu package
 
 ```sh
@@ -187,7 +205,7 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 
 ## Roadmap
 
-Signed apt/rpm repositories.
+Ideas welcome — open an issue.
 
 ## License
 

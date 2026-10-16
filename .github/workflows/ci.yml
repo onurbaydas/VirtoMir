@@ -47,4 +47,4 @@ jobs:
         run: CGO_ENABLED=1 go build -tags pam -o /tmp/virtomird ./cmd/virtomird
 
       - name: Shell scripts
-        run: shellcheck -s sh scripts/install.sh scripts/build-release.sh
+        run: shellcheck -s sh scripts/install.sh scripts/build-release.sh scripts/build-repos.sh
