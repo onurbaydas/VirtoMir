@@ -213,6 +213,7 @@ func (s *Server) Handler() http.Handler {
 	s.hostInfoRoutes(mux)
 	s.firewallRoutes(mux)
 	s.updateRoutes(mux)
+	s.objectXMLRoutes(mux)
 
 	spec := s.openAPI(mux.routes) // everything above, built once
 	mux.HandleFunc("GET /api/v1/openapi.json", func(w http.ResponseWriter, _ *http.Request) {

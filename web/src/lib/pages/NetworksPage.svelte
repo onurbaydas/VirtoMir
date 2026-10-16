@@ -1,4 +1,7 @@
 <script lang="ts">
+  import ObjectXmlDialog from '../components/ObjectXmlDialog.svelte'
+  import FileCode from '@lucide/svelte/icons/file-code'
+  let xmlNet = $state<string | null>(null)
   import { session } from '../session.svelte'
   import Network from '@lucide/svelte/icons/network'
   import Plus from '@lucide/svelte/icons/plus'
@@ -157,6 +160,18 @@
   }
 </script>
 
+<ObjectXmlDialog
+  open={!!xmlNet}
+  title="Network {xmlNet ?? ''}"
+  kind="network"
+  load={() => api.networkXML(xmlNet!)}
+  save={(x) => api.saveNetworkXML(xmlNet!, x)}
+  onclose={(saved) => {
+    xmlNet = null
+    if (saved) void load()
+  }}
+/>
+
 <svelte:head><title>Networks · VirtoMir</title></svelte:head>
 
 <header class="page-head">
@@ -206,6 +221,7 @@
                 Start with the host
               </label>
               <span class="spacer"></span>
+              <button class="ui-btn sm ghost" onclick={() => (xmlNet = n.name)}><FileCode size={14} /> XML</button>
               {#if n.active}
                 <ConfirmButton
                   label="Stop"
