@@ -32,6 +32,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/reports"
 	"github.com/onurbaydas/virtomir/internal/respool"
 	"github.com/onurbaydas/virtomir/internal/schedule"
+	"github.com/onurbaydas/virtomir/internal/update"
 	"github.com/onurbaydas/virtomir/internal/virt"
 	"github.com/onurbaydas/virtomir/web"
 )
@@ -48,6 +49,7 @@ type config struct {
 	tlsMode, tlsCert, tlsKey string
 	stateDir                 string
 	name                     string
+	updateRepo               string
 }
 
 func main() {
@@ -64,6 +66,7 @@ func main() {
 	flag.StringVar(&c.tlsKey, "tls-key", "", "private key file for -tls=files")
 	flag.StringVar(&c.stateDir, "state-dir", "/var/lib/virtomir", "where virtomird keeps its own files (TLS certificate)")
 	flag.StringVar(&c.name, "name", "", "how this host is called in a cluster (default: its hostname)")
+	flag.StringVar(&c.updateRepo, "update-repo", "onurbaydas/VirtoMir", `GitHub repository whose releases the Updates card offers ("" turns the check off); a private one needs VIRTOMIR_GITHUB_TOKEN`)
 	debug := flag.Bool("debug", false, "verbose logging")
 	flag.Parse()
 
@@ -165,6 +168,8 @@ func run(c config, log *slog.Logger) error {
 		opts.HA = haStore
 	}
 	opts.HostInfo = hostinfo.New()
+	opts.Updater = update.New(c.updateRepo, version, os.Getenv("VIRTOMIR_GITHUB_TOKEN"))
+	opts.StateDir = c.stateDir
 	if repStore, err := reports.Open(filepath.Join(c.stateDir, "reports")); err != nil {
 		log.Warn("reports store", "err", err)
 	} else {

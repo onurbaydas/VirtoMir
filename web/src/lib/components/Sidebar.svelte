@@ -193,7 +193,7 @@
 
   {#if session.info}
     <div class="user">
-      <a class="who" class:active={router.route.name === 'account'} href="/account" onclick={router.link} title="Your role and API tokens">
+      <a class="who" class:active={router.route.name === 'account'} href="/account" onclick={router.link} title="Your account, API tokens and updates">
         <span class="avatar"><UserRound size={14} /></span>
         <span class="uname">{session.info.user ?? 'dev mode'}<small>{session.role}</small></span>
       </a>

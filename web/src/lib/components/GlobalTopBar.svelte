@@ -15,12 +15,16 @@
 
   // Real health: daemon version, HA quorum (clustered only), storage pools, live data age.
   let version = $state('')
+  let newer = $state('') // a newer release on GitHub
   let quorum = $state<{ votes: number; total: number; ok: boolean } | null>(null)
   let storage = $state<{ ok: boolean; text: string } | null>(null)
   let now = $state(Date.now())
 
   $effect(() => {
     void api.get<{ version: string }>('/api/v1/version').then((v) => (version = v.version)).catch(() => {})
+    void api.get<{ available: boolean; latest?: { version: string } }>('/api/v1/update')
+      .then((u) => (newer = u.available ? (u.latest?.version ?? '') : ''))
+      .catch(() => {})
     const tick = setInterval(() => (now = Date.now()), 1000)
     const poll = async () => {
       try {
@@ -145,6 +149,12 @@
 
   <!-- Right Section: Cluster Health & Controls -->
   <div class="right-group mono">
+    {#if newer}
+      <a class="health-block warn" href="/account" onclick={router.link} title="A newer VirtoMir release is available">
+        <span>UPDATE {newer}</span>
+      </a>
+    {/if}
+
     {#if quorum}
       <a class="health-block" class:ok={quorum.ok} class:warn={!quorum.ok} href="/cluster" onclick={router.link} title="HA quorum: votes this host sees">
         <span class="dot">●</span>
@@ -242,6 +252,8 @@
     align-items: center;
     gap: 12px;
     min-width: 0;
+    flex-shrink: 1;
+    overflow: hidden;
   }
   .deck-logo {
     display: flex;
@@ -274,6 +286,8 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+    overflow: hidden;
     font-size: 11px;
     color: var(--text-2);
   }
@@ -295,7 +309,8 @@
     color: var(--text-3);
   }
   .center-group {
-    flex: 1;
+    flex: 1 1 120px;
+    min-width: 0;
     max-width: 440px;
   }
   .cmd-palette-btn {
@@ -339,6 +354,8 @@
     align-items: center;
     gap: 6px;
     font-size: 11px;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
   .health-block {
     display: flex;
