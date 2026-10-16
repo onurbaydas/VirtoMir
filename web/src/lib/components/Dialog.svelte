@@ -50,7 +50,7 @@
     max-height: calc(100vh - 48px);
     padding: 0;
     border: var(--frame) solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text);
     box-shadow:
@@ -98,7 +98,7 @@
     flex: none;
     height: 28px;
     border: var(--frame) solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--metal);
     box-shadow: var(--bevel);
     color: var(--text);

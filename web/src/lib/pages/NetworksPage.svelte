@@ -415,7 +415,7 @@
     place-items: center;
     width: 36px;
     height: 36px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-3);
   }
@@ -437,7 +437,7 @@
   }
   .mode {
     padding: 1px 8px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11.5px;
@@ -496,8 +496,6 @@
     color: var(--text-3);
     font-size: 12px;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
   }
   .leases {
     display: grid;
@@ -518,7 +516,7 @@
     height: 22px;
     margin-left: 6px;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-3);
     cursor: pointer;
@@ -582,7 +580,7 @@
     gap: 3px;
     padding: 10px 12px;
     border: 1px solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     transition: border-color var(--dur-fast);
   }

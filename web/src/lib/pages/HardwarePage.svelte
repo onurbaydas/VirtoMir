@@ -247,7 +247,7 @@
     width: 8px;
     height: 8px;
     margin-top: 6px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--idle);
   }
   .dot.ok {

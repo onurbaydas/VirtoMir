@@ -209,8 +209,6 @@
     color: var(--text-3);
     font-size: 11.5px;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
   }
   .user {
     display: flex;
@@ -231,7 +229,7 @@
   }
   .qr {
     align-self: center;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: #fff;
     padding: 8px;
   }
@@ -241,7 +239,6 @@
   }
   .code {
     font-size: 18px;
-    letter-spacing: 0.2em;
     text-align: center;
   }
   .rec {
@@ -261,7 +258,7 @@
     gap: 6px 24px;
     width: 100%;
     padding: 12px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     font-size: 14px;
   }

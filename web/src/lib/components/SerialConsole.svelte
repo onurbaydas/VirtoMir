@@ -132,7 +132,7 @@
     flex-direction: column;
     background: var(--surface);
     border: var(--frame) solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     overflow: hidden;
     box-shadow:
       var(--bevel),
@@ -141,7 +141,7 @@
   .serial.standalone {
     height: 100vh;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
   }
   .bar {
     display: flex;
@@ -165,7 +165,7 @@
   .dot {
     width: 7px;
     height: 7px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--c);
   }
   .dev {
@@ -185,7 +185,7 @@
     width: 30px;
     height: 30px;
     border: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-2);
     cursor: pointer;

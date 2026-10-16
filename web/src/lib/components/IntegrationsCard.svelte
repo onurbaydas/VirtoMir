@@ -187,7 +187,7 @@ resource "virtomir_machine" "web" {
     max-height: 340px;
     overflow: auto;
     border: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
   }
   .ep {
     display: grid;
@@ -203,7 +203,7 @@ resource "virtomir_machine" "web" {
   }
   .method {
     padding: 1px 6px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     font-size: 11px;
     font-weight: 700;
@@ -235,7 +235,7 @@ resource "virtomir_machine" "web" {
   .snippet pre {
     margin: 0;
     padding: 12px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     font-size: 12px;
     overflow: auto;

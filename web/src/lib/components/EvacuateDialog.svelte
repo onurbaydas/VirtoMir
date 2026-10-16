@@ -135,9 +135,9 @@
 
 <style>
   .t { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .t th { text-align: left; font: 600 11px var(--font-mono); text-transform: uppercase; color: var(--text-2); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .t th { text-align: left; font: 500 12px var(--font-sans); color: var(--text-2); padding: 6px 8px; border-bottom: 1px solid var(--border); }
   .t td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  .st { font: 600 11px var(--font-mono); text-transform: uppercase; }
+  .st { font: 500 12px var(--font-sans); }
   .st.done { color: var(--ok); }
   .st.failed, .bad { color: var(--danger); }
   .st.moving { color: var(--warn); }

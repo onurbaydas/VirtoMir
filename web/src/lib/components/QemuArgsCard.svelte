@@ -114,7 +114,7 @@
   .qemu {
     background: var(--surface);
     border: var(--frame) dashed var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     overflow: hidden;
     box-shadow:
       var(--bevel),
@@ -141,7 +141,7 @@
     place-items: center;
     width: 32px;
     height: 32px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: color-mix(in srgb, var(--warn) 14%, transparent);
     color: var(--warn);
   }
@@ -160,7 +160,7 @@
   }
   .badge {
     padding: 1px 7px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--warn);
     font-size: 11px;
@@ -188,7 +188,7 @@
   }
   .warn {
     padding: 10px 12px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     border-left: 3px solid var(--warn);
     color: var(--text-2);

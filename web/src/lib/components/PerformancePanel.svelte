@@ -160,7 +160,7 @@
     margin-bottom: 16px;
     background: var(--surface);
     border: var(--frame) solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     box-shadow:
       var(--bevel),
       var(--shadow-hard);
@@ -183,8 +183,6 @@
     margin: 0;
     font-size: 14px;
     font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
   }
   h2 :global(svg) {
     color: var(--accent);
@@ -221,8 +219,6 @@
     color: var(--text-2);
     font-size: 12px;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
   }
   .vcpus {
     display: flex;
@@ -240,7 +236,7 @@
     position: relative;
     width: 14px;
     height: 56px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     overflow: hidden;
   }

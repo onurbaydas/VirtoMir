@@ -99,15 +99,15 @@
     </div>
   </div>
 {:else}
-  <div class="cluster-tabs mono">
+  <div class="cluster-tabs">
     <button class="c-tab" class:active={currentTab === 'members'} onclick={() => currentTab = 'members'}>
-      [01] CLUSTER MEMBERS
+      Members
     </button>
     <button class="c-tab" class:active={currentTab === 'ha'} onclick={() => currentTab = 'ha'}>
-      [02] HIGH AVAILABILITY & STONITH
+      High availability
     </button>
     <button class="c-tab" class:active={currentTab === 'pools'} onclick={() => currentTab = 'pools'}>
-      [03] RESOURCE POOLS & QUOTAS
+      Resource pools
     </button>
   </div>
 
@@ -129,10 +129,10 @@
               {#if m.self}<span class="pill">this host</span>{/if}
               {#if cluster.current?.id === m.id}<span class="pill accent">shown</span>{/if}
             </div>
-            <div class="m-sub mono">{m.address}</div>
+            <div class="m-sub">{m.address}</div>
             {#if m.error}<div class="m-err">{m.error}</div>{/if}
           </div>
-          <div class="m-ver mono" class:warn={m.version && self?.version && m.version !== self.version} title={m.version && self?.version && m.version !== self.version ? 'Runs another VirtoMir version than this host' : 'VirtoMir version'}>
+          <div class="m-ver" class:warn={m.version && self?.version && m.version !== self.version} title={m.version && self?.version && m.version !== self.version ? 'Runs another VirtoMir version than this host' : 'VirtoMir version'}>
             {m.version ?? '—'}
           </div>
           <div class="m-actions">
@@ -186,7 +186,7 @@
         <section class="ui-panel card">
           <h2><LogIn size={16} /> Join a cluster</h2>
           <p class="hint">Paste a code created on any host of the cluster. This host's machines stay where they are.</p>
-          <textarea class="ui-input mono" rows="3" placeholder="vmj1-…" bind:value={code} aria-label="Join code" spellcheck="false"></textarea>
+          <textarea class="ui-input" rows="3" placeholder="vmj1-…" bind:value={code} aria-label="Join code" spellcheck="false"></textarea>
           {#if joinError}<div class="ui-error-box">{joinError}</div>{/if}
           <button class="ui-btn primary" class:busy={joining} disabled={joining || !code.trim().startsWith('vmj1-')} onclick={join}>Join</button>
         </section>
@@ -201,30 +201,28 @@
 <style>
   .cluster-tabs {
     display: flex;
-    gap: 8px;
-    margin-bottom: 20px;
-    border-bottom: 2px solid var(--border-strong);
-    padding-bottom: 8px;
+    gap: 2px;
+    margin-bottom: 22px;
+    border-bottom: 1px solid var(--border);
   }
   .c-tab {
-    padding: 8px 14px;
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    font-size: 11px;
-    font-weight: 700;
+    height: 38px;
+    margin-bottom: -1px;
+    padding: 0 12px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--text-2);
+    font-size: 13.5px;
+    font-weight: 500;
     cursor: pointer;
-    letter-spacing: 0.05em;
   }
   .c-tab:hover {
     color: var(--text);
-    border-color: var(--text-dim);
   }
   .c-tab.active {
-    background: var(--accent);
-    color: #fff;
-    border-color: var(--accent);
-    box-shadow: 2px 2px 0 0 var(--border-strong);
+    border-bottom-color: var(--text);
+    color: var(--text);
   }
   .lead {
     margin: 0;
@@ -289,7 +287,7 @@
     flex: none;
     width: 9px;
     height: 9px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--danger);
   }
   .dot.ok {
@@ -327,7 +325,7 @@
   }
   .pill {
     padding: 1px 8px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11px;
@@ -350,7 +348,7 @@
     gap: 8px;
     padding: 8px 10px;
     border: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
   }
   .code code {

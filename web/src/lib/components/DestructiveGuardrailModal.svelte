@@ -56,7 +56,7 @@
     <div class="hazard-stripes banner-header">
       <div class="banner-content">
         <TriangleAlert size={20} />
-        <span class="banner-title mono">DESTRUCTIVE ACTION SAFEGUARD</span>
+        <span class="banner-title">This cannot be undone</span>
       </div>
     </div>
 
@@ -64,24 +64,24 @@
       <div class="action-alert">
         {#if action === 'delete'}
           <p class="lead-warn">
-            You are about to <strong>PERMANENTLY DESTROY</strong> machine
-            <span class="target-chip mono">{targetName}</span>.
+            You are about to <strong>delete</strong> machine
+            <span class="target-chip">{targetName}</span>.
           </p>
           <p class="sub-warn">
             This cannot be undone: its definition, snapshots and (if ticked) its disk images are removed. Backups stay.
           </p>
         {:else if action === 'force-off'}
           <p class="lead-warn">
-            You are about to <strong>FORCE POWER OFF (PULL PLUG)</strong> on
-            <span class="target-chip mono">{targetName}</span>.
+            You are about to <strong>force off</strong>
+            <span class="target-chip">{targetName}</span>.
           </p>
           <p class="sub-warn">
             The machine stops at once, without shutting down: data the guest has not written to disk yet is lost.
           </p>
         {:else}
           <p class="lead-warn">
-            You are about to execute a <strong>HARD COLD RESET</strong> on
-            <span class="target-chip mono">{targetName}</span>.
+            You are about to <strong>hard reset</strong>
+            <span class="target-chip">{targetName}</span>.
           </p>
           <p class="sub-warn">
             Like pressing the reset button: the guest restarts at once, without shutting down.
@@ -90,14 +90,14 @@
       </div>
 
       {#if targetUuid}
-        <div class="uuid-bar mono">
-          <span class="lbl">UUID:</span>
+        <div class="uuid-bar">
+          <span class="lbl">UUID</span>
           <span class="val">{targetUuid}</span>
         </div>
       {/if}
 
       {#if action === 'delete'}
-        <div class="checkbox-group mono">
+        <div class="checkbox-group">
           <label class="check-row">
             <input type="checkbox" bind:checked={purgeDisks} />
             <span>Also delete its own disk images (shared images, ISOs and template disks are kept)</span>
@@ -106,12 +106,12 @@
       {/if}
 
       <div class="verification-box">
-        <label for="verify-input" class="verify-label mono">
+        <label for="verify-input" class="verify-label">
           To proceed, type exact machine name <strong>"{targetName}"</strong>:
         </label>
         <input
           id="verify-input"
-          class="verify-input mono"
+          class="verify-input"
           type="text"
           bind:value={typedName}
           placeholder={targetName}
@@ -122,24 +122,24 @@
     </div>
 
     <div class="guardrail-footer">
-      <button class="ui-btn" onclick={onclose}>CANCEL</button>
+      <button class="ui-btn" onclick={onclose}>Cancel</button>
       <button
-        class="ui-btn danger-confirm mono"
+        class="ui-btn danger-confirm"
         class:locked={!canConfirm}
         disabled={!canConfirm}
         onclick={confirm}
       >
         {#if countdown > 0}
-          <span class="timer-badge">UNLOCKING IN {countdown}S</span>
+          <span class="timer-badge">Wait {countdown}s</span>
         {:else if !nameMatches}
-          <span>TYPE NAME TO UNLOCK</span>
+          <span>Type the name to continue</span>
         {:else}
           {#if action === 'delete'}
             <Trash size={14} />
-            <span>CONFIRM PERMANENT DELETION</span>
+            <span>Delete for good</span>
           {:else}
             <Zap size={14} />
-            <span>EXECUTE FORCED ACTION</span>
+            <span>Do it</span>
           {/if}
         {/if}
       </button>
@@ -172,7 +172,6 @@
     box-shadow: 2px 2px 0 var(--ink);
     color: var(--danger);
     font-weight: 800;
-    letter-spacing: 0.08em;
   }
   .guardrail-body {
     padding: 20px 24px;
@@ -231,7 +230,7 @@
     width: 16px;
     height: 16px;
     accent-color: var(--danger);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     cursor: pointer;
   }
   .verification-box {
@@ -279,7 +278,6 @@
     padding: 0 16px;
     font-weight: 700;
     font-size: 12px;
-    letter-spacing: 0.05em;
     cursor: pointer;
   }
   .danger-confirm.locked,

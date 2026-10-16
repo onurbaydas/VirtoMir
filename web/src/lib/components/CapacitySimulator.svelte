@@ -117,6 +117,6 @@
   .out .ok { border-left-color: var(--ok); }
   .out .warn { border-left-color: var(--warn); }
   .out .bad { border-left-color: var(--danger); color: var(--danger); }
-  .lbl { font: 600 11px var(--font-mono); text-transform: uppercase; color: var(--text-2); }
+  .lbl { font: 500 12px var(--font-sans); color: var(--text-2); }
   .muted { color: var(--text-2); font-size: 12px; }
 </style>

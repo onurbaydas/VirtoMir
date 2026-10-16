@@ -171,7 +171,7 @@
   .host-chip {
     margin-right: 6px;
     padding: 1px 8px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 11px;

@@ -153,7 +153,7 @@
         <span>It has stopped its protected machines; the members that still have quorum restart them.</span>
       {/if}
     </div>
-    {#if status.watchdogArmed}<span class="chip mono">WATCHDOG ARMED</span>{/if}
+    {#if status.watchdogArmed}<span class="chip mono">Watchdog armed</span>{/if}
   </section>
   {#if status.watchdogError}<div class="ui-error-box">Watchdog: {status.watchdogError}</div>{/if}
 
@@ -165,7 +165,7 @@
         {#each status.nodes as n (n.id)}
           {@const a = form.fenceAgents[n.id]}
           <tr>
-            <td><b>{n.name}</b>{#if n.self} <span class="muted">(this host)</span>{/if}{#if q.coordinator === n.id} <span class="chip mono">COORDINATOR</span>{/if}</td>
+            <td><b>{n.name}</b>{#if n.self} <span class="muted">(this host)</span>{/if}{#if q.coordinator === n.id} <span class="chip mono">coordinator</span>{/if}</td>
             <td>
               <span class="dot {n.status}"></span>{n.status}
               <div class="muted small">{n.self ? '' : `heartbeat ${ago(n.lastSeen)}`}</div>
@@ -306,10 +306,10 @@
   .banner.bad { border-left-color: var(--danger); background: var(--danger-soft); }
   .banner div { display: flex; flex-direction: column; gap: 2px; flex: 1; }
   .banner span { color: var(--text-2); font-size: 13px; }
-  .sub { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; margin: 20px 0 8px; }
+  .sub { font-size: 14px; margin: 20px 0 8px; }
   .table-wrap { overflow-x: auto; padding: 0; }
   .t { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .t th { text-align: left; font: 600 11px var(--font-mono); text-transform: uppercase; color: var(--text-2); padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .t th { text-align: left; font: 500 12px var(--font-sans); color: var(--text-2); padding: 8px 10px; border-bottom: 1px solid var(--border); }
   .t td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
   .dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; background: var(--idle); }
   .dot.online { background: var(--ok); }
@@ -327,7 +327,7 @@
   .hint { color: var(--text-2); font-size: 12px; margin: 0; }
   .hint.warn { color: var(--warn); }
   .actions { display: flex; gap: 8px; }
-  .prio { font: 600 11px var(--font-mono); text-transform: uppercase; }
+  .prio { font: 500 12px var(--font-sans); }
   .prio.critical { color: var(--danger); }
   .prio.high { color: var(--warn); }
   .small { font-size: 11px; }

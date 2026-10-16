@@ -363,7 +363,7 @@
     flex-direction: column;
     background: var(--surface);
     border: var(--frame) solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     overflow: hidden;
     box-shadow:
       var(--bevel),
@@ -373,7 +373,7 @@
   .console:fullscreen {
     height: 100vh;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
   }
   .bar {
     display: flex;
@@ -406,7 +406,7 @@
   .dot {
     width: 7px;
     height: 7px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--c);
   }
   .tb {
@@ -416,7 +416,7 @@
     height: 30px;
     padding: 0 10px;
     border: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 12.5px;
@@ -461,7 +461,7 @@
     padding: 8px;
     background: var(--bg-elev);
     border: 1px solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     box-shadow: var(--shadow-pop);
   }
   .keys {
@@ -478,7 +478,7 @@
   .fkeys button {
     height: 28px;
     border: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     font-size: 12px;
     cursor: pointer;
@@ -494,7 +494,7 @@
     height: 32px;
     padding: 0 8px;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     font-size: 13px;
     text-align: left;
@@ -543,7 +543,7 @@
     display: flex;
     gap: 2px;
     padding: 2px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
     box-shadow: var(--bevel-in);
@@ -552,7 +552,7 @@
     height: 26px;
     padding: 0 9px;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-2);
     font-size: 12px;
@@ -605,7 +605,7 @@
     height: 22px;
     border: 2.5px solid var(--accent);
     border-right-color: transparent;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin {

@@ -63,7 +63,7 @@
   header { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
   h2 { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 15px; }
   .t { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .t th { text-align: left; font: 600 11px var(--font-mono); text-transform: uppercase; color: var(--text-2); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .t th { text-align: left; font: 500 12px var(--font-sans); color: var(--text-2); padding: 6px 8px; border-bottom: 1px solid var(--border); }
   .t td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
   .bar { display: inline-block; width: 60px; height: 6px; background: var(--bg-elev); vertical-align: middle; margin-right: 6px; }
   .bar i { display: block; height: 100%; background: var(--accent); }

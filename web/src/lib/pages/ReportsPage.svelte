@@ -200,9 +200,9 @@
   .kind { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
   .kind h2 { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 15px; }
   .kind p { margin: 0; color: var(--text-2); font-size: 13px; flex: 1; }
-  .sub { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; margin: 22px 0 8px; }
+  .sub { font-size: 14px; margin: 22px 0 8px; }
   .t { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .t th { text-align: left; font: 600 11px var(--font-mono); text-transform: uppercase; color: var(--text-2); padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .t th { text-align: left; font: 500 12px var(--font-sans); color: var(--text-2); padding: 8px 10px; border-bottom: 1px solid var(--border); }
   .t td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
   .summary { max-width: 420px; color: var(--text-2); }
   .acts { white-space: nowrap; display: flex; gap: 4px; }

@@ -53,7 +53,7 @@
     background: var(--surface);
     border: var(--frame) solid var(--border-strong);
     border-left: 8px solid var(--c);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     box-shadow:
       var(--bevel),
       var(--shadow-pop);
@@ -75,7 +75,7 @@
     margin: 1px;
     border: 2px solid var(--info);
     border-right-color: transparent;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin {
@@ -107,14 +107,12 @@
     height: 28px;
     padding: 0 12px;
     border: var(--frame) solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--metal);
     box-shadow: var(--bevel);
     font-family: var(--font-display);
     font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
     cursor: pointer;
   }
   .act.danger {
@@ -129,7 +127,7 @@
     width: 24px;
     height: 24px;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-3);
     cursor: pointer;

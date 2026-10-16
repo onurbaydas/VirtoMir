@@ -128,7 +128,7 @@
   .xml {
     background: var(--surface);
     border: var(--frame) solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     overflow: hidden;
     box-shadow:
       var(--bevel),
@@ -155,7 +155,7 @@
     display: flex;
     gap: 2px;
     padding: 3px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
     box-shadow: var(--bevel-in);
@@ -164,7 +164,7 @@
     height: 26px;
     padding: 0 11px;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-2);
     font-size: 12.5px;
@@ -184,7 +184,7 @@
     height: 30px;
     padding: 0 10px;
     border: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-2);
     font-size: 12.5px;
@@ -278,7 +278,7 @@
   }
   .sk {
     height: 12px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--skeleton);
     animation: shimmer 1.4s ease-in-out infinite;
   }

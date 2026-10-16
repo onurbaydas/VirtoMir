@@ -85,12 +85,12 @@ EOF`
   <div class="panel-head">
     <div class="title">
       <span class="dot"></span>
-      <span>AS CODE</span>
+      <span>As code</span>
     </div>
     <div class="formats">
-      <button class:active={format === 'curl'} onclick={() => (format = 'curl')}>API (CURL)</button>
-      <button class:active={format === 'ansible'} onclick={() => (format = 'ansible')}>ANSIBLE</button>
-      <button class:active={format === 'virt-install'} onclick={() => (format = 'virt-install')}>VIRT-INSTALL</button>
+      <button class:active={format === 'curl'} onclick={() => (format = 'curl')}>API (curl)</button>
+      <button class:active={format === 'ansible'} onclick={() => (format = 'ansible')}>Ansible</button>
+      <button class:active={format === 'virt-install'} onclick={() => (format = 'virt-install')}>virt-install</button>
     </div>
   </div>
 
@@ -99,10 +99,10 @@ EOF`
     <button class="copy-btn" onclick={copyCode} title="Copy code">
       {#if copied}
         <Check size={13} />
-        <span>COPIED</span>
+        <span>Copied</span>
       {:else}
         <Copy size={13} />
-        <span>COPY</span>
+        <span>Copy</span>
       {/if}
     </button>
   </div>
@@ -110,69 +110,64 @@ EOF`
 
 <style>
   .iac-panel {
-    border: var(--frame) solid var(--border-strong);
-    background: var(--surface);
-    box-shadow: var(--shadow-hard);
     display: flex;
     flex-direction: column;
     margin-top: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
   }
   .panel-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 12px;
-    background: var(--bg-elev);
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
     gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
   }
   .title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--accent);
+    color: var(--text-2);
+    font-size: 13px;
+    font-weight: 500;
   }
   .dot {
-    width: 6px;
-    height: 6px;
-    background: var(--accent);
+    display: none;
   }
   .formats {
     display: flex;
     gap: 2px;
+    padding: 2px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-elev);
   }
   .formats button {
-    padding: 2px 8px;
-    border: 1px solid var(--border);
-    background: var(--surface);
+    padding: 3px 9px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
     color: var(--text-2);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 700;
+    font-size: 12px;
     cursor: pointer;
   }
   .formats button.active {
-    background: var(--accent);
-    color: var(--accent-contrast);
-    border-color: var(--accent);
+    background: var(--surface-hover);
+    color: var(--text);
   }
   .code-container {
     position: relative;
-    background: #0d0e10;
-    color: #4fd27b;
-    padding: 12px;
-    max-height: 220px;
+    max-height: 240px;
     overflow-y: auto;
+    padding: 12px;
+    background: var(--bg-elev);
+    color: var(--text-2);
   }
   pre {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 1.45;
+    font-size: 11.5px;
+    line-height: 1.5;
     white-space: pre-wrap;
     user-select: text;
   }
@@ -184,16 +179,14 @@ EOF`
     align-items: center;
     gap: 4px;
     padding: 3px 8px;
-    border: 1px solid #333;
-    background: #1a1c20;
-    color: #eee;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 700;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-2);
+    font-size: 12px;
     cursor: pointer;
   }
   .copy-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
+    color: var(--text);
   }
 </style>

@@ -500,7 +500,7 @@
     gap: 2px;
     padding: 10px 14px;
     border: 1px solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     font: inherit;
     cursor: pointer;
@@ -531,7 +531,7 @@
     place-items: center;
     width: 22px;
     height: 22px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--accent-soft);
     color: var(--accent);
     font-size: 12px;
@@ -548,7 +548,7 @@
     gap: 4px;
     padding: 12px;
     border: 1px solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     transition:
       border-color var(--dur-fast),
@@ -620,7 +620,7 @@
     display: flex;
     gap: 2px;
     padding: 3px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
     box-shadow: var(--bevel-in);
@@ -630,7 +630,7 @@
     display: grid;
     place-items: center;
     height: 32px;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     color: var(--text-2);
     font-size: 13px;
     font-weight: 500;
@@ -656,7 +656,7 @@
     gap: 12px;
     padding: 12px;
     border: 1px dashed var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
   }
   .adv {
     display: flex;

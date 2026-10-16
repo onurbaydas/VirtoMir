@@ -99,8 +99,8 @@
     <p class="empty">No snapshots yet. Take one before risky changes, then return to it in one click.</p>
   {:else}
     <div class="tree-header">
-      <span class="mono font-bold text-accent">[SNAPSHOT GIT-GRAPH TIMELINE]</span>
-      <span class="mono text-muted text-xs">{rows.length} SNAPSHOT(S) CAPTURED</span>
+      <span class="font-bold text-accent">Snapshot tree</span>
+      <span class="text-muted text-xs">{rows.length} SNAPSHOT(S) CAPTURED</span>
     </div>
     <ol class="tree">
       {#each rows as { s, depth } (s.name)}
@@ -111,8 +111,8 @@
             <span class="name font-mono">
               <span class="tree-glyph">{depth > 0 ? '├─' : '●'}</span>
               <strong>{s.name}</strong>
-              {#if s.current}<span class="badge-brutal accent" title="The machine was last reverted to or created from this snapshot">[● YOU ARE HERE]</span>{/if}
-              {#if s.memory}<span class="badge-brutal ok" title="Includes memory: reverting resumes the running machine">[RAM INCLUDED]</span>{/if}
+              {#if s.current}<span class="badge-brutal accent" title="The machine was last reverted to or created from this snapshot">● You are here</span>{/if}
+              {#if s.memory}<span class="badge-brutal ok" title="Includes memory: reverting resumes the running machine">with memory</span>{/if}
             </span>
             <span class="meta font-mono">{when(s.created)} // {STATE[s.state] ?? s.state}{s.location === 'external' ? ' // external' : ''}</span>
             {#if s.description}<span class="desc font-mono">{s.description}</span>{/if}
@@ -196,7 +196,7 @@
   }
   .tree-glyph {
     color: var(--accent);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-weight: 700;
   }
   .tree {
@@ -218,7 +218,7 @@
     width: 12px;
     height: 12px;
     border: 2px solid var(--border-strong);
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: var(--surface);
     box-shadow:
       var(--bevel),
