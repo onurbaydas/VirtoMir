@@ -89,7 +89,7 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - **Roles** from Linux groups: admin (`libvirt`), operator (`virtomir-operator`: run machines, console, snapshots, backups) and viewer (`virtomir-viewer`)
 - **LDAP / Active Directory** and **OpenID Connect** ("Sign in with …") besides local accounts, roles from directory groups
 - **Two-step sign-in** with any authenticator app (TOTP), with recovery codes; admins can reset it
-- **Quotas and self-service**: operators create and manage their own machines within a limit on machines, vCPUs and memory
+- **Quotas and self-service**: operators create and manage their own machines within a limit on machines, vCPUs, memory and disk space
 - **API tokens** for scripts and automation, limited to their owner's role
 - HTTPS by default (self-signed certificate created on first start, or your own)
 - Session timeouts, lockout after failed sign-ins, CSRF protection, **activity log** of every change (CSV export)
@@ -116,7 +116,7 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 sudo apt install ./virtomir_0.5.0_amd64.deb   # or _arm64.deb; pulls libvirt and QEMU if missing
 ```
 
-It starts `virtomird` right away on port 8420 (self-signed HTTPS). Sign in with a Linux account in the `libvirt` group (admins), `virtomir-operator` or `virtomir-viewer`. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Later versions install from the UI (Account → Updates). Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
+It starts `virtomird` right away on port 8420 (self-signed HTTPS); the first admin to sign in is walked through what the host still needs (storage, a network, a backup location, a first image). Sign in with a Linux account in the `libvirt` group (admins), `virtomir-operator` or `virtomir-viewer`. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Later versions install from the UI (Account → Updates). Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
 
 ### Fedora / RHEL package (experimental)
 

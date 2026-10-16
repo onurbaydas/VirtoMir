@@ -24,6 +24,8 @@
   import ActivityPage from './lib/pages/ActivityPage.svelte'
   import AccountPage from './lib/pages/AccountPage.svelte'
   import ReportsPage from './lib/pages/ReportsPage.svelte'
+  import SetupPage from './lib/pages/SetupPage.svelte'
+  import { api } from './lib/api'
   import ConsolePage from './lib/pages/ConsolePage.svelte'
   import Login from './lib/pages/Login.svelte'
   import CommandPalette from './lib/components/CommandPalette.svelte'
@@ -84,6 +86,19 @@
   })
 
   let route = $derived(router.route)
+
+  // First run (ADR-0045): an admin opening a fresh host lands on the setup page once.
+  let setupAsked = false
+  $effect(() => {
+    if (!session.ready || setupAsked || !session.can('admin') || router.host) return
+    setupAsked = true
+    void api
+      .get<{ done: boolean }>('/api/v1/setup')
+      .then((s) => {
+        if (!s.done && router.route.name === 'overview') router.navigate('/setup', { replace: true })
+      })
+      .catch(() => {})
+  })
 </script>
 
 {#if session.info === null}
@@ -128,6 +143,8 @@
           <AccountPage />
         {:else if route.name === 'hardware'}
           <HardwarePage />
+        {:else if route.name === 'setup'}
+          <SetupPage />
         {:else if route.name === 'reports'}
           <ReportsPage />
         {:else if route.name === 'cluster'}

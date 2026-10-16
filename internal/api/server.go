@@ -221,6 +221,7 @@ func (s *Server) Handler() http.Handler {
 	s.hostInfoRoutes(mux)
 	s.hostNetRoutes(mux)
 	s.offsiteRoutes(mux)
+	s.setupRoutes(mux)
 	s.firewallRoutes(mux)
 	s.updateRoutes(mux)
 	s.objectXMLRoutes(mux)

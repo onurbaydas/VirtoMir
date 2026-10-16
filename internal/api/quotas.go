@@ -60,6 +60,11 @@ func (s *Server) quotaFor(user string) (quota.Rule, bool) {
 	return s.quotas.For(user, s.groupsOf(user))
 }
 
+// DiskSizer reports the size of machines' own disks for the disk quota (ADR-0044).
+type DiskSizer interface {
+	DiskBytes(uuids []string) (map[string]uint64, error)
+}
+
 // usage adds up the machines user owns on this host.
 func (s *Server) usage(user string) quota.Usage {
 	var u quota.Usage
@@ -67,14 +72,34 @@ func (s *Server) usage(user string) quota.Usage {
 	if err != nil {
 		return u
 	}
+	var mine []string
 	for _, d := range doms {
 		if d.Owner == user {
 			u.Machines++
 			u.VCPUs += d.VCPUs
 			u.MemoryMiB += d.MaxMemoryKiB >> 10
+			mine = append(mine, d.UUID)
 		}
 	}
+	u.DiskGiB = s.diskGiB(mine)
 	return u
+}
+
+// diskGiB is the size of the machines' own disks, rounded up to whole GiB.
+func (s *Server) diskGiB(uuids []string) uint64 {
+	ds, ok := s.backend.(DiskSizer)
+	if !ok || len(uuids) == 0 {
+		return 0
+	}
+	sizes, err := ds.DiskBytes(uuids)
+	if err != nil {
+		return 0
+	}
+	var total uint64
+	for _, b := range sizes {
+		total += b
+	}
+	return (total + 1<<30 - 1) >> 30
 }
 
 // ownerOf is who created a machine through VirtoMir ("" when unknown).
@@ -128,8 +153,8 @@ func (s *Server) selfService(id auth.Identity, method, path string) bool {
 }
 
 // checkQuota answers 403 and returns false when a non-admin would exceed their quota by
-// adding (machines, vcpus, memory).
-func (s *Server) checkQuota(w http.ResponseWriter, r *http.Request, machines, vcpus int, memoryMiB uint64) bool {
+// adding (machines, vcpus, memory, disk).
+func (s *Server) checkQuota(w http.ResponseWriter, r *http.Request, machines, vcpus int, memoryMiB, diskGiB uint64) bool {
 	id := identity(r)
 	if id.Role >= auth.Admin || s.quotas == nil {
 		return true
@@ -139,7 +164,7 @@ func (s *Server) checkQuota(w http.ResponseWriter, r *http.Request, machines, vc
 		s.writeJSON(w, http.StatusForbidden, map[string]string{"error": "you have no quota for creating machines; ask an admin"})
 		return false
 	}
-	if err := quota.Check(rule, s.usage(id.Name), machines, vcpus, memoryMiB); err != nil {
+	if err := quota.Check(rule, s.usage(id.Name), machines, vcpus, memoryMiB, diskGiB); err != nil {
 		s.writeJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
 		return false
 	}

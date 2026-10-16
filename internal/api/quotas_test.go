@@ -77,3 +77,44 @@ func TestQuotaSelfService(t *testing.T) {
 		t.Errorf("mine: %s", rec.Body)
 	}
 }
+
+// diskBackend adds disk sizes to the fake backend.
+type diskBackend struct {
+	*fakeBackend
+	sizes map[string]uint64
+}
+
+func (d diskBackend) DiskBytes(uuids []string) (map[string]uint64, error) {
+	out := map[string]uint64{}
+	for _, u := range uuids {
+		out[u] = d.sizes[u]
+	}
+	return out, nil
+}
+
+func TestDiskQuota(t *testing.T) {
+	mine := virt.Domain{UUID: "11111111-1111-1111-1111-111111111111", Name: "mine", Owner: "op", VCPUs: 1, MaxMemoryKiB: 1024 << 10}
+	m := auth.New(stubAuthn{}, func(u string) auth.Role { return auth.Operator })
+	q, _ := quota.Open(filepath.Join(t.TempDir(), "quotas.json"))
+	limit := uint64(50)
+	if err := q.Set([]quota.Rule{{Kind: "user", Name: "op", Machines: 5, VCPUs: 8, MemoryMiB: 8192, DiskGiB: &limit}}); err != nil {
+		t.Fatal(err)
+	}
+	b := diskBackend{&fakeBackend{domains: []virt.Domain{mine}}, map[string]uint64{mine.UUID: 30 << 30}}
+	h := NewServer(Options{Backend: b, Live: &fakeLive{}, Auth: m, Quotas: q, GroupsOf: func(string) []string { return nil },
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Handler()
+	op := signIn(t, h, "op")
+	if rec := do(h, "POST", "/api/v1/domains", `{"name":"a","vcpus":1,"memoryMiB":1024,"diskGiB":20}`, op); rec.Code != http.StatusCreated {
+		t.Errorf("30 + 20 of 50 GiB: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(h, "POST", "/api/v1/domains", `{"name":"b","vcpus":1,"memoryMiB":1024,"diskGiB":21}`, op); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "disk space (30 of 50 GiB used, this needs 21)") {
+		t.Errorf("over the disk quota: %d %s", rec.Code, rec.Body)
+	}
+	// An existing disk (diskPath) adds nothing.
+	if rec := do(h, "POST", "/api/v1/domains", `{"name":"c","vcpus":1,"memoryMiB":1024,"diskPath":"/var/lib/libvirt/images/c.qcow2","diskGiB":99}`, op); rec.Code != http.StatusCreated {
+		t.Errorf("existing disk: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(h, "GET", "/api/v1/quotas/mine", "", op); !strings.Contains(rec.Body.String(), `"diskGiB":30`) || !strings.Contains(rec.Body.String(), `"diskGiB":50`) {
+		t.Errorf("mine: %s", rec.Body)
+	}
+}

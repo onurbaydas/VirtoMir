@@ -65,7 +65,7 @@
   <section class="ui-panel card">
     <h2><Gauge size={16} /> Your quota</h2>
     <p class="hint">You may create machines yourself up to these limits{cluster.clustered ? ' (on this host)' : ''}, and change or delete the ones you created.</p>
-    {#each [['Machines', q.used!.machines, q.rule!.machines, ''], ['vCPUs', q.used!.vcpus, q.rule!.vcpus, ''], ['Memory', q.used!.memoryMiB, q.rule!.memoryMiB, ' MiB']] as [label, used, max, unit] (label)}
+    {#each [['Machines', q.used!.machines, q.rule!.machines, ''], ['vCPUs', q.used!.vcpus, q.rule!.vcpus, ''], ['Memory', q.used!.memoryMiB, q.rule!.memoryMiB, ' MiB'], ...(q.rule!.diskGiB != null ? [['Disk', q.used!.diskGiB ?? 0, q.rule!.diskGiB, ' GiB']] : [])] as [label, used, max, unit] (label)}
       <div class="meter">
         <span class="m-label">{label}</span>
         <span class="bar" class:full={Number(used) >= Number(max)}><span style:width="{pct(Number(used), Number(max))}%"></span></span>
@@ -87,7 +87,7 @@
     {:else}
       {#if rules.length}
         <div class="rules">
-          <span class="th">For</span><span class="th">Name</span><span class="th">Machines</span><span class="th">vCPUs</span><span class="th">Memory (MiB)</span><span></span>
+          <span class="th">For</span><span class="th">Name</span><span class="th">Machines</span><span class="th">vCPUs</span><span class="th">Memory (MiB)</span><span class="th" title="The full size of their machines' own disks; empty: no limit">Disk (GiB)</span><span></span>
           {#each rules as r, i (i)}
             <select class="ui-input" bind:value={r.kind} aria-label="Rule for">
               <option value="group">Group</option>
@@ -97,6 +97,7 @@
             <input class="ui-input mono" type="number" min="0" bind:value={r.machines} aria-label="Machines" />
             <input class="ui-input mono" type="number" min="0" bind:value={r.vcpus} aria-label="vCPUs" />
             <input class="ui-input mono" type="number" min="0" step="512" bind:value={r.memoryMiB} aria-label="Memory" />
+            <input class="ui-input mono" type="number" min="0" step="10" bind:value={r.diskGiB} placeholder="no limit" aria-label="Disk (GiB)" />
             <button class="ui-btn sm ghost" onclick={() => (rules = rules!.filter((_, j) => j !== i))} aria-label="Remove rule"><Trash size={14} /></button>
           {/each}
         </div>

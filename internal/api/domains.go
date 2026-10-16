@@ -46,7 +46,11 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &spec) {
 		return
 	}
-	if !s.checkQuota(w, r, 1, max(spec.VCPUs, 1), max(spec.MemoryMiB, 1024)) {
+	var newDisk uint64
+	if spec.DiskPath == "" {
+		newDisk = spec.DiskGiB // a new disk or a copy of a cloud image, grown to this size
+	}
+	if !s.checkQuota(w, r, 1, max(spec.VCPUs, 1), max(spec.MemoryMiB, 1024), newDisk) {
 		return
 	}
 	// ?respool=<id>: the machine goes into that resource pool if it fits its limits.

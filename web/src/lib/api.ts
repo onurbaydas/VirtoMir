@@ -780,12 +780,14 @@ export interface QuotaRule {
   machines: number
   vcpus: number
   memoryMiB: number
+  /** The full size of the owned machines' own disks; null/absent: no limit (ADR-0044). */
+  diskGiB?: number | null
 }
 
 export interface MyQuota {
   unlimited: boolean
   rule?: QuotaRule
-  used?: { machines: number; vcpus: number; memoryMiB: number }
+  used?: { machines: number; vcpus: number; memoryMiB: number; diskGiB?: number }
 }
 
 export interface ConfigVersion {
