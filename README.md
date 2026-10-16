@@ -110,10 +110,18 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 ### Debian / Ubuntu package
 
 ```sh
-sudo apt install ./virtomir_0.4.0_amd64.deb   # from the latest release; pulls libvirt and QEMU if missing
+sudo apt install ./virtomir_0.5.0_amd64.deb   # or _arm64.deb; pulls libvirt and QEMU if missing
 ```
 
 It starts `virtomird` right away on port 8420 (self-signed HTTPS). Sign in with a Linux account in the `libvirt` group (admins), `virtomir-operator` or `virtomir-viewer`. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Later versions install from the UI (Account → Updates). Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
+
+### Fedora / RHEL package (experimental)
+
+```sh
+sudo dnf install ./virtomir-0.5.0-1.x86_64.rpm   # or .aarch64.rpm; Fedora 40+ / RHEL 10
+```
+
+Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf`, not from the UI. Built with `scripts/build-rpm.sh <version>`.
 
 ### Tarball
 
@@ -174,7 +182,7 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 
 ## Roadmap
 
-SPICE console and keyboard layouts, IPv6 networks and firewall rules, creating bonds and bridges on the host, ZFS/LVM pools, off-site backups (restic/S3), a Turkish UI, .rpm packages and a signed apt repository. See [`.ai/context/roadmap.md`](.ai/context/roadmap.md).
+SPICE console, IPv6 networks and firewall rules, creating bonds and bridges on the host, ZFS/LVM pools, off-site backups (restic/S3), a Turkish UI and signed apt/rpm repositories. See [`.ai/context/roadmap.md`](.ai/context/roadmap.md).
 
 ## License
 
