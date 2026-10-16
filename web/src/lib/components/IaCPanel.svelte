@@ -1,131 +1,71 @@
 <script lang="ts">
+  // The machine being designed as code: the exact request this page sends to VirtoMir
+  // (curl, Ansible), and an equivalent virt-install command for hosts without VirtoMir.
+  // Passwords are never written into the code.
   import { toasts } from '../toast.svelte'
   import Copy from '@lucide/svelte/icons/copy'
   import Check from '@lucide/svelte/icons/check'
+  import type { CreateSpec } from '../api'
 
-  let {
-    name = 'vm-01',
-    os = 'linux',
-    vcpus = 2,
-    memGiB = 2,
-    diskGiB = 20,
-    pool = 'default',
-    firmware = 'uefi',
-    secureBoot = false,
-    tpm = false,
-    netChoice = 'network:default',
-  }: {
-    name: string
-    os: string
-    vcpus: number
-    memGiB: number
-    diskGiB: number
-    pool: string
-    firmware: string
-    secureBoot: boolean
-    tpm: boolean
-    netChoice: string
-  } = $props()
+  let { spec }: { spec: CreateSpec } = $props()
 
-  type Format = 'cli' | 'qm' | 'terraform' | 'ansible' | 'json'
-  let format = $state<Format>('cli')
+  type Format = 'curl' | 'ansible' | 'virt-install'
+  let format = $state<Format>('curl')
   let copied = $state(false)
 
-  let memMiB = $derived(Math.round(memGiB * 1024))
-  let netName = $derived(netChoice.startsWith('network:') ? netChoice.slice(8) : netChoice)
+  // The spec as sent, with a cloud-init password replaced by a placeholder.
+  let safe = $derived.by(() => {
+    const s: CreateSpec = JSON.parse(JSON.stringify(spec))
+    if (s.cloudInit?.password) s.cloudInit.password = '<password>'
+    return s
+  })
+  let body = $derived(JSON.stringify(safe, null, 2))
+  const indent = (t: string, n: number) => t.split('\n').map((l, i) => (i ? ' '.repeat(n) + l : l)).join('\n')
 
   let generatedCode = $derived.by(() => {
-    const cleanName = name || 'new-vm'
+    const s = safe
     switch (format) {
-      case 'cli':
-        return `# Libvirt CLI (virt-install / virsh):
-virt-install \\
-  --name "${cleanName}" \\
-  --vcpus ${vcpus} \\
-  --memory ${memMiB} \\
-  --os-variant ${os === 'linux' ? 'ubuntu24.04' : os === 'windows' ? 'win11' : 'generic'} \\
-  --disk pool=${pool},size=${diskGiB},bus=virtio,cache=none \\
-  --network ${netChoice.startsWith('network:') ? `network=${netName}` : `bridge=${netName}`} \\
-  --boot ${firmware === 'uefi' ? 'uefi' : 'hd'} \\
-  --graphics vnc,listen=127.0.0.1 \\
-  --channel spicevmc,target_type=virtio,name=com.redhat.spice.0 \\
-  --noautoconsole`
-
-      case 'qm':
-        return `# QEMU / Proxmox CLI:
-qm create 108 \\
-  --name "${cleanName}" \\
-  --cores ${vcpus} --sockets 1 \\
-  --cpu host \\
-  --memory ${memMiB} \\
-  --scsihw virtio-scsi-single \\
-  --scsi0 ${pool}:${diskGiB},discard=on,ssd=1 \\
-  --net0 virtio,bridge=${netName}${firmware === 'uefi' ? ' \\\n  --bios ovmf' : ''}${tpm ? ' \\\n  --tpmstate0 pool:tpm' : ''}`
-
-      case 'terraform':
-        return `# HashiCorp Terraform (libvirt provider):
-resource "libvirt_volume" "${cleanName}_disk" {
-  name   = "${cleanName}-disk0.qcow2"
-  pool   = "${pool}"
-  size   = ${diskGiB * 1024 * 1024 * 1024}
-  format = "qcow2"
-}
-
-resource "libvirt_domain" "${cleanName}" {
-  name   = "${cleanName}"
-  memory = ${memMiB}
-  vcpu   = ${vcpus}
-
-  disk {
-    volume_id = libvirt_volume.${cleanName}_disk.id
-  }
-
-  network_interface {
-    network_name = "${netName}"
-  }
-
-  graphics {
-    type        = "vnc"
-    listen_type = "address"
-  }
-}`
-
+      case 'curl':
+        return `# VirtoMir API (token: Account → API tokens)
+curl -k -X POST '${location.origin}/api/v1/domains' \\
+  -H "Authorization: Bearer $VIRTOMIR_TOKEN" \\
+  -H 'Content-Type: application/json' \\
+  -d @- <<'EOF'
+${body}
+EOF`
       case 'ansible':
-        return `# Ansible Playbook Task:
-- name: Deploy virtual machine ${cleanName}
-  community.libvirt.virt:
-    name: "${cleanName}"
-    state: running
-    command: define
-    xml: |
-      <domain type='kvm'>
-        <name>${cleanName}</name>
-        <memory unit='MiB'>${memMiB}</memory>
-        <vcpu>${vcpus}</vcpu>
-        <os>
-          <type arch='x86_64' machine='q35'>hvm</type>
-          ${firmware === 'uefi' ? '<loader readonly="yes" type="pflash">/usr/share/OVMF/OVMF_CODE.fd</loader>' : ''}
-        </os>
-      </domain>`
-
-      case 'json':
-        return JSON.stringify(
-          {
-            name: cleanName,
-            os,
-            vcpus,
-            memoryMiB: memMiB,
-            firmware,
-            secureBoot,
-            tpm,
-            pool,
-            diskGiB,
-            network: { [netChoice.startsWith('network:') ? 'network' : 'bridge']: netName },
-            start: true,
-          },
-          null,
-          2,
-        )
+        return `# Ansible task against the VirtoMir API
+- name: Create machine ${s.name}
+  ansible.builtin.uri:
+    url: "${location.origin}/api/v1/domains"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ virtomir_token }}"
+    body_format: json
+    body: ${indent(body, 6)}
+    status_code: 201
+    validate_certs: false`
+      case 'virt-install': {
+        const net = s.network?.network ? `network=${s.network.network},model=virtio` : s.network?.bridge ? `bridge=${s.network.bridge},model=virtio` : 'none'
+        const disk = s.diskPath ? `path=${s.diskPath}` : s.baseImage ? `path=${s.baseImage},size=${s.diskGiB} # copy the image first` : s.diskGiB ? `pool=${s.pool},size=${s.diskGiB},format=qcow2,bus=virtio` : 'none'
+        const lines = [
+          `virt-install`,
+          `--name ${s.name || 'new-machine'}`,
+          `--vcpus ${s.vcpus}`,
+          `--memory ${s.memoryMiB}`,
+          `--osinfo ${s.os === 'windows' ? 'win11' : s.os === 'linux' ? 'linux2022' : 'generic'}`,
+          `--machine q35`,
+          s.firmware === 'uefi' ? `--boot uefi${s.secureBoot ? ',firmware.feature0.name=secure-boot,firmware.feature0.enabled=yes' : ''}` : `--boot hd`,
+          ...(s.tpm ? ['--tpm emulator,model=tpm-crb'] : []),
+          `--disk ${disk}`,
+          ...(s.iso ? [`--cdrom ${s.iso}`] : []),
+          `--network ${net}`,
+          `--graphics vnc,listen=127.0.0.1`,
+          ...(s.start ? [] : ['--noreboot --print-xml > machine.xml  # define only']),
+          `--noautoconsole`,
+        ]
+        return `# Equivalent on a host without VirtoMir (cloud-init not included)\n${lines.join(' \\\n  ')}`
+      }
     }
   })
 
@@ -133,7 +73,7 @@ resource "libvirt_domain" "${cleanName}" {
     try {
       await navigator.clipboard.writeText(generatedCode)
       copied = true
-      toasts.push({ kind: 'info', title: 'IaC code copied to clipboard' })
+      toasts.push({ kind: 'info', title: 'Copied' })
       setTimeout(() => (copied = false), 2000)
     } catch {
       toasts.push({ kind: 'warn', title: 'Clipboard copy failed' })
@@ -145,14 +85,12 @@ resource "libvirt_domain" "${cleanName}" {
   <div class="panel-head">
     <div class="title">
       <span class="dot"></span>
-      <span>REAL-TIME IaC & CLI CODE GENERATOR</span>
+      <span>AS CODE</span>
     </div>
     <div class="formats">
-      <button class:active={format === 'cli'} onclick={() => (format = 'cli')}>VIRSH</button>
-      <button class:active={format === 'qm'} onclick={() => (format = 'qm')}>QM</button>
-      <button class:active={format === 'terraform'} onclick={() => (format = 'terraform')}>TERRAFORM</button>
+      <button class:active={format === 'curl'} onclick={() => (format = 'curl')}>API (CURL)</button>
       <button class:active={format === 'ansible'} onclick={() => (format = 'ansible')}>ANSIBLE</button>
-      <button class:active={format === 'json'} onclick={() => (format = 'json')}>REST JSON</button>
+      <button class:active={format === 'virt-install'} onclick={() => (format = 'virt-install')}>VIRT-INSTALL</button>
     </div>
   </div>
 

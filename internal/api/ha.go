@@ -43,9 +43,10 @@ func (t haTransport) SelfID() string {
 	return t.s.cluster.SelfID()
 }
 
+// Members is every cluster member; a standalone host is a cluster of one.
 func (t haTransport) Members() []ha.Node {
-	if t.s.cluster == nil {
-		return nil
+	if t.s.cluster == nil || !t.s.cluster.Clustered() {
+		return []ha.Node{{ID: t.SelfID(), Name: t.s.hostName}}
 	}
 	ms, _ := t.s.cluster.Members()
 	out := make([]ha.Node, len(ms))
@@ -143,11 +144,12 @@ func (s *Server) haSetPolicy(w http.ResponseWriter, r *http.Request) {
 			p.Name = d.Name
 		}
 	}
-	if _, err := s.ha.SetPolicy(p); err != nil {
+	cfg, err := s.ha.SetPolicy(p)
+	if err != nil {
 		s.writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	s.writeJSON(w, http.StatusOK, p)
+	s.writeJSON(w, http.StatusOK, cfg.VMPolicies[strings.ToLower(p.UUID)])
 }
 
 func (s *Server) haDeletePolicy(w http.ResponseWriter, r *http.Request) {

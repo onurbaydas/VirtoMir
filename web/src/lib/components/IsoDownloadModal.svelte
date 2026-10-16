@@ -1,204 +1,83 @@
 <script lang="ts">
+  // Fetch an image (installer ISO, cloud image) from a URL straight into a storage pool. The
+  // host downloads it, so nothing passes through the browser; with a SHA-256 checksum a
+  // corrupt or tampered download is deleted again.
   import Dialog from './Dialog.svelte'
   import Download from '@lucide/svelte/icons/download'
-  import ShieldCheck from '@lucide/svelte/icons/shield-check'
-  import { toasts } from '../toast.svelte'
+  import { api, errorText, type Pool } from '../api'
+  import { ent } from '../enterprise'
+  import { track } from '../jobs'
 
-  interface Props {
-    open: boolean
-    poolName: string
-    onclose: () => void
-    onsuccess: () => void
-  }
-  let { open, poolName, onclose, onsuccess }: Props = $props()
+  let { open, poolName, onclose, onsuccess }: { open: boolean; poolName: string; onclose: () => void; onsuccess: () => void } = $props()
 
-  let url = $state('https://releases.ubuntu.com/24.04/ubuntu-24.04.1-live-server-amd64.iso')
-  let filename = $state('ubuntu-24.04.1-live-server-amd64.iso')
-  let sha256 = $state('e240e4b801fde6e12c13da2d540a5be11b50820794716e777bc0460b16a80869')
-  let downloading = $state(false)
-  let progress = $state(0)
-  let verified = $state(false)
+  let pools = $state<Pool[]>([])
+  let pool = $state('')
+  let url = $state('')
+  let name = $state('')
+  let sha256 = $state('')
+  let error = $state('')
+  let busy = $state(false)
 
   $effect(() => {
-    if (url) {
-      try {
-        const u = new URL(url)
-        const parts = u.pathname.split('/')
-        const last = parts[parts.length - 1]
-        if (last && last.endsWith('.iso')) filename = last
-      } catch {}
+    if (!open) return
+    error = ''
+    void api.pools().then((p) => {
+      pools = p.filter((x) => x.active && ['dir', 'netfs', 'fs'].includes(x.type))
+      pool = pools.some((x) => x.name === poolName) ? poolName : (pools[0]?.name ?? '')
+    })
+  })
+
+  // Name from the URL until the user types one.
+  let named = $state(false)
+  $effect(() => {
+    if (named) return
+    try {
+      name = decodeURIComponent(new URL(url).pathname.split('/').pop() ?? '')
+    } catch {
+      name = ''
     }
   })
 
-  function startDownload() {
-    downloading = true
-    progress = 0
-    verified = false
-    const interval = setInterval(() => {
-      if (progress < 100) {
-        progress += 12
-      } else {
-        clearInterval(interval)
-        downloading = false
-        verified = true
-        toasts.push({
-          kind: 'info',
-          title: `${filename} downloaded`,
-          detail: `Saved to ${poolName} pool. SHA-256 checksum verified successfully.`,
-        })
-        onsuccess()
-        onclose()
-      }
-    }, 300)
+  let shaOK = $derived(sha256.trim() === '' || /^[0-9a-fA-F]{64}$/.test(sha256.trim()))
+
+  async function start() {
+    busy = true
+    error = ''
+    try {
+      const job = await ent.download(pool, url.trim(), name.trim(), sha256.trim())
+      track(job, { success: `${name} is in ${pool}`, onSuccess: onsuccess })
+      onclose()
+      url = ''
+      sha256 = ''
+      named = false
+    } catch (e) {
+      error = errorText(e)
+    } finally {
+      busy = false
+    }
   }
 </script>
 
-<Dialog {open} title="" {onclose} width={580}>
-  <div class="iso-modal">
-    <div class="iso-header mono">
-      <div class="title-wrap">
-        <Download size={16} />
-        <span>PULL INSTALLATION ISO FROM URL</span>
-      </div>
-      <span class="pool-tag">TARGET POOL: {poolName}</span>
-    </div>
-
-    <div class="iso-body mono">
-      <p class="lead-desc">
-        Stream an ISO image directly into the hypervisor storage pool over HTTP/HTTPS with automatic SHA-256 cryptographic verification.
-      </p>
-
-      <label class="ui-field">
-        <span class="label">SOURCE ISO URL</span>
-        <input
-          class="ui-input"
-          type="url"
-          bind:value={url}
-          placeholder="https://.../image.iso"
-          disabled={downloading}
-        />
-      </label>
-
-      <label class="ui-field">
-        <span class="label">DESTINATION FILENAME</span>
-        <input
-          class="ui-input"
-          type="text"
-          bind:value={filename}
-          placeholder="image.iso"
-          disabled={downloading}
-        />
-      </label>
-
-      <label class="ui-field">
-        <span class="label">EXPECTED SHA-256 CHECKSUM (OPTIONAL)</span>
-        <input
-          class="ui-input"
-          type="text"
-          bind:value={sha256}
-          placeholder="e.g. e240e4b801fde6e12c13da2d540a5be..."
-          disabled={downloading}
-        />
-      </label>
-
-      {#if downloading}
-        <div class="progress-box">
-          <div class="progress-bar">
-            <div class="fill" style="width: {progress}%;"></div>
-          </div>
-          <div class="progress-meta">
-            <span>STREAMING BITS: {progress}%</span>
-            <span>{(progress * 26.4).toFixed(0)} MB / 2.6 GB</span>
-          </div>
-        </div>
-      {/if}
-    </div>
-
-    <div class="iso-footer mono">
-      <button class="ui-btn" onclick={onclose} disabled={downloading}>CANCEL</button>
-      <button class="ui-btn primary" disabled={downloading || !url} onclick={startDownload}>
-        <Download size={13} />
-        <span>{downloading ? 'PULLING STREAM…' : 'START DOWNLOAD'}</span>
-      </button>
-    </div>
+<Dialog {open} title="Download an image into a pool" subtitle="The host fetches it; progress shows under Tasks" width={560} {onclose}>
+  <div class="form">
+    {#if error}<div class="ui-error-box">{error}</div>{/if}
+    <label class="ui-field"><span class="label">Address</span>
+      <input class="ui-input mono" placeholder="https://cdimage.debian.org/…/debian-13-netinst.iso" bind:value={url} /></label>
+    <label class="ui-field"><span class="label">Save as</span>
+      <input class="ui-input mono" bind:value={name} oninput={() => (named = true)} /></label>
+    <label class="ui-field"><span class="label">Storage pool</span>
+      <select class="ui-input" bind:value={pool}>{#each pools as p (p.name)}<option value={p.name}>{p.name} ({p.type})</option>{/each}</select></label>
+    <label class="ui-field"><span class="label">SHA-256 checksum (optional, recommended)</span>
+      <input class="ui-input mono" placeholder="from the download page's SHA256SUMS" bind:value={sha256} />
+      {#if !shaOK}<span class="error">64 hex characters</span>{/if}</label>
   </div>
+  {#snippet footer()}
+    <button class="ui-btn ghost" onclick={onclose}>Cancel</button>
+    <button class="ui-btn primary" disabled={busy || !url.trim() || !name.trim() || !pool || !shaOK} onclick={start}><Download size={14} /> Download</button>
+  {/snippet}
 </Dialog>
 
 <style>
-  .iso-modal {
-    display: flex;
-    flex-direction: column;
-    margin: -16px -20px;
-    background: var(--bg);
-    border: 1px solid var(--border-strong);
-  }
-  .iso-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 18px;
-    background: var(--surface);
-    border-bottom: 2px solid var(--ink);
-  }
-  .title-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    font-weight: 800;
-    color: var(--accent);
-  }
-  .pool-tag {
-    font-size: 10px;
-    color: var(--text-2);
-    padding: 2px 6px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-  }
-  .iso-body {
-    padding: 16px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    font-size: 11px;
-  }
-  .lead-desc {
-    margin: 0 0 4px;
-    color: var(--text-2);
-    line-height: 1.4;
-  }
-  .progress-box {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 10px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-  }
-  .progress-bar {
-    height: 10px;
-    background: var(--bg);
-    border: 1px solid var(--border-strong);
-    overflow: hidden;
-  }
-  .fill {
-    height: 100%;
-    background: var(--accent);
-    transition: width 0.3s;
-  }
-  .progress-meta {
-    display: flex;
-    justify-content: space-between;
-    font-size: 10px;
-    color: var(--text-3);
-  }
-  .iso-footer {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 20px;
-    background: var(--surface);
-    border-top: 1px solid var(--border-strong);
-  }
+  .form { display: flex; flex-direction: column; gap: 10px; }
+  .error { color: var(--danger); font-size: 12px; }
 </style>

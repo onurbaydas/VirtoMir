@@ -10,23 +10,21 @@
     action: 'delete' | 'force-off' | 'hard-reset'
     targetName: string
     targetUuid?: string
-    onconfirm: (opts: { purgeDisks: boolean; purgeBackups: boolean }) => void
+    onconfirm: (opts: { purgeDisks: boolean }) => void
     onclose: () => void
   }
 
   let { open, action, targetName, targetUuid, onconfirm, onclose }: Props = $props()
 
   let typedName = $state('')
-  let purgeDisks = $state(true)
-  let purgeBackups = $state(true)
+  let purgeDisks = $state(false)
   let countdown = $state(5)
   let timer: ReturnType<typeof setInterval> | undefined
 
   $effect(() => {
     if (open) {
       typedName = ''
-      purgeDisks = true
-      purgeBackups = true
+      purgeDisks = false
       countdown = 5
       clearInterval(timer)
       timer = setInterval(() => {
@@ -48,7 +46,7 @@
 
   function confirm() {
     if (!canConfirm) return
-    onconfirm({ purgeDisks, purgeBackups })
+    onconfirm({ purgeDisks })
   }
 </script>
 
@@ -70,7 +68,7 @@
             <span class="target-chip mono">{targetName}</span>.
           </p>
           <p class="sub-warn">
-            This operation cannot be undone. All active memory state, guest definitions, and selected storage volumes will be completely eradicated from libvirt.
+            This cannot be undone: its definition, snapshots and (if ticked) its disk images are removed. Backups stay.
           </p>
         {:else if action === 'force-off'}
           <p class="lead-warn">
@@ -78,7 +76,7 @@
             <span class="target-chip mono">{targetName}</span>.
           </p>
           <p class="sub-warn">
-            Immediate QEMU process termination (SIGKILL). Unflushed write buffers and database transactions in the guest will be corrupted or lost.
+            The machine stops at once, without shutting down: data the guest has not written to disk yet is lost.
           </p>
         {:else}
           <p class="lead-warn">
@@ -86,7 +84,7 @@
             <span class="target-chip mono">{targetName}</span>.
           </p>
           <p class="sub-warn">
-            Instant CPU reset vector trigger without graceful OS ACPI signal.
+            Like pressing the reset button: the guest restarts at once, without shutting down.
           </p>
         {/if}
       </div>
@@ -102,11 +100,7 @@
         <div class="checkbox-group mono">
           <label class="check-row">
             <input type="checkbox" bind:checked={purgeDisks} />
-            <span>Permanently delete all attached virtual disks (QCOW2/RAW)</span>
-          </label>
-          <label class="check-row">
-            <input type="checkbox" bind:checked={purgeBackups} />
-            <span>Remove all scheduled snapshots and local retention backups</span>
+            <span>Also delete its own disk images (shared images, ISOs and template disks are kept)</span>
           </label>
         </div>
       {/if}

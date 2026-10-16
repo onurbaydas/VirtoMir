@@ -95,7 +95,7 @@
     </div>
   </section>
 
-  <GpuPoolPanel />
+  <GpuPoolPanel pci={hw.pci} />
 
   <h2 class="sub"><Cpu size={16} /> PCI devices</h2>
   {#each groups as [g, devs] (g)}

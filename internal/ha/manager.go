@@ -462,6 +462,10 @@ func (m *Manager) countVotes(cfg Config, members []Node, self string, witnessOK 
 // localProtected is the protected machines defined on this member, minus those another
 // member has taken over (a higher epoch elsewhere: this copy is stale).
 func (m *Manager) localProtected(cfg Config, doms []virt.Domain, self string) []virt.Domain {
+	member := map[string]bool{}
+	for _, n := range m.transport.Members() {
+		member[n.ID] = true
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []virt.Domain
@@ -470,7 +474,9 @@ func (m *Manager) localProtected(cfg Config, doms []virt.Domain, self string) []
 		if !ok || !p.Enabled || d.Template || !d.Persistent {
 			continue
 		}
-		if r, ok := m.replicas[strings.ToLower(d.UUID)]; ok && r.Owner != self && r.Owner != "" {
+		// Only a current member can have taken it over; an unknown owner is this host under
+		// an earlier identity (e.g. before it had TLS) or a member that left.
+		if r, ok := m.replicas[strings.ToLower(d.UUID)]; ok && r.Owner != self && member[r.Owner] {
 			if d.State == virt.StateRunning || d.State == virt.StatePaused || d.State == virt.StateBlocked {
 				// Our stale copy runs while another member owns the machine: split brain.
 				if err := m.hv.DomainAction(d.UUID, virt.ActionForceOff); err == nil {
