@@ -543,3 +543,21 @@ func TestSimulate(t *testing.T) {
 		t.Errorf("steps = %+v", sim.Steps)
 	}
 }
+
+func TestMachineDeletedOutsideIsNotRecovered(t *testing.T) {
+	hv := &fakeHV{} // v1 was deleted with virsh: libvirt no longer has it
+	m, fc, _, st := newTestManager(t, "a", hv)
+	st.SetPolicy(VMPolicy{UUID: "v1", Name: "db", Enabled: true})
+	m.Accept([]Replica{{UUID: "v1", Name: "db", Owner: "a", Running: true, XML: "<domain/>"}})
+	m.Tick(context.Background())
+	time.Sleep(20 * time.Millisecond)
+	fc.mu.Lock()
+	reps := fc.pushed["b"]
+	fc.mu.Unlock()
+	if len(reps) != 1 || reps[0].Running {
+		t.Fatalf("pushed = %+v, want v1 marked not running", reps)
+	}
+	if m.Status().Machines[0].Running {
+		t.Error("local copy still says running")
+	}
+}

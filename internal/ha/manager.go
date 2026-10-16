@@ -541,6 +541,20 @@ func (m *Manager) replicate(ctx context.Context, cfg Config, local []virt.Domain
 			}
 		}
 	}
+	// A protected machine deleted outside VirtoMir (virsh) must not come back when this host
+	// dies: its copies elsewhere learn that it no longer runs here.
+	here := map[string]bool{}
+	for _, r := range reps {
+		here[r.UUID] = true
+	}
+	m.mu.Lock()
+	for u, r := range m.replicas {
+		if r.Owner == self && r.Running && !here[u] {
+			r.Running, r.Updated = false, m.now()
+			reps = append(reps, r)
+		}
+	}
+	m.mu.Unlock()
 	m.Accept(reps)
 	if len(reps) == 0 {
 		return
