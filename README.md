@@ -90,6 +90,16 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 
 ## Install
 
+### Debian / Ubuntu package
+
+```sh
+sudo apt install ./virtomir_0.2.0~rc1_amd64.deb   # pulls libvirt and QEMU if missing
+```
+
+It starts `virtomird` right away on port 8420 (self-signed HTTPS). Sign in with a Linux account in the `libvirt` group (admins), `virtomir-operator` or `virtomir-viewer`. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
+
+### Tarball
+
 Requirements: a Linux host with **libvirt + QEMU/KVM** running and **systemd**.
 
 ```sh
