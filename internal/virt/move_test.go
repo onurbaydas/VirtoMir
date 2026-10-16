@@ -154,6 +154,47 @@ func TestPoolXMLLocalBlock(t *testing.T) {
 	}
 }
 
+func TestNetworkIPv6(t *testing.T) {
+	x, err := buildNetwork(NetworkSpec{Name: "dual", Mode: "nat", Subnet: "192.168.140.0/24", DHCP: true, Subnet6: "fd12:3456:789a:1::/64", DHCP6: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := x.Marshal()
+	for _, want := range []string{`<nat ipv6="yes">`, `address="fd12:3456:789a:1::1" family="ipv6" prefix="64"`, `<range start="fd12:3456:789a:1::100" end="fd12:3456:789a:1::ffff">`, `address="192.168.140.1"`} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("missing %s in\n%s", want, doc)
+		}
+	}
+	v, err := parseNetwork(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Subnet != "192.168.140.1/24" || v.Subnet6 != "fd12:3456:789a:1::1/64" || v.DHCP6Start != "fd12:3456:789a:1::100" {
+		t.Errorf("read back %+v", v)
+	}
+	// IPv6 only, routed, SLAAC only.
+	x, err = buildNetwork(NetworkSpec{Name: "v6", Mode: "route", Subnet6: "2001:db8:5::/64"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _ = x.Marshal()
+	if strings.Contains(doc, "<dhcp>") || strings.Contains(doc, "<nat") || strings.Count(doc, "<ip ") != 1 {
+		t.Errorf("v6 only:\n%s", doc)
+	}
+	for _, bad := range []NetworkSpec{
+		{Name: "a", Mode: "nat"},
+		{Name: "a", Mode: "nat", Subnet6: "fd00::/48"},
+		{Name: "a", Mode: "nat", Subnet6: "fe80::/64"},
+		{Name: "a", Mode: "nat", Subnet6: "10.0.0.0/24"},
+		{Name: "a", Mode: "nat", Subnet6: "fd00::/64", DHCP: true},
+		{Name: "a", Mode: "nat", Subnet: "10.9.0.0/24", DHCP6: true},
+	} {
+		if _, err := buildNetwork(bad); err == nil {
+			t.Errorf("accepted %+v", bad)
+		}
+	}
+}
+
 func TestNetworkVLAN(t *testing.T) {
 	x, err := buildNetwork(NetworkSpec{Name: "lab10", Mode: "bridge", Bridge: "ovsbr0", OVS: true, VLAN: 10})
 	if err != nil {

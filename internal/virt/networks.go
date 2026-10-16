@@ -18,13 +18,18 @@ type VNetwork struct {
 	Autostart  bool   `json:"autostart"`
 	Persistent bool   `json:"persistent"`
 	// nat, route, open, isolated (no forward), bridge (host bridge), macvtap modes, hostdev.
-	Mode      string   `json:"mode"`
-	Bridge    string   `json:"bridge,omitempty"`
-	Subnet    string   `json:"subnet,omitempty"` // e.g. 192.168.122.1/24 (gateway/prefix)
-	DHCPStart string   `json:"dhcpStart,omitempty"`
-	DHCPEnd   string   `json:"dhcpEnd,omitempty"`
-	Domain    string   `json:"domain,omitempty"`
-	UsedBy    []string `json:"usedBy"`
+	Mode      string `json:"mode"`
+	Bridge    string `json:"bridge,omitempty"`
+	Subnet    string `json:"subnet,omitempty"` // e.g. 192.168.122.1/24 (gateway/prefix)
+	DHCPStart string `json:"dhcpStart,omitempty"`
+	DHCPEnd   string `json:"dhcpEnd,omitempty"`
+	Domain    string `json:"domain,omitempty"`
+	// IPv6 (ADR-0041): gateway/prefix, e.g. fd12:3456:789a::1/64, and the DHCPv6 range if
+	// any (without one, guests configure themselves from router advertisements).
+	Subnet6    string   `json:"subnet6,omitempty"`
+	DHCP6Start string   `json:"dhcp6Start,omitempty"`
+	DHCP6End   string   `json:"dhcp6End,omitempty"`
+	UsedBy     []string `json:"usedBy"`
 	// Fixed address reservations (static DHCP).
 	DHCPHosts []DHCPHost `json:"dhcpHosts"`
 }
@@ -83,6 +88,14 @@ func parseNetwork(raw string) (VNetwork, error) {
 	}
 	if x.Domain != nil {
 		v.Domain = x.Domain.Name
+	}
+	for _, ip := range x.IPs {
+		if ip.Family == "ipv6" && ip.Address != "" && v.Subnet6 == "" {
+			v.Subnet6 = fmt.Sprintf("%s/%d", ip.Address, ip.Prefix)
+			if ip.DHCP != nil && len(ip.DHCP.Ranges) > 0 {
+				v.DHCP6Start, v.DHCP6End = ip.DHCP.Ranges[0].Start, ip.DHCP.Ranges[0].End
+			}
+		}
 	}
 	for _, ip := range x.IPs {
 		if ip.Family == "ipv6" || ip.Address == "" {
@@ -213,6 +226,12 @@ type NetworkSpec struct {
 	// machine on this network (bridge mode with OVS); 0 = untagged.
 	OVS  bool `json:"ovs,omitempty"`
 	VLAN uint `json:"vlan,omitempty"`
+	// Subnet6 adds IPv6 (nat / route / isolated), a /64 such as fd12:3456:789a::/64; the
+	// host takes ::1 and sends router advertisements, so guests configure themselves
+	// (SLAAC). DHCP6 also hands out addresses ::100 – ::ffff. Either Subnet or Subnet6 (or
+	// both) is needed. In nat mode IPv6 is translated too (NAT66, libvirt ≥ 6.5).
+	Subnet6 string `json:"subnet6,omitempty"`
+	DHCP6   bool   `json:"dhcp6,omitempty"`
 }
 
 // buildNetwork turns a spec into network XML: gateway .1, DHCP .2 to the last usable address.
@@ -253,13 +272,67 @@ func buildNetwork(spec NetworkSpec) (*libvirtxml.Network, error) {
 	default:
 		return nil, invalidf("Unknown network mode %q.", spec.Mode)
 	}
+	if spec.Subnet == "" && spec.Subnet6 == "" {
+		return nil, invalidf("Give the network an IPv4 subnet, an IPv6 subnet, or both.")
+	}
+	if spec.Subnet != "" {
+		ip, err := ipv4Net(spec)
+		if err != nil {
+			return nil, err
+		}
+		x.IPs = append(x.IPs, ip)
+	} else if spec.DHCP {
+		return nil, invalidf("DHCP (IPv4) needs an IPv4 subnet.")
+	}
+	if spec.Subnet6 != "" {
+		ip, err := ipv6Net(spec)
+		if err != nil {
+			return nil, err
+		}
+		x.IPs = append(x.IPs, ip)
+		if spec.Mode == "nat" {
+			x.Forward.NAT = &libvirtxml.NetworkForwardNAT{IPv6: "yes"}
+		}
+	} else if spec.DHCP6 {
+		return nil, invalidf("DHCPv6 needs an IPv6 subnet.")
+	}
+	return x, nil
+}
+
+// ipv6Net: gateway ::1 of a /64, DHCPv6 ::100 – ::ffff.
+func ipv6Net(spec NetworkSpec) (libvirtxml.NetworkIP, error) {
+	pfx, err := netip.ParsePrefix(spec.Subnet6)
+	if err != nil || !pfx.Addr().Is6() || pfx.Addr().Is4In6() {
+		return libvirtxml.NetworkIP{}, invalidf("The IPv6 subnet is a /64 like fd12:3456:789a::/64.")
+	}
+	if pfx.Bits() != 64 {
+		return libvirtxml.NetworkIP{}, invalidf("Use a /64 for IPv6: guests configure themselves (SLAAC) only on a /64.")
+	}
+	pfx = pfx.Masked()
+	if pfx.Addr().IsLinkLocalUnicast() || pfx.Addr().IsMulticast() || pfx.Addr().IsLoopback() {
+		return libvirtxml.NetworkIP{}, invalidf("Use a unique local (fd…) or global prefix, not a link-local or multicast one.")
+	}
+	b := pfx.Addr().As16()
+	at := func(hi, lo byte) netip.Addr {
+		c := b
+		c[14], c[15] = hi, lo
+		return netip.AddrFrom16(c)
+	}
+	ip := libvirtxml.NetworkIP{Family: "ipv6", Address: at(0, 1).String(), Prefix: 64}
+	if spec.DHCP6 {
+		ip.DHCP = &libvirtxml.NetworkDHCP{Ranges: []libvirtxml.NetworkDHCPRange{{Start: at(1, 0).String(), End: at(0xff, 0xff).String()}}}
+	}
+	return ip, nil
+}
+
+func ipv4Net(spec NetworkSpec) (libvirtxml.NetworkIP, error) {
 	pfx, err := netip.ParsePrefix(spec.Subnet)
 	if err != nil || !pfx.Addr().Is4() {
-		return nil, invalidf("Subnet must be an IPv4 network like 192.168.100.0/24.")
+		return libvirtxml.NetworkIP{}, invalidf("Subnet must be an IPv4 network like 192.168.100.0/24.")
 	}
 	pfx = pfx.Masked()
 	if pfx.Bits() < 16 || pfx.Bits() > 29 {
-		return nil, invalidf("Use a subnet between /16 and /29.")
+		return libvirtxml.NetworkIP{}, invalidf("Use a subnet between /16 and /29.")
 	}
 	gw := pfx.Addr().Next()
 	ip := libvirtxml.NetworkIP{Address: gw.String(), Prefix: uint(pfx.Bits())}
@@ -267,12 +340,11 @@ func buildNetwork(spec NetworkSpec) (*libvirtxml.Network, error) {
 		last := lastUsable(pfx)
 		start := gw.Next()
 		if !start.Less(last) {
-			return nil, invalidf("The subnet is too small for DHCP.")
+			return libvirtxml.NetworkIP{}, invalidf("The subnet is too small for DHCP.")
 		}
 		ip.DHCP = &libvirtxml.NetworkDHCP{Ranges: []libvirtxml.NetworkDHCPRange{{Start: start.String(), End: last.String()}}}
 	}
-	x.IPs = []libvirtxml.NetworkIP{ip}
-	return x, nil
+	return ip, nil
 }
 
 // lastUsable is the address before the broadcast address.

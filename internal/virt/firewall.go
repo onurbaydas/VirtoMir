@@ -15,13 +15,18 @@ import (
 // of its network adapters (ADR-0033). libvirt turns it into iptables/ebtables rules on the
 // host side of the adapter, so the guest cannot change it. Rules are stateful: allowing
 // a connection in one direction also lets its replies through.
+//
+// IPv6 (ADR-0041): a rule without a remote address applies to IPv4 and IPv6 alike (written
+// as a pair of nwfilter rules with the same priority); one with an address applies to that
+// address's family. The default policies cover both families; when one drops, IPv6 neighbor
+// discovery and DHCPv6 replies stay allowed, without them IPv6 would not work at all.
 
 // FirewallRule is one rule, in the guest's view: "in" is traffic to the machine.
 type FirewallRule struct {
 	Direction string `json:"direction"` // in, out
 	Action    string `json:"action"`    // accept, drop, reject
 	Protocol  string `json:"protocol"`  // all, tcp, udp, icmp
-	// Remote is the other end: an IPv4 address or CIDR ("" anyone).
+	// Remote is the other end: an IPv4 or IPv6 address or network ("" anyone, both families).
 	Remote string `json:"remote,omitempty"`
 	// Ports on the machine for "in", on the remote side for "out": "22" or "8000-8100".
 	Ports   string `json:"ports,omitempty"`
@@ -31,7 +36,7 @@ type FirewallRule struct {
 // Firewall is a machine's whole firewall.
 type Firewall struct {
 	Enabled bool `json:"enabled"`
-	// DefaultIn/DefaultOut apply to IPv4 traffic no rule matched: accept or drop.
+	// DefaultIn/DefaultOut apply to IPv4 and IPv6 traffic no rule matched: accept or drop.
 	DefaultIn  string `json:"defaultIn"`
 	DefaultOut string `json:"defaultOut"`
 	// AntiSpoof adds libvirt's clean-traffic filter: the machine may only send with its own
@@ -51,6 +56,7 @@ type FirewallResult struct {
 
 const (
 	rulePriority    = 100 // user rules: 100, 101, …
+	basicsPriority  = 890 // IPv6 neighbor discovery and DHCPv6, ahead of a default drop
 	defaultPriority = 900 // the default policies come last
 )
 
@@ -72,7 +78,7 @@ func (r FirewallRule) validate() error {
 		return invalidf("Protocol must be all, tcp, udp or icmp.")
 	}
 	if r.Remote != "" {
-		if _, _, err := parseRemote(r.Remote); err != nil {
+		if _, _, _, err := parseRemote(r.Remote); err != nil {
 			return err
 		}
 	}
@@ -90,20 +96,22 @@ func (r FirewallRule) validate() error {
 	return nil
 }
 
-// parseRemote splits "10.0.0.0/8" into address and prefix length ("" for a single address).
-func parseRemote(s string) (ip, mask string, err error) {
+// parseRemote splits "10.0.0.0/8" or "2001:db8::/32" into address and prefix length (""
+// for a single address) and tells whether it is IPv6.
+func parseRemote(s string) (ip, mask string, v6 bool, err error) {
 	if strings.Contains(s, "/") {
 		addr, n, err := net.ParseCIDR(s)
-		if err != nil || addr.To4() == nil {
-			return "", "", invalidf("%q is not an IPv4 address or network (IPv6 rules are not supported yet).", s)
+		if err != nil {
+			return "", "", false, invalidf("%q is not an IP address or network (e.g. 10.0.0.0/8 or 2001:db8::/32).", s)
 		}
 		ones, _ := n.Mask.Size()
-		return n.IP.String(), strconv.Itoa(ones), nil
+		return n.IP.String(), strconv.Itoa(ones), addr.To4() == nil, nil
 	}
-	if a := net.ParseIP(s); a == nil || a.To4() == nil {
-		return "", "", invalidf("%q is not an IPv4 address or network (IPv6 rules are not supported yet).", s)
+	a := net.ParseIP(s)
+	if a == nil {
+		return "", "", false, invalidf("%q is not an IP address or network (e.g. 10.0.0.0/8 or 2001:db8::/32).", s)
 	}
-	return s, "", nil
+	return a.String(), "", a.To4() == nil, nil
 }
 
 func parsePorts(s string) (from, to int, err error) {
@@ -133,8 +141,10 @@ func buildFilter(name string, fw Firewall) (string, error) {
 			return "", fmt.Errorf("rule %d: %w", i+1, err)
 		}
 		var ip libvirtxml.NWFilterRuleCommonIP
+		v4, v6 := true, true
 		if r.Remote != "" {
-			addr, mask, _ := parseRemote(r.Remote)
+			addr, mask, is6, _ := parseRemote(r.Remote)
+			v4, v6 = !is6, is6
 			if r.Direction == "in" {
 				ip.SrcIPAddr = field(addr)
 				if mask != "" {
@@ -155,32 +165,73 @@ func buildFilter(name string, fw Firewall) (string, error) {
 				port.DstPortEnd = field(strconv.Itoa(to))
 			}
 		}
-		rule := &libvirtxml.NWFilterRule{Action: r.Action, Direction: r.Direction, Priority: rulePriority + i}
-		switch r.Protocol {
-		case "tcp":
-			rule.TCP = &libvirtxml.NWFilterRuleTCP{NWFilterRuleCommonIP: ip, NWFilterRuleCommonPort: port, Comment: r.Comment}
-		case "udp":
-			rule.UDP = &libvirtxml.NWFilterRuleUDP{NWFilterRuleCommonIP: ip, NWFilterRuleCommonPort: port, Comment: r.Comment}
-		case "icmp":
-			rule.ICMP = &libvirtxml.NWFilterRuleICMP{NWFilterRuleCommonIP: ip, Comment: r.Comment}
-		default:
-			rule.All = &libvirtxml.NWFilterRuleAll{NWFilterRuleCommonIP: ip, Comment: r.Comment}
+		if v4 {
+			rule := &libvirtxml.NWFilterRule{Action: r.Action, Direction: r.Direction, Priority: rulePriority + i}
+			switch r.Protocol {
+			case "tcp":
+				rule.TCP = &libvirtxml.NWFilterRuleTCP{NWFilterRuleCommonIP: ip, NWFilterRuleCommonPort: port, Comment: r.Comment}
+			case "udp":
+				rule.UDP = &libvirtxml.NWFilterRuleUDP{NWFilterRuleCommonIP: ip, NWFilterRuleCommonPort: port, Comment: r.Comment}
+			case "icmp":
+				rule.ICMP = &libvirtxml.NWFilterRuleICMP{NWFilterRuleCommonIP: ip, Comment: r.Comment}
+			default:
+				rule.All = &libvirtxml.NWFilterRuleAll{NWFilterRuleCommonIP: ip, Comment: r.Comment}
+			}
+			f.Entries = append(f.Entries, libvirtxml.NWFilterEntry{Rule: rule})
 		}
-		f.Entries = append(f.Entries, libvirtxml.NWFilterEntry{Rule: rule})
+		if v6 {
+			rule := &libvirtxml.NWFilterRule{Action: r.Action, Direction: r.Direction, Priority: rulePriority + i}
+			switch r.Protocol {
+			case "tcp":
+				rule.TCPIPv6 = &libvirtxml.NWFilterRuleTCPIPv6{NWFilterRuleCommonIP: ip, NWFilterRuleCommonPort: port, Comment: r.Comment}
+			case "udp":
+				rule.UDPIPv6 = &libvirtxml.NWFilterRuleUDPIPv6{NWFilterRuleCommonIP: ip, NWFilterRuleCommonPort: port, Comment: r.Comment}
+			case "icmp":
+				rule.ICMPv6 = &libvirtxml.NWFilterRuleICMPIPv6{NWFilterRuleCommonIP: ip, Comment: r.Comment}
+			default:
+				rule.AllIPv6 = &libvirtxml.NWFilterRuleAllIPv6{NWFilterRuleCommonIP: ip, Comment: r.Comment}
+			}
+			f.Entries = append(f.Entries, libvirtxml.NWFilterEntry{Rule: rule})
+		}
 	}
-	for _, d := range []struct{ dir, policy string }{{"in", fw.DefaultIn}, {"out", fw.DefaultOut}} {
-		switch d.policy {
-		case "", "accept":
-		case "drop":
-			f.Entries = append(f.Entries, libvirtxml.NWFilterEntry{Rule: &libvirtxml.NWFilterRule{
-				Action: "drop", Direction: d.dir, Priority: defaultPriority,
-				All: &libvirtxml.NWFilterRuleAll{Comment: "VirtoMir default " + d.dir},
-			}})
-		default:
+	for _, p := range []string{fw.DefaultIn, fw.DefaultOut} {
+		if p != "" && p != "accept" && p != "drop" {
 			return "", invalidf("The default policy must be accept or drop.")
 		}
 	}
+	if fw.DefaultIn == "drop" || fw.DefaultOut == "drop" {
+		f.Entries = append(f.Entries, ipv6Basics()...)
+	}
+	for _, d := range []struct{ dir, policy string }{{"in", fw.DefaultIn}, {"out", fw.DefaultOut}} {
+		if d.policy != "drop" {
+			continue
+		}
+		f.Entries = append(f.Entries,
+			libvirtxml.NWFilterEntry{Rule: &libvirtxml.NWFilterRule{Action: "drop", Direction: d.dir, Priority: defaultPriority,
+				All: &libvirtxml.NWFilterRuleAll{Comment: "VirtoMir default " + d.dir}}},
+			libvirtxml.NWFilterEntry{Rule: &libvirtxml.NWFilterRule{Action: "drop", Direction: d.dir, Priority: defaultPriority,
+				AllIPv6: &libvirtxml.NWFilterRuleAllIPv6{Comment: "VirtoMir default " + d.dir}}})
+	}
 	return f.Marshal()
+}
+
+// ipv6Basics keeps IPv6 working under a default drop: neighbor discovery (router and
+// neighbor solicitations/advertisements, ICMPv6 133-136) both ways, and DHCPv6. Without
+// state matching: conntrack does not track neighbor discovery, so a NEW/ESTABLISHED
+// match never sees it (found in the live test).
+func ipv6Basics() []libvirtxml.NWFilterEntry {
+	var out []libvirtxml.NWFilterEntry
+	for _, dir := range []string{"in", "out"} {
+		for t := 133; t <= 136; t++ {
+			out = append(out, libvirtxml.NWFilterEntry{Rule: &libvirtxml.NWFilterRule{Action: "accept", Direction: dir, Priority: basicsPriority, StateMatch: "false",
+				ICMPv6: &libvirtxml.NWFilterRuleICMPIPv6{Type: field(strconv.Itoa(t)), Comment: "VirtoMir IPv6 neighbor discovery"}}})
+		}
+	}
+	return append(out,
+		libvirtxml.NWFilterEntry{Rule: &libvirtxml.NWFilterRule{Action: "accept", Direction: "out", Priority: basicsPriority, StateMatch: "false",
+			UDPIPv6: &libvirtxml.NWFilterRuleUDPIPv6{NWFilterRuleCommonPort: libvirtxml.NWFilterRuleCommonPort{DstPortStart: field("547")}, Comment: "VirtoMir DHCPv6"}}},
+		libvirtxml.NWFilterEntry{Rule: &libvirtxml.NWFilterRule{Action: "accept", Direction: "in", Priority: basicsPriority, StateMatch: "false",
+			UDPIPv6: &libvirtxml.NWFilterRuleUDPIPv6{NWFilterRuleCommonPort: libvirtxml.NWFilterRuleCommonPort{SrcPortStart: field("547"), DstPortStart: field("546")}, Comment: "VirtoMir DHCPv6"}}})
 }
 
 // parseFilter reads back a filter written by buildFilter.
@@ -190,6 +241,8 @@ func parseFilter(doc string) (Firewall, error) {
 		return Firewall{}, err
 	}
 	fw := Firewall{Enabled: true, DefaultIn: "accept", DefaultOut: "accept", Rules: []FirewallRule{}}
+	// A rule for both families is an IPv4 + IPv6 pair with the same priority.
+	pairOf := map[int]int{} // priority → index in fw.Rules of its address-less IPv4 rule
 	for _, e := range f.Entries {
 		if e.Ref != nil {
 			fw.AntiSpoof = fw.AntiSpoof || e.Ref.Filter == "clean-traffic"
@@ -199,7 +252,10 @@ func parseFilter(doc string) (Firewall, error) {
 		if r == nil {
 			continue
 		}
-		if r.Priority >= defaultPriority && r.All != nil && r.Action == "drop" {
+		if r.Priority >= basicsPriority && r.Priority < defaultPriority {
+			continue // ipv6Basics
+		}
+		if r.Priority >= defaultPriority && (r.All != nil || r.AllIPv6 != nil) && r.Action == "drop" {
 			if r.Direction == "in" {
 				fw.DefaultIn = "drop"
 			} else {
@@ -210,7 +266,16 @@ func parseFilter(doc string) (Firewall, error) {
 		fr := FirewallRule{Direction: r.Direction, Action: r.Action}
 		var ip libvirtxml.NWFilterRuleCommonIP
 		var port *libvirtxml.NWFilterRuleCommonPort
+		v6 := false
 		switch {
+		case r.TCPIPv6 != nil:
+			fr.Protocol, ip, port, fr.Comment, v6 = "tcp", r.TCPIPv6.NWFilterRuleCommonIP, &r.TCPIPv6.NWFilterRuleCommonPort, r.TCPIPv6.Comment, true
+		case r.UDPIPv6 != nil:
+			fr.Protocol, ip, port, fr.Comment, v6 = "udp", r.UDPIPv6.NWFilterRuleCommonIP, &r.UDPIPv6.NWFilterRuleCommonPort, r.UDPIPv6.Comment, true
+		case r.ICMPv6 != nil:
+			fr.Protocol, ip, fr.Comment, v6 = "icmp", r.ICMPv6.NWFilterRuleCommonIP, r.ICMPv6.Comment, true
+		case r.AllIPv6 != nil:
+			fr.Protocol, ip, fr.Comment, v6 = "all", r.AllIPv6.NWFilterRuleCommonIP, r.AllIPv6.Comment, true
 		case r.TCP != nil:
 			fr.Protocol, ip, port, fr.Comment = "tcp", r.TCP.NWFilterRuleCommonIP, &r.TCP.NWFilterRuleCommonPort, r.TCP.Comment
 		case r.UDP != nil:
@@ -236,6 +301,14 @@ func parseFilter(doc string) (Firewall, error) {
 			fr.Ports = port.DstPortStart.Str
 			if port.DstPortEnd.Str != "" && port.DstPortEnd.Str != port.DstPortStart.Str {
 				fr.Ports += "-" + port.DstPortEnd.Str
+			}
+		}
+		if fr.Remote == "" {
+			if j, ok := pairOf[r.Priority]; ok && v6 && fw.Rules[j] == fr {
+				continue // the IPv6 half of a rule for both families
+			}
+			if !v6 {
+				pairOf[r.Priority] = len(fw.Rules)
 			}
 		}
 		fw.Rules = append(fw.Rules, fr)
@@ -342,6 +415,16 @@ func (c *Client) SetFirewall(uuid string, fw Firewall) (FirewallResult, error) {
 	ref := ""
 	if fw.Enabled {
 		// Define (or redefine) the filter first: libvirt re-applies it to running adapters.
+		// A redefinition must carry the filter's UUID, or libvirt refuses the same name.
+		if f, err := l.NwfilterLookupByName(name); err == nil {
+			var x libvirtxml.NWFilter
+			if err := x.Unmarshal(doc); err == nil {
+				x.UUID = formatUUID(f.UUID)
+				if out, err := x.Marshal(); err == nil {
+					doc = out
+				}
+			}
+		}
 		if _, err := l.NwfilterDefineXML(doc); err != nil {
 			return res, fmt.Errorf("network filters: %w (is libvirt's nwfilter driver installed?)", classify(err))
 		}
