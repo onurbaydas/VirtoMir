@@ -178,11 +178,11 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 - Go (daemon, `cmd/` + `internal/`) and Svelte 5 + TypeScript (UI, `web/`).
 - `go test ./...` and `cd web && npm run check` run anywhere, no libvirt needed.
 - `scripts/dev-run.ps1` builds on Windows and runs on a Hyper-V dev host created by `dev/hyperv/New-VirtoMirDevHost.ps1` (Debian 13 with nested KVM).
-- Design decisions live in [`.ai/context/decisions.md`](.ai/context/decisions.md); contributors and AI agents start at [AGENTS.md](AGENTS.md).
+- Contributors and AI agents start at [AGENTS.md](AGENTS.md).
 
 ## Roadmap
 
-SPICE console, IPv6 networks and firewall rules, creating bonds and bridges on the host, ZFS/LVM pools, off-site backups (restic/S3), a Turkish UI and signed apt/rpm repositories. See [`.ai/context/roadmap.md`](.ai/context/roadmap.md).
+SPICE console, IPv6 networks and firewall rules, creating bonds and bridges on the host, ZFS/LVM pools, off-site backups (restic/S3), a Turkish UI and signed apt/rpm repositories.
 
 ## License
 

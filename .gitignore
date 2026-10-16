@@ -1,5 +1,5 @@
-# --- AI memory: local-only (secrets, machine-specific notes) ---
-.ai/local/
+# --- AI memory: local-only (project notes, transcripts, secrets); never published ---
+.ai/
 
 # --- Secrets / env ---
 .env
