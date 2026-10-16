@@ -266,7 +266,7 @@
             {/each}
           </select>
           <span class="hint">
-            A ready-to-boot image (e.g. debian-13-generic-amd64.qcow2, ubuntu noble-server-cloudimg-amd64.img). It is copied, so the original stays clean.
+            Copied, so the original stays clean.
             <a href="/storage" onclick={router.link}>Upload one</a> in Storage.
           </span>
         </label>
@@ -403,7 +403,6 @@
           </div>
           <label class="ui-switch"><input type="checkbox" bind:checked={secureBoot} disabled={firmware === 'bios'} /> Secure Boot</label>
           <label class="ui-switch"><input type="checkbox" bind:checked={tpm} /> TPM 2.0 (required by Windows 11)</label>
-          <p class="hint">Every other setting — CPU model, devices, boot order — can be changed later on the machine page or in its XML.</p>
         </div>
       {/if}
     </section>

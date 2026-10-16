@@ -118,11 +118,7 @@
 </script>
 
 <header class="head">
-  <p class="lead">
-    Group machines and cap what they may take together: vCPUs, memory and disk space per storage pool. VirtoMir refuses a new machine, a bigger machine,
-    a new disk or a move that would break a limit — for admins too. Pools nest: a team pool inside a department pool counts against both.
-    Pools are kept per host.
-  </p>
+  <p class="lead">Hard caps on what a group of machines may take together (vCPUs, memory, disk). Nested pools count against their parents. Kept per host.</p>
   {#if admin}<button class="ui-btn primary" onclick={openNew}><Plus size={14} /> New pool</button>{/if}
 </header>
 

@@ -89,10 +89,12 @@
       <h2><Shield size={16} /> Firewall</h2>
       <label class="ui-switch"><input type="checkbox" bind:checked={fw.enabled} onchange={() => (dirty = true)} disabled={!admin} /> {fw.enabled ? 'On' : 'Off'}</label>
     </header>
-    <p class="muted">
-      Enforced on this host, in front of the machine's network adapters: the guest cannot turn it off. Rules are checked top to bottom; the first match wins.
-      Allowing a connection also lets its replies back. IPv4 only for now.
-    </p>
+    <p class="muted">Enforced on the host; the first matching rule wins. IPv4 only.</p>
+    {#if fw.enabled && !fw.rules.length && fw.defaultIn === 'accept' && fw.defaultOut === 'accept'}
+      <p class="warn">On, but with no rules and both defaults on Allow it blocks nothing.</p>
+    {:else if fw.enabled && fw.defaultOut === 'drop' && !fw.rules.some((r) => r.direction === 'out' && r.action === 'accept')}
+      <p class="warn">Outgoing is blocked with no exception: the machine gets no DHCP lease, DNS or updates.</p>
+    {/if}
     {#if fw.adapters?.length === 0}<div class="ui-error-box">This machine has no adapter the firewall can apply to.</div>{/if}
     {#if fw.unsupported?.length}<p class="warn">Not covered: {fw.unsupported.join(', ')} (macvtap/direct or passthrough adapters bypass host filters).</p>{/if}
 

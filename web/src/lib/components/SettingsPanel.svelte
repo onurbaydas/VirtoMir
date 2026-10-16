@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { router } from '../router.svelte'
   import { session } from '../session.svelte'
   // The common settings as a form. Form and XML editor read and write the same persistent
   // definition; "Review changes" shows exactly what the form will change in the XML.
@@ -267,7 +268,7 @@
       {#if tuningOpen || tuned}
         <div class="tuning">
           <div>
-            <span class="label">vCPU pinning <span class="hint">— host CPUs each vCPU may run on (this host has {hostThreads || '?'}: 0–{Math.max(0, hostThreads - 1)})</span></span>
+            <span class="label">vCPU pinning <span class="hint">— host CPUs each vCPU may run on (this host has {hostThreads || '?'}: 0–{Math.max(0, hostThreads - 1)}; <a href="/hardware" onclick={router.link}>CPU map</a>)</span></span>
             <div class="pins">
               {#each form.pinning as _, i (i)}
                 <label class="pin">

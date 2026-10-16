@@ -258,7 +258,6 @@
 
 <DestructiveGuardrailModal
   open={which === 'delete'}
-  action="delete"
   targetName={detail.name}
   targetUuid={detail.uuid}
   onconfirm={(opts) => {
