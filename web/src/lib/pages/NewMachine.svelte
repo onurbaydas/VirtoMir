@@ -435,7 +435,7 @@
     {#if error}<div class="ui-error-box">{error}</div>{/if}
     {#if !session.canCreate}<p class="error">{session.why('admin')} Operators can create machines when an admin gives them a quota.</p>{/if}
     {#if session.quota?.rule && session.quota.used}
-      <p class="hint">Your quota: {session.quota.used.machines} of {session.quota.rule.machines} machines, {session.quota.used.vcpus} of {session.quota.rule.vcpus} vCPUs, {session.quota.used.memoryMiB} of {session.quota.rule.memoryMiB} MiB in use.</p>
+      <p class="hint">Your quota: {session.quota.used.machines} of {session.quota.rule.machines} machines, {session.quota.used.vcpus} of {session.quota.rule.vcpus} vCPUs, {session.quota.used.memoryMiB} of {session.quota.rule.memoryMiB} MiB{session.quota.rule.diskGiB != null ? `, ${session.quota.used.diskGiB ?? 0} of ${session.quota.rule.diskGiB} GiB disk` : ''} in use.</p>
     {/if}
     <button class="ui-btn primary create" disabled={!canCreate || busy || !session.canCreate}>
       <Rocket size={15} />

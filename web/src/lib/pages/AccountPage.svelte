@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { router } from '../router.svelte'
   import QuotasCard from '../components/QuotasCard.svelte'
   import SigninCard from '../components/SigninCard.svelte'
   import IntegrationsCard from '../components/IntegrationsCard.svelte'
@@ -96,6 +97,7 @@
     <div class="name">{session.info?.user ?? 'Development mode (no sign-in)'}</div>
     <div class="role">{me?.label} · {me?.can}</div>
   </div>
+  {#if session.can('admin')}<a class="ui-btn sm ghost setup" href="/setup" onclick={router.link}>Run the host setup again</a>{/if}
 </section>
 
 {#if session.can('admin')}<UpdatesCard />{/if}
@@ -221,6 +223,9 @@
   .card {
     padding: 16px 18px;
     margin-bottom: 16px;
+  }
+  .who .setup {
+    margin-left: auto;
   }
   .who {
     display: flex;

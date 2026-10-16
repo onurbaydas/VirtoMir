@@ -28,12 +28,21 @@ func TestForAndCheck(t *testing.T) {
 		t.Error("no rule must mean no quota")
 	}
 	r, _ := s.For("ali", []string{"students"})
-	if err := Check(r, Usage{Machines: 1, VCPUs: 2, MemoryMiB: 2048}, 1, 2, 2048); err != nil {
+	if err := Check(r, Usage{Machines: 1, VCPUs: 2, MemoryMiB: 2048, DiskGiB: 900}, 1, 2, 2048, 500); err != nil {
 		t.Errorf("exactly at the limit: %v", err)
 	}
-	err = Check(r, Usage{Machines: 2, VCPUs: 4, MemoryMiB: 4096}, 1, 1, 512)
+	err = Check(r, Usage{Machines: 2, VCPUs: 4, MemoryMiB: 4096}, 1, 1, 512, 0)
 	if err == nil || !strings.Contains(err.Error(), "machines (2 of 2 used)") {
 		t.Errorf("over: %v", err)
+	}
+	// A disk limit, when set, counts; nil (older rules) means none.
+	disk := uint64(100)
+	r.DiskGiB = &disk
+	if err := Check(r, Usage{DiskGiB: 80}, 0, 0, 0, 20); err != nil {
+		t.Errorf("disk at the limit: %v", err)
+	}
+	if err := Check(r, Usage{DiskGiB: 80}, 0, 0, 0, 21); err == nil || !strings.Contains(err.Error(), "disk space (80 of 100 GiB used, this needs 21)") {
+		t.Errorf("disk over: %v", err)
 	}
 	// Persisted.
 	s2, _ := Open(s.path)

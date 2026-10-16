@@ -66,7 +66,7 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	addCPU, addMem := max(int(set.MaxVCPUs)-vcpus, 0), uint64(max(int64(set.MemoryMiB)-int64(mem), 0))
 	// An owner growing their machine stays within their quota; everyone within its pool.
-	if identity(r).Role < auth.Admin && (addCPU > 0 || addMem > 0) && !s.checkQuota(w, r, 0, addCPU, addMem) {
+	if identity(r).Role < auth.Admin && (addCPU > 0 || addMem > 0) && !s.checkQuota(w, r, 0, addCPU, addMem, 0) {
 		return
 	}
 	if (addCPU > 0 || addMem > 0) && !s.checkRespool(w, "", r.PathValue("uuid"), respool.Demand{VCPUs: addCPU, MemoryMiB: addMem}) {

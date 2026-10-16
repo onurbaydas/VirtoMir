@@ -66,7 +66,9 @@ func (s *Server) deploy(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if identity(r).Role < auth.Admin && !s.checkQuota(w, r, 1, vcpus, mem) {
+	// The new machine's disks are the template's, full or linked (a linked overlay can grow
+	// to the same size).
+	if identity(r).Role < auth.Admin && !s.checkQuota(w, r, 1, vcpus, mem, s.diskGiB([]string{uuid})) {
 		return
 	}
 	rp := r.URL.Query().Get("respool") // the new machine's resource pool, if any

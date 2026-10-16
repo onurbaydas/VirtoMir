@@ -1,0 +1,193 @@
+<script lang="ts">
+  // First-run setup (ADR-0045): what this host needs before the first machine, each with a
+  // one-click fix. Reachable again from Account → "Run the setup again".
+  import Check from '@lucide/svelte/icons/check'
+  import CircleAlert from '@lucide/svelte/icons/circle-alert'
+  import Info from '@lucide/svelte/icons/info'
+  import { api, errorText, type Pool } from '../api'
+  import { ent } from '../enterprise'
+  import { track } from '../jobs'
+  import { router } from '../router.svelte'
+  import { session } from '../session.svelte'
+  import { toasts } from '../toast.svelte'
+
+  interface SetupCheck {
+    id: string
+    ok: boolean
+    needed: boolean
+    title: string
+    detail: string
+  }
+  let checks = $state<SetupCheck[] | null>(null)
+  let arch = $state('')
+  let backupDir = $state('')
+  let error = $state('')
+  let pools = $state<Pool[]>([])
+
+  async function load() {
+    try {
+      const s = await api.get<{ done: boolean; arch: string; backupDir?: string; checks: SetupCheck[] }>('/api/v1/setup')
+      checks = s.checks
+      arch = s.arch
+      if (!backupDir) backupDir = s.backupDir ?? ''
+      pools = (await api.pools()).filter((p) => p.active && ['dir', 'netfs', 'fs'].includes(p.type))
+      error = ''
+    } catch (e) {
+      error = errorText(e)
+    }
+  }
+  $effect(() => {
+    void load()
+  })
+  const check = (id: string) => checks?.find((c) => c.id === id)
+  let ready = $derived(!!checks && checks.filter((c) => c.needed).every((c) => c.ok))
+
+  let busy = $state('')
+  async function step(id: string, fn: () => Promise<unknown>, done: string) {
+    busy = id
+    try {
+      await fn()
+      toasts.push({ kind: 'info', title: done })
+      await load()
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'That did not work', detail: errorText(e) })
+    } finally {
+      busy = ''
+    }
+  }
+
+  // ---- fixes --------------------------------------------------------------------------
+  let poolPath = $state('/var/lib/libvirt/images')
+  const createPool = () =>
+    step('pool', async () => {
+      const taken = new Set((await api.pools()).map((p) => p.name))
+      await api.createPool({ name: taken.has('default') ? 'images' : 'default', path: poolPath.trim() })
+    }, 'Storage pool created')
+
+  const createNetwork = () =>
+    step('network', async () => {
+      const nets = await api.networks()
+      const used = new Set(nets.map((n) => n.subnet?.split('.').slice(0, 3).join('.')))
+      let x = 122
+      while (used.has(`192.168.${x}`) && x < 250) x++
+      const name = nets.some((n) => n.name === 'default') ? 'nat' : 'default'
+      await api.createNetwork({ name, mode: 'nat', subnet: `192.168.${x}.0/24`, dhcp: true })
+    }, 'NAT network created')
+
+  const saveBackups = () => step('backups', () => api.saveBackupSettings(backupDir.trim()), 'Backup location saved')
+
+  // A first image: a cloud image boots in seconds with cloud-init (user, password, SSH key).
+  let x86 = $derived(!/aarch64|arm/i.test(arch))
+  let images = $derived([
+    {
+      label: 'Debian 13 (trixie) cloud image',
+      url: x86 ? 'https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2' : 'https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-arm64.qcow2',
+    },
+    {
+      label: 'Ubuntu 24.04 LTS cloud image',
+      url: x86 ? 'https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img' : 'https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img',
+    },
+  ])
+  let imagePool = $derived(pools[0]?.name ?? '')
+  async function download(url: string) {
+    try {
+      const name = url.split('/').pop()!.replace(/\.img$/, '.qcow2')
+      const job = await ent.download(imagePool, url, name, '')
+      track(job, { success: `${name} is ready in ${imagePool}` })
+    } catch (e) {
+      toasts.push({ kind: 'error', title: 'Download not started', detail: errorText(e) })
+    }
+  }
+
+  async function finish(to: string) {
+    try {
+      await api.post('/api/v1/setup/done')
+    } catch {
+      /* not fatal: the page simply shows again next time */
+    }
+    router.navigate(to)
+  }
+</script>
+
+<svelte:head><title>Setup · VirtoMir</title></svelte:head>
+
+<header class="page-head">
+  <div>
+    <h1>Welcome to VirtoMir</h1>
+    <p class="lead">A few things this host needs before the first machine. Each can be fixed from here; you can also skip and do it later.</p>
+  </div>
+</header>
+
+{#if !session.can('admin')}
+  <p class="muted">Only admins set up a host.</p>
+{:else if error}
+  <div class="ui-error-box">{error}</div>
+{:else if !checks}
+  <p class="muted">Looking at this host…</p>
+{:else}
+  <ol class="steps">
+    {#each checks as c (c.id)}
+      <li class="ui-panel step" class:ok={c.ok} class:needed={!c.ok && c.needed}>
+        <span class="mark">
+          {#if c.ok}<Check size={18} />{:else if c.needed}<CircleAlert size={18} />{:else}<Info size={18} />{/if}
+        </span>
+        <div class="body">
+          <b>{c.title}</b>
+          <span class="detail">{c.detail}</span>
+          {#if c.id === 'pool' && !c.ok}
+            <div class="fix">
+              <input class="ui-input mono" bind:value={poolPath} aria-label="Directory for disks and images" />
+              <button class="ui-btn primary" disabled={busy === 'pool'} onclick={createPool}>{busy === 'pool' ? 'Creating…' : 'Create pool'}</button>
+            </div>
+          {:else if c.id === 'network' && !c.ok}
+            <div class="fix">
+              <button class="ui-btn primary" disabled={busy === 'network'} onclick={createNetwork}>{busy === 'network' ? 'Creating…' : 'Create a NAT network'}</button>
+              <a class="ui-btn ghost" href="/networks" onclick={router.link}>Bridge to the LAN instead…</a>
+            </div>
+          {:else if c.id === 'backups'}
+            <div class="fix">
+              <input class="ui-input mono" bind:value={backupDir} aria-label="Backup location" />
+              <button class="ui-btn" disabled={busy === 'backups' || !backupDir.trim()} onclick={saveBackups}>Save</button>
+            </div>
+          {:else if c.id === 'offsite' && c.ok}
+            <div class="fix"><a class="ui-btn ghost" href="/backups" onclick={router.link}>Set up off-site copies…</a></div>
+          {/if}
+        </div>
+      </li>
+    {/each}
+    {#if check('pool')?.ok}
+      <li class="ui-panel step">
+        <span class="mark"><Info size={18} /></span>
+        <div class="body">
+          <b>Something to start from</b>
+          <span class="detail">Download a cloud image into {imagePool} (the host fetches it; nothing passes through this browser), or upload an installer ISO on the Storage page.</span>
+          <div class="fix">
+            {#each images as img (img.url)}<button class="ui-btn" onclick={() => download(img.url)}>{img.label}</button>{/each}
+            <a class="ui-btn ghost" href="/storage" onclick={router.link}>Upload an ISO…</a>
+          </div>
+        </div>
+      </li>
+    {/if}
+  </ol>
+  <div class="end">
+    <button class="ui-btn primary" disabled={!ready} title={ready ? '' : 'Fix the red items first'} onclick={() => finish('/machines/new')}>Create the first machine</button>
+    <button class="ui-btn ghost" onclick={() => finish('/')}>{ready ? 'Done' : 'Skip for now'}</button>
+  </div>
+{/if}
+
+<style>
+  .lead { margin: 0; color: var(--text-3); font-size: 13.5px; }
+  .muted { color: var(--text-3); }
+  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; max-width: 820px; }
+  .step { display: flex; gap: 12px; padding: 14px 16px; border-left: 4px solid var(--border); }
+  .step.ok { border-left-color: var(--ok, var(--accent)); }
+  .step.needed { border-left-color: var(--danger, var(--warn)); }
+  .mark { flex: none; margin-top: 1px; color: var(--text-3); }
+  .ok .mark { color: var(--ok, var(--accent)); }
+  .needed .mark { color: var(--danger, var(--warn)); }
+  .body { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+  .detail { color: var(--text-2); font-size: 13px; }
+  .fix { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .fix input { flex: 1; min-width: 200px; max-width: 420px; }
+  .end { display: flex; gap: 10px; margin: 18px 0; }
+</style>

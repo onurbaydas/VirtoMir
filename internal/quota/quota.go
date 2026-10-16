@@ -1,5 +1,6 @@
 // Package quota limits what operators may create themselves (ADR-0022): a rule per Linux
-// group or user caps the number of machines, vCPUs and memory of the machines they own.
+// group or user caps the number of machines, vCPUs, memory and disk space (ADR-0044) of the
+// machines they own.
 package quota
 
 import (
@@ -21,6 +22,9 @@ type Rule struct {
 	Machines  int    `json:"machines"`
 	VCPUs     int    `json:"vcpus"`
 	MemoryMiB uint64 `json:"memoryMiB"`
+	// DiskGiB caps the size of the owned machines' own disks (their full virtual size, as
+	// a thin disk can fill up). nil: no disk limit — rules from before ADR-0044 stay valid.
+	DiskGiB *uint64 `json:"diskGiB,omitempty"`
 }
 
 // Usage is what a user's machines take now.
@@ -28,6 +32,7 @@ type Usage struct {
 	Machines  int    `json:"machines"`
 	VCPUs     int    `json:"vcpus"`
 	MemoryMiB uint64 `json:"memoryMiB"`
+	DiskGiB   uint64 `json:"diskGiB"`
 }
 
 type Store struct {
@@ -121,9 +126,9 @@ func (s *Store) For(user string, groups []string) (Rule, bool) {
 	return best, found
 }
 
-// Check says whether adding (machines, vcpus, memory) to used stays within r; the error
-// names what would be exceeded.
-func Check(r Rule, used Usage, machines, vcpus int, memoryMiB uint64) error {
+// Check says whether adding (machines, vcpus, memory, disk) to used stays within r; the
+// error names what would be exceeded.
+func Check(r Rule, used Usage, machines, vcpus int, memoryMiB, diskGiB uint64) error {
 	var over []string
 	if used.Machines+machines > r.Machines {
 		over = append(over, fmt.Sprintf("machines (%d of %d used)", used.Machines, r.Machines))
@@ -133,6 +138,9 @@ func Check(r Rule, used Usage, machines, vcpus int, memoryMiB uint64) error {
 	}
 	if used.MemoryMiB+memoryMiB > r.MemoryMiB {
 		over = append(over, fmt.Sprintf("memory (%d of %d MiB used, this needs %d)", used.MemoryMiB, r.MemoryMiB, memoryMiB))
+	}
+	if r.DiskGiB != nil && used.DiskGiB+diskGiB > *r.DiskGiB {
+		over = append(over, fmt.Sprintf("disk space (%d of %d GiB used, this needs %d)", used.DiskGiB, *r.DiskGiB, diskGiB))
 	}
 	if len(over) > 0 {
 		return fmt.Errorf("this would exceed your quota for %s; ask an admin for more", strings.Join(over, ", "))
