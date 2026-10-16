@@ -34,10 +34,13 @@ jobs:
       - name: Build linux/amd64 with PAM
         run: sh scripts/build-release.sh "${GITHUB_REF_NAME}"
 
+      - name: Debian package
+        run: SKIP_WEB=1 sh scripts/build-deb.sh "${GITHUB_REF_NAME}"
+
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" out/*.tar.gz out/*.sha256 \
+          gh release create "${GITHUB_REF_NAME}" out/*.tar.gz out/*.deb out/*.sha256 \
             --title "VirtoMir ${GITHUB_REF_NAME}" --generate-notes \
             $([[ "${GITHUB_REF_NAME}" == *-* ]] && echo --prerelease)
