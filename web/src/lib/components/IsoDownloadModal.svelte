@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Fetch an image (installer ISO, cloud image) from a URL straight into a storage pool. The
   // host downloads it, so nothing passes through the browser; with a SHA-256 checksum a
   // corrupt or tampered download is deleted again.
@@ -58,22 +59,22 @@
   }
 </script>
 
-<Dialog {open} title="Download an image into a pool" subtitle="The host fetches it; progress shows under Tasks" width={560} {onclose}>
+<Dialog {open} title={t('Download an image into a pool')} subtitle={t('The host fetches it; progress shows under Tasks')} width={560} {onclose}>
   <div class="form">
     {#if error}<div class="ui-error-box">{error}</div>{/if}
-    <label class="ui-field"><span class="label">Address</span>
-      <input class="ui-input mono" placeholder="https://cdimage.debian.org/…/debian-13-netinst.iso" bind:value={url} /></label>
-    <label class="ui-field"><span class="label">Save as</span>
+    <label class="ui-field"><span class="label">{t('Address')}</span>
+      <input class="ui-input mono" placeholder={t('https://cdimage.debian.org/…/debian-13-netinst.iso')} bind:value={url} /></label>
+    <label class="ui-field"><span class="label">{t('Save as')}</span>
       <input class="ui-input mono" bind:value={name} oninput={() => (named = true)} /></label>
-    <label class="ui-field"><span class="label">Storage pool</span>
+    <label class="ui-field"><span class="label">{t('Storage pool')}</span>
       <select class="ui-input" bind:value={pool}>{#each pools as p (p.name)}<option value={p.name}>{p.name} ({p.type})</option>{/each}</select></label>
-    <label class="ui-field"><span class="label">SHA-256 checksum (optional, recommended)</span>
+    <label class="ui-field"><span class="label">{t('SHA-256 checksum (optional, recommended)')}</span>
       <input class="ui-input mono" placeholder="from the download page's SHA256SUMS" bind:value={sha256} />
-      {#if !shaOK}<span class="error">64 hex characters</span>{/if}</label>
+      {#if !shaOK}<span class="error">{t('64 hex characters')}</span>{/if}</label>
   </div>
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={onclose}>Cancel</button>
-    <button class="ui-btn primary" disabled={busy || !url.trim() || !name.trim() || !pool || !shaOK} onclick={start}><Download size={14} /> Download</button>
+    <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
+    <button class="ui-btn primary" disabled={busy || !url.trim() || !name.trim() || !pool || !shaOK} onclick={start}><Download size={14} /> {t('Download')}</button>
   {/snippet}
 </Dialog>
 

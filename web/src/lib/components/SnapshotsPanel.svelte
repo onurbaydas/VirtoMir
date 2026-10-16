@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { session } from '../session.svelte'
   // Snapshot tree of one machine: take, revert to and delete snapshots.
   import Camera from '@lucide/svelte/icons/camera'
@@ -35,12 +36,12 @@
     busy = true
     try {
       const res = await api.createSnapshot(uuid, name.trim(), description.trim())
-      toasts.push({ kind: 'info', title: `Snapshot ${res.name} taken` })
+      toasts.push({ kind: 'info', title: t('Snapshot {name} taken', { name: res.name }) })
       name = ''
       description = ''
       await load()
     } catch (err) {
-      toasts.push({ kind: 'error', title: 'Snapshot failed', detail: errorText(err) })
+      toasts.push({ kind: 'error', title: t('Snapshot failed'), detail: errorText(err) })
     } finally {
       busy = false
     }
@@ -78,29 +79,28 @@
 <section class="ui-panel panel">
   <form class="take" onsubmit={take}>
     <div class="fields">
-      <input class="ui-input" bind:value={name} placeholder="Name (optional, e.g. before-upgrade)" pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" spellcheck="false" />
-      <input class="ui-input" bind:value={description} placeholder="Note (optional)" />
+      <input class="ui-input" bind:value={name} placeholder={t('Name (optional, e.g. before-upgrade)')} pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" spellcheck="false" />
+      <input class="ui-input" bind:value={description} placeholder={t('Note (optional)')} />
     </div>
-    <button class="ui-btn primary" disabled={busy || !session.can('operator')} title={session.why('operator')}><Camera size={15} /> {busy ? 'Taking…' : 'Take snapshot'}</button>
+    <button class="ui-btn primary" disabled={busy || !session.can('operator')} title={session.why('operator')}><Camera size={15} /> {busy ? 'Taking…' : t('Take snapshot')}</button>
   </form>
   <p class="hint">
-    {active
+    {t('{v} Snapshots of qcow2 disks are stored inside the image.', { v: active
       ? 'The machine keeps running. Its memory is saved too, so reverting brings it back exactly as it is now.'
-      : 'Saves the disks as they are now.'}
-    Snapshots of qcow2 disks are stored inside the image.
-    <a href="#backups" onclick={(e) => (e.preventDefault(), router.navigate(location.pathname + '#backups', { replace: true }))}>Take them automatically →</a>
+      : 'Saves the disks as they are now.' })}
+    <a href="#backups" onclick={(e) => (e.preventDefault(), router.navigate(location.pathname + '#backups', { replace: true }))}>{t('Take them automatically →')}</a>
   </p>
 
   {#if error}
     <div class="ui-error-box">{error}</div>
   {:else if snaps === null}
-    <p class="muted">Loading…</p>
+    <p class="muted">{t('Loading…')}</p>
   {:else if rows.length === 0}
-    <p class="empty">No snapshots yet. Take one before risky changes, then return to it in one click.</p>
+    <p class="empty">{t('No snapshots yet. Take one before risky changes, then return to it in one click.')}</p>
   {:else}
     <div class="tree-header">
-      <span class="font-bold text-accent">Snapshot tree</span>
-      <span class="text-muted text-xs">{rows.length} SNAPSHOT(S) CAPTURED</span>
+      <span class="font-bold text-accent">{t('Snapshot tree')}</span>
+      <span class="text-muted text-xs">{t('{length} SNAPSHOT(S) CAPTURED', { length: rows.length })}</span>
     </div>
     <ol class="tree">
       {#each rows as { s, depth } (s.name)}
@@ -111,20 +111,20 @@
             <span class="name font-mono">
               <span class="tree-glyph">{depth > 0 ? '├─' : '●'}</span>
               <strong>{s.name}</strong>
-              {#if s.current}<span class="badge-brutal accent" title="The machine was last reverted to or created from this snapshot">● You are here</span>{/if}
-              {#if s.memory}<span class="badge-brutal ok" title="Includes memory: reverting resumes the running machine">with memory</span>{/if}
+              {#if s.current}<span class="badge-brutal accent" title={t('The machine was last reverted to or created from this snapshot')}>{t('● You are here')}</span>{/if}
+              {#if s.memory}<span class="badge-brutal ok" title={t('Includes memory: reverting resumes the running machine')}>{t('with memory')}</span>{/if}
             </span>
             <span class="meta font-mono">{when(s.created)} // {STATE[s.state] ?? s.state}{s.location === 'external' ? ' // external' : ''}</span>
             {#if s.description}<span class="desc font-mono">{s.description}</span>{/if}
           </div>
           <div class="acts">
             <ConfirmButton
-              label="Revert"
-              confirm="Lose changes since then?"
+              label={t('Revert')}
+              confirm={t('Lose changes since then?')}
               icon={RotateCcw}
               disabled={!session.can('operator')}
               title={session.why('operator')}
-              failure="Could not revert to {s.name}"
+              failure={t('Could not revert to {name}', { name: s.name })}
               run={async () => {
                 await api.revertSnapshot(uuid, s.name)
                 toasts.push({ kind: 'info', title: `Reverted to ${s.name}` })
@@ -133,12 +133,12 @@
               }}
             />
             <ConfirmButton
-              label="Delete"
-              confirm="Delete snapshot?"
+              label={t('Delete')}
+              confirm={t('Delete snapshot?')}
               icon={Trash}
               disabled={!session.can('admin')}
               title={session.why('admin')}
-              failure="Could not delete {s.name}"
+              failure={t('Could not delete {name}', { name: s.name })}
               run={async () => {
                 await api.deleteSnapshot(uuid, s.name)
                 await load()

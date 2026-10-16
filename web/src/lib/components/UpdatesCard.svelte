@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Updates (ADR-0036): the newest release on GitHub and, on hosts that run the .deb
   // package, a button that installs it (checked against the release's SHA-256).
   import RefreshCw from '@lucide/svelte/icons/refresh-cw'
@@ -43,7 +44,7 @@
     installing = true
     try {
       const job = await api.post('/api/v1/update/install')
-      track(job, { success: 'Update started: VirtoMir restarts in a few seconds', onSuccess: () => setTimeout(() => location.reload(), 15000) })
+      track(job, { success: t('Update started: VirtoMir restarts in a few seconds'), onSuccess: () => setTimeout(() => location.reload(), 15000) })
     } catch (e) {
       error = errorText(e)
     } finally {
@@ -54,14 +55,14 @@
 
 <section class="ui-panel card">
   <header>
-    <h2>Updates</h2>
-    <button class="ui-btn sm ghost" disabled={checking} onclick={() => check(true)}><RefreshCw size={13} /> {checking ? 'Checking…' : 'Check now'}</button>
+    <h2>{t('Updates')}</h2>
+    <button class="ui-btn sm ghost" disabled={checking} onclick={() => check(true)}><RefreshCw size={13} /> {checking ? 'Checking…' : t('Check now')}</button>
   </header>
   {#if error}<div class="ui-error-box">{error}</div>{/if}
   {#if st}
-    <p class="line">This host runs <b class="mono">{st.current}</b>.
+    <p class="line">{t('This host runs')} <b class="mono">{st.current}</b>.
       {#if st.latest}
-        Newest release{st.repo ? ` on ${st.repo}` : ''}: <b class="mono">{st.latest.version}</b>{st.latest.published ? ` (${new Date(st.latest.published).toLocaleDateString()})` : ''}.
+        {t('Newest release{v}:', { v: st.repo ? ` on ${st.repo}` : '' })} <b class="mono">{st.latest.version}</b>{st.latest.published ? ` (${new Date(st.latest.published).toLocaleDateString()})` : ''}.
       {/if}
     </p>
     {#if st.error}
@@ -74,13 +75,13 @@
           {#if st.installable && session.can('admin')}
             <button class="ui-btn primary" disabled={installing} onclick={install}><Download size={14} /> {installing ? 'Starting…' : `Install ${st.latest?.version}`}</button>
           {/if}
-          {#if st.latest?.url}<a class="ui-btn ghost" href={st.latest.url} target="_blank" rel="noopener"><ExternalLink size={13} /> Release notes</a>{/if}
+          {#if st.latest?.url}<a class="ui-btn ghost" href={st.latest.url} target="_blank" rel="noopener"><ExternalLink size={13} /> {t('Release notes')}</a>{/if}
         </div>
-        {#if !st.installable}<p class="muted">Cannot install from here: {st.reason}</p>{/if}
-        <p class="muted small">In a cluster, update every host (switch host in the sidebar). The download is checked against the release's SHA-256; settings and machines are kept.</p>
+        {#if !st.installable}<p class="muted">{t('Cannot install from here: {reason}', { reason: st.reason })}</p>{/if}
+        <p class="muted small">{t('In a cluster, update every host (switch host in the sidebar). The download is checked against the release\'s SHA-256; settings and machines are kept.')}</p>
       </div>
     {:else}
-      <p class="ok">Up to date.</p>
+      <p class="ok">{t('Up to date.')}</p>
     {/if}
     <p class="muted small">Checked {new Date(st.checkedAt).toLocaleString()}.</p>
   {/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Who is using this host right now: the machines with the most CPU, disk and network load,
   // from the live samples. When the host itself is busy, these are the ones to move.
   import Activity from '@lucide/svelte/icons/activity'
@@ -37,11 +38,11 @@
 {#if rows.length}
   <section class="ui-panel nn">
     <header>
-      <h2><Activity size={16} /> Busiest machines right now</h2>
-      <span class="muted" class:warn={busy}>host CPU {hostCpu.toFixed(0)} %{busy ? ' — busy: consider moving one of these' : ''}</span>
+      <h2><Activity size={16} /> {t('Busiest machines right now')}</h2>
+      <span class="muted" class:warn={busy}>{t('host CPU {v} %{v2}', { v: hostCpu.toFixed(0), v2: busy ? ' — busy: consider moving one of these' : '' })}</span>
     </header>
     <table class="t">
-      <thead><tr><th>Machine</th><th>Share of host CPU</th><th>Disk</th><th>IOPS</th><th>Worst latency</th><th>Network</th></tr></thead>
+      <thead><tr><th>{t('Machine')}</th><th>{t('Share of host CPU')}</th><th>{t('Disk')}</th><th>{t('IOPS')}</th><th>{t('Worst latency')}</th><th>{t('Network')}</th></tr></thead>
       <tbody>
         {#each top as r (r.uuid)}
           <tr>

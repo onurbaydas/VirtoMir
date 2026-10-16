@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Disk images no machine uses: not attached, not a backing image of a linked clone. On
   // shared pools (NFS, Ceph, iSCSI) every reachable member is asked too, so a disk of a
   // machine on another host is never offered for deletion. ISOs are listed apart: an unused
@@ -72,15 +73,15 @@
   let total = $derived(disks.reduce((n, o) => n + o.vol.allocationBytes, 0))
 </script>
 
-<Dialog {open} title="Unused disk images" subtitle={scanning ? 'Looking through every pool…' : `${disks.length} disks · ${formatBytes(total)} on disk`} width={720} {onclose}>
+<Dialog {open} title={t('Unused disk images')} subtitle={scanning ? 'Looking through every pool…' : t('{length} disks · {total} on disk', { length: disks.length, total: formatBytes(total) })} width={720} {onclose}>
   {#if error}<div class="ui-error-box">{error}</div>{/if}
-  {#if unchecked.length}<div class="ui-error-box">Could not ask {unchecked.join(', ')}: disks on shared pools might be theirs. Check before deleting.</div>{/if}
+  {#if unchecked.length}<div class="ui-error-box">{t('Could not ask {v}: disks on shared pools might be theirs. Check before deleting.', { v: unchecked.join(', ') })}</div>{/if}
   {#if !scanning}
     {#if disks.length === 0}
-      <p class="muted">Every disk image is used by a machine (or a linked clone).</p>
+      <p class="muted">{t('Every disk image is used by a machine (or a linked clone).')}</p>
     {:else}
       <table class="t">
-        <thead><tr><th>Image</th><th>Pool</th><th>Size</th><th>On disk</th><th></th></tr></thead>
+        <thead><tr><th>{t('Image')}</th><th>{t('Pool')}</th><th>{t('Size')}</th><th>{t('On disk')}</th><th></th></tr></thead>
         <tbody>
           {#each disks as o (o.pool + o.vol.name)}
             <tr>
@@ -88,17 +89,17 @@
               <td>{o.pool}{o.shared ? ' (shared)' : ''}</td>
               <td class="mono">{formatBytes(o.vol.capacityBytes)}</td>
               <td class="mono">{formatBytes(o.vol.allocationBytes)}</td>
-              <td>{#if session.can('admin')}<ConfirmButton label="Delete" confirm="Delete for good?" icon={Trash} run={() => remove(o)} />{/if}</td>
+              <td>{#if session.can('admin')}<ConfirmButton label={t('Delete')} confirm={t('Delete for good?')} icon={Trash} run={() => remove(o)} />{/if}</td>
             </tr>
           {/each}
         </tbody>
       </table>
     {/if}
     {#if isos.length}
-      <h3>Installation media not in a drive ({isos.length})</h3>
+      <h3>{t('Installation media not in a drive ({length})', { length: isos.length })}</h3>
       <p class="muted small">{isos.map((o) => `${o.vol.name} (${formatBytes(o.vol.allocationBytes)})`).join(' · ')}</p>
     {/if}
-    <p class="muted small">Snapshots inside qcow2 images and backups are not listed here; backups have their own page.</p>
+    <p class="muted small">{t('Snapshots inside qcow2 images and backups are not listed here; backups have their own page.')}</p>
   {/if}
 </Dialog>
 

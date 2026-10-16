@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import History from '@lucide/svelte/icons/clock-arrow-up'
   import RefreshCw from '@lucide/svelte/icons/refresh-cw'
   import CircleCheck from '@lucide/svelte/icons/circle-check'
@@ -104,21 +105,21 @@
   })
 </script>
 
-<svelte:head><title>Activity · VirtoMir</title></svelte:head>
+<svelte:head><title>{t('Activity · VirtoMir')}</title></svelte:head>
 
 <header class="page-head">
   <div>
-    <h1>Activity</h1>
-    <p class="lead">Who changed what, when — every change and sign-in, including refused ones{cluster.clustered ? ', on every host' : ''}.</p>
+    <h1>{t('Activity')}</h1>
+    <p class="lead">{t('Who changed what, when — every change and sign-in, including refused ones{v}.', { v: cluster.clustered ? ', on every host' : '' })}</p>
   </div>
   <div class="tools">
-    <select class="ui-input" bind:value={user} aria-label="Filter by user">
-      <option value="">Everyone</option>
+    <select class="ui-input" bind:value={user} aria-label={t('Filter by user')}>
+      <option value="">{t('Everyone')}</option>
       {#each users as u (u)}<option value={u}>{u}</option>{/each}
     </select>
-    <label class="ui-switch"><input type="checkbox" bind:checked={failedOnly} /> Failed only</label>
-    <button class="ui-btn ghost" onclick={load} title="Reload"><RefreshCw size={15} /></button>
-    <button class="ui-btn" disabled={!entries?.length} onclick={exportCSV} title="Download what is listed as a CSV file"><Download size={15} /> Export</button>
+    <label class="ui-switch"><input type="checkbox" bind:checked={failedOnly} /> {t('Failed only')}</label>
+    <button class="ui-btn ghost" onclick={load} title={t('Reload')}><RefreshCw size={15} /></button>
+    <button class="ui-btn" disabled={!entries?.length} onclick={exportCSV} title={t('Download what is listed as a CSV file')}><Download size={15} /> {t('Export')}</button>
   </div>
 </header>
 
@@ -127,12 +128,12 @@
 {:else if error}
   <div class="ui-error-box">{error}</div>
 {:else if entries === null}
-  <p class="muted">Loading…</p>
+  <p class="muted">{t('Loading…')}</p>
 {:else if entries.length === 0}
   <div class="empty ui-panel">
     <History size={28} strokeWidth={1.5} />
-    <strong>Nothing yet</strong>
-    <span>Changes made in VirtoMir or through its API appear here.</span>
+    <strong>{t('Nothing yet')}</strong>
+    <span>{t('Changes made in VirtoMir or through its API appear here.')}</span>
   </div>
 {:else}
   {#each days as d (d.day)}
@@ -149,7 +150,7 @@
                 {#if e.hostName}<span class="host-chip">{e.hostName}</span>{/if}
                 <b>{e.user || 'someone'}</b>
                 {info.before}{#if info.machine}{#if names.has(info.machine)}<a href={machineLink(info.machine).href} onclick={(ev) => open(ev, info.machine!)}>{info.machineName}</a>{:else}<span class="gone">{info.machineName}</span>{/if}{/if}{info.after}
-                {#if e.token}<span class="tok" title="Through the API token “{e.token}”"><KeyRound size={12} /> {e.token}</span>{/if}
+                {#if e.token}<span class="tok" title={t('Through the API token “{token}”', { token: e.token })}><KeyRound size={12} /> {e.token}</span>{/if}
               </span>
               {#if e.error}<span class="err">{e.error}</span>{/if}
             </div>

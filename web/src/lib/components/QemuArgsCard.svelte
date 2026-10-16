@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Expert setting: extra QEMU arguments and environment (<qemu:commandline>). Collapsed and
   // marked dangerous: libvirt cannot see what these do and marks the machine "tainted".
   import ChevronDown from '@lucide/svelte/icons/chevron-down'
@@ -56,7 +57,7 @@
       saved = { args, env }
       toasts.push({
         kind: 'warn',
-        title: lines(args).length + Object.keys(e).length ? 'QEMU command line saved' : 'QEMU command line removed',
+        title: lines(args).length + Object.keys(e).length ? 'QEMU command line saved' : t('QEMU command line removed'),
         detail: r.appliesOnNextBoot ? 'Used from the next start of the machine.' : undefined,
       })
       onsaved()
@@ -72,38 +73,38 @@
   <button class="head" aria-expanded={open} aria-controls="{id}-body" onclick={() => (open = !open)}>
     <span class="icon"><TriangleAlert size={16} /></span>
     <span class="titles">
-      <span class="title">QEMU command line <span class="badge">Expert</span></span>
-      <span class="summary">{loaded ? (count ? `${count} extra ${count === 1 ? 'entry' : 'entries'}` : 'None') : 'Arguments and environment passed straight to QEMU'}</span>
+      <span class="title">{t('QEMU command line')} <span class="badge">{t('Expert')}</span></span>
+      <span class="summary">{loaded ? (count ? `${count} extra ${count === 1 ? 'entry' : 'entries'}` : 'None') : t('Arguments and environment passed straight to QEMU')}</span>
     </span>
     <span class="chev"><ChevronDown size={16} /></span>
   </button>
   {#if open}
     <div class="body" id="{id}-body">
       <div class="warn">
-        These go to QEMU unchecked. A wrong argument stops the machine from starting, and libvirt marks it as
-        <i>tainted</i>: support, migration and snapshots may misbehave. Prefer the Hardware and Settings tabs whenever they offer it.
+        {t('These go to QEMU unchecked. A wrong argument stops the machine from starting, and libvirt marks it as')}
+        <i>{t('tainted')}</i>{t(': support, migration and snapshots may misbehave. Prefer the Hardware and Settings tabs whenever they offer it.')}
       </div>
       {#if !loaded && !error}
-        <p class="muted">Loading…</p>
+        <p class="muted">{t('Loading…')}</p>
       {:else if loaded}
         <label class="ui-field">
-          <span class="label">Arguments, one per line</span>
+          <span class="label">{t('Arguments, one per line')}</span>
           <textarea class="ui-input mono" rows="4" spellcheck="false" placeholder={'-device\nich9-intel-hda'} bind:value={args} readonly={!session.can('admin')}></textarea>
-          <span class="hint">An option and its value are separate lines, as QEMU's argv: <span class="mono">-set</span> then <span class="mono">device.hostdev0.x-igd-opregion=on</span>.</span>
+          <span class="hint">{t('An option and its value are separate lines, as QEMU\'s argv:')} <span class="mono">{t('-set')}</span> {t('then')} <span class="mono">{t('device.hostdev0.x-igd-opregion=on')}</span>.</span>
         </label>
         <label class="ui-field">
-          <span class="label">Environment, NAME=value per line</span>
-          <textarea class="ui-input mono" rows="2" spellcheck="false" placeholder="QEMU_AUDIO_DRV=none" bind:value={env} readonly={!session.can('admin')} aria-invalid={badEnv.length > 0}></textarea>
-          {#if badEnv.length}<span class="error">Not NAME=value: {badEnv.join(', ')}</span>{/if}
+          <span class="label">{t('Environment, NAME=value per line')}</span>
+          <textarea class="ui-input mono" rows="2" spellcheck="false" placeholder={t('QEMU_AUDIO_DRV=none')} bind:value={env} readonly={!session.can('admin')} aria-invalid={badEnv.length > 0}></textarea>
+          {#if badEnv.length}<span class="error">{t('Not NAME=value: {v}', { v: badEnv.join(', ') })}</span>{/if}
         </label>
       {/if}
       {#if error}<div class="ui-error-box">{error}</div>{/if}
       {#if loaded}
         <div class="actions">
           <button class="ui-btn sm danger-soft" disabled={!dirty || busy || badEnv.length > 0 || !session.can('admin')} title={session.why('admin')} onclick={save}>
-            {busy ? 'Saving…' : 'Save QEMU command line'}
+            {busy ? 'Saving…' : t('Save QEMU command line')}
           </button>
-          {#if dirty}<button class="ui-btn sm ghost" onclick={() => ((args = saved.args), (env = saved.env))}>Undo</button>{/if}
+          {#if dirty}<button class="ui-btn sm ghost" onclick={() => ((args = saved.args), (env = saved.env))}>{t('Undo')}</button>{/if}
         </div>
       {/if}
     </div>

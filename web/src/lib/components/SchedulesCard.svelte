@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Automatic snapshots and backups of one machine: one schedule of each kind, edited in place.
   import CalendarClock from '@lucide/svelte/icons/calendar-clock'
   import Play from '@lucide/svelte/icons/play'
@@ -49,10 +50,10 @@
     busy = k
     try {
       await api.saveSchedule(strip($state.snapshot(drafts[k])))
-      toasts.push({ kind: 'info', title: drafts[k].enabled ? `Automatic ${k}s are on` : `Automatic ${k}s are off` })
+      toasts.push({ kind: 'info', title: drafts[k].enabled ? t('Automatic {k}s are on', { k: k }) : t('Automatic {k}s are off', { k: k }) })
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Schedule not saved', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Schedule not saved'), detail: errorText(e) })
     } finally {
       busy = null
     }
@@ -62,27 +63,27 @@
     if (!drafts[k].id) return
     try {
       await api.runSchedule(drafts[k].id)
-      toasts.push({ kind: 'info', title: `${k === 'snapshot' ? 'Snapshot' : 'Backup'} started`, detail: 'Retention runs right after it.' })
+      toasts.push({ kind: 'info', title: `${k === 'snapshot' ? 'Snapshot' : 'Backup'} started`, detail: t('Retention runs right after it.') })
       setTimeout(load, 3000)
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Could not start', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Could not start'), detail: errorText(e) })
     }
   }
 
   const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
   const when = (s?: string) => (s ? new Date(s).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '')
   const LABEL: Record<Kind, { title: string; what: string }> = {
-    snapshot: { title: 'Automatic snapshots', what: 'Quick points to return to, stored inside the disk image. Not a backup: they live and die with the disk.' },
-    backup: { title: 'Automatic backups', what: 'Full copies of the disks and definition in the backup location — taken live, without stopping the machine.' },
+    snapshot: { title: t('Automatic snapshots'), what: t('Quick points to return to, stored inside the disk image. Not a backup: they live and die with the disk.') },
+    backup: { title: t('Automatic backups'), what: t('Full copies of the disks and definition in the backup location — taken live, without stopping the machine.') },
   }
 </script>
 
 <section class="ui-panel card">
-  <h2><CalendarClock size={16} /> Automatic protection</h2>
+  <h2><CalendarClock size={16} /> {t('Automatic protection')}</h2>
   {#if error}
     <div class="ui-error-box">{error}</div>
   {:else if !list}
-    <p class="muted">Loading…</p>
+    <p class="muted">{t('Loading…')}</p>
   {:else}
     <div class="grid">
       {#each ['snapshot', 'backup'] as Kind[] as k (k)}
@@ -93,28 +94,28 @@
           </div>
           <p class="what">{LABEL[k].what}</p>
           <div class="row" inert={!session.can('admin')}>
-            <select class="ui-input" bind:value={d.every} aria-label="How often">
-              <option value="hours">every few hours</option>
-              <option value="daily">every day</option>
-              <option value="weekly">every week</option>
+            <select class="ui-input" bind:value={d.every} aria-label={t('How often')}>
+              <option value="hours">{t('every few hours')}</option>
+              <option value="daily">{t('every day')}</option>
+              <option value="weekly">{t('every week')}</option>
             </select>
             {#if d.every === 'hours'}
-              <select class="ui-input" bind:value={d.hours} aria-label="Hours">
+              <select class="ui-input" bind:value={d.hours} aria-label={t('Hours')}>
                 {#each [1, 2, 3, 4, 6, 8, 12] as h (h)}<option value={h}>every {h} h</option>{/each}
               </select>
             {:else}
               {#if d.every === 'weekly'}
-                <select class="ui-input" bind:value={d.weekday} aria-label="Weekday">
+                <select class="ui-input" bind:value={d.weekday} aria-label={t('Weekday')}>
                   {#each DAYS as day, i (day)}<option value={i}>on {day}</option>{/each}
                 </select>
               {/if}
-              <input class="ui-input time" type="time" bind:value={d.at} aria-label="At" />
+              <input class="ui-input time" type="time" bind:value={d.at} aria-label={t('At')} />
             {/if}
-            <span class="keep">keep the last <input class="ui-input num" type="number" min="1" max="365" bind:value={d.keep} aria-label="Keep" /></span>
+            <span class="keep">{t('keep the last')} <input class="ui-input num" type="number" min="1" max="365" bind:value={d.keep} aria-label={t('Keep')} /></span>
           </div>
           <div class="status">
             {#if d.lastError}
-              <span class="err">Last run failed: {d.lastError}</span>
+              <span class="err">{t('Last run failed: {lastError}', { lastError: d.lastError })}</span>
             {:else if d.lastResult}
               <span class="muted">Last: {when(d.lastRun)} — {d.lastResult}</span>
             {/if}
@@ -122,14 +123,14 @@
           </div>
           <div class="actions">
             {#if d.id}
-              <button class="ui-btn sm ghost" onclick={() => runNow(k)} disabled={!session.can('admin')} title={session.why('admin')}><Play size={13} /> Run now</button>
+              <button class="ui-btn sm ghost" onclick={() => runNow(k)} disabled={!session.can('admin')} title={session.why('admin')}><Play size={13} /> {t('Run now')}</button>
             {/if}
             <button class="ui-btn sm primary" disabled={!dirty(k) || busy === k || !session.can('admin')} onclick={() => save(k)}>{busy === k ? 'Saving…' : 'Save'}</button>
           </div>
         </div>
       {/each}
     </div>
-    <p class="note">Retention only removes what the schedule made itself — snapshots named <span class="mono">auto-…</span> and automatic backups. Your own are never touched.</p>
+    <p class="note">{t('Retention only removes what the schedule made itself — snapshots named')} <span class="mono">{t('auto-…')}</span> {t('and automatic backups. Your own are never touched.')}</p>
   {/if}
 </section>
 

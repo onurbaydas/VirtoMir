@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { session } from '../session.svelte'
   import ArrowLeft from '@lucide/svelte/icons/arrow-left'
   import Monitor from '@lucide/svelte/icons/monitor'
@@ -95,61 +96,61 @@
     if (!detail) return []
     const admin = session.why('admin') || undefined
     const items: MenuItem[] = [
-      { label: 'Rename…', icon: Pencil, run: () => (dlg = 'rename'), disabled: session.whyManage(dom) || undefined },
-      { label: 'Clone…', icon: CopyPlus, run: () => (dlg = 'clone'), disabled: admin },
+      { label: t('Rename…'), icon: Pencil, run: () => (dlg = 'rename'), disabled: session.whyManage(dom) || undefined },
+      { label: t('Clone…'), icon: CopyPlus, run: () => (dlg = 'clone'), disabled: admin },
     ]
     if (cluster.clustered && detail.persistent)
-      items.push({ label: 'Move to another host…', icon: ArrowRightLeft, run: () => (dlg = 'move'), disabled: admin })
+      items.push({ label: t('Move to another host…'), icon: ArrowRightLeft, run: () => (dlg = 'move'), disabled: admin })
     if (detail.persistent)
       items.push(
         dom?.template
-          ? { label: 'Turn into a normal machine', icon: LayoutTemplate, run: () => void setTemplate(false), disabled: admin }
-          : { label: 'Make template…', icon: LayoutTemplate, run: () => (dlg = 'template'), disabled: admin },
+          ? { label: t('Turn into a normal machine'), icon: LayoutTemplate, run: () => void setTemplate(false), disabled: admin }
+          : { label: t('Make template…'), icon: LayoutTemplate, run: () => (dlg = 'template'), disabled: admin },
       )
     if (detail.persistent)
       items.push({
-        label: liveDom?.autostart ?? detail.autostart ? 'Don’t start with the host' : 'Start with the host',
+        label: liveDom?.autostart ?? detail.autostart ? 'Don’t start with the host' : t('Start with the host'),
         icon: Power,
         run: () => void setAutostart(!(liveDom?.autostart ?? detail!.autostart)),
         disabled: admin,
       })
-    items.push({ label: 'Delete…', icon: Trash, run: () => (dlg = 'delete'), disabled: session.whyManage(dom) || undefined })
+    items.push({ label: t('Delete…'), icon: Trash, run: () => (dlg = 'delete'), disabled: session.whyManage(dom) || undefined })
     return items
   })
 
   async function setTemplate(on: boolean) {
     try {
       await api.setTemplate(uuid, on)
-      toasts.push({ kind: 'info', title: on ? 'Now a template' : `${detail?.name} is a normal machine again` })
+      toasts.push({ kind: 'info', title: on ? 'Now a template' : t('{name} is a normal machine again', { name: detail?.name }) })
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Not changed', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Not changed'), detail: errorText(e) })
     }
   }
 
   async function setAutostart(on: boolean) {
     try {
       await api.setAutostart(uuid, on)
-      toasts.push({ kind: 'info', title: on ? 'Starts with the host' : 'No longer starts with the host' })
+      toasts.push({ kind: 'info', title: on ? 'Starts with the host' : t('No longer starts with the host') })
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Autostart not changed', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Autostart not changed'), detail: errorText(e) })
     }
   }
 
   /** Devices the Remove button handles, with its question. The rest: the XML tab. */
   const REMOVE: Partial<Record<string, string>> = {
-    disk: 'Detach from machine?',
-    cdrom: 'Detach from machine?',
-    'hostdev-pci': 'Give it back to the host?',
-    'hostdev-usb': 'Give it back to the host?',
-    'hostdev-mdev': 'Give the slice back?',
-    interface: 'Unplug this adapter?',
-    filesystem: 'Stop sharing this folder?',
-    watchdog: 'Remove the watchdog?',
-    tpm: 'Remove the TPM and its keys?',
+    disk: t('Detach from machine?'),
+    cdrom: t('Detach from machine?'),
+    'hostdev-pci': t('Give it back to the host?'),
+    'hostdev-usb': t('Give it back to the host?'),
+    'hostdev-mdev': t('Give the slice back?'),
+    interface: t('Unplug this adapter?'),
+    filesystem: t('Stop sharing this folder?'),
+    watchdog: t('Remove the watchdog?'),
+    tpm: t('Remove the TPM and its keys?'),
     rng: 'Remove it?',
-    clipboard: 'Turn clipboard sharing off?',
+    clipboard: t('Turn clipboard sharing off?'),
   }
   const NO_TARGET = new Set(['tpm', 'rng', 'clipboard'])
   const removable = (d: Device) => !!REMOVE[d.kind] && (d.kind === 'interface' ? !!d.mac : NO_TARGET.has(d.kind) || !!d.target)
@@ -163,7 +164,7 @@
       kind: r.liveError ? 'warn' : 'info',
       title: `${d.title} removed`,
       detail: r.liveError
-        ? `Gone from the saved definition; the running machine keeps it until it stops: ${r.liveError}`
+        ? t('Gone from the saved definition; the running machine keeps it until it stops: {liveError}', { liveError: r.liveError })
         : r.appliesOnNextBoot
           ? 'Gone from the next start; the running machine keeps it until then.'
           : d.kind === 'disk'
@@ -177,27 +178,27 @@
   // ---- Overview cards -------------------------------------------------------------
 
   const CPU_MODE: Record<string, string> = {
-    'host-passthrough': 'Same as host (passthrough)',
-    'host-model': 'Closest to the host CPU',
-    maximum: 'Everything the hypervisor supports',
-    custom: 'Named CPU model',
+    'host-passthrough': t('Same as host (passthrough)'),
+    'host-model': t('Closest to the host CPU'),
+    maximum: t('Everything the hypervisor supports'),
+    custom: t('Named CPU model'),
   }
   const POWER_EVENT: Record<string, string> = {
-    destroy: 'Power off',
+    destroy: t('Power off'),
     restart: 'Restart',
-    preserve: 'Keep for debugging',
-    'rename-restart': 'Rename and restart',
-    'coredump-destroy': 'Dump memory, then power off',
-    'coredump-restart': 'Dump memory, then restart',
+    preserve: t('Keep for debugging'),
+    'rename-restart': t('Rename and restart'),
+    'coredump-destroy': t('Dump memory, then power off'),
+    'coredump-restart': t('Dump memory, then restart'),
   }
   const FEATURE: Record<string, string> = {
     acpi: 'ACPI',
     apic: 'APIC',
     pae: 'PAE',
-    hyperv: 'Hyper-V enlightenments',
-    kvm: 'KVM tweaks',
+    hyperv: t('Hyper-V enlightenments'),
+    kvm: t('KVM tweaks'),
     smm: 'SMM',
-    vmport: 'VMware port',
+    vmport: t('VMware port'),
     ioapic: 'IOAPIC',
     vmcoreinfo: 'vmcoreinfo',
     pvspinlock: 'PV spinlocks',
@@ -217,21 +218,21 @@
         : s.hypervisor === 'qemu'
           ? 'QEMU emulation (no acceleration, slow)'
           : s.hypervisor
-    const fw = s.firmware === 'uefi' ? (s.secureBoot ? 'UEFI with Secure Boot' : 'UEFI') : 'BIOS (legacy)'
+    const fw = s.firmware === 'uefi' ? (s.secureBoot ? 'UEFI with Secure Boot' : 'UEFI') : t('BIOS (legacy)')
     return clean([
       p('Hypervisor', hv, 'domain@type'),
       p('Architecture', s.arch, 'os/type@arch'),
-      p('Chipset / machine type', s.machine, 'os/type@machine'),
+      p( t('Chipset / machine type'), s.machine, 'os/type@machine'),
       p('Firmware', fw, s.firmware === 'uefi' ? 'os@firmware / os/loader' : 'os/loader'),
-      p('Firmware image', s.loader, 'os/loader'),
-      p('UEFI variables', s.nvram, 'os/nvram'),
-      p('Kernel (direct boot)', s.kernel, 'os/kernel'),
-      p('Kernel command line', s.cmdline, 'os/cmdline'),
-      p('Boot menu', s.bootMenu ? 'shown' : null, 'os/bootmenu@enable'),
+      p( t('Firmware image'), s.loader, 'os/loader'),
+      p( t('UEFI variables'), s.nvram, 'os/nvram'),
+      p( t('Kernel (direct boot)'), s.kernel, 'os/kernel'),
+      p( t('Kernel command line'), s.cmdline, 'os/cmdline'),
+      p( t('Boot menu'), s.bootMenu ? 'shown' : null, 'os/bootmenu@enable'),
       p('Clock', s.clock, 'clock@offset'),
-      p('When the guest powers off', POWER_EVENT[s.onPoweroff ?? ''] ?? s.onPoweroff, 'on_poweroff'),
-      p('When the guest reboots', POWER_EVENT[s.onReboot ?? ''] ?? s.onReboot, 'on_reboot'),
-      p('When the guest crashes', POWER_EVENT[s.onCrash ?? ''] ?? s.onCrash, 'on_crash'),
+      p( t('When the guest powers off'), POWER_EVENT[s.onPoweroff ?? ''] ?? s.onPoweroff, 'on_poweroff'),
+      p( t('When the guest reboots'), POWER_EVENT[s.onReboot ?? ''] ?? s.onReboot, 'on_reboot'),
+      p( t('When the guest crashes'), POWER_EVENT[s.onCrash ?? ''] ?? s.onCrash, 'on_crash'),
       p('Emulator', s.emulator, 'devices/emulator'),
     ])
   })
@@ -241,13 +242,13 @@
     const c = detail.cpu
     const topo = `${plural(c.sockets, 'socket')} × ${plural(c.cores, 'core')} × ${plural(c.threads, 'thread')}`
     return clean([
-      p('Virtual CPUs', c.vcpus === c.maxVcpus ? c.vcpus : `${c.vcpus} active of ${c.maxVcpus} (hot-pluggable)`, 'vcpu'),
+      p( t('Virtual CPUs'), c.vcpus === c.maxVcpus ? c.vcpus : t('{vcpus} active of {maxVcpus} (hot-pluggable)', { vcpus: c.vcpus, maxVcpus: c.maxVcpus }), 'vcpu'),
       p('Topology', topo, 'cpu/topology'),
-      p('CPU model', CPU_MODE[c.mode] ? CPU_MODE[c.mode] + (c.model ? ` · ${c.model}` : '') : c.mode, 'cpu@mode / cpu/model'),
-      p('Feature overrides', c.features ? plural(c.features, 'feature') : null, 'cpu/feature'),
-      p('Pinned to host CPUs', c.pinned ? 'yes' : null, 'cputune/vcpupin'),
-      p('Allowed host CPUs', c.cpuset, 'vcpu@cpuset'),
-      p('Guest NUMA nodes', c.numaNodes || null, 'cpu/numa/cell'),
+      p( t('CPU model'), CPU_MODE[c.mode] ? CPU_MODE[c.mode] + (c.model ? ` · ${c.model}` : '') : c.mode, 'cpu@mode / cpu/model'),
+      p( t('Feature overrides'), c.features ? plural(c.features, 'feature') : null, 'cpu/feature'),
+      p( t('Pinned to host CPUs'), c.pinned ? 'yes' : null, 'cputune/vcpupin'),
+      p( t('Allowed host CPUs'), c.cpuset, 'vcpu@cpuset'),
+      p( t('Guest NUMA nodes'), c.numaNodes || null, 'cpu/numa/cell'),
     ])
   })
 
@@ -256,24 +257,24 @@
     const m = detail.memory
     return clean([
       p('Assigned', formatKiB(m.maxKiB), 'memory'),
-      p('Current (balloon target)', m.currentKiB !== m.maxKiB ? formatKiB(m.currentKiB) : null, 'currentMemory'),
-      p('Hot-plug maximum', m.hotplugKiB ? formatKiB(m.hotplugKiB) : null, 'maxMemory'),
-      p('Huge pages', m.hugepages ? 'yes' : null, 'memoryBacking/hugepages'),
-      p('Balloon device', m.balloon ? (m.balloon === 'virtio' ? 'VirtIO' : m.balloon) : 'none', 'devices/memballoon@model'),
+      p( t('Current (balloon target)'), m.currentKiB !== m.maxKiB ? formatKiB(m.currentKiB) : null, 'currentMemory'),
+      p( t('Hot-plug maximum'), m.hotplugKiB ? formatKiB(m.hotplugKiB) : null, 'maxMemory'),
+      p( t('Huge pages'), m.hugepages ? 'yes' : null, 'memoryBacking/hugepages'),
+      p( t('Balloon device'), m.balloon ? (m.balloon === 'virtio' ? 'VirtIO' : m.balloon) : 'none', 'devices/memballoon@model'),
     ])
   })
 
   // ---- Hardware --------------------------------------------------------------------
 
   const GROUPS: { key: DeviceGroup; label: string; advanced?: boolean }[] = [
-    { key: 'storage', label: 'Storage' },
-    { key: 'network', label: 'Network' },
-    { key: 'display', label: 'Display' },
-    { key: 'console', label: 'Consoles & channels' },
-    { key: 'passthrough', label: 'Passthrough' },
-    { key: 'input', label: 'Input & sound' },
-    { key: 'system', label: 'System devices', advanced: true },
-    { key: 'controller', label: 'Controllers', advanced: true },
+    { key: 'storage', label: t('Storage') },
+    { key: 'network', label: t('Network') },
+    { key: 'display', label: t('Display') },
+    { key: 'console', label: t('Consoles & channels') },
+    { key: 'passthrough', label: t('Passthrough') },
+    { key: 'input', label: t('Input & sound') },
+    { key: 'system', label: t('System devices'), advanced: true },
+    { key: 'controller', label: t('Controllers'), advanced: true },
   ]
   let showAdvanced = $state(false)
   let grouped = $derived(
@@ -294,24 +295,24 @@
   let memCurrent = $derived(liveDom?.memoryKiB ?? detail?.memory.currentKiB ?? 0)
   let memMax = $derived(liveDom?.maxMemoryKiB ?? detail?.memory.maxKiB ?? 0)
 
-  let title = $derived(dom ? `${dom.name} · VirtoMir` : 'Machine · VirtoMir')
+  let title = $derived(dom ? `${dom.name} · VirtoMir` : t('Machine · VirtoMir'))
 </script>
 
 <svelte:head><title>{title}</title></svelte:head>
 
-<a class="back" href="/" onclick={router.link}><ArrowLeft size={15} /> Overview</a>
+<a class="back" href="/" onclick={router.link}><ArrowLeft size={15} /> {t('Overview')}</a>
 
 {#if error && !detail}
   <div class="state-msg">
     {#if error.status === 404}
       <SearchX size={30} strokeWidth={1.5} />
-      <strong>This machine does not exist</strong>
-      <span>It may have been deleted, or the link is wrong.</span>
+      <strong>{t('This machine does not exist')}</strong>
+      <span>{t('It may have been deleted, or the link is wrong.')}</span>
     {:else}
       <TriangleAlert size={30} strokeWidth={1.5} />
-      <strong>Could not load this machine</strong>
+      <strong>{t('Could not load this machine')}</strong>
       <span class="mono">{error.message}</span>
-      <button class="link" onclick={load}>Try again</button>
+      <button class="link" onclick={load}>{t('Try again')}</button>
     {/if}
   </div>
 {:else if !dom || !detail}
@@ -324,7 +325,7 @@
   {#if gone}
     <div class="gone" role="status">
       <TriangleAlert size={16} />
-      This machine is no longer on the host. What you see is its last known configuration.
+      {t('This machine is no longer on the host. What you see is its last known configuration.')}
     </div>
   {/if}
 
@@ -338,24 +339,24 @@
         </h1>
         <div class="chips">
           {#if detail.title}<span class="chip">{detail.title}</span>{/if}
-          <button class="chip mono copyable" title="Copy UUID" onclick={() => copy(uuid, 'UUID')}>{uuid}</button>
-          <span class="chip" title={dom.persistent ? 'Defined: survives a host reboot' : 'Exists only while running'}>
+          <button class="chip mono copyable" title={t('Copy UUID')} onclick={() => copy(uuid, 'UUID')}>{uuid}</button>
+          <span class="chip" title={dom.persistent ? 'Defined: survives a host reboot' : t('Exists only while running')}>
             {dom.persistent ? 'persistent' : 'transient'}
           </span>
-          {#if dom.autostart}<span class="chip" title="Starts when the host boots">autostart</span>{/if}
-          {#if dom.template}<span class="chip accent" title="Never starts; new machines are made from it"><LayoutTemplate size={12} /> template</span>{/if}
+          {#if dom.autostart}<span class="chip" title={t('Starts when the host boots')}>{t('autostart')}</span>{/if}
+          {#if dom.template}<span class="chip accent" title={t('Never starts; new machines are made from it')}><LayoutTemplate size={12} /> {t('template')}</span>{/if}
           {#if dom.linkedFrom}
             {@const t = live.snapshot?.domains.find((d) => d.uuid === dom.linkedFrom)}
             <a class="chip link" href={machineHref(dom.linkedFrom)} onclick={router.link} title="Its disks only store changes on top of this template's disks">linked to {t?.name ?? 'template'}</a>
           {/if}
-          <span class="chip mono" title="Firmware">{detail.system.firmware === 'uefi' ? 'UEFI' : 'BIOS'}{detail.system.secureBoot ? ' · Secure Boot' : ''}</span>
-          {#if detail.system.machine}<span class="chip mono" title="Machine type">{detail.system.machine}</span>{/if}
+          <span class="chip mono" title={t('Firmware')}>{detail.system.firmware === 'uefi' ? 'UEFI' : 'BIOS'}{detail.system.secureBoot ? ' · Secure Boot' : ''}</span>
+          {#if detail.system.machine}<span class="chip mono" title={t('Machine type')}>{detail.system.machine}</span>{/if}
         </div>
       </div>
     </div>
     <div class="head-right">
       {#if live.streamOpen && live.snapshot?.connected && active}
-        <span class="live" title="Updated every second"><span class="live-dot"></span>Live</span>
+        <span class="live" title={t('Updated every second')}><span class="live-dot"></span>{t('Live')}</span>
       {/if}
       {#if !gone && liveDom}<MachineActions d={liveDom} size="lg" extra={manageItems} />{/if}
     </div>
@@ -365,7 +366,7 @@
 
   <section class="stats">
     <StatCard
-      label="CPU"
+      label={t('CPU')}
       icon={Cpu}
       value={active ? formatPercent(liveDom?.cpuPercent ?? 0) : '—'}
       unit={active ? '%' : ''}
@@ -374,27 +375,27 @@
       {#snippet chart()}<Sparkline data={live.domainCpu(uuid)} tick={live.tick} height={56} />{/snippet}
     </StatCard>
     <StatCard
-      label="Memory"
+      label={t('Memory')}
       icon={MemoryStick}
       value={formatKiB(memCurrent).split(' ')[0]}
       unit={formatKiB(memCurrent).split(' ')[1] + (memCurrent !== memMax ? ` of ${formatKiB(memMax)}` : '')}
       sub={liveDom?.guestMemTotalKiB
-        ? `Guest uses ${formatKiB(liveDom.guestMemUsedKiB ?? 0)} (${formatPercent(((liveDom.guestMemUsedKiB ?? 0) / liveDom.guestMemTotalKiB) * 100)} %)`
+        ? t('Guest uses {guestMemUsedKiB} ({guestMemTotalKiB} %)', { guestMemUsedKiB: formatKiB(liveDom.guestMemUsedKiB ?? 0), guestMemTotalKiB: formatPercent(((liveDom.guestMemUsedKiB ?? 0) / liveDom.guestMemTotalKiB) * 100) })
         : memCurrent !== memMax
           ? 'Balloon is holding memory back'
           : detail.memory.balloon
             ? 'Balloon can return memory to the host'
-            : 'Fixed size'}
+            : t('Fixed size')}
     />
     <StatCard
-      label="Storage"
+      label={t('Storage')}
       icon={HardDrive}
       value={diskTotal ? formatBytes(diskTotal).split(' ')[0] : String(disks.length)}
       unit={diskTotal ? formatBytes(diskTotal).split(' ')[1] : disks.length === 1 ? 'disk' : 'disks'}
-      sub={diskTotal ? `${plural(disks.length, 'disk')} · virtual size` : 'Size unknown'}
+      sub={diskTotal ? t('{disk} · virtual size', { disk: plural(disks.length, 'disk') }) : t('Size unknown')}
     />
     <StatCard
-      label="Network"
+      label={t('Network')}
       icon={EthernetPort}
       value={ipv4[0]?.split('/')[0] ?? (nics.length ? String(nics.length) : 'None')}
       unit={ipv4[0] ? '' : nics.length ? (nics.length === 1 ? 'adapter' : 'adapters') : ''}
@@ -404,47 +405,47 @@
           ? nics[0]?.summary
           : active
             ? 'No address reported yet'
-            : 'Addresses appear while running'}
+            : t('Addresses appear while running')}
     />
   </section>
 
-  <div class="tabs" role="tablist" aria-label="Machine sections">
+  <div class="tabs" role="tablist" aria-label={t('Machine sections')}>
     <button role="tab" aria-selected={tab === 'overview'} class:on={tab === 'overview'} onclick={() => setTab('overview')}>
-      Overview
+      {t('Overview')}
     </button>
     {#if session.can('operator')}
       <button role="tab" aria-selected={tab === 'console'} class:on={tab === 'console'} onclick={() => setTab('console')}>
-        Console
+        {t('Console')}
       </button>
     {/if}
     <button role="tab" aria-selected={tab === 'firewall'} class:on={tab === 'firewall'} onclick={() => setTab('firewall')}>
-      Firewall
+      {t('Firewall')}
     </button>
     <button role="tab" aria-selected={tab === 'settings'} class:on={tab === 'settings'} onclick={() => setTab('settings')}>
-      Settings
+      {t('Settings')}
     </button>
     <button role="tab" aria-selected={tab === 'hardware'} class:on={tab === 'hardware'} onclick={() => setTab('hardware')}>
-      Hardware <span class="count num">{detail.devices.length}</span>
+      {t('Hardware')} <span class="count num">{detail.devices.length}</span>
     </button>
     <button role="tab" aria-selected={tab === 'snapshots'} class:on={tab === 'snapshots'} onclick={() => setTab('snapshots')}>
-      Snapshots
+      {t('Snapshots')}
     </button>
     <button role="tab" aria-selected={tab === 'backups'} class:on={tab === 'backups'} onclick={() => setTab('backups')}>
-      Backups
+      {t('Backups')}
     </button>
-    <button role="tab" aria-selected={tab === 'changes'} class:on={tab === 'changes'} onclick={() => setTab('changes')}>Changes</button>
-    <button role="tab" aria-selected={tab === 'xml'} class:on={tab === 'xml'} onclick={() => setTab('xml')}>XML</button>
+    <button role="tab" aria-selected={tab === 'changes'} class:on={tab === 'changes'} onclick={() => setTab('changes')}>{t('Changes')}</button>
+    <button role="tab" aria-selected={tab === 'xml'} class:on={tab === 'xml'} onclick={() => setTab('xml')}>{t('XML')}</button>
   </div>
 
   {#if tab === 'overview'}
     {#if liveDom}<PerformancePanel d={liveDom} devices={detail.devices} />{/if}
     <div class="grid" role="tabpanel">
       <section class="panel">
-        <h2>System</h2>
+        <h2>{t('System')}</h2>
         <PropList props={systemProps} />
         {#if detail.system.bootOrder.length}
           <div class="sub-block">
-            <h3>Boot order</h3>
+            <h3>{t('Boot order')}</h3>
             <ol class="boot">
               {#each detail.system.bootOrder as b, i (b + i)}<li>{b}</li>{/each}
             </ol>
@@ -452,7 +453,7 @@
         {/if}
         {#if detail.system.features.length}
           <div class="sub-block">
-            <h3>Platform features</h3>
+            <h3>{t('Platform features')}</h3>
             <div class="chips">
               {#each detail.system.features as f (f)}<span class="chip" title="features/{f}">{FEATURE[f] ?? f}</span>{/each}
             </div>
@@ -461,11 +462,11 @@
       </section>
       <div class="col">
         <section class="panel">
-          <h2>Processor</h2>
+          <h2>{t('Processor')}</h2>
           <PropList props={cpuProps} />
         </section>
         <section class="panel">
-          <h2>Memory</h2>
+          <h2>{t('Memory')}</h2>
           <PropList props={memoryProps} />
         </section>
       </div>
@@ -473,11 +474,11 @@
   {:else if tab === 'hardware'}
     <div class="hw" role="tabpanel">
       <div class="hw-tools">
-        <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'disk')}><Plus size={14} /> Add storage</button>
-        <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'nic')}><Plus size={14} /> Add network adapter</button>
-        <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'hostdev')}><Plus size={14} /> Add host device</button>
-        <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((addKind = null), (addOpen = true))}><Plus size={14} /> Add other device…</button>
-        <span class="hw-hint">{active ? 'Hot-plugged where the hardware allows; the rest from the next start.' : 'Anything else: the XML tab.'}</span>
+        <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'disk')}><Plus size={14} /> {t('Add storage')}</button>
+        <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'nic')}><Plus size={14} /> {t('Add network adapter')}</button>
+        <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'hostdev')}><Plus size={14} /> {t('Add host device')}</button>
+        <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((addKind = null), (addOpen = true))}><Plus size={14} /> {t('Add other device…')}</button>
+        <span class="hw-hint">{active ? 'Hot-plugged where the hardware allows; the rest from the next start.' : t('Anything else: the XML tab.')}</span>
       </div>
       {#each grouped as g (g.key)}
         {#if !g.advanced || showAdvanced}
@@ -489,17 +490,17 @@
                   {#snippet actions()}
                     {#if d.kind === 'cdrom' || d.kind === 'floppy'}
                       <button class="ui-btn sm" disabled={!session.can('operator')} title={session.why('operator')} onclick={() => ((mediaDrive = d), (dlg = 'media'))}>
-                        <Disc size={14} /> {d.summary?.endsWith('Empty') ? 'Insert media…' : 'Change media…'}
+                        <Disc size={14} /> {d.summary?.endsWith('Empty') ? 'Insert media…' : t('Change media…')}
                       </button>
                     {/if}
                     {#if d.kind === 'disk' && d.target}
-                      <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'resize'))}><Maximize2 size={14} /> Grow…</button>
+                      <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'resize'))}><Maximize2 size={14} /> {t('Grow…')}</button>
                     {/if}
                     {#if d.kind === 'video'}
-                      <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((addKind = 'video'), (addOpen = true))}><Pencil size={14} /> Change…</button>
+                      <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((addKind = 'video'), (addOpen = true))}><Pencil size={14} /> {t('Change…')}</button>
                     {/if}
                     {#if removable(d)}
-                      <ConfirmButton label="Remove" confirm={REMOVE[d.kind] ?? "Remove it?"} icon={Unplug} failure="Could not remove {d.title}" disabled={!session.can('admin')} title={session.why('admin')} run={() => detachDevice(d)} />
+                      <ConfirmButton label={t('Remove')} confirm={REMOVE[d.kind] ?? "Remove it?"} icon={Unplug} failure={t('Could not remove {title}', { title: d.title })} disabled={!session.can('admin')} title={session.why('admin')} run={() => detachDevice(d)} />
                     {/if}
                   {/snippet}
                 </DeviceCard>
@@ -511,12 +512,11 @@
       {#if advancedCount}
         <button class="more" aria-expanded={showAdvanced} onclick={() => (showAdvanced = !showAdvanced)}>
           <span class="chev" class:up={showAdvanced}><ChevronDown size={15} /></span>
-          {showAdvanced ? 'Hide' : 'Show'}
-          {plural(advancedCount, 'more device')} (controllers, balloon, RNG, TPM…)
+          {t('{v} {device} (controllers, balloon, RNG, TPM…)', { v: showAdvanced ? 'Hide' : 'Show', device: plural(advancedCount, 'more device') })}
         </button>
       {/if}
       {#if detail.devices.length === 0}
-        <div class="state-msg"><strong>No devices defined</strong></div>
+        <div class="state-msg"><strong>{t('No devices defined')}</strong></div>
       {/if}
       {#if detail.persistent}<QemuArgsCard {uuid} onsaved={load} />{/if}
     </div>

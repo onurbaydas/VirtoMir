@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // The machine being designed as code: the exact request this page sends to VirtoMir
   // (curl, Ansible), and an equivalent virt-install command for hosts without VirtoMir.
   // Passwords are never written into the code.
@@ -73,10 +74,10 @@ EOF`
     try {
       await navigator.clipboard.writeText(generatedCode)
       copied = true
-      toasts.push({ kind: 'info', title: 'Copied' })
+      toasts.push({ kind: 'info', title: t('Copied') })
       setTimeout(() => (copied = false), 2000)
     } catch {
-      toasts.push({ kind: 'warn', title: 'Clipboard copy failed' })
+      toasts.push({ kind: 'warn', title: t('Clipboard copy failed') })
     }
   }
 </script>
@@ -85,24 +86,24 @@ EOF`
   <div class="panel-head">
     <div class="title">
       <span class="dot"></span>
-      <span>As code</span>
+      <span>{t('As code')}</span>
     </div>
     <div class="formats">
-      <button class:active={format === 'curl'} onclick={() => (format = 'curl')}>API (curl)</button>
-      <button class:active={format === 'ansible'} onclick={() => (format = 'ansible')}>Ansible</button>
-      <button class:active={format === 'virt-install'} onclick={() => (format = 'virt-install')}>virt-install</button>
+      <button class:active={format === 'curl'} onclick={() => (format = 'curl')}>{t('API (curl)')}</button>
+      <button class:active={format === 'ansible'} onclick={() => (format = 'ansible')}>{t('Ansible')}</button>
+      <button class:active={format === 'virt-install'} onclick={() => (format = 'virt-install')}>{t('virt-install')}</button>
     </div>
   </div>
 
   <div class="code-container">
     <pre><code>{generatedCode}</code></pre>
-    <button class="copy-btn" onclick={copyCode} title="Copy code">
+    <button class="copy-btn" onclick={copyCode} title={t('Copy code')}>
       {#if copied}
         <Check size={13} />
-        <span>Copied</span>
+        <span>{t('Copied')}</span>
       {:else}
         <Copy size={13} />
-        <span>Copy</span>
+        <span>{t('Copy')}</span>
       {/if}
     </button>
   </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import ObjectXmlDialog from '../components/ObjectXmlDialog.svelte'
   import FileCode from '@lucide/svelte/icons/file-code'
   let xmlPool = $state<string | null>(null)
@@ -72,7 +73,7 @@
       await api.poolAction(p.name, action)
       await refresh()
     } catch (e) {
-      toasts.push({ kind: 'error', title: `Could not ${action} ${p.name}`, detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Could not {action} {name}', { action: action, name: p.name }), detail: errorText(e) })
     }
   }
   async function toggleAutostart(p: Pool, on: boolean) {
@@ -80,7 +81,7 @@
       await api.poolAutostart(p.name, on)
       await loadPools()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Autostart not changed', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Autostart not changed'), detail: errorText(e) })
     }
   }
 
@@ -133,7 +134,7 @@
     growErr = ''
     try {
       await api.resizeVolume(current.name, growVol.name, growGiB)
-      toasts.push({ kind: 'info', title: `${growVol.name} is now ${growGiB} GiB` })
+      toasts.push({ kind: 'info', title: t('{name} is now {growGiB} GiB', { name: growVol.name, growGiB: growGiB }) })
       growVol = null
       await refresh()
     } catch (err) {
@@ -156,7 +157,7 @@
       toasts.push({ kind: 'info', title: `${name} uploaded`, detail: `${formatBytes(file.size)} to ${current.name}` })
       await refresh()
     } catch (e) {
-      toasts.push({ kind: 'error', title: `Upload of ${name} failed`, detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Upload of {name} failed', { name: name }), detail: errorText(e) })
     } finally {
       uploading = null
     }
@@ -213,7 +214,7 @@
         if (failed.length === res.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
         toasts.push({
           kind: failed.length ? 'warn' : 'info',
-          title: failed.length ? `${pName} created on ${res.length - failed.length} of ${res.length} hosts` : `${pName} created on every host`,
+          title: failed.length ? t('{pName} created on {v} of {length} hosts', { pName: pName, v: res.length - failed.length, length: res.length }) : t('{pName} created on every host', { pName: pName }),
           detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') || undefined,
         })
       } else {
@@ -235,7 +236,7 @@
 
 <ObjectXmlDialog
   open={!!xmlPool}
-  title="Storage pool {xmlPool ?? ''}"
+  title={t('Storage pool {v}', { v: xmlPool ?? '' })}
   kind="storage pool"
   load={() => api.poolXML(xmlPool!)}
   save={(x) => api.savePoolXML(xmlPool!, x)}
@@ -245,22 +246,22 @@
   }}
 />
 
-<svelte:head><title>Storage · VirtoMir</title></svelte:head>
+<svelte:head><title>{t('Storage · VirtoMir')}</title></svelte:head>
 
 <header class="page-head">
   <div>
-    <h1>Storage</h1>
-    <p class="lead">Disk images and installation media live in storage pools, usually directories on this host.</p>
+    <h1>{t('Storage')}</h1>
+    <p class="lead">{t('Disk images and installation media live in storage pools, usually directories on this host.')}</p>
   </div>
   <div class="head-right">
-    <button class="ui-btn" onclick={() => (orphanedOpen = true)} title="Find disks not attached to any VM">
-      <HardDrive size={15} /> Unused disks
+    <button class="ui-btn" onclick={() => (orphanedOpen = true)} title={t('Find disks not attached to any VM')}>
+      <HardDrive size={15} /> {t('Unused disks')}
     </button>
-    <button class="ui-btn" onclick={() => (isoOpen = true)} title="The host downloads an image from a URL into a pool">
-      <Download size={15} /> Download from URL
+    <button class="ui-btn" onclick={() => (isoOpen = true)} title={t('The host downloads an image from a URL into a pool')}>
+      <Download size={15} /> {t('Download from URL')}
     </button>
     <button class="ui-btn primary" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((pName = ''), (pPath = ''), (pErr = ''), (poolDlg = true))}>
-      <FolderPlus size={15} /> New pool
+      <FolderPlus size={15} /> {t('New pool')}
     </button>
   </div>
 </header>
@@ -272,11 +273,11 @@
 {:else if pools.length === 0}
   <div class="empty ui-panel">
     <HardDrive size={28} strokeWidth={1.5} />
-    <strong>No storage pools yet</strong>
-    <span>Create one to keep disk images, for example in /var/lib/libvirt/images.</span>
+    <strong>{t('No storage pools yet')}</strong>
+    <span>{t('Create one to keep disk images, for example in /var/lib/libvirt/images.')}</span>
   </div>
 {:else}
-  <div class="pools" role="tablist" aria-label="Storage pools">
+  <div class="pools" role="tablist" aria-label={t('Storage pools')}>
     {#each pools as p (p.name)}
       <button
         class="pool"
@@ -304,24 +305,24 @@
         <div class="v-title">
           <h2 class="keep-case">{current.name}</h2>
           <span class="chip mono">{current.type}</span>
-          <label class="ui-switch small" title="Start this pool when the host boots">
+          <label class="ui-switch small" title={t('Start this pool when the host boots')}>
             <input type="checkbox" checked={current.autostart} disabled={!session.can('admin')} onchange={(e) => toggleAutostart(current!, e.currentTarget.checked)} />
-            Autostart
+            {t('Autostart')}
           </label>
         </div>
         <div class="v-actions" inert={!session.can('admin')} title={session.why('admin')}>
-          <button class="ui-btn sm ghost" onclick={() => (xmlPool = current!.name)}><FileCode size={14} /> XML</button>
+          <button class="ui-btn sm ghost" onclick={() => (xmlPool = current!.name)}><FileCode size={14} /> {t('XML')}</button>
           {#if current.active}
-            <button class="ui-btn sm ghost" onclick={() => poolAction(current!, 'refresh')} title="Rescan the directory for files added outside VirtoMir">
-              <RefreshCw size={14} /> Rescan
+            <button class="ui-btn sm ghost" onclick={() => poolAction(current!, 'refresh')} title={t('Rescan the directory for files added outside VirtoMir')}>
+              <RefreshCw size={14} /> {t('Rescan')}
             </button>
-            <ConfirmButton label="Stop" confirm="Stop the pool?" icon={Square} run={() => poolAction(current!, 'stop')} />
-            <button class="ui-btn sm" onclick={() => fileInput?.click()} disabled={!!uploading}><Upload size={14} /> Upload ISO</button>
-            <button class="ui-btn sm primary" onclick={openVolume}><Plus size={14} /> New volume</button>
+            <ConfirmButton label={t('Stop')} confirm={t('Stop the pool?')} icon={Square} run={() => poolAction(current!, 'stop')} />
+            <button class="ui-btn sm" onclick={() => fileInput?.click()} disabled={!!uploading}><Upload size={14} /> {t('Upload ISO')}</button>
+            <button class="ui-btn sm primary" onclick={openVolume}><Plus size={14} /> {t('New volume')}</button>
           {:else}
             <ConfirmButton
-              label="Remove pool"
-              confirm="Forget this pool? (files stay)"
+              label={t('Remove pool')}
+              confirm={t('Forget this pool? (files stay)')}
               icon={Trash}
               run={async () => {
                 await api.deletePool(current!.name)
@@ -329,7 +330,7 @@
                 await loadPools()
               }}
             />
-            <button class="ui-btn sm primary" onclick={() => poolAction(current!, 'start')}><Play size={14} /> Start</button>
+            <button class="ui-btn sm primary" onclick={() => poolAction(current!, 'start')}><Play size={14} /> {t('Start')}</button>
           {/if}
         </div>
       </header>
@@ -350,26 +351,26 @@
           <span class="mono">{uploading.name}</span>
           <span class="bar wide"><span style:width="{uploading.fraction * 100}%"></span></span>
           <span class="num">{Math.round(uploading.fraction * 100)} %</span>
-          <button class="ui-btn sm ghost" onclick={() => uploading?.abort.abort()}>Cancel</button>
+          <button class="ui-btn sm ghost" onclick={() => uploading?.abort.abort()}>{t('Cancel')}</button>
         </div>
       {/if}
 
       {#if volError}
         <div class="ui-error-box">{volError}</div>
       {:else if !current.active}
-        <p class="muted">Start the pool to see its volumes.</p>
+        <p class="muted">{t('Start the pool to see its volumes.')}</p>
       {:else if volumes === null}
-        <p class="muted">Loading…</p>
+        <p class="muted">{t('Loading…')}</p>
       {:else if volumes.length === 0}
-        <p class="muted">No volumes in this pool yet. Upload an ISO or create an empty disk.</p>
+        <p class="muted">{t('No volumes in this pool yet. Upload an ISO or create an empty disk.')}</p>
       {:else}
-        <div class="table" role="table" aria-label="Volumes in {current.name}">
+        <div class="table" role="table" aria-label={t('Volumes in {name}', { name: current.name })}>
           <div class="row head" role="row">
-            <span role="columnheader">Name</span>
-            <span role="columnheader">Format</span>
-            <span role="columnheader">Size</span>
-            <span role="columnheader">Used by</span>
-            <span role="columnheader" class="sr">Actions</span>
+            <span role="columnheader">{t('Name')}</span>
+            <span role="columnheader">{t('Format')}</span>
+            <span role="columnheader">{t('Size')}</span>
+            <span role="columnheader">{t('Used by')}</span>
+            <span role="columnheader" class="sr">{t('Actions')}</span>
           </div>
           {#each volumes as v (v.name)}
             <div class="row" role="row">
@@ -381,7 +382,7 @@
                 </span>
               </span>
               <span role="cell" class="muted">{fmtLabel(v)}</span>
-              <span role="cell" class="num" title="Allocated on disk / virtual size">
+              <span role="cell" class="num" title={t('Allocated on disk / virtual size')}>
                 {v.allocationBytes !== v.capacityBytes ? `${formatBytes(v.allocationBytes)} / ` : ''}{formatBytes(v.capacityBytes)}
               </span>
               <span role="cell" class="used">
@@ -389,15 +390,15 @@
               </span>
               <span role="cell" class="act" inert={!session.can('admin')}>
                 {#if v.format !== 'iso' && v.usedBy.length === 0}
-                  <button class="ui-btn sm ghost" onclick={() => openGrow(v)} title="Make this volume bigger"><Maximize2 size={14} /> Grow</button>
+                  <button class="ui-btn sm ghost" onclick={() => openGrow(v)} title={t('Make this volume bigger')}><Maximize2 size={14} /> {t('Grow')}</button>
                 {/if}
                 <ConfirmButton
-                  label="Delete"
-                  confirm="Delete for good?"
+                  label={t('Delete')}
+                  confirm={t('Delete for good?')}
                   icon={Trash}
                   disabled={v.usedBy.length > 0}
-                  title={v.usedBy.length ? 'In use by a machine' : 'Delete this volume'}
-                  failure="Could not delete {v.name}"
+                  title={v.usedBy.length ? 'In use by a machine' : t('Delete this volume')}
+                  failure={t('Could not delete {name}', { name: v.name })}
                   run={async () => {
                     await api.deleteVolume(current!.name, v.name)
                     toasts.push({ kind: 'info', title: `${v.name} deleted` })
@@ -413,70 +414,70 @@
   {/if}
 {/if}
 
-<Dialog open={volDlg} title="New volume" subtitle="An empty disk image in {current?.name}" onclose={() => (volDlg = false)}>
+<Dialog open={volDlg} title={t('New volume')} subtitle={t('An empty disk image in {name}', { name: current?.name })} onclose={() => (volDlg = false)}>
   <form id="vol-form" class="form" onsubmit={createVolume}>
     <label class="ui-field">
-      <span class="label">Name</span>
-      <input class="ui-input" bind:value={vName} placeholder="data-disk" required pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" />
+      <span class="label">{t('Name')}</span>
+      <input class="ui-input" bind:value={vName} placeholder={t('data-disk')} required pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" />
     </label>
     <div class="two">
       <label class="ui-field">
-        <span class="label">Size (GiB)</span>
+        <span class="label">{t('Size (GiB)')}</span>
         <input class="ui-input" type="number" min="1" max="65536" bind:value={vSize} required />
       </label>
       <label class="ui-field">
-        <span class="label">Format</span>
+        <span class="label">{t('Format')}</span>
         <select class="ui-input" bind:value={vFormat}>
-          <option value="qcow2">QCOW2 (thin, snapshots)</option>
-          <option value="raw">Raw (fastest)</option>
+          <option value="qcow2">{t('QCOW2 (thin, snapshots)')}</option>
+          <option value="raw">{t('Raw (fastest)')}</option>
         </select>
       </label>
     </div>
     {#if vErr}<div class="ui-error-box">{vErr}</div>{/if}
   </form>
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={() => (volDlg = false)}>Cancel</button>
-    <button class="ui-btn primary" form="vol-form" disabled={vBusy}>{vBusy ? 'Creating…' : 'Create volume'}</button>
+    <button class="ui-btn ghost" onclick={() => (volDlg = false)}>{t('Cancel')}</button>
+    <button class="ui-btn primary" form="vol-form" disabled={vBusy}>{vBusy ? 'Creating…' : t('Create volume')}</button>
   {/snippet}
 </Dialog>
 
-<Dialog open={growVol !== null} title="Grow {growVol?.name ?? ''}" onclose={() => (growVol = null)}>
+<Dialog open={growVol !== null} title={t('Grow {v}', { v: growVol?.name ?? '' })} onclose={() => (growVol = null)}>
   <form id="grow-form" class="form" onsubmit={grow}>
     <label class="ui-field">
-      <span class="label">New size (GiB)</span>
+      <span class="label">{t('New size (GiB)')}</span>
       <input class="ui-input" type="number" min={Math.floor((growVol?.capacityBytes ?? 0) / 2 ** 30) + 1} max="65536" bind:value={growGiB} />
-      <span class="hint">Currently {formatBytes(growVol?.capacityBytes ?? 0)}. Volumes can only grow. Disks attached to a machine are grown from its Hardware tab.</span>
+      <span class="hint">{t('Currently {capacityBytes}. Volumes can only grow. Disks attached to a machine are grown from its Hardware tab.', { capacityBytes: formatBytes(growVol?.capacityBytes ?? 0) })}</span>
     </label>
     {#if growErr}<div class="ui-error-box">{growErr}</div>{/if}
   </form>
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={() => (growVol = null)}>Cancel</button>
+    <button class="ui-btn ghost" onclick={() => (growVol = null)}>{t('Cancel')}</button>
     <button class="ui-btn primary" form="grow-form" disabled={growBusy}>{growBusy ? 'Growing…' : 'Grow'}</button>
   {/snippet}
 </Dialog>
 
-<Dialog open={poolDlg} title="New storage pool" subtitle="Where disk images and ISOs live" onclose={() => (poolDlg = false)}>
+<Dialog open={poolDlg} title={t('New storage pool')} subtitle={t('Where disk images and ISOs live')} onclose={() => (poolDlg = false)}>
   <form id="pool-form" class="form" onsubmit={createPool}>
-    <div class="seg" role="radiogroup" aria-label="Kind of storage">
-      <button type="button" role="radio" aria-checked={pType === 'dir'} class:on={pType === 'dir'} onclick={() => (pType = 'dir')}>Directory on the host</button>
-      <button type="button" role="radio" aria-checked={pType === 'netfs'} class:on={pType === 'netfs'} onclick={() => (pType = 'netfs')}>NFS share</button>
-      <button type="button" role="radio" aria-checked={pType === 'iscsi'} class:on={pType === 'iscsi'} onclick={() => (pType = 'iscsi')}>iSCSI</button>
-      <button type="button" role="radio" aria-checked={pType === 'rbd'} class:on={pType === 'rbd'} onclick={() => (pType = 'rbd')}>Ceph RBD</button>
-      <button type="button" role="radio" aria-checked={pType === 'logical'} class:on={pType === 'logical'} onclick={() => (pType = 'logical')}>LVM</button>
-      <button type="button" role="radio" aria-checked={pType === 'zfs'} class:on={pType === 'zfs'} onclick={() => (pType = 'zfs')}>ZFS</button>
+    <div class="seg" role="radiogroup" aria-label={t('Kind of storage')}>
+      <button type="button" role="radio" aria-checked={pType === 'dir'} class:on={pType === 'dir'} onclick={() => (pType = 'dir')}>{t('Directory on the host')}</button>
+      <button type="button" role="radio" aria-checked={pType === 'netfs'} class:on={pType === 'netfs'} onclick={() => (pType = 'netfs')}>{t('NFS share')}</button>
+      <button type="button" role="radio" aria-checked={pType === 'iscsi'} class:on={pType === 'iscsi'} onclick={() => (pType = 'iscsi')}>{t('iSCSI')}</button>
+      <button type="button" role="radio" aria-checked={pType === 'rbd'} class:on={pType === 'rbd'} onclick={() => (pType = 'rbd')}>{t('Ceph RBD')}</button>
+      <button type="button" role="radio" aria-checked={pType === 'logical'} class:on={pType === 'logical'} onclick={() => (pType = 'logical')}>{t('LVM')}</button>
+      <button type="button" role="radio" aria-checked={pType === 'zfs'} class:on={pType === 'zfs'} onclick={() => (pType = 'zfs')}>{t('ZFS')}</button>
     </div>
     <label class="ui-field">
-      <span class="label">Name</span>
+      <span class="label">{t('Name')}</span>
       <input class="ui-input" bind:value={pName} placeholder={pType === 'netfs' ? 'shared' : 'fast-ssd'} required pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" />
     </label>
     {#if pType === 'netfs'}
       <div class="row2">
         <label class="ui-field">
-          <span class="label">NFS server</span>
+          <span class="label">{t('NFS server')}</span>
           <input class="ui-input mono" bind:value={pHost} placeholder="192.168.1.20" required />
         </label>
         <label class="ui-field">
-          <span class="label">Export</span>
+          <span class="label">{t('Export')}</span>
           <input class="ui-input mono" bind:value={pExport} placeholder="/srv/vms" required />
         </label>
       </div>
@@ -484,78 +485,78 @@
     {#if pType === 'iscsi'}
       <div class="row2">
         <label class="ui-field">
-          <span class="label">Portal</span>
+          <span class="label">{t('Portal')}</span>
           <input class="ui-input mono" bind:value={pHost} placeholder="192.168.1.30" required />
         </label>
         <label class="ui-field">
-          <span class="label">Target IQN</span>
-          <input class="ui-input mono" bind:value={pTarget} placeholder="iqn.2026-01.com.example:vms" required />
+          <span class="label">{t('Target IQN')}</span>
+          <input class="ui-input mono" bind:value={pTarget} placeholder={t('iqn.2026-01.com.example:vms')} required />
         </label>
       </div>
-      <span class="hint">Each LUN of the target becomes a volume you can give to a machine. The host needs the iSCSI initiator (open-iscsi).</span>
+      <span class="hint">{t('Each LUN of the target becomes a volume you can give to a machine. The host needs the iSCSI initiator (open-iscsi).')}</span>
     {:else if pType === 'rbd'}
       <label class="ui-field">
-        <span class="label">Monitors</span>
+        <span class="label">{t('Monitors')}</span>
         <input class="ui-input mono" bind:value={pMonitors} placeholder="10.0.0.1, 10.0.0.2, 10.0.0.3:3300" required />
       </label>
       <div class="row2">
         <label class="ui-field">
-          <span class="label">Ceph pool</span>
+          <span class="label">{t('Ceph pool')}</span>
           <input class="ui-input mono" bind:value={pCephPool} placeholder="vms" required />
         </label>
         <label class="ui-field">
-          <span class="label">User</span>
-          <input class="ui-input mono" bind:value={pCephUser} placeholder="libvirt" />
+          <span class="label">{t('User')}</span>
+          <input class="ui-input mono" bind:value={pCephUser} placeholder={t('libvirt')} />
         </label>
       </div>
       <label class="ui-field">
-        <span class="label">Key</span>
-        <input class="ui-input mono" type="password" bind:value={pCephKey} placeholder="from: ceph auth get-key client.libvirt" autocomplete="off" />
-        <span class="hint">Stored in a libvirt secret on the host, never in the pool definition.</span>
+        <span class="label">{t('Key')}</span>
+        <input class="ui-input mono" type="password" bind:value={pCephKey} placeholder={t('from: ceph auth get-key client.libvirt')} autocomplete="off" />
+        <span class="hint">{t('Stored in a libvirt secret on the host, never in the pool definition.')}</span>
       </label>
     {:else if pType === 'logical'}
       <label class="ui-field">
-        <span class="label">Volume group</span>
-        <input class="ui-input mono" bind:value={pSource} placeholder="vg-fast" required />
+        <span class="label">{t('Volume group')}</span>
+        <input class="ui-input mono" bind:value={pSource} placeholder={t('vg-fast')} required />
       </label>
       <label class="check">
         <input type="checkbox" bind:checked={pNewVG} />
-        <span>Create this volume group from empty disks</span>
+        <span>{t('Create this volume group from empty disks')}</span>
       </label>
       {#if pNewVG}
         <label class="ui-field">
-          <span class="label">Disks</span>
-          <input class="ui-input mono" bind:value={pDevices} placeholder="/dev/disk/by-id/nvme-…, /dev/sdc" required />
+          <span class="label">{t('Disks')}</span>
+          <input class="ui-input mono" bind:value={pDevices} placeholder={t('/dev/disk/by-id/nvme-…, /dev/sdc')} required />
         </label>
-        <div class="warn">The disks become this volume group. Only empty ones are accepted: a disk with a partition table, file system or LVM label is refused, so nothing is overwritten.</div>
+        <div class="warn">{t('The disks become this volume group. Only empty ones are accepted: a disk with a partition table, file system or LVM label is refused, so nothing is overwritten.')}</div>
       {:else}
-        <span class="hint">An existing volume group (see <span class="mono">vgs</span>). Each logical volume becomes a volume; new disks are raw logical volumes.</span>
+        <span class="hint">{t('An existing volume group (see')} <span class="mono">vgs</span>{t('). Each logical volume becomes a volume; new disks are raw logical volumes.')}</span>
       {/if}
     {:else if pType === 'zfs'}
       <label class="ui-field">
-        <span class="label">Pool or dataset</span>
-        <input class="ui-input mono" bind:value={pSource} placeholder="tank/vms" required />
-        <span class="hint">An existing zpool or dataset (see <span class="mono">zfs list</span>); new disks are ZFS volumes (zvols). The host needs libvirt's ZFS driver (libvirt-daemon-driver-storage-zfs).</span>
+        <span class="label">{t('Pool or dataset')}</span>
+        <input class="ui-input mono" bind:value={pSource} placeholder={t('tank/vms')} required />
+        <span class="hint">{t('An existing zpool or dataset (see')} <span class="mono">{t('zfs list')}</span>{t('); new disks are ZFS volumes (zvols). The host needs libvirt\'s ZFS driver (libvirt-daemon-driver-storage-zfs).')}</span>
       </label>
     {/if}
     {#if pType === 'dir' || pType === 'netfs'}
     <label class="ui-field">
       <span class="label">{pType === 'netfs' ? 'Mount at' : 'Directory'}</span>
       <input class="ui-input mono" bind:value={pPath} placeholder={pType === 'netfs' ? '/var/lib/libvirt/shared' : '/srv/vm-images'} required />
-      <span class="hint">{pType === 'netfs' ? 'Mounted now and on every boot (the host needs the NFS client, e.g. nfs-common).' : 'Created if it does not exist. The pool starts now and on every boot.'}</span>
+      <span class="hint">{pType === 'netfs' ? 'Mounted now and on every boot (the host needs the NFS client, e.g. nfs-common).' : t('Created if it does not exist. The pool starts now and on every boot.')}</span>
     </label>
     {/if}
     {#if cluster.clustered && !localDisks}
       <label class="check">
         <input type="checkbox" bind:checked={pEverywhere} />
-        <span>Create it on every host of the cluster{pType === 'netfs' ? ' — machines on it can then move between hosts without copying their disks' : ''}</span>
+        <span>{t('Create it on every host of the cluster{v}', { v: pType === 'netfs' ? ' — machines on it can then move between hosts without copying their disks' : '' })}</span>
       </label>
     {/if}
     {#if pErr}<div class="ui-error-box">{pErr}</div>{/if}
   </form>
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={() => (poolDlg = false)}>Cancel</button>
-    <button class="ui-btn primary" form="pool-form" disabled={pBusy}>{pBusy ? 'Creating…' : 'Create pool'}</button>
+    <button class="ui-btn ghost" onclick={() => (poolDlg = false)}>{t('Cancel')}</button>
+    <button class="ui-btn primary" form="pool-form" disabled={pBusy}>{pBusy ? 'Creating…' : t('Create pool')}</button>
   {/snippet}
 </Dialog>
 

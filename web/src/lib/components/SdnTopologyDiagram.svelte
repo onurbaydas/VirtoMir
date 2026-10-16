@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // How this host's network is wired, read from /sys: physical ports, bonds, VLANs, bridges
   // and the machines' adapters (tap devices) plugged into them.
   import Network from '@lucide/svelte/icons/network'
@@ -51,14 +52,14 @@
 
 <section class="ui-panel topo">
   <header>
-    <h2><Network size={16} /> Host wiring</h2>
-    <button class="ui-btn sm ghost" onclick={load}><RefreshCw size={13} /> Refresh</button>
+    <h2><Network size={16} /> {t('Host wiring')}</h2>
+    <button class="ui-btn sm ghost" onclick={load}><RefreshCw size={13} /> {t('Refresh')}</button>
   </header>
   <HostNetEditor {ifs} onchanged={load} />
   {#if error}
     <div class="ui-error-box">{error}</div>
   {:else if !ifs.length}
-    <p class="muted">Reading the interfaces…</p>
+    <p class="muted">{t('Reading the interfaces…')}</p>
   {:else}
     <div class="grid">
       {#each bridges as b (b.name)}
@@ -68,20 +69,20 @@
           <ul>
             {#each (b.members ?? []).filter((m) => !isVM(m)) as m (m)}<li class="up mono" class:down={down(byName.get(m))}>⇅ {describe(m)}</li>{/each}
             {#each (b.members ?? []).filter(isVM) as m (m)}<li class="vm mono" class:down={down(byName.get(m))}>▣ {describe(m)}</li>{/each}
-            {#if !b.members?.length}<li class="muted">nothing plugged in</li>{/if}
+            {#if !b.members?.length}<li class="muted">{t('nothing plugged in')}</li>{/if}
           </ul>
         </div>
       {/each}
       {#if loose.length}
         <div class="br">
-          <div class="head mono"><b>Not in a bridge</b></div>
+          <div class="head mono"><b>{t('Not in a bridge')}</b></div>
           <ul>
             {#each loose as i (i.name)}<li class="up mono" class:down={down(i)}>{describe(i.name)}{i.addresses?.length ? ` · ${i.addresses.join(', ')}` : ''}</li>{/each}
           </ul>
         </div>
       {/if}
     </div>
-    <p class="muted small">⇅ uplink · ▣ machine adapter · grey: link down. New bridges, bonds and VLAN interfaces are made with the host's own network tools, and kept only once you confirm them.</p>
+    <p class="muted small">{t('⇅ uplink · ▣ machine adapter · grey: link down. New bridges, bonds and VLAN interfaces are made with the host\'s own network tools, and kept only once you confirm them.')}</p>
   {/if}
 </section>
 

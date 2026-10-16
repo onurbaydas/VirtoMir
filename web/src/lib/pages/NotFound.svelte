@@ -1,14 +1,15 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import Compass from '@lucide/svelte/icons/compass'
   import { router } from '../router.svelte'
 </script>
 
-<svelte:head><title>Not found · VirtoMir</title></svelte:head>
+<svelte:head><title>{t('Not found · VirtoMir')}</title></svelte:head>
 
 <div class="nf">
   <Compass size={32} strokeWidth={1.5} />
-  <strong>This page does not exist</strong>
-  <a href="/" onclick={router.link}>Back to the overview</a>
+  <strong>{t('This page does not exist')}</strong>
+  <a href="/" onclick={router.link}>{t('Back to the overview')}</a>
 </div>
 
 <style>

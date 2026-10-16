@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { session } from '../session.svelte'
   import Search from '@lucide/svelte/icons/search'
   import MonitorOff from '@lucide/svelte/icons/monitor-off'
@@ -57,7 +58,7 @@
 
 <section class="panel">
   <header class="head">
-    <h2>Machines</h2>
+    <h2>{t('Machines')}</h2>
     {#if counts.all > 0}
       <div class="tabs" role="tablist">
         {#each [['all', 'All'], ['running', 'Running'], ['stopped', 'Stopped']] as [key, label] (key)}
@@ -73,45 +74,45 @@
       </div>
       <label class="search">
         <Search size={15} />
-        <input type="search" placeholder="Find by name or UUID" bind:value={query} spellcheck="false" />
+        <input type="search" placeholder={t('Find by name or UUID')} bind:value={query} spellcheck="false" />
       </label>
     {/if}
   </header>
 
   {#if picked.length}
-    <div class="bulk" role="toolbar" aria-label="Actions for selected machines">
+    <div class="bulk" role="toolbar" aria-label={t('Actions for selected machines')}>
       <strong>{picked.length} selected</strong>
       <button class="ui-btn sm" disabled={!picked.some(canStart)} onclick={() => bulk('start', canStart)}>
         <Play size={14} /> Start {picked.filter(canStart).length || ''}
       </button>
       <button class="ui-btn sm" disabled={!picked.some(canStop)} onclick={() => bulk('shutdown', canStop)}>
-        <Power size={14} /> Shut down {picked.filter(canStop).length || ''}
+        <Power size={14} /> {t('Shut down {v}', { v: picked.filter(canStop).length || '' })}
       </button>
       <ConfirmButton
-        label="Force off {picked.filter(canKill).length || ''}"
-        confirm="Cut power to {picked.filter(canKill).length}?"
+        label={t('Force off {v}', { v: picked.filter(canKill).length || '' })}
+        confirm={t('Cut power to {v}?', { v: picked.filter(canKill).length })}
         icon={Zap}
         disabled={!picked.some(canKill)}
         run={() => bulk('force-off', canKill)}
       />
       <span class="spacer"></span>
-      <button class="ui-btn sm ghost" onclick={() => (selected = new Set())}>Clear</button>
+      <button class="ui-btn sm ghost" onclick={() => (selected = new Set())}>{t('Clear')}</button>
     </div>
   {/if}
 
-  <div class="table" role="table" aria-label="Virtual machines">
+  <div class="table" role="table" aria-label={t('Virtual machines')}>
     <div class="colhead" role="row">
       <span role="columnheader" class="name-h">
         {#if shown.length && session.can('operator')}
-          <input type="checkbox" checked={allShown} aria-label="Select all shown machines" onchange={(e) => selectAll(e.currentTarget.checked)} />
+          <input type="checkbox" checked={allShown} aria-label={t('Select all shown machines')} onchange={(e) => selectAll(e.currentTarget.checked)} />
         {/if}
-        Name
+        {t('Name')}
       </span>
-      <span role="columnheader">State</span>
-      <span role="columnheader">CPUs</span>
-      <span role="columnheader">Memory</span>
-      <span role="columnheader">CPU usage · 60 s</span>
-      <span role="columnheader" class="sr">Actions</span>
+      <span role="columnheader">{t('State')}</span>
+      <span role="columnheader">{t('CPUs')}</span>
+      <span role="columnheader">{t('Memory')}</span>
+      <span role="columnheader">{t('CPU usage · 60 s')}</span>
+      <span role="columnheader" class="sr">{t('Actions')}</span>
     </div>
 
     {#if loading}
@@ -122,12 +123,12 @@
       <div class="empty">
         <MonitorOff size={28} strokeWidth={1.5} />
         {#if counts.all === 0}
-          <strong>No virtual machines on this host yet</strong>
-          <span>Create one here, or with virt-manager or virsh — it appears instantly.</span>
-          {#if session.can('admin')}<a class="ui-btn primary new" href="/machines/new" onclick={router.link}>New machine</a>{/if}
+          <strong>{t('No virtual machines on this host yet')}</strong>
+          <span>{t('Create one here, or with virt-manager or virsh — it appears instantly.')}</span>
+          {#if session.can('admin')}<a class="ui-btn primary new" href="/machines/new" onclick={router.link}>{t('New machine')}</a>{/if}
         {:else}
-          <strong>Nothing matches</strong>
-          <button class="link" onclick={() => ((filter = 'all'), (query = ''))}>Show all machines</button>
+          <strong>{t('Nothing matches')}</strong>
+          <button class="link" onclick={() => ((filter = 'all'), (query = ''))}>{t('Show all machines')}</button>
         {/if}
       </div>
     {:else}

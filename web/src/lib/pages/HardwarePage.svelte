@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // The host's PCI and USB devices: what each is, who uses it, and whether it can be passed
   // through to a machine — with the reason when not.
   import Cpu from '@lucide/svelte/icons/cpu'
@@ -40,10 +41,10 @@
     creating = p.address
     try {
       const r = await api.createMDev(p.address, type)
-      toasts.push({ kind: 'info', title: 'vGPU slice created', detail: `${r.uuid} — give it to a machine on its Hardware tab (Add other device → vGPU slice).` })
+      toasts.push({ kind: 'info', title: t('vGPU slice created'), detail: t('{uuid} — give it to a machine on its Hardware tab (Add other device → vGPU slice).', { uuid: r.uuid }) })
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Slice not created', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Slice not created'), detail: errorText(e) })
     } finally {
       creating = ''
     }
@@ -51,7 +52,7 @@
 
   async function deleteSlice(uuid: string) {
     await api.deleteMDev(uuid)
-    toasts.push({ kind: 'info', title: 'vGPU slice deleted' })
+    toasts.push({ kind: 'info', title: t('vGPU slice deleted') })
     await load()
   }
 
@@ -68,30 +69,30 @@
   let passable = $derived((hw?.pci ?? []).filter((p) => !p.blocked && !p.usedBy.length).length)
 </script>
 
-<svelte:head><title>Hardware · VirtoMir</title></svelte:head>
+<svelte:head><title>{t('Hardware · VirtoMir')}</title></svelte:head>
 
 <header class="page-head">
   <div>
-    <h1>Host hardware</h1>
-    <p class="lead">CPU and memory layout, PCI and USB devices of this host, and which of them can be given to a machine.</p>
+    <h1>{t('Host hardware')}</h1>
+    <p class="lead">{t('CPU and memory layout, PCI and USB devices of this host, and which of them can be given to a machine.')}</p>
   </div>
-  <label class="ui-switch"><input type="checkbox" bind:checked={showBridges} /> Show bridges</label>
+  <label class="ui-switch"><input type="checkbox" bind:checked={showBridges} /> {t('Show bridges')}</label>
 </header>
 
 {#if error}
   <div class="ui-error-box">{error}</div>
 {:else if !hw}
-  <p class="muted">Looking at the hardware…</p>
+  <p class="muted">{t('Looking at the hardware…')}</p>
 {:else}
   <section class="ui-panel banner" class:ok={hw.iommu}>
     {#if hw.iommu}<ShieldCheck size={20} />{:else}<ShieldAlert size={20} />{/if}
     <div>
       {#if hw.iommu}
-        <strong>IOMMU is on</strong>
-        <span>Devices are isolated in IOMMU groups. {passable} PCI device{passable === 1 ? '' : 's'} can be passed through right now.</span>
+        <strong>{t('IOMMU is on')}</strong>
+        <span>{t('Devices are isolated in IOMMU groups. {passable} PCI device{v} can be passed through right now.', { passable: passable, v: passable === 1 ? '' : 's' })}</span>
       {:else}
-        <strong>IOMMU is off — PCI passthrough is not possible</strong>
-        <span>Turn on VT-d (Intel) or AMD-Vi in the firmware settings and add <span class="mono">intel_iommu=on iommu=pt</span> (or <span class="mono">amd_iommu=on</span>) to the kernel command line, then reboot. USB devices work without it.</span>
+        <strong>{t('IOMMU is off — PCI passthrough is not possible')}</strong>
+        <span>{t('Turn on VT-d (Intel) or AMD-Vi in the firmware settings and add')} <span class="mono">{t('intel_iommu=on iommu=pt')}</span> {t('(or')} <span class="mono">{t('amd_iommu=on')}</span>{t(') to the kernel command line, then reboot. USB devices work without it.')}</span>
       {/if}
     </div>
   </section>
@@ -100,10 +101,10 @@
 
   <GpuPoolPanel pci={hw.pci} />
 
-  <h2 class="sub"><Cpu size={16} /> PCI devices</h2>
+  <h2 class="sub"><Cpu size={16} /> {t('PCI devices')}</h2>
   {#each groups as [g, devs] (g)}
     <section class="ui-panel group">
-      {#if g !== ''}<header>IOMMU group {g} <span class="muted">· these go to a machine together</span></header>{/if}
+      {#if g !== ''}<header>{t('IOMMU group {g}', { g: g })} <span class="muted">{t('· these go to a machine together')}</span></header>{/if}
       {#each devs as p (p.address)}
         <div class="dev">
           <span class="dot" class:ok={!p.blocked && !p.usedBy.length} class:used={p.usedBy.length > 0}></span>
@@ -117,35 +118,35 @@
       {/each}
     </section>
   {:else}
-    <p class="muted">No PCI devices reported.</p>
+    <p class="muted">{t('No PCI devices reported.')}</p>
   {/each}
 
   {#if cards.length || mdevs.length}
-    <h2 class="sub"><Layers size={16} /> vGPU slices</h2>
-    <p class="lead sub-lead">Cards whose driver supports mediated devices (NVIDIA vGPU, Intel GVT-g, …) can be split into slices, each given to one machine. Slices start with the host.</p>
+    <h2 class="sub"><Layers size={16} /> {t('vGPU slices')}</h2>
+    <p class="lead sub-lead">{t('Cards whose driver supports mediated devices (NVIDIA vGPU, Intel GVT-g, …) can be split into slices, each given to one machine. Slices start with the host.')}</p>
     {#each cards as p (p.address)}
       {@const free = p.mdevTypes!.filter((t) => t.available > 0)}
       <section class="ui-panel group">
         <header>{p.product || p.productId} <span class="muted mono">· {p.address}</span></header>
         <div class="slice-new">
-          <select class="ui-input" aria-label="Slice type" value={pick[p.address] ?? free[0]?.id ?? ''} onchange={(e) => (pick[p.address] = e.currentTarget.value)} disabled={!free.length}>
+          <select class="ui-input" aria-label={t('Slice type')} value={pick[p.address] ?? free[0]?.id ?? ''} onchange={(e) => (pick[p.address] = e.currentTarget.value)} disabled={!free.length}>
             {#each p.mdevTypes! as t (t.id)}
               <option value={t.id} disabled={t.available === 0}>{t.name || t.id} — {t.available} free</option>
             {/each}
           </select>
-          <button class="ui-btn sm" disabled={!free.length || creating === p.address || !session.can('admin')} title={session.why('admin') || (free.length ? '' : 'No free slices left on this card')} onclick={() => createSlice(p)}>
-            <Plus size={14} /> {creating === p.address ? 'Creating…' : 'Create slice'}
+          <button class="ui-btn sm" disabled={!free.length || creating === p.address || !session.can('admin')} title={session.why('admin') || (free.length ? '' : t('No free slices left on this card'))} onclick={() => createSlice(p)}>
+            <Plus size={14} /> {creating === p.address ? 'Creating…' : t('Create slice')}
           </button>
         </div>
         {#each mdevs.filter((m) => m.parent === p.address) as m (m.uuid)}
           <div class="dev">
             <span class="dot" class:ok={m.active && !m.usedBy.length} class:used={m.usedBy.length > 0}></span>
             <div class="main">
-              <span><b>{m.typeName || m.type}</b> {#if !m.active}<span class="why">not running</span>{/if}</span>
+              <span><b>{m.typeName || m.type}</b> {#if !m.active}<span class="why">{t('not running')}</span>{/if}</span>
               <span class="meta mono">{m.uuid}{m.autostart ? '' : ' · does not start with the host'}</span>
               {#if m.usedBy.length}<span class="used-by">Given to {m.usedBy.join(', ')}</span>{/if}
             </div>
-            <span class="act"><ConfirmButton label="Delete" confirm="Delete this slice?" icon={Trash} failure="Slice not deleted" disabled={m.usedBy.length > 0 || !session.can('admin')} title={m.usedBy.length ? 'Remove it from ' + m.usedBy.join(', ') + ' first' : session.why('admin')} run={() => deleteSlice(m.uuid)} /></span>
+            <span class="act"><ConfirmButton label={t('Delete')} confirm={t('Delete this slice?')} icon={Trash} failure={t('Slice not deleted')} disabled={m.usedBy.length > 0 || !session.can('admin')} title={m.usedBy.length ? t('Remove it from ') + m.usedBy.join(', ') + ' first' : session.why('admin')} run={() => deleteSlice(m.uuid)} /></span>
           </div>
         {/each}
       </section>
@@ -153,7 +154,7 @@
     {@const orphans = mdevs.filter((m) => !cards.some((c) => c.address === m.parent))}
     {#if orphans.length}
       <section class="ui-panel group">
-        <header>Other slices</header>
+        <header>{t('Other slices')}</header>
         {#each orphans as m (m.uuid)}
           <div class="dev">
             <span class="dot" class:used={m.usedBy.length > 0}></span>
@@ -162,26 +163,26 @@
               <span class="meta mono">{m.uuid}</span>
               {#if m.usedBy.length}<span class="used-by">Given to {m.usedBy.join(', ')}</span>{/if}
             </div>
-            <span class="act"><ConfirmButton label="Delete" confirm="Delete this slice?" icon={Trash} failure="Slice not deleted" disabled={m.usedBy.length > 0 || !session.can('admin')} title={session.why('admin')} run={() => deleteSlice(m.uuid)} /></span>
+            <span class="act"><ConfirmButton label={t('Delete')} confirm={t('Delete this slice?')} icon={Trash} failure={t('Slice not deleted')} disabled={m.usedBy.length > 0 || !session.can('admin')} title={session.why('admin')} run={() => deleteSlice(m.uuid)} /></span>
           </div>
         {/each}
       </section>
     {/if}
   {/if}
 
-  <h2 class="sub"><Usb size={16} /> USB devices</h2>
+  <h2 class="sub"><Usb size={16} /> {t('USB devices')}</h2>
   <section class="ui-panel group">
     {#each hw.usb as u (u.name)}
       <div class="dev">
         <span class="dot" class:ok={!u.blocked && !u.usedBy.length} class:used={u.usedBy.length > 0}></span>
         <div class="main">
-          <span><b>{u.product || 'USB device'}</b> <span class="muted">{u.vendor}</span></span>
-          <span class="meta mono">bus {u.bus} · device {u.device} · {u.vendorId.replace('0x', '')}:{u.productId.replace('0x', '')}</span>
+          <span><b>{u.product || t('USB device')}</b> <span class="muted">{u.vendor}</span></span>
+          <span class="meta mono">{t('bus {bus} · device {device} · {v}:{v2}', { bus: u.bus, device: u.device, v: u.vendorId.replace('0x', ''), v2: u.productId.replace('0x', '') })}</span>
           {#if u.usedBy.length}<span class="used-by">Given to {u.usedBy.join(', ')}</span>{:else if u.blocked}<span class="why">{u.blocked}</span>{/if}
         </div>
       </div>
     {:else}
-      <p class="muted pad">No USB devices are connected.</p>
+      <p class="muted pad">{t('No USB devices are connected.')}</p>
     {/each}
   </section>
 {/if}

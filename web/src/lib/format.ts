@@ -1,3 +1,4 @@
+import { lang, t } from './i18n.svelte'
 const KiB_PER_MiB = 1024
 const KiB_PER_GiB = 1024 * 1024
 const KiB_PER_TiB = 1024 * 1024 * 1024
@@ -49,6 +50,8 @@ export function formatMHz(mhz: number): string {
 }
 
 export function plural(n: number, one: string, many = one + 's'): string {
+  // Turkish keeps the singular after a number ("2 makine"); the noun itself goes through t().
+  if (lang === 'tr') return `${n} ${t(one)}`
   return `${n} ${n === 1 ? one : many}`
 }
 

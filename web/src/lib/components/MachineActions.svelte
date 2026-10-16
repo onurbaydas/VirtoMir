@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { session } from '../session.svelte'
   // Primary power button + "more" menu for one machine (list rows and the machine page).
   import type { Domain } from '../api'
@@ -18,14 +19,14 @@
 
 <div class="actions {size}">
   {#if d.template}
-    <button class="btn accent" disabled={!session.can('admin')} title={session.why('admin') || 'Create a machine from this template'} onclick={() => openDeploy(d)}>
+    <button class="btn accent" disabled={!session.can('admin')} title={session.why('admin') || t('Create a machine from this template')} onclick={() => openDeploy(d)}>
       <Rocket size={size === 'lg' ? 15 : 14} strokeWidth={2.25} />
-      New machine
+      {t('New machine')}
     </button>
   {:else if primary}
     <PowerSplitButton {d} {size} />
   {/if}
-  <ActionMenu items={menu} label="More actions for {d.name}" />
+  <ActionMenu items={menu} label={t('More actions for {name}', { name: d.name })} />
 </div>
 
 <style>

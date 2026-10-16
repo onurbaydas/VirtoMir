@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Metric history from virtomird (GET /api/v1/history) with a time axis and a hover readout.
   // Refreshes once per step so the newest bucket keeps filling in.
   import uPlot from 'uplot'
@@ -177,7 +178,7 @@
       {#each lines as l, i (id(l))}
         <span class="key" class:dashed={l.dashed} style:--c="var({l.color})">
           <i></i>{l.label}
-          <b class="mono">{hover ? fmt(hover.vals[i]) : stats[i]?.any ? `avg ${fmt(stats[i].avg)} · max ${fmt(stats[i].max)}` : '—'}</b>
+          <b class="mono">{hover ? fmt(hover.vals[i]) : stats[i]?.any ? t('avg {avg} · max {max}', { avg: fmt(stats[i].avg), max: fmt(stats[i].max) }) : '—'}</b>
         </span>
       {/each}
       {#if hover}<span class="when mono">{when(hover.t)}</span>{/if}
@@ -188,7 +189,7 @@
   {:else}
     <div class="wrap">
       <div class="plot" bind:this={el} style:height="{height}px"></div>
-      {#if !data}<div class="msg">Loading…</div>{:else if empty}<div class="msg">No data for this period yet — history starts when VirtoMir sees the machine running.</div>{/if}
+      {#if !data}<div class="msg">{t('Loading…')}</div>{:else if empty}<div class="msg">{t('No data for this period yet — history starts when VirtoMir sees the machine running.')}</div>{/if}
     </div>
   {/if}
 </div>

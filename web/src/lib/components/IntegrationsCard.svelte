@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // API reference (from GET /api/v1/openapi.json) and ready-to-paste snippets for Prometheus,
   // Terraform and Ansible. Everything here works with an API token from the card below.
   import Plug from '@lucide/svelte/icons/plug'
@@ -83,8 +84,8 @@ resource "virtomir_machine" "web" {
 <section class="ui-panel card">
   <header class="head">
     <div>
-      <h2><Plug size={16} /> API and integrations</h2>
-      <p class="hint">Everything the UI does is in the API. Use a token from <em>API tokens</em> below.</p>
+      <h2><Plug size={16} /> {t('API and integrations')}</h2>
+      <p class="hint">{t('Everything the UI does is in the API. Use a token from')} <em>{t('API tokens')}</em> {t('below.')}</p>
     </div>
     <a class="ui-btn ghost" href="/api/v1/openapi.json" target="_blank" rel="noopener"><ExternalLink size={14} /> openapi.json</a>
   </header>
@@ -99,9 +100,9 @@ resource "virtomir_machine" "web" {
     {#if error}
       <div class="ui-error-box">{error}</div>
     {:else if !endpoints}
-      <p class="muted">Loading…</p>
+      <p class="muted">{t('Loading…')}</p>
     {:else}
-      <input class="ui-input filter" placeholder="Filter: domains, snapshot, POST…" bind:value={filter} />
+      <input class="ui-input filter" placeholder={t('Filter: domains, snapshot, POST…')} bind:value={filter} />
       <div class="eps">
         {#each shown as e (e.method + e.path)}
           <div class="ep">
@@ -112,22 +113,22 @@ resource "virtomir_machine" "web" {
           </div>
         {/each}
       </div>
-      <p class="muted small">{shown.length} of {endpoints.length} endpoints. In a cluster, <span class="mono">/api/v1/hosts/&lt;host&gt;/…</span> reaches another member.</p>
+      <p class="muted small">{t('{length} of {length2} endpoints. In a cluster,', { length: shown.length, length2: endpoints.length })} <span class="mono">/api/v1/hosts/&lt;host&gt;/…</span> {t('reaches another member.')}</p>
     {/if}
   {:else}
     {@const text = tab === 'prometheus' ? prometheus : tab === 'terraform' ? terraform : ansible}
     <p class="hint">
       {#if tab === 'prometheus'}
-        <span class="mono">/api/v1/metrics</span>: host, machines (CPU, per-vCPU, disks, network, memory), pools and open alerts, refreshed every second.
+        <span class="mono">/api/v1/metrics</span>{t(': host, machines (CPU, per-vCPU, disks, network, memory), pools and open alerts, refreshed every second.')}
       {:else if tab === 'terraform'}
-        The provider lives in <span class="mono">integrations/terraform-provider-virtomir</span> of the VirtoMir repository.
+        {t('The provider lives in')} <span class="mono">{t('integrations/terraform-provider-virtomir')}</span> {t('of the VirtoMir repository.')}
       {:else}
-        The collection lives in <span class="mono">integrations/ansible</span> of the VirtoMir repository.
+        {t('The collection lives in')} <span class="mono">{t('integrations/ansible')}</span> {t('of the VirtoMir repository.')}
       {/if}
     </p>
     <div class="snippet">
       <pre class="mono">{text}</pre>
-      <button class="ui-btn ghost copy" onclick={() => copy(text, 'Snippet')}><Copy size={14} /> Copy</button>
+      <button class="ui-btn ghost copy" onclick={() => copy(text, 'Snippet')}><Copy size={14} /> {t('Copy')}</button>
     </div>
   {/if}
 </section>

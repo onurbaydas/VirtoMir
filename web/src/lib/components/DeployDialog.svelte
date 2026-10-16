@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t as tt } from '../i18n.svelte'
   // New machine from a template: name, linked or full copy, optional first-boot settings.
   import Link from '@lucide/svelte/icons/link'
   import Copy from '@lucide/svelte/icons/copy'
@@ -77,55 +78,55 @@
   }
 </script>
 
-<Dialog open={t !== null} title="New machine from {t?.name ?? ''}" subtitle="Same hardware and system as the template, with its own identity" onclose={close}>
+<Dialog open={t !== null} title={tt('New machine from {v}', { v: t?.name ?? '' })} subtitle={tt('Same hardware and system as the template, with its own identity')} onclose={close}>
   <form id="deploy-form" class="form" onsubmit={submit}>
     <label class="ui-field">
-      <span class="label">Name</span>
+      <span class="label">{tt('Name')}</span>
       <input class="ui-input" bind:value={name} required aria-invalid={!nameValid || nameTaken} />
-      {#if nameTaken}<span class="hint warn">A machine with this name already exists.</span>{:else if !nameValid}<span class="hint warn">Letters, digits, '.', '_', '+' or '-'.</span>{/if}
+      {#if nameTaken}<span class="hint warn">{tt('A machine with this name already exists.')}</span>{:else if !nameValid}<span class="hint warn">{tt('Letters, digits, \'.\', \'_\', \'+\' or \'-\'.')}</span>{/if}
     </label>
 
-    <div class="modes" role="radiogroup" aria-label="Disk">
+    <div class="modes" role="radiogroup" aria-label={tt('Disk')}>
       <label class="mode" class:on={linked}>
         <input type="radio" bind:group={linked} value={true} />
-        <span class="m-head"><Link size={15} /> Linked clone</span>
-        <span class="m-text">Ready in seconds and takes almost no space: only what the machine changes is stored. Needs the template to stay.</span>
+        <span class="m-head"><Link size={15} /> {tt('Linked clone')}</span>
+        <span class="m-text">{tt('Ready in seconds and takes almost no space: only what the machine changes is stored. Needs the template to stay.')}</span>
       </label>
       <label class="mode" class:on={!linked}>
         <input type="radio" bind:group={linked} value={false} />
-        <span class="m-head"><Copy size={15} /> Full copy</span>
-        <span class="m-text">An independent machine with its own copy of every disk. Takes as long and as much space as the disks.</span>
+        <span class="m-head"><Copy size={15} /> {tt('Full copy')}</span>
+        <span class="m-text">{tt('An independent machine with its own copy of every disk. Takes as long and as much space as the disks.')}</span>
       </label>
     </div>
 
-    <label class="check"><input type="checkbox" bind:checked={firstBoot} /> Set host name and sign-in on first boot <span class="muted">(cloud-init)</span></label>
+    <label class="check"><input type="checkbox" bind:checked={firstBoot} /> {tt('Set host name and sign-in on first boot')} <span class="muted">{tt('(cloud-init)')}</span></label>
     {#if firstBoot}
       <div class="ci">
         <div class="ci-row">
           <label class="ui-field">
-            <span class="label">User</span>
+            <span class="label">{tt('User')}</span>
             <input class="ui-input" bind:value={user} autocomplete="off" />
           </label>
           <label class="ui-field">
-            <span class="label">Password</span>
+            <span class="label">{tt('Password')}</span>
             <input class="ui-input" type="password" bind:value={password} autocomplete="new-password" />
           </label>
         </div>
         <label class="ui-field">
-          <span class="label">SSH public keys <span class="muted">(one per line)</span></span>
-          <textarea class="ui-input mono" rows="2" bind:value={sshKeys} placeholder="ssh-ed25519 AAAA…"></textarea>
+          <span class="label">{tt('SSH public keys')} <span class="muted">{tt('(one per line)')}</span></span>
+          <textarea class="ui-input mono" rows="2" bind:value={sshKeys} placeholder={tt('ssh-ed25519 AAAA…')}></textarea>
         </label>
         {#if ciProblem}<span class="hint warn">{ciProblem}</span>{/if}
-        <span class="hint">The host name becomes <b>{name || '…'}</b>. Works when the template's system has cloud-init (cloud images do).</span>
+        <span class="hint">{tt('The host name becomes')} <b>{name || '…'}</b>{tt('. Works when the template\'s system has cloud-init (cloud images do).')}</span>
       </div>
     {/if}
 
-    <label class="check"><input type="checkbox" bind:checked={start} /> Start it right away</label>
+    <label class="check"><input type="checkbox" bind:checked={start} /> {tt('Start it right away')}</label>
     {#if error}<div class="ui-error-box">{error}</div>{/if}
   </form>
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={close}>Cancel</button>
-    <button class="ui-btn primary" form="deploy-form" disabled={!ok || busy}><Rocket size={14} /> Create machine</button>
+    <button class="ui-btn ghost" onclick={close}>{tt('Cancel')}</button>
+    <button class="ui-btn primary" form="deploy-form" disabled={!ok || busy}><Rocket size={14} /> {tt('Create machine')}</button>
   {/snippet}
 </Dialog>
 

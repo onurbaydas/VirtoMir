@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import BellRing from '@lucide/svelte/icons/bell-ring'
   import Check from '@lucide/svelte/icons/check'
   import CircleCheck from '@lucide/svelte/icons/circle-check'
@@ -31,7 +32,7 @@
       await api.ackAlert(a.id, a.hostId)
       await alerts.refresh()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Could not acknowledge', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Could not acknowledge'), detail: errorText(e) })
     }
   }
   const since = (s: string) => {
@@ -95,14 +96,14 @@
         saved = JSON.stringify(snap)
         toasts.push({
           kind: failed.length ? 'warn' : 'info',
-          title: failed.length ? `Saved on ${res.length - failed.length} of ${res.length} hosts` : 'Alert settings saved on every host',
+          title: failed.length ? t('Saved on {v} of {length} hosts', { v: res.length - failed.length, length: res.length }) : t('Alert settings saved on every host'),
           detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') || undefined,
         })
       } else {
         const c = await api.saveAlertConfig(snap)
         cfg = c
         saved = JSON.stringify(c)
-        toasts.push({ kind: 'info', title: 'Alert settings saved' })
+        toasts.push({ kind: 'info', title: t('Alert settings saved') })
       }
     } catch (e) {
       cfgErr = errorText(e)
@@ -112,13 +113,13 @@
   }
 
   const KINDS: Record<AlertKind, { label: string; unit?: string; above?: boolean; target?: 'vm' | 'pool' }> = {
-    'host.cpu': { label: 'Host CPU above', unit: '%', above: true },
-    'host.mem': { label: 'Host memory above', unit: '%', above: true },
-    'vm.cpu': { label: 'Machine CPU above', unit: '%', above: true, target: 'vm' },
-    'vm.crashed': { label: 'Machine crashed', target: 'vm' },
-    'vm.down': { label: 'Autostart machine not running', target: 'vm' },
-    'pool.free': { label: 'Pool free space below', unit: '%', target: 'pool' },
-    'libvirt.down': { label: 'libvirt unreachable' },
+    'host.cpu': { label: t('Host CPU above'), unit: '%', above: true },
+    'host.mem': { label: t('Host memory above'), unit: '%', above: true },
+    'vm.cpu': { label: t('Machine CPU above'), unit: '%', above: true, target: 'vm' },
+    'vm.crashed': { label: t('Machine crashed'), target: 'vm' },
+    'vm.down': { label: t('Autostart machine not running'), target: 'vm' },
+    'pool.free': { label: t('Pool free space below'), unit: '%', target: 'pool' },
+    'libvirt.down': { label: t('libvirt unreachable') },
   }
   const machines = $derived(live.snapshot?.domains ?? [])
   let pools = $state<string[]>([])
@@ -155,31 +156,31 @@
     testing = true
     try {
       await api.testChannel($state.snapshot(ch))
-      toasts.push({ kind: 'info', title: `Test sent to ${ch.name || 'the channel'}` })
+      toasts.push({ kind: 'info', title: t('Test sent to {v}', { v: ch.name || 'the channel' }) })
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Test failed', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Test failed'), detail: errorText(e) })
     } finally {
       testing = false
     }
   }
   const FORMATS = [
-    { key: 'json', label: 'Generic JSON', hint: 'Any webhook receiver, n8n, Home Assistant…' },
-    { key: 'slack', label: 'Slack / Mattermost', hint: 'Incoming webhook URL' },
-    { key: 'discord', label: 'Discord', hint: 'Channel webhook URL' },
+    { key: 'json', label: t('Generic JSON'), hint: t('Any webhook receiver, n8n, Home Assistant…') },
+    { key: 'slack', label: t('Slack / Mattermost'), hint: t('Incoming webhook URL') },
+    { key: 'discord', label: t('Discord'), hint: t('Channel webhook URL') },
     { key: 'ntfy', label: 'ntfy', hint: 'https://ntfy.sh/<topic> or your own server — push to your phone' },
   ] as const
 </script>
 
-<svelte:head><title>Alerts · VirtoMir</title></svelte:head>
+<svelte:head><title>{t('Alerts · VirtoMir')}</title></svelte:head>
 
 <header class="page-head">
   <div>
-    <h1>Alerts</h1>
+    <h1>{t('Alerts')}</h1>
     <p class="lead">
       {#if cluster.clustered}
-        Every host watches itself and its machines; this list shows all hosts.{#if view !== 'alerts'} Rules and notifications below are those of <b>{cluster.current?.name}</b> — switch host in the sidebar to change another one's.{/if}
+        {t('Every host watches itself and its machines; this list shows all hosts.')}{#if view !== 'alerts'} {t('Rules and notifications below are those of')} <b>{cluster.current?.name}</b> {t('— switch host in the sidebar to change another one\'s.')}{/if}
       {:else}
-        VirtoMir watches the host and its machines and tells you when something needs attention.
+        {t('VirtoMir watches the host and its machines and tells you when something needs attention.')}
       {/if}
     </p>
   </div>
@@ -187,11 +188,11 @@
 
 <div class="tabs" role="tablist">
   <button role="tab" aria-selected={view === 'alerts'} class:on={view === 'alerts'} onclick={() => go('')}>
-    Alerts {#if alerts.active.length}<span class="count">{alerts.active.length}</span>{/if}
+    {t('Alerts')} {#if alerts.active.length}<span class="count">{alerts.active.length}</span>{/if}
   </button>
   {#if session.can('admin')}
-    <button role="tab" aria-selected={view === 'rules'} class:on={view === 'rules'} onclick={() => go('rules')}>Rules</button>
-    <button role="tab" aria-selected={view === 'notifications'} class:on={view === 'notifications'} onclick={() => go('notifications')}>Notifications</button>
+    <button role="tab" aria-selected={view === 'rules'} class:on={view === 'rules'} onclick={() => go('rules')}>{t('Rules')}</button>
+    <button role="tab" aria-selected={view === 'notifications'} class:on={view === 'notifications'} onclick={() => go('notifications')}>{t('Notifications')}</button>
   {/if}
 </div>
 
@@ -199,8 +200,8 @@
   {#if alerts.active.length === 0}
     <div class="ok ui-panel">
       <CircleCheck size={30} strokeWidth={1.5} />
-      <strong>All clear</strong>
-      <span>Nothing needs attention right now.</span>
+      <strong>{t('All clear')}</strong>
+      <span>{t('Nothing needs attention right now.')}</span>
     </div>
   {:else}
     <section class="list">
@@ -210,7 +211,7 @@
           <div class="body">
             <div class="top">
               <span class="badge {a.severity}">{a.severity}</span>
-              {#if a.hostName}<span class="host-chip" title="Host">{a.hostName}</span>{/if}
+              {#if a.hostName}<span class="host-chip" title={t('Host')}>{a.hostName}</span>{/if}
               {#if isVM(a)}
                 <a href={hrefOn(a, `/machines/${a.subjectId}`)} onclick={(e) => goOn(e, a, `/machines/${a.subjectId}`)} class="subj">{a.subject}</a>
               {:else if a.kind === 'pool.free'}
@@ -224,8 +225,8 @@
             {#if a.ackedBy}<span class="acked-by"><Check size={12} /> Seen by {a.ackedBy}</span>{/if}
           </div>
           {#if !a.ackedBy}
-            <button class="ui-btn sm" disabled={!session.can('operator')} title={session.why('operator') || 'Mark as seen; it stays until the problem is gone'} onclick={() => ack(a)}>
-              <Check size={14} /> Acknowledge
+            <button class="ui-btn sm" disabled={!session.can('operator')} title={session.why('operator') || t('Mark as seen; it stays until the problem is gone')} onclick={() => ack(a)}>
+              <Check size={14} /> {t('Acknowledge')}
             </button>
           {/if}
         </article>
@@ -234,7 +235,7 @@
   {/if}
 
   {#if resolved.length}
-    <h2 class="sub">Recently resolved</h2>
+    <h2 class="sub">{t('Recently resolved')}</h2>
     <div class="ui-panel history">
       {#each resolved.slice(0, 50) as a (a.key)}
         <div class="h-row">
@@ -247,14 +248,14 @@
     </div>
   {/if}
 {:else if !cfg}
-  {#if cfgErr}<div class="ui-error-box">{cfgErr}</div>{:else}<p class="muted">Loading…</p>{/if}
+  {#if cfgErr}<div class="ui-error-box">{cfgErr}</div>{:else}<p class="muted">{t('Loading…')}</p>{/if}
 {:else if view === 'rules'}
   <section class="ui-panel card">
     <div class="rules">
       {#each cfg.rules as r, i (r.id || i)}
         {@const k = KINDS[r.kind]}
         <div class="rule" class:off={!r.enabled}>
-          <label class="ui-switch"><input type="checkbox" bind:checked={r.enabled} aria-label="Enabled" /></label>
+          <label class="ui-switch"><input type="checkbox" bind:checked={r.enabled} aria-label={t('Enabled')} /></label>
           <span class="rname">{k.label}</span>
           {#if k.unit}
             <span class="inline"><input class="ui-input num" type="number" min="1" max="100" bind:value={r.threshold} /> {k.unit}</span>
@@ -262,38 +263,38 @@
           <span class="inline">
             {k.unit || r.kind === 'vm.down' || r.kind === 'libvirt.down' ? 'for' : 'after'}
             <select class="ui-input dur" bind:value={r.forSec}>
-              <option value={0}>at once</option>
-              <option value={60}>1 min</option>
-              <option value={120}>2 min</option>
-              <option value={300}>5 min</option>
-              <option value={600}>10 min</option>
-              <option value={1800}>30 min</option>
+              <option value={0}>{t('at once')}</option>
+              <option value={60}>{t('1 min')}</option>
+              <option value={120}>{t('2 min')}</option>
+              <option value={300}>{t('5 min')}</option>
+              <option value={600}>{t('10 min')}</option>
+              <option value={1800}>{t('30 min')}</option>
               <option value={3600}>1 h</option>
             </select>
           </span>
           {#if k.target === 'vm'}
-            <select class="ui-input tgt" bind:value={r.target} aria-label="Which machine">
-              <option value="">any machine</option>
+            <select class="ui-input tgt" bind:value={r.target} aria-label={t('Which machine')}>
+              <option value="">{t('any machine')}</option>
               {#each machines as m (m.uuid)}<option value={m.uuid}>{m.name}</option>{/each}
             </select>
           {:else if k.target === 'pool'}
-            <select class="ui-input tgt" bind:value={r.target} aria-label="Which pool">
-              <option value="">any pool</option>
+            <select class="ui-input tgt" bind:value={r.target} aria-label={t('Which pool')}>
+              <option value="">{t('any pool')}</option>
               {#each pools as p (p)}<option value={p}>{p}</option>{/each}
             </select>
           {:else}
             <span class="tgt"></span>
           {/if}
-          <select class="ui-input sevsel {r.severity}" bind:value={r.severity} aria-label="Severity">
-            <option value="warning">warning</option>
-            <option value="critical">critical</option>
+          <select class="ui-input sevsel {r.severity}" bind:value={r.severity} aria-label={t('Severity')}>
+            <option value="warning">{t('warning')}</option>
+            <option value="critical">{t('critical')}</option>
           </select>
-          <button class="ui-btn sm ghost icon" aria-label="Remove rule" title="Remove rule" onclick={() => cfg?.rules.splice(i, 1)}><Trash size={14} /></button>
+          <button class="ui-btn sm ghost icon" aria-label={t('Remove rule')} title={t('Remove rule')} onclick={() => cfg?.rules.splice(i, 1)}><Trash size={14} /></button>
         </div>
       {/each}
     </div>
     <div class="add">
-      <span class="muted">Add a rule:</span>
+      <span class="muted">{t('Add a rule:')}</span>
       {#each Object.entries(KINDS) as [kind, k] (kind)}
         <button class="chip-btn" onclick={() => addRule(kind as AlertKind)}><Plus size={12} /> {k.label}</button>
       {/each}
@@ -302,68 +303,68 @@
 {:else}
   <section class="ui-panel card">
     <header class="ch-head">
-      <h2>Channels</h2>
+      <h2>{t('Channels')}</h2>
       <div class="ch-add">
-        <button class="ui-btn sm" onclick={() => newChannel('webhook')}><Plus size={14} /> Webhook</button>
-        <button class="ui-btn sm" onclick={() => newChannel('email')}><Plus size={14} /> Email</button>
+        <button class="ui-btn sm" onclick={() => newChannel('webhook')}><Plus size={14} /> {t('Webhook')}</button>
+        <button class="ui-btn sm" onclick={() => newChannel('email')}><Plus size={14} /> {t('Email')}</button>
       </div>
     </header>
     {#if cfg.channels.length === 0}
-      <p class="muted">No channels yet: alerts only show up here. Add ntfy for phone pushes, a chat webhook, or email.</p>
+      <p class="muted">{t('No channels yet: alerts only show up here. Add ntfy for phone pushes, a chat webhook, or email.')}</p>
     {:else}
       {#each cfg.channels as ch, i (ch.id || i)}
         <div class="channel" class:off={!ch.enabled}>
-          <label class="ui-switch"><input type="checkbox" bind:checked={ch.enabled} aria-label="Enabled" /></label>
+          <label class="ui-switch"><input type="checkbox" bind:checked={ch.enabled} aria-label={t('Enabled')} /></label>
           <div class="ch-text">
             <strong>{ch.name}</strong>
             <span class="muted mono">{ch.kind === 'webhook' ? `${ch.format} · ${ch.url}` : `email · ${ch.to}`}</span>
           </div>
           <span class="badge {ch.minSeverity} small">{ch.minSeverity === 'critical' ? 'critical only' : 'all'}</span>
-          <button class="ui-btn sm ghost" disabled={testing} onclick={() => test(ch)}><Send size={14} /> Test</button>
-          <button class="ui-btn sm ghost icon" aria-label="Edit" onclick={() => editChannel(i)}><Pencil size={14} /></button>
-          <button class="ui-btn sm ghost icon" aria-label="Remove" onclick={() => cfg?.channels.splice(i, 1)}><Trash size={14} /></button>
+          <button class="ui-btn sm ghost" disabled={testing} onclick={() => test(ch)}><Send size={14} /> {t('Test')}</button>
+          <button class="ui-btn sm ghost icon" aria-label={t('Edit')} onclick={() => editChannel(i)}><Pencil size={14} /></button>
+          <button class="ui-btn sm ghost icon" aria-label={t('Remove')} onclick={() => cfg?.channels.splice(i, 1)}><Trash size={14} /></button>
         </div>
       {/each}
     {/if}
   </section>
 
   <section class="ui-panel card">
-    <h2>Mail server</h2>
-    <p class="muted">Used by email channels.</p>
+    <h2>{t('Mail server')}</h2>
+    <p class="muted">{t('Used by email channels.')}</p>
     <div class="smtp">
-      <label class="ui-field"><span class="label">Server</span><input class="ui-input" bind:value={cfg.smtp.host} placeholder="smtp.example.com" /></label>
-      <label class="ui-field"><span class="label">Security</span>
+      <label class="ui-field"><span class="label">{t('Server')}</span><input class="ui-input" bind:value={cfg.smtp.host} placeholder={t('smtp.example.com')} /></label>
+      <label class="ui-field"><span class="label">{t('Security')}</span>
         <select class="ui-input" bind:value={cfg.smtp.tls}>
-          <option value="starttls">STARTTLS (587)</option>
-          <option value="tls">TLS (465)</option>
-          <option value="none">None (local relay)</option>
+          <option value="starttls">{t('STARTTLS (587)')}</option>
+          <option value="tls">{t('TLS (465)')}</option>
+          <option value="none">{t('None (local relay)')}</option>
         </select>
       </label>
-      <label class="ui-field"><span class="label">Port</span><input class="ui-input" type="number" bind:value={cfg.smtp.port} placeholder="auto" /></label>
-      <label class="ui-field"><span class="label">From</span><input class="ui-input" bind:value={cfg.smtp.from} placeholder="VirtoMir <virtomir@example.com>" /></label>
-      <label class="ui-field"><span class="label">User</span><input class="ui-input" bind:value={cfg.smtp.username} autocomplete="off" /></label>
-      <label class="ui-field"><span class="label">Password</span><input class="ui-input" type="password" bind:value={cfg.smtp.password} autocomplete="new-password" /></label>
+      <label class="ui-field"><span class="label">{t('Port')}</span><input class="ui-input" type="number" bind:value={cfg.smtp.port} placeholder={t('auto')} /></label>
+      <label class="ui-field"><span class="label">{t('From')}</span><input class="ui-input" bind:value={cfg.smtp.from} placeholder="VirtoMir <virtomir@example.com>" /></label>
+      <label class="ui-field"><span class="label">{t('User')}</span><input class="ui-input" bind:value={cfg.smtp.username} autocomplete="off" /></label>
+      <label class="ui-field"><span class="label">{t('Password')}</span><input class="ui-input" type="password" bind:value={cfg.smtp.password} autocomplete="new-password" /></label>
     </div>
   </section>
 {/if}
 
 {#if view !== 'alerts' && cfg}
   <footer class="ui-panel bar">
-    <span class="status">{cfgErr || (dirty ? 'Unsaved changes' : 'Everything is saved')}</span>
+    <span class="status">{cfgErr || (dirty ? 'Unsaved changes' : t('Everything is saved'))}</span>
     {#if cluster.clustered}
-      <label class="everywhere"><input type="checkbox" bind:checked={everywhere} /> Same on every host</label>
+      <label class="everywhere"><input type="checkbox" bind:checked={everywhere} /> {t('Same on every host')}</label>
     {/if}
-    <button class="ui-btn ghost" disabled={!dirty || saving} onclick={() => (cfg = JSON.parse(saved))}>Reset</button>
+    <button class="ui-btn ghost" disabled={!dirty || saving} onclick={() => (cfg = JSON.parse(saved))}>{t('Reset')}</button>
     <button class="ui-btn primary" disabled={!dirty || saving} onclick={saveCfg}><Save size={14} /> {saving ? 'Saving…' : 'Save'}</button>
   </footer>
 {/if}
 
-<Dialog open={editing !== null} title={editIndex >= 0 ? 'Edit channel' : editing?.kind === 'email' ? 'New email channel' : 'New webhook'} onclose={() => (editing = null)} width={520}>
+<Dialog open={editing !== null} title={editIndex >= 0 ? 'Edit channel' : editing?.kind === 'email' ? 'New email channel' : t('New webhook')} onclose={() => (editing = null)} width={520}>
   {#if editing}
     <form id="ch-form" class="form" onsubmit={keepChannel}>
-      <label class="ui-field"><span class="label">Name</span><input class="ui-input" bind:value={editing.name} placeholder={editing.kind === 'email' ? 'Ops team' : 'My phone'} required /></label>
+      <label class="ui-field"><span class="label">{t('Name')}</span><input class="ui-input" bind:value={editing.name} placeholder={editing.kind === 'email' ? 'Ops team' : 'My phone'} required /></label>
       {#if editing.kind === 'webhook'}
-        <div class="formats" role="radiogroup" aria-label="Format">
+        <div class="formats" role="radiogroup" aria-label={t('Format')}>
           {#each FORMATS as f (f.key)}
             <label class="fmt" class:on={editing.format === f.key}>
               <input type="radio" name="fmt" value={f.key} bind:group={editing.format} />
@@ -372,26 +373,26 @@
             </label>
           {/each}
         </div>
-        <label class="ui-field"><span class="label">URL</span><input class="ui-input mono" bind:value={editing.url} placeholder={editing.format === 'ntfy' ? 'https://ntfy.sh/my-virtomir-alerts' : 'https://…'} required /></label>
+        <label class="ui-field"><span class="label">{t('URL')}</span><input class="ui-input mono" bind:value={editing.url} placeholder={editing.format === 'ntfy' ? 'https://ntfy.sh/my-virtomir-alerts' : 'https://…'} required /></label>
       {:else}
-        <label class="ui-field"><span class="label">Recipients</span><input class="ui-input" bind:value={editing.to} placeholder="ops@example.com, me@example.com" required /></label>
+        <label class="ui-field"><span class="label">{t('Recipients')}</span><input class="ui-input" bind:value={editing.to} placeholder={t('ops@example.com, me@example.com')} required /></label>
       {/if}
       <div class="two">
-        <label class="ui-field"><span class="label">Send</span>
+        <label class="ui-field"><span class="label">{t('Send')}</span>
           <select class="ui-input" bind:value={editing.minSeverity}>
-            <option value="warning">warnings and critical alerts</option>
-            <option value="critical">critical alerts only</option>
+            <option value="warning">{t('warnings and critical alerts')}</option>
+            <option value="critical">{t('critical alerts only')}</option>
           </select>
         </label>
-        <label class="ui-switch resolved"><input type="checkbox" bind:checked={editing.resolved} /> Also when resolved</label>
+        <label class="ui-switch resolved"><input type="checkbox" bind:checked={editing.resolved} /> {t('Also when resolved')}</label>
       </div>
     </form>
   {/if}
   {#snippet footer()}
-    <button class="ui-btn ghost" type="button" disabled={testing || !editing} onclick={() => editing && test(editing)}><Send size={14} /> Send test</button>
+    <button class="ui-btn ghost" type="button" disabled={testing || !editing} onclick={() => editing && test(editing)}><Send size={14} /> {t('Send test')}</button>
     <span class="spacer"></span>
-    <button class="ui-btn ghost" onclick={() => (editing = null)}>Cancel</button>
-    <button class="ui-btn primary" form="ch-form">{editIndex >= 0 ? 'Keep changes' : 'Add channel'}</button>
+    <button class="ui-btn ghost" onclick={() => (editing = null)}>{t('Cancel')}</button>
+    <button class="ui-btn primary" form="ch-form">{editIndex >= 0 ? 'Keep changes' : t('Add channel')}</button>
   {/snippet}
 </Dialog>
 

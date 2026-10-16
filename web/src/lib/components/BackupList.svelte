@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Backups of one machine (or all, grouped on the Backups page) with restore and delete.
   import ArchiveRestore from '@lucide/svelte/icons/archive-restore'
   import Trash from '@lucide/svelte/icons/trash'
@@ -21,9 +22,9 @@
   async function copyOffsite(b: BackupInfo) {
     try {
       const job = await api.offsiteUpload(b.id, host)
-      track(job, { success: `${b.domain}: copied off-site`, host, onSuccess: onchange })
+      track(job, { success: t('{domain}: copied off-site', { domain: b.domain }), host, onSuccess: onchange })
     } catch (err) {
-      toasts.push({ kind: 'error', title: 'Could not copy off-site', detail: errorText(err) })
+      toasts.push({ kind: 'error', title: t('Could not copy off-site'), detail: errorText(err) })
     }
   }
 
@@ -70,31 +71,31 @@
 <div class="list">
   {#each backups as b (b.id)}
     <div class="backup">
-      <span class="kind" title={b.live ? 'Taken while the machine was running (no downtime)' : 'Taken while the machine was off'}>
+      <span class="kind" title={b.live ? 'Taken while the machine was running (no downtime)' : t('Taken while the machine was off')}>
         {#if b.live}<Zap size={15} />{:else}<Power size={15} />{/if}
       </span>
       <div class="info">
-        <span class="when">{when(b.created)} {#if b.automatic}<span class="tag">automatic</span>{/if}</span>
+        <span class="when">{when(b.created)} {#if b.automatic}<span class="tag">{t('automatic')}</span>{/if}</span>
         <span class="meta">{formatBytes(b.sizeBytes)} · {b.disks.map((d) => d.target).join(', ')} · {b.live ? 'live' : 'offline'} · took {took(b.durationSec)}</span>
       </div>
       {#if offsite}
-        <button class="ui-btn sm ghost" disabled={!session.can('admin')} title={session.why('admin') || 'Copy this backup to the off-site repository'} onclick={() => copyOffsite(b)}>
-          <CloudUpload size={14} /> Copy off-site
+        <button class="ui-btn sm ghost" disabled={!session.can('admin')} title={session.why('admin') || t('Copy this backup to the off-site repository')} onclick={() => copyOffsite(b)}>
+          <CloudUpload size={14} /> {t('Copy off-site')}
         </button>
       {/if}
-      <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin') || 'Create a new machine from this backup'} onclick={() => openRestore(b)}>
-        <ArchiveRestore size={14} /> Restore…
+      <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin') || t('Create a new machine from this backup')} onclick={() => openRestore(b)}>
+        <ArchiveRestore size={14} /> {t('Restore…')}
       </button>
       <ConfirmButton
-        label="Delete"
-        confirm="Delete backup?"
+        label={t('Delete')}
+        confirm={t('Delete backup?')}
         icon={Trash}
         disabled={!session.can('admin')}
         title={session.why('admin')}
-        failure="Could not delete the backup"
+        failure={t('Could not delete the backup')}
         run={async () => {
           await api.deleteBackup(b.id, host)
-          toasts.push({ kind: 'info', title: 'Backup deleted' })
+          toasts.push({ kind: 'info', title: t('Backup deleted') })
           onchange()
         }}
       />
@@ -102,25 +103,25 @@
   {/each}
 </div>
 
-<Dialog open={restoring !== null} title="Restore backup" subtitle={restoring ? `${restoring.domain}, ${when(restoring.created)}` : ''} onclose={() => (restoring = null)}>
+<Dialog open={restoring !== null} title={t('Restore backup')} subtitle={restoring ? `${restoring.domain}, ${when(restoring.created)}` : ''} onclose={() => (restoring = null)}>
   <form id="restore-form" class="form" onsubmit={restore}>
-    <p class="text">The backup becomes a <b>new machine</b> with its own name, identity and network addresses. The original — if it still exists — is not touched.</p>
+    <p class="text">{t('The backup becomes a')} <b>{t('new machine')}</b> {t('with its own name, identity and network addresses. The original — if it still exists — is not touched.')}</p>
     <label class="ui-field">
-      <span class="label">Name of the new machine</span>
+      <span class="label">{t('Name of the new machine')}</span>
       <input class="ui-input" bind:value={name} required pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" />
     </label>
     <label class="ui-field">
-      <span class="label">Put its disks in</span>
+      <span class="label">{t('Put its disks in')}</span>
       <select class="ui-input" bind:value={pool}>
         {#each pools as p (p.name)}<option value={p.name}>{p.name} — {formatBytes(p.availableBytes)} free</option>{/each}
       </select>
-      <span class="hint" class:warn={!!target && needed > target.availableBytes}>Needs about {formatBytes(needed)} (more if the disks are fuller than the compressed backup).</span>
+      <span class="hint" class:warn={!!target && needed > target.availableBytes}>{t('Needs about {needed} (more if the disks are fuller than the compressed backup).', { needed: formatBytes(needed) })}</span>
     </label>
     {#if error}<div class="ui-error-box">{error}</div>{/if}
   </form>
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={() => (restoring = null)}>Cancel</button>
-    <button class="ui-btn primary" form="restore-form"><ArchiveRestore size={14} /> Restore</button>
+    <button class="ui-btn ghost" onclick={() => (restoring = null)}>{t('Cancel')}</button>
+    <button class="ui-btn primary" form="restore-form"><ArchiveRestore size={14} /> {t('Restore')}</button>
   {/snippet}
 </Dialog>
 

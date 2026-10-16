@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Form dialog on the native <dialog> element: focus trap, Escape and backdrop come free.
   // Dangerous one-step actions use inline two-click confirms instead (see ActionMenu).
   import X from '@lucide/svelte/icons/x'
@@ -36,7 +37,7 @@
           <h2 id="dlg-title">{title}</h2>
           {#if subtitle}<p>{subtitle}</p>{/if}
         </div>
-        <button class="x" aria-label="Close" onclick={onclose}><X size={16} /></button>
+        <button class="x" aria-label={t('Close')} onclick={onclose}><X size={16} /></button>
       </header>
       <div class="body">{@render children()}</div>
       {#if footer}<footer>{@render footer()}</footer>{/if}

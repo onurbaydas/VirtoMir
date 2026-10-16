@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // The machine VirtoMir runs on, as its firmware and sensors report it (DMI, hwmon). Only
   // what the host reports is shown: no sensors, no sensor rows.
   import Server from '@lucide/svelte/icons/server'
@@ -43,7 +44,7 @@
     const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60)
     return d ? `${d} d ${h} h` : h ? `${h} h ${m} min` : `${m} min`
   }
-  let model = $derived([c?.vendor, c?.product].filter(Boolean).join(' ') || 'Unknown hardware')
+  let model = $derived([c?.vendor, c?.product].filter(Boolean).join(' ') || t('Unknown hardware'))
 </script>
 
 {#if !unavailable}
@@ -64,12 +65,12 @@
       {/if}
       {#if fans.length}<span class="r"><Fan size={14} /> {fans.map((f) => f.value.toFixed(0)).join(' / ')} RPM</span>{/if}
       {#if power.length}<span class="r"><Zap size={14} /> {power.reduce((n, p) => n + p.value, 0).toFixed(0)} W</span>{/if}
-      {#if c && !c.sensors.length}<span class="muted small">No sensors reported (install lm-sensors drivers, or this is a VM)</span>{/if}
+      {#if c && !c.sensors.length}<span class="muted small">{t('No sensors reported (install lm-sensors drivers, or this is a VM)')}</span>{/if}
     </div>
     <div class="acts">
-      {#if c?.bmc}<a class="ui-btn sm" href={c.bmc.url} target="_blank" rel="noopener noreferrer" title="Management controller (from the HA fence agent)"><ExternalLink size={13} /> BMC</a>{/if}
-      {#if c?.sensors.length}<button class="ui-btn sm ghost" onclick={() => (showAll = !showAll)}>{showAll ? 'Hide sensors' : 'All sensors'}</button>{/if}
-      {#if cluster.clustered && session.can('admin')}<button class="ui-btn sm" onclick={() => (evacuating = true)}><Wrench size={13} /> Maintenance…</button>{/if}
+      {#if c?.bmc}<a class="ui-btn sm" href={c.bmc.url} target="_blank" rel="noopener noreferrer" title={t('Management controller (from the HA fence agent)')}><ExternalLink size={13} /> {t('BMC')}</a>{/if}
+      {#if c?.sensors.length}<button class="ui-btn sm ghost" onclick={() => (showAll = !showAll)}>{showAll ? 'Hide sensors' : t('All sensors')}</button>{/if}
+      {#if cluster.clustered && session.can('admin')}<button class="ui-btn sm" onclick={() => (evacuating = true)}><Wrench size={13} /> {t('Maintenance…')}</button>{/if}
     </div>
     {#if showAll && c}
       <div class="sensors mono">

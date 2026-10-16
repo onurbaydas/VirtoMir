@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Edits the persistent (next-boot) definition. The browser checks that the XML is
   // well-formed while typing; libvirt validates it against its schema on save.
   import Save from '@lucide/svelte/icons/save'
@@ -68,10 +69,10 @@
 
   // Well-formedness check (cheap, instant). Schema problems come back from libvirt on save.
   let parseError = $derived.by(() => {
-    if (!text.trim()) return 'The XML is empty.'
+    if (!text.trim()) return t('The XML is empty.')
     const doc = new DOMParser().parseFromString(text, 'application/xml')
     const err = doc.querySelector('parsererror')
-    if (err) return (err.textContent ?? 'Not well-formed XML').split('\n').find((l) => l.trim())?.trim() ?? 'Not well-formed XML'
+    if (err) return (err.textContent ?? t('Not well-formed XML')).split('\n').find((l) => l.trim())?.trim() ?? t('Not well-formed XML')
     if (doc.documentElement.nodeName !== 'domain') return 'The root element must be <domain>.'
     return ''
   })
@@ -83,7 +84,7 @@
       const res = await api.saveXML(uuid, text)
       toasts.push({
         kind: 'info',
-        title: 'Configuration saved',
+        title: t('Configuration saved'),
         detail: res.appliesOnNextBoot ? 'The machine is running: changes take effect at its next boot.' : undefined,
       })
       onclose(true)
@@ -95,7 +96,7 @@
   }
 
   function cancel() {
-    if (dirty && !confirm('Discard your changes to the XML?')) return
+    if (dirty && !confirm( t('Discard your changes to the XML?'))) return
     onclose(false)
   }
 
@@ -119,9 +120,9 @@
     <TriangleAlert size={15} />
     <span>
       {#if active}
-        Editing the configuration for the <b>next boot</b>. The running machine keeps its current setup until it is restarted.
+        {t('Editing the configuration for the')} <b>{t('next boot')}</b>. The running machine keeps its current setup until it is restarted.
       {:else}
-        Every libvirt setting can be changed here — including ones that stop the machine from booting. A snapshot first is a good idea.
+        {t('Every libvirt setting can be changed here — including ones that stop the machine from booting. A snapshot first is a good idea.')}
       {/if}
     </span>
   </div>
@@ -129,7 +130,7 @@
   {#if loadErr}
     <div class="err">{loadErr}</div>
   {:else if original === null}
-    <p class="muted">Loading…</p>
+    <p class="muted">{t('Loading…')}</p>
   {:else if showDiff}
     <div class="diff-area mono">
       {#each diffLines as dl}
@@ -150,7 +151,7 @@
         spellcheck="false"
         autocapitalize="off"
         autocomplete="off"
-        aria-label="Domain XML"
+        aria-label={t('Domain XML')}
         aria-invalid={!!parseError}
         onscroll={() => gutter && ta && (gutter.scrollTop = ta.scrollTop)}
         onkeydown={onKey}
@@ -160,18 +161,18 @@
 
   <footer>
     <span class="status" class:bad={!!parseError}>
-      {#if parseError}{parseError}{:else if dirty}Unsaved changes · Ctrl+S to save{:else}No changes{/if}
+      {#if parseError}{parseError}{:else if dirty}{t('Unsaved changes · Ctrl+S to save')}{:else}{t('No changes')}{/if}
     </span>
-    <button class="ui-btn ghost mono" class:active={showDiff} onclick={() => (showDiff = !showDiff)} disabled={!dirty} title="Toggle visual diff">
-      <Split size={14} /> {showDiff ? 'Edit' : 'Show changes'}
+    <button class="ui-btn ghost mono" class:active={showDiff} onclick={() => (showDiff = !showDiff)} disabled={!dirty} title={t('Toggle visual diff')}>
+      <Split size={14} /> {showDiff ? 'Edit' : t('Show changes')}
     </button>
-    <button class="ui-btn ghost" onclick={() => (text = original ?? '')} disabled={!dirty || saving}><Undo2 size={14} /> Reset</button>
-    <button class="ui-btn ghost" onclick={cancel} disabled={saving}>Cancel</button>
+    <button class="ui-btn ghost" onclick={() => (text = original ?? '')} disabled={!dirty || saving}><Undo2 size={14} /> {t('Reset')}</button>
+    <button class="ui-btn ghost" onclick={cancel} disabled={saving}>{t('Cancel')}</button>
     <button class="ui-btn primary" onclick={save} disabled={!dirty || !!parseError || saving}>
       <Save size={14} /> {saving ? 'Saving…' : 'Save'}
     </button>
   </footer>
-  {#if saveErr}<div class="err" role="alert"><b>libvirt refused the change:</b> {saveErr}</div>{/if}
+  {#if saveErr}<div class="err" role="alert"><b>{t('libvirt refused the change:')}</b> {saveErr}</div>{/if}
 </div>
 
 <style>

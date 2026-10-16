@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Resource pools (ADR-0032): machines grouped under hard limits that VirtoMir checks on
   // every create, resize and move. Pools nest; a child counts against its parents.
   import Plus from '@lucide/svelte/icons/plus'
@@ -81,11 +82,11 @@
     try {
       if (editing.id) await ent.updateRespool({ ...(pools.find((p) => p.id === editing!.id) as ResourcePool), ...body, id: editing.id })
       else await ent.createRespool(body)
-      toasts.push({ kind: 'info', title: editing.id ? 'Pool saved' : 'Pool created' })
+      toasts.push({ kind: 'info', title: editing.id ? 'Pool saved' : t('Pool created') })
       editing = null
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Not saved', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Not saved'), detail: errorText(e) })
     } finally {
       saving = false
     }
@@ -103,12 +104,12 @@
   async function assign(uuid: string, pool: string) {
     try {
       await ent.assignRespool(uuid, pool)
-      toasts.push({ kind: 'info', title: pool ? `${nameOf(uuid.toLowerCase())} moved into the pool` : `${nameOf(uuid.toLowerCase())} taken out of the pool` })
+      toasts.push({ kind: 'info', title: pool ? t('{toLowerCase} moved into the pool', { toLowerCase: nameOf(uuid.toLowerCase()) }) : t('{toLowerCase} taken out of the pool', { toLowerCase: nameOf(uuid.toLowerCase()) }) })
       adding = null
       pick = ''
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Not moved', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Not moved'), detail: errorText(e) })
     }
   }
 
@@ -118,16 +119,16 @@
 </script>
 
 <header class="head">
-  <p class="lead">Hard caps on what a group of machines may take together (vCPUs, memory, disk). Nested pools count against their parents. Kept per host.</p>
-  {#if admin}<button class="ui-btn primary" onclick={openNew}><Plus size={14} /> New pool</button>{/if}
+  <p class="lead">{t('Hard caps on what a group of machines may take together (vCPUs, memory, disk). Nested pools count against their parents. Kept per host.')}</p>
+  {#if admin}<button class="ui-btn primary" onclick={openNew}><Plus size={14} /> {t('New pool')}</button>{/if}
 </header>
 
 {#if error}
   <div class="ui-error-box">{error}</div>
 {:else if !loaded}
-  <p class="muted">Loading…</p>
+  <p class="muted">{t('Loading…')}</p>
 {:else if tree.length === 0}
-  <section class="ui-panel empty"><p class="muted">No resource pools yet. Machines outside pools are not limited (apart from user quotas).</p></section>
+  <section class="ui-panel empty"><p class="muted">{t('No resource pools yet. Machines outside pools are not limited (apart from user quotas).')}</p></section>
 {:else}
   {#each tree as { p, depth } (p.id)}
     <section class="ui-panel pool" style="margin-left: {depth * 24}px">
@@ -138,22 +139,22 @@
         </div>
         {#if admin}
           <div class="acts">
-            <button class="ui-btn sm" onclick={() => (adding = p)}><Plus size={13} /> Add machine</button>
-            <button class="ui-btn sm ghost" onclick={() => openEdit(p)}><Pencil size={13} /> Edit</button>
-            <ConfirmButton label="Delete" confirm="Delete this pool?" icon={Trash} run={() => remove(p)} />
+            <button class="ui-btn sm" onclick={() => (adding = p)}><Plus size={13} /> {t('Add machine')}</button>
+            <button class="ui-btn sm ghost" onclick={() => openEdit(p)}><Pencil size={13} /> {t('Edit')}</button>
+            <ConfirmButton label={t('Delete')} confirm={t('Delete this pool?')} icon={Trash} run={() => remove(p)} />
           </div>
         {/if}
       </header>
       <div class="meters">
         <div class="meter">
-          <span class="lbl">vCPUs</span>
+          <span class="lbl">{t('vCPUs')}</span>
           <span class="val mono">{p.usage.vcpus}{p.cpuLimit ? ` / ${p.cpuLimit}` : ''}</span>
-          {#if p.cpuLimit}<div class="bar"><i style="width: {pct(p.usage.vcpus, p.cpuLimit)}%" class:hot={pct(p.usage.vcpus, p.cpuLimit) > 90}></i></div>{:else}<span class="muted small">no limit</span>{/if}
+          {#if p.cpuLimit}<div class="bar"><i style="width: {pct(p.usage.vcpus, p.cpuLimit)}%" class:hot={pct(p.usage.vcpus, p.cpuLimit) > 90}></i></div>{:else}<span class="muted small">{t('no limit')}</span>{/if}
         </div>
         <div class="meter">
-          <span class="lbl">Memory</span>
+          <span class="lbl">{t('Memory')}</span>
           <span class="val mono">{(p.usage.memoryMiB / 1024).toFixed(1)}{p.memoryLimitMiB ? ` / ${(p.memoryLimitMiB / 1024).toFixed(0)}` : ''} GiB</span>
-          {#if p.memoryLimitMiB}<div class="bar"><i style="width: {pct(p.usage.memoryMiB, p.memoryLimitMiB)}%" class:hot={pct(p.usage.memoryMiB, p.memoryLimitMiB) > 90}></i></div>{:else}<span class="muted small">no limit</span>{/if}
+          {#if p.memoryLimitMiB}<div class="bar"><i style="width: {pct(p.usage.memoryMiB, p.memoryLimitMiB)}%" class:hot={pct(p.usage.memoryMiB, p.memoryLimitMiB) > 90}></i></div>{:else}<span class="muted small">{t('no limit')}</span>{/if}
         </div>
         {#each Object.entries(p.storageLimits ?? {}) as [sp, max] (sp)}
           <div class="meter">
@@ -165,60 +166,60 @@
       </div>
       <div class="machines">
         {#each p.machines as uuid (uuid)}
-          <span class="vm">{nameOf(uuid)}{#if admin}<button class="x" title="Take it out of the pool" onclick={() => assign(uuid, '')}>×</button>{/if}</span>
+          <span class="vm">{nameOf(uuid)}{#if admin}<button class="x" title={t('Take it out of the pool')} onclick={() => assign(uuid, '')}>×</button>{/if}</span>
         {:else}
-          <span class="muted small">No machines directly in this pool{p.usage.machines ? ` (${p.usage.machines} in its sub-pools)` : ''}.</span>
+          <span class="muted small">{t('No machines directly in this pool{v}.', { v: p.usage.machines ? ` (${p.usage.machines} in its sub-pools)` : '' })}</span>
         {/each}
       </div>
     </section>
   {/each}
 {/if}
 
-<Dialog open={!!editing} title={editing?.id ? 'Edit pool' : 'New resource pool'} onclose={() => (editing = null)} width={560}>
+<Dialog open={!!editing} title={editing?.id ? 'Edit pool' : t('New resource pool')} onclose={() => (editing = null)} width={560}>
   {#if editing}
     <div class="form">
-      <label class="ui-field"><span class="label">Name</span><input class="ui-input" bind:value={editing.name} /></label>
-      <label class="ui-field"><span class="label">Inside</span>
+      <label class="ui-field"><span class="label">{t('Name')}</span><input class="ui-input" bind:value={editing.name} /></label>
+      <label class="ui-field"><span class="label">{t('Inside')}</span>
         <select class="ui-input" bind:value={editing.parentId}>
-          <option value="">— (top level)</option>
+          <option value="">{t('— (top level)')}</option>
           {#each pools.filter((p) => p.id !== editing?.id) as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
         </select>
-        <span class="hint">A pool inside another must set every limit its parent has, at most as high.</span>
+        <span class="hint">{t('A pool inside another must set every limit its parent has, at most as high.')}</span>
       </label>
-      <label class="ui-field"><span class="label">Description</span><input class="ui-input" bind:value={editing.description} /></label>
+      <label class="ui-field"><span class="label">{t('Description')}</span><input class="ui-input" bind:value={editing.description} /></label>
       <div class="two">
-        <label class="ui-field"><span class="label">vCPU limit (0 = none)</span><input class="ui-input" type="number" min="0" bind:value={editing.cpuLimit} /></label>
-        <label class="ui-field"><span class="label">Memory limit, GiB (0 = none)</span><input class="ui-input" type="number" min="0" bind:value={editing.memoryGiB} /></label>
+        <label class="ui-field"><span class="label">{t('vCPU limit (0 = none)')}</span><input class="ui-input" type="number" min="0" bind:value={editing.cpuLimit} /></label>
+        <label class="ui-field"><span class="label">{t('Memory limit, GiB (0 = none)')}</span><input class="ui-input" type="number" min="0" bind:value={editing.memoryGiB} /></label>
       </div>
-      <span class="label">Disk limits per storage pool, GiB (empty = none)</span>
+      <span class="label">{t('Disk limits per storage pool, GiB (empty = none)')}</span>
       <div class="two">
         {#each storage as sp (sp.name)}
           <label class="ui-field"><span class="hint">{sp.name} ({sp.type})</span>
-            <input class="ui-input" type="number" min="0" placeholder="no limit" bind:value={editing.storageGiB[sp.name]} /></label>
+            <input class="ui-input" type="number" min="0" placeholder={t('no limit')} bind:value={editing.storageGiB[sp.name]} /></label>
         {/each}
       </div>
     </div>
   {/if}
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={() => (editing = null)}>Cancel</button>
+    <button class="ui-btn ghost" onclick={() => (editing = null)}>{t('Cancel')}</button>
     <button class="ui-btn primary" disabled={saving || !editing?.name.trim()} onclick={saveForm}>{saving ? 'Saving…' : 'Save'}</button>
   {/snippet}
 </Dialog>
 
-<Dialog open={!!adding} title={adding ? `Add a machine to ${adding.name}` : ''} onclose={() => (adding = null)}>
+<Dialog open={!!adding} title={adding ? t('Add a machine to {name}', { name: adding.name }) : ''} onclose={() => (adding = null)}>
   <label class="ui-field">
-    <span class="label">Machine</span>
+    <span class="label">{t('Machine')}</span>
     <select class="ui-input" bind:value={pick}>
-      <option value="">Choose…</option>
+      <option value="">{t('Choose…')}</option>
       {#each domains.filter((d) => !d.template) as d (d.uuid)}
-        <option value={d.uuid}>{d.name} · {d.vcpus} vCPU · {Math.round(d.maxMemoryKiB / 1048576)} GiB{poolOf(d.uuid) ? ` (now in ${pools.find((p) => p.id === poolOf(d.uuid))?.name})` : ''}</option>
+        <option value={d.uuid}>{t('{name} · {vcpus} vCPU · {v} GiB{name2}', { name: d.name, vcpus: d.vcpus, v: Math.round(d.maxMemoryKiB / 1048576), name2: poolOf(d.uuid) ? ` (now in ${pools.find((p) => p.id === poolOf(d.uuid))?.name})` : '' })}</option>
       {/each}
     </select>
-    <span class="hint">It leaves any other pool. Refused if it does not fit the limits.</span>
+    <span class="hint">{t('It leaves any other pool. Refused if it does not fit the limits.')}</span>
   </label>
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={() => (adding = null)}>Cancel</button>
-    <button class="ui-btn primary" disabled={!pick} onclick={() => adding && assign(pick, adding.id)}>Add</button>
+    <button class="ui-btn ghost" onclick={() => (adding = null)}>{t('Cancel')}</button>
+    <button class="ui-btn primary" disabled={!pick} onclick={() => adding && assign(pick, adding.id)}>{t('Add')}</button>
   {/snippet}
 </Dialog>
 

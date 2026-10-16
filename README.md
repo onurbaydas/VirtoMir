@@ -106,6 +106,8 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 
 <p align="center"><img src="docs/screenshots/mobile.png" alt="On a phone" width="260"></p>
 
+- **English and Turkish** (Türkçe) user interface — the browser's language by default, switchable in the sidebar and on the Account page
+
 <sub>Screenshots from VirtoMir 0.4.0 on a test host (Ubuntu 26.04, libvirt 12) with real, small machines; the host name is shown as hv-01. Dark, light and "match system" themes; works on phones too.</sub>
 
 ## Install
@@ -185,7 +187,7 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 
 ## Roadmap
 
-A Turkish UI and signed apt/rpm repositories.
+Signed apt/rpm repositories.
 
 ## License
 

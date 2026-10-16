@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // SPICE console (ADR-0046) with spice-html5 over virtomird's WebSocket bridge. With the guest
   // agent (spice-vdagent) the guest's resolution follows the window and the clipboard is shared.
   // spice-html5 works with fixed element ids and a global connection, so only one SPICE console
@@ -102,15 +103,15 @@
 <div class="spice" class:standalone>
   <div class="bar">
     <span class="state" class:ok={conn === 'connected'} class:bad={conn === 'error'}>
-      {conn === 'connected' ? `SPICE · ${name}` : conn === 'connecting' ? 'Connecting…' : `Not connected${message ? ': ' + message : ''} — retrying`}
+      {conn === 'connected' ? `SPICE · ${name}` : conn === 'connecting' ? 'Connecting…' : t('Not connected{v} — retrying', { v: message ? ': ' + message : '' })}
     </span>
     {#if conn === 'connected'}
-      <span class="hint">{agent ? 'Guest agent: resolution follows the window, clipboard shared' : 'No guest agent (install spice-vdagent for resizing and the clipboard)'}</span>
+      <span class="hint">{agent ? 'Guest agent: resolution follows the window, clipboard shared' : t('No guest agent (install spice-vdagent for resizing and the clipboard)')}</span>
     {/if}
     <span class="spacer"></span>
-    <button class="ui-btn sm" disabled={conn !== 'connected'} onclick={cad} title="Send Ctrl+Alt+Del"><Keyboard size={13} /> Ctrl+Alt+Del</button>
-    <button class="ui-btn sm" onclick={fullscreen} title="Full screen"><Maximize size={13} /></button>
-    <button class="ui-btn sm ghost" onclick={connect} title="Reconnect"><RefreshCw size={13} /></button>
+    <button class="ui-btn sm" disabled={conn !== 'connected'} onclick={cad} title={t('Send Ctrl+Alt+Del')}><Keyboard size={13} /> {t('Ctrl+Alt+Del')}</button>
+    <button class="ui-btn sm" onclick={fullscreen} title={t('Full screen')}><Maximize size={13} /></button>
+    <button class="ui-btn sm ghost" onclick={connect} title={t('Reconnect')}><RefreshCw size={13} /></button>
   </div>
   <div id="spice-area" class="area" bind:this={area}>
     <div id="spice-screen" class="screen"></div>

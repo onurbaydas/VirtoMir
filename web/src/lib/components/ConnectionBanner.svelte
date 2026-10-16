@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import WifiOff from '@lucide/svelte/icons/wifi-off'
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert'
   import { live } from '../live.svelte'
@@ -22,14 +23,14 @@
     if (!live.streamOpen && live.lastUpdate && streamDownSince && now - streamDownSince > 3000) {
       return {
         kind: 'down',
-        title: 'Lost connection to VirtoMir',
-        detail: `Retrying automatically. Last update ${ago(now - live.lastUpdate)}.`,
+        title: t('Lost connection to VirtoMir'),
+        detail: t('Retrying automatically. Last update {lastUpdate}.', { lastUpdate: ago(now - live.lastUpdate) }),
       }
     }
     if (live.snapshot && !live.snapshot.connected) {
       return {
         kind: 'degraded',
-        title: 'VirtoMir cannot reach libvirt on this host',
+        title: t('VirtoMir cannot reach libvirt on this host'),
         detail: live.snapshot.error,
       }
     }

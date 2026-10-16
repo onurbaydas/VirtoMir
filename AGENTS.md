@@ -57,6 +57,9 @@ scripts/install.sh   ← installer shipped in release tarballs; build-release.sh
 docs/screenshots/    ← README images (taken from the mock UI)
 web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embedded into virtomird
   src/app.css        ← design tokens (colors, radii, motion) — use these, never hard-coded colors
+  src/lib/i18n.svelte.ts, src/lib/locales/tr.ts ← UI language (ADR-0047): write every UI string as t('English text'),
+                       with {name} placeholders for values (t('{n} of {total} running', { n, total })), and add its
+                       Turkish to tr.ts; an untranslated key falls back to English
   src/lib/           ← api client, live/session stores, router, components (Dialog, ConfirmButton, …)
   src/lib/pages/     ← Overview, MachinePage (#console|#settings|#hardware|#snapshots|#backups|#changes|#xml), NewMachine,
                        Import, Storage, Networks, Hardware (host PCI/USB), Backups, Alerts, Activity, Cluster,

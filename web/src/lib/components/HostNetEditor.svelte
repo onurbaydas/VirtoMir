@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Bridges, bonds and VLAN interfaces on the host (ADR-0042). A change is applied at once and
   // must be kept within the confirmation window from this browser: if the host can no longer be
   // reached (wrong port, address moved), nobody can confirm and the host undoes it by itself.
@@ -56,10 +57,10 @@
     keepErr = ''
     try {
       st = await ent.confirmHostNet(p.id)
-      toasts.push({ kind: 'info', title: 'Network change kept', detail: p.what })
+      toasts.push({ kind: 'info', title: t('Network change kept'), detail: p.what })
       onchanged()
     } catch (e) {
-      keepErr = `${errorText(e)} — if the host cannot be reached any more, it undoes the change by itself when the time is up.`
+      keepErr = t('{e} — if the host cannot be reached any more, it undoes the change by itself when the time is up.', { e: errorText(e) })
     } finally {
       keepBusy = false
     }
@@ -67,7 +68,7 @@
   async function undo(p: HostNetPending) {
     try {
       st = await ent.rollbackHostNet(p.id)
-      toasts.push({ kind: 'info', title: 'Network change undone', detail: p.what })
+      toasts.push({ kind: 'info', title: t('Network change undone'), detail: p.what })
       onchanged()
     } catch (e) {
       keepErr = errorText(e)
@@ -148,18 +149,18 @@
   <div class="pending" role="alert">
     <TriangleAlert size={18} />
     <div class="txt">
-      <b>Keep this network change?</b>
-      <span>{pending.what} — applied with {BACKEND[pending.backend] ?? pending.backend}.</span>
+      <b>{t('Keep this network change?')}</b>
+      <span>{t('{what} — applied with {v}.', { what: pending.what, v: BACKEND[pending.backend] ?? pending.backend })}</span>
       {#if left > 0}
-        <span class="mono">Undone automatically in {left} s unless you keep it.</span>
+        <span class="mono">{t('Undone automatically in {left} s unless you keep it.', { left: left })}</span>
       {:else}
-        <span class="mono">Time is up: the host is undoing it.</span>
+        <span class="mono">{t('Time is up: the host is undoing it.')}</span>
       {/if}
       {#if keepErr}<span class="ui-error-box">{keepErr}</span>{/if}
     </div>
     {#if admin && left > 0}
       <button class="ui-btn primary" disabled={keepBusy} onclick={() => keep(pending)}>{keepBusy ? 'Keeping…' : 'Keep'}</button>
-      <button class="ui-btn ghost" onclick={() => undo(pending)}>Undo now</button>
+      <button class="ui-btn ghost" onclick={() => undo(pending)}>{t('Undo now')}</button>
     {/if}
   </div>
 {/if}
@@ -168,9 +169,9 @@
   <div class="bar">
     {#if st.backend}
       <span class="muted small">Managed by {BACKEND[st.backend]}.</span>
-      <button class="ui-btn sm" disabled={!!pending} onclick={() => openNew('bridge')}><Plus size={13} /> Bridge</button>
-      <button class="ui-btn sm" disabled={!!pending} onclick={() => openNew('bond')}><Plus size={13} /> Bond</button>
-      <button class="ui-btn sm" disabled={!!pending} onclick={() => openNew('vlan')}><Plus size={13} /> VLAN interface</button>
+      <button class="ui-btn sm" disabled={!!pending} onclick={() => openNew('bridge')}><Plus size={13} /> {t('Bridge')}</button>
+      <button class="ui-btn sm" disabled={!!pending} onclick={() => openNew('bond')}><Plus size={13} /> {t('Bond')}</button>
+      <button class="ui-btn sm" disabled={!!pending} onclick={() => openNew('vlan')}><Plus size={13} /> {t('VLAN interface')}</button>
     {:else}
       <span class="muted small">{st.reason}</span>
     {/if}
@@ -180,8 +181,8 @@
       {#each st.created as c (c.name)}
         <li class="mono">
           <b>{c.name}</b>
-          <span class="muted">{c.kind}{c.ports?.length ? ` · ${c.ports.join(', ')}` : ''}{c.parent ? ` · VLAN ${c.vlan} on ${c.parent}` : ''}{c.takeAddressFrom ? ` · address from ${c.takeAddressFrom}` : ''}</span>
-          <ConfirmButton label="Remove" confirm={`Remove ${c.name}?`} icon={Trash} disabled={!!pending} run={() => remove(c.name)} />
+          <span class="muted">{c.kind}{c.ports?.length ? ` · ${c.ports.join(', ')}` : ''}{c.parent ? ` · VLAN ${c.vlan} on ${c.parent}` : ''}{c.takeAddressFrom ? t(' · address from {takeAddressFrom}', { takeAddressFrom: c.takeAddressFrom }) : ''}</span>
+          <ConfirmButton label={t('Remove')} confirm={`Remove ${c.name}?`} icon={Trash} disabled={!!pending} run={() => remove(c.name)} />
         </li>
       {/each}
     </ul>
@@ -192,29 +193,29 @@
 
 <Dialog
   open={dlg}
-  title={spec.kind === 'vlan' ? 'New VLAN interface' : spec.kind === 'bond' ? 'New bond' : 'New bridge'}
-  subtitle="On this host, with its own network tools"
+  title={spec.kind === 'vlan' ? 'New VLAN interface' : spec.kind === 'bond' ? 'New bond' : t('New bridge')}
+  subtitle={t('On this host, with its own network tools')}
   onclose={() => (dlg = false)}
 >
   <form id="hostif-form" class="form" onsubmit={create}>
     <label class="ui-field">
-      <span class="label">Name</span>
+      <span class="label">{t('Name')}</span>
       <input class="ui-input mono" bind:value={spec.name} required maxlength="15" />
     </label>
     {#if spec.kind === 'vlan'}
       <div class="row2">
         <label class="ui-field">
-          <span class="label">On</span>
+          <span class="label">{t('On')}</span>
           <select class="ui-input" bind:value={spec.parent}>
             {#each parents as p (p.name)}<option value={p.name}>{p.name} ({p.kind})</option>{/each}
           </select>
         </label>
         <label class="ui-field">
-          <span class="label">VLAN ID</span>
+          <span class="label">{t('VLAN ID')}</span>
           <input class="ui-input mono" type="number" min="1" max="4094" bind:value={spec.vlan} required />
         </label>
       </div>
-      <span class="hint">Tagged traffic of that VLAN arrives here; put a bridge on it for machines, or use it as a bridge port.</span>
+      <span class="hint">{t('Tagged traffic of that VLAN arrives here; put a bridge on it for machines, or use it as a bridge port.')}</span>
     {:else}
       <fieldset class="ports">
         <legend class="label">{spec.kind === 'bond' ? 'Members' : 'Ports'} <span class="opt">{spec.kind === 'bridge' ? '(optional: a bridge without ports only connects machines with each other)' : ''}</span></legend>
@@ -225,38 +226,37 @@
             <span class="muted">{c.kind}{c.speedMbps ? ` · ${c.speedMbps >= 1000 ? c.speedMbps / 1000 + 'G' : c.speedMbps + 'M'}` : ''}{hasAddress(c) ? ` · ${c.addresses?.filter((a) => !a.startsWith('fe80:')).join(', ')}` : ''}</span>
           </label>
         {:else}
-          <span class="muted small">No free ports.</span>
+          <span class="muted small">{t('No free ports.')}</span>
         {/each}
       </fieldset>
       {#if spec.kind === 'bond'}
         <label class="ui-field">
-          <span class="label">Mode</span>
+          <span class="label">{t('Mode')}</span>
           <select class="ui-input" bind:value={spec.bondMode}>
             {#each BOND_MODES as [v, l] (v)}<option value={v}>{l}</option>{/each}
           </select>
         </label>
       {:else}
-        <label class="check"><input type="checkbox" bind:checked={spec.stp} /> <span>Spanning tree (STP) — only if this bridge could form a loop with other switches</span></label>
+        <label class="check"><input type="checkbox" bind:checked={spec.stp} /> <span>{t('Spanning tree (STP) — only if this bridge could form a loop with other switches')}</span></label>
       {/if}
       {#if addrPorts.length}
         <label class="ui-field">
-          <span class="label">Host address</span>
+          <span class="label">{t('Host address')}</span>
           <select class="ui-input" bind:value={spec.takeAddressFrom}>
-            <option value={undefined}>— none: keep the ports address-free —</option>
-            {#each addrPorts as p (p)}<option value={p}>Take over the address of {p}</option>{/each}
+            <option value={undefined}>{t('— none: keep the ports address-free —')}</option>
+            {#each addrPorts as p (p)}<option value={p}>{t('Take over the address of {p}', { p: p })}</option>{/each}
           </select>
         </label>
         <div class="warn">
-          A port loses its own address in a {spec.kind}. Taking it over moves the host's address (DHCP or static, routes, DNS) to {spec.name || 'the new interface'}.
-          With DHCP the host may get a different address. If this page cannot reach the host afterwards, the change is undone by itself after two minutes.
+          {t('A port loses its own address in a {kind}. Taking it over moves the host\'s address (DHCP or static, routes, DNS) to {v}. With DHCP the host may get a different address. If this page cannot reach the host afterwards, the change is undone by itself after two minutes.', { kind: spec.kind, v: spec.name || 'the new interface' })}
         </div>
       {/if}
     {/if}
     {#if formErr}<div class="ui-error-box">{formErr}</div>{/if}
   </form>
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={() => (dlg = false)}>Cancel</button>
-    <button class="ui-btn primary" form="hostif-form" disabled={busy}>{busy ? 'Applying…' : 'Apply and confirm'}</button>
+    <button class="ui-btn ghost" onclick={() => (dlg = false)}>{t('Cancel')}</button>
+    <button class="ui-btn primary" form="hostif-form" disabled={busy}>{busy ? 'Applying…' : t('Apply and confirm')}</button>
   {/snippet}
 </Dialog>
 

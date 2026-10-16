@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { session } from '../session.svelte'
   import { live } from '../live.svelte'
   import { router } from '../router.svelte'
@@ -14,30 +15,30 @@
   let stopped = $derived(domains.filter((d) => !isActive(d.state) && d.state !== 'paused'))
 </script>
 
-<svelte:head><title>Virtual Machines · VirtoMir</title></svelte:head>
+<svelte:head><title>{t('Virtual Machines · VirtoMir')}</title></svelte:head>
 
 <header class="page-head">
   <div>
     <div class="title-row">
       <Boxes size={22} />
-      <h1>Virtual Machines</h1>
+      <h1>{t('Virtual Machines')}</h1>
     </div>
     <div class="chips">
-      <span class="chip on" title="Running machines">● {running.length} RUNNING</span>
+      <span class="chip on" title={t('Running machines')}>● {running.length} RUNNING</span>
       {#if paused.length}
-        <span class="chip paused" title="Paused machines">⏸ {paused.length} PAUSED</span>
+        <span class="chip paused" title={t('Paused machines')}>⏸ {paused.length} PAUSED</span>
       {/if}
-      <span class="chip" title="Stopped machines">○ {stopped.length} STOPPED</span>
-      <span class="chip" title="Total defined guests">{domains.length} TOTAL</span>
+      <span class="chip" title={t('Stopped machines')}>○ {stopped.length} STOPPED</span>
+      <span class="chip" title={t('Total defined guests')}>{domains.length} TOTAL</span>
     </div>
   </div>
   <div class="head-right">
-    <a class="ui-btn" href="/machines/import" onclick={router.link} title="Import OVA or disk image">
-      <Download size={14} /> Import image
+    <a class="ui-btn" href="/machines/import" onclick={router.link} title={t('Import OVA or disk image')}>
+      <Download size={14} /> {t('Import image')}
     </a>
     {#if session.canCreate}
       <a class="ui-btn primary" href="/machines/new" onclick={router.link}>
-        <Plus size={15} /> New machine
+        <Plus size={15} /> {t('New machine')}
       </a>
     {/if}
   </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t as tt } from '../i18n.svelte'
   // The host's CPU layout as a map to pin by (P5): NUMA nodes, cores with their hardware
   // threads, each thread's load, and the running machines' vCPUs where they run right now.
   // Pick a machine to see where it is allowed to run (its pinning).
@@ -65,7 +66,7 @@
     return t.machines
       .map((d) => ({ d, nodes: new Set(d.vcpus.filter((v) => v.cpu >= 0).map((v) => nodeOf.get(v.cpu))) }))
       .filter((x) => x.nodes.size > 1)
-      .map((x) => `${x.d.name} runs on ${x.nodes.size} NUMA nodes: pin its vCPUs to one node (Settings → Performance tuning) to keep memory local.`)
+      .map((x) => tt('{name} runs on {size} NUMA nodes: pin its vCPUs to one node (Settings → Performance tuning) to keep memory local.', { name: x.d.name, size: x.nodes.size }))
   })
 
   const loadLevel = (p?: number) => (p === undefined ? '' : p >= 85 ? 'hot' : p >= 50 ? 'warm' : '')
@@ -74,12 +75,12 @@
 {#if error}
   <div class="ui-error-box">{error}</div>
 {:else if t}
-  <h2 class="sub"><Network size={16} /> CPU and memory layout</h2>
+  <h2 class="sub"><Network size={16} /> {tt('CPU and memory layout')}</h2>
   {#each warnings as w (w)}
     <p class="warn">{w}</p>
   {/each}
   {#if t.machines.length}
-    <div class="legend" role="radiogroup" aria-label="Show the pinning of">
+    <div class="legend" role="radiogroup" aria-label={tt('Show the pinning of')}>
       {#each t.machines as m (m.uuid)}
         <button role="radio" aria-checked={picked === m.uuid} class:on={picked === m.uuid} onclick={() => (picked = picked === m.uuid ? '' : m.uuid)}>
           <i style:background={colour.get(m.uuid)}></i>{m.name}
@@ -88,7 +89,7 @@
       {/each}
     </div>
     {#if picked && allowed && !allowed.size}
-      <p class="hint">Not pinned: its vCPUs may run on any host CPU.</p>
+      <p class="hint">{tt('Not pinned: its vCPUs may run on any host CPU.')}</p>
     {/if}
   {/if}
   <div class="nodes">
@@ -104,7 +105,7 @@
         </header>
         <div class="cores">
           {#each cores(n.id) as threads (threads[0].id)}
-            <div class="core" title="Socket {threads[0].socket}, core {threads[0].core}">
+            <div class="core" title={tt('Socket {socket}, core {core}', { socket: threads[0].socket, core: threads[0].core })}>
               {#each threads as c (c.id)}
                 {@const here = onCPU.get(c.id) ?? []}
                 <div

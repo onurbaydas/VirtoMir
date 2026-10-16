@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // "Would N more machines fit?" from real numbers: every reachable member's CPUs and memory,
   // what its running machines are given, and the free space of the storage pools. The N+1
   // check asks whether everything still fits when the biggest host is down.
@@ -69,41 +70,41 @@
 </script>
 
 <section class="ui-panel cap">
-  <header><h2><Calculator size={16} /> Would more machines fit?</h2>
-    <span class="muted">{hosts.length} host{hosts.length === 1 ? '' : 's'} · from live numbers</span></header>
+  <header><h2><Calculator size={16} /> {t('Would more machines fit?')}</h2>
+    <span class="muted">{t('{length} host{v} · from live numbers', { length: hosts.length, v: hosts.length === 1 ? '' : 's' })}</span></header>
   <div class="inputs">
-    <label class="ui-field"><span class="label">Machines</span><input class="ui-input" type="number" min="1" bind:value={newVms} /></label>
-    <label class="ui-field"><span class="label">vCPUs each</span><input class="ui-input" type="number" min="1" bind:value={vcpuEach} /></label>
-    <label class="ui-field"><span class="label">Memory each (GiB)</span><input class="ui-input" type="number" min="1" bind:value={ramEachGiB} /></label>
-    <label class="ui-field"><span class="label">Disk each (GiB)</span><input class="ui-input" type="number" min="0" bind:value={diskEachGiB} /></label>
+    <label class="ui-field"><span class="label">{t('Machines')}</span><input class="ui-input" type="number" min="1" bind:value={newVms} /></label>
+    <label class="ui-field"><span class="label">{t('vCPUs each')}</span><input class="ui-input" type="number" min="1" bind:value={vcpuEach} /></label>
+    <label class="ui-field"><span class="label">{t('Memory each (GiB)')}</span><input class="ui-input" type="number" min="1" bind:value={ramEachGiB} /></label>
+    <label class="ui-field"><span class="label">{t('Disk each (GiB)')}</span><input class="ui-input" type="number" min="0" bind:value={diskEachGiB} /></label>
   </div>
   {#if loaded}
     <div class="out">
       <div class:bad={memPct > 100} class:warn={memPct > 85 && memPct <= 100}>
-        <span class="lbl">Memory given to running machines</span>
+        <span class="lbl">{t('Memory given to running machines')}</span>
         <b class="mono">{((alloc + addMem) / GiB).toFixed(0)} / {(totMem / GiB).toFixed(0)} GiB ({memPct.toFixed(0)} %)</b>
-        <span class="muted">now {(alloc / GiB).toFixed(0)} GiB</span>
+        <span class="muted">{t('now {v} GiB', { v: (alloc / GiB).toFixed(0) })}</span>
       </div>
       <div class:warn={ratio > 4}>
-        <span class="lbl">vCPU : CPU</span>
+        <span class="lbl">{t('vCPU : CPU')}</span>
         <b class="mono">{vcpus + addCpu} : {totCpus} ({ratio.toFixed(1)}:1)</b>
-        <span class="muted">above 4:1 most workloads feel it</span>
+        <span class="muted">{t('above 4:1 most workloads feel it')}</span>
       </div>
       <div class:bad={addDisk > storageFree}>
-        <span class="lbl">Disk space</span>
-        <b class="mono">{(addDisk / 2 ** 30).toFixed(0)} of {(storageFree / 2 ** 30).toFixed(0)} GiB free</b>
-        <span class="muted">thin disks only take what they use</span>
+        <span class="lbl">{t('Disk space')}</span>
+        <b class="mono">{t('{v} of {v2} GiB free', { v: (addDisk / 2 ** 30).toFixed(0), v2: (storageFree / 2 ** 30).toFixed(0) })}</b>
+        <span class="muted">{t('thin disks only take what they use')}</span>
       </div>
       {#if hosts.length > 1}
         <div class:bad={!nPlusOne} class:ok={nPlusOne}>
-          <span class="lbl">One host down (N+1)</span>
-          <b>{nPlusOne ? 'Everything still fits' : 'Would NOT fit without the biggest host'}</b>
-          <span class="muted">{((totMem - biggest) / GiB).toFixed(0)} GiB left on the others</span>
+          <span class="lbl">{t('One host down (N+1)')}</span>
+          <b>{nPlusOne ? 'Everything still fits' : t('Would NOT fit without the biggest host')}</b>
+          <span class="muted">{t('{v} GiB left on the others', { v: ((totMem - biggest) / GiB).toFixed(0) })}</span>
         </div>
       {/if}
     </div>
   {:else}
-    <p class="muted">Asking the hosts…</p>
+    <p class="muted">{t('Asking the hosts…')}</p>
   {/if}
 </section>
 

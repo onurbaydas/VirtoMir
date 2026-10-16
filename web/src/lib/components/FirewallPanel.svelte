@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // A machine's firewall (ADR-0033): a libvirt network filter on the host side of its network
   // adapters, so the guest cannot switch it off. IPv4 and IPv6, stateful (replies are let through).
   import Shield from '@lucide/svelte/icons/shield'
@@ -34,10 +35,10 @@
   })
 
   const PRESETS: { label: string; rule: FirewallRule }[] = [
-    { label: 'SSH (22)', rule: { direction: 'in', action: 'accept', protocol: 'tcp', ports: '22' } },
-    { label: 'Web (80, 443)', rule: { direction: 'in', action: 'accept', protocol: 'tcp', ports: '80' } },
-    { label: 'RDP (3389)', rule: { direction: 'in', action: 'accept', protocol: 'tcp', ports: '3389' } },
-    { label: 'Ping', rule: { direction: 'in', action: 'accept', protocol: 'icmp' } },
+    { label: t('SSH (22)'), rule: { direction: 'in', action: 'accept', protocol: 'tcp', ports: '22' } },
+    { label: t('Web (80, 443)'), rule: { direction: 'in', action: 'accept', protocol: 'tcp', ports: '80' } },
+    { label: t('RDP (3389)'), rule: { direction: 'in', action: 'accept', protocol: 'tcp', ports: '3389' } },
+    { label: t('Ping'), rule: { direction: 'in', action: 'accept', protocol: 'icmp' } },
   ]
 
   function add(r?: FirewallRule) {
@@ -66,12 +67,12 @@
       const res = await ent.saveFirewall(uuid, clean)
       toasts.push({
         kind: res.liveError ? 'warn' : 'info',
-        title: fw.enabled ? `Firewall of ${name} saved` : `Firewall of ${name} off`,
-        detail: res.liveError ?? (active ? 'In effect now.' : 'In effect from the next start.'),
+        title: fw.enabled ? t('Firewall of {name} saved', { name: name }) : t('Firewall of {name} off', { name: name }),
+        detail: res.liveError ?? (active ? 'In effect now.' : t('In effect from the next start.')),
       })
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Not saved', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Not saved'), detail: errorText(e) })
     } finally {
       saving = false
     }
@@ -82,65 +83,65 @@
 {#if error}
   <div class="ui-error-box">{error}</div>
 {:else if !fw}
-  <p class="muted">Reading the firewall…</p>
+  <p class="muted">{t('Reading the firewall…')}</p>
 {:else}
   <section class="ui-panel fw">
     <header>
-      <h2><Shield size={16} /> Firewall</h2>
+      <h2><Shield size={16} /> {t('Firewall')}</h2>
       <label class="ui-switch"><input type="checkbox" bind:checked={fw.enabled} onchange={() => (dirty = true)} disabled={!admin} /> {fw.enabled ? 'On' : 'Off'}</label>
     </header>
-    <p class="muted">Enforced on the host; the first matching rule wins. A rule without an address applies to IPv4 and IPv6.</p>
+    <p class="muted">{t('Enforced on the host; the first matching rule wins. A rule without an address applies to IPv4 and IPv6.')}</p>
     {#if fw.enabled && !fw.rules.length && fw.defaultIn === 'accept' && fw.defaultOut === 'accept'}
-      <p class="warn">On, but with no rules and both defaults on Allow it blocks nothing.</p>
+      <p class="warn">{t('On, but with no rules and both defaults on Allow it blocks nothing.')}</p>
     {:else if fw.enabled && fw.defaultOut === 'drop' && !fw.rules.some((r) => r.direction === 'out' && r.action === 'accept')}
-      <p class="warn">Outgoing is blocked with no exception: the machine gets no DHCP lease, DNS or updates.</p>
+      <p class="warn">{t('Outgoing is blocked with no exception: the machine gets no DHCP lease, DNS or updates.')}</p>
     {/if}
-    {#if fw.adapters?.length === 0}<div class="ui-error-box">This machine has no adapter the firewall can apply to.</div>{/if}
-    {#if fw.unsupported?.length}<p class="warn">Not covered: {fw.unsupported.join(', ')} (macvtap/direct or passthrough adapters bypass host filters).</p>{/if}
+    {#if fw.adapters?.length === 0}<div class="ui-error-box">{t('This machine has no adapter the firewall can apply to.')}</div>{/if}
+    {#if fw.unsupported?.length}<p class="warn">{t('Not covered: {v} (macvtap/direct or passthrough adapters bypass host filters).', { v: fw.unsupported.join(', ') })}</p>{/if}
 
     {#if fw.enabled}
       <div class="defaults">
-        <label class="ui-field"><span class="label">Incoming, when no rule matches</span>
-          <select class="ui-input" bind:value={fw.defaultIn} onchange={() => (dirty = true)} disabled={!admin}><option value="accept">Allow</option><option value="drop">Block</option></select></label>
-        <label class="ui-field"><span class="label">Outgoing, when no rule matches</span>
-          <select class="ui-input" bind:value={fw.defaultOut} onchange={() => (dirty = true)} disabled={!admin}><option value="accept">Allow</option><option value="drop">Block</option></select></label>
-        <label class="ui-switch"><input type="checkbox" bind:checked={fw.antiSpoof} onchange={() => (dirty = true)} disabled={!admin} /> Anti-spoofing: only its own MAC and IP (libvirt clean-traffic)</label>
+        <label class="ui-field"><span class="label">{t('Incoming, when no rule matches')}</span>
+          <select class="ui-input" bind:value={fw.defaultIn} onchange={() => (dirty = true)} disabled={!admin}><option value="accept">{t('Allow')}</option><option value="drop">{t('Block')}</option></select></label>
+        <label class="ui-field"><span class="label">{t('Outgoing, when no rule matches')}</span>
+          <select class="ui-input" bind:value={fw.defaultOut} onchange={() => (dirty = true)} disabled={!admin}><option value="accept">{t('Allow')}</option><option value="drop">{t('Block')}</option></select></label>
+        <label class="ui-switch"><input type="checkbox" bind:checked={fw.antiSpoof} onchange={() => (dirty = true)} disabled={!admin} /> {t('Anti-spoofing: only its own MAC and IP (libvirt clean-traffic)')}</label>
       </div>
 
       <table class="t">
-        <thead><tr><th></th><th>Direction</th><th>Action</th><th>Protocol</th><th>Port(s)</th><th>Remote address</th><th>Comment</th><th></th></tr></thead>
+        <thead><tr><th></th><th>{t('Direction')}</th><th>{t('Action')}</th><th>{t('Protocol')}</th><th>{t('Port(s)')}</th><th>{t('Remote address')}</th><th>{t('Comment')}</th><th></th></tr></thead>
         <tbody>
           {#each fw.rules as r, i (i)}
             <tr>
               <td class="mono muted">{i + 1}</td>
-              <td><select class="ui-input" bind:value={r.direction} onchange={() => (dirty = true)} disabled={!admin}><option value="in">In</option><option value="out">Out</option></select></td>
-              <td><select class="ui-input act {r.action}" bind:value={r.action} onchange={() => (dirty = true)} disabled={!admin}><option value="accept">Allow</option><option value="drop">Drop</option><option value="reject">Reject</option></select></td>
-              <td><select class="ui-input" bind:value={r.protocol} onchange={() => (dirty = true)} disabled={!admin}><option value="tcp">TCP</option><option value="udp">UDP</option><option value="icmp">ICMP</option><option value="all">Any</option></select></td>
+              <td><select class="ui-input" bind:value={r.direction} onchange={() => (dirty = true)} disabled={!admin}><option value="in">{t('In')}</option><option value="out">{t('Out')}</option></select></td>
+              <td><select class="ui-input act {r.action}" bind:value={r.action} onchange={() => (dirty = true)} disabled={!admin}><option value="accept">{t('Allow')}</option><option value="drop">{t('Drop')}</option><option value="reject">{t('Reject')}</option></select></td>
+              <td><select class="ui-input" bind:value={r.protocol} onchange={() => (dirty = true)} disabled={!admin}><option value="tcp">{t('TCP')}</option><option value="udp">{t('UDP')}</option><option value="icmp">{t('ICMP')}</option><option value="all">{t('Any')}</option></select></td>
               <td><input class="ui-input mono" placeholder={r.protocol === 'tcp' || r.protocol === 'udp' ? 'any' : '—'} disabled={!admin || (r.protocol !== 'tcp' && r.protocol !== 'udp')} bind:value={r.ports} oninput={() => (dirty = true)} /></td>
-              <td><input class="ui-input mono" placeholder="anyone (or 10.0.0.0/8, 2001:db8::/32)" bind:value={r.remote} oninput={() => (dirty = true)} disabled={!admin} /></td>
+              <td><input class="ui-input mono" placeholder={t('anyone (or 10.0.0.0/8, 2001:db8::/32)')} bind:value={r.remote} oninput={() => (dirty = true)} disabled={!admin} /></td>
               <td><input class="ui-input" bind:value={r.comment} oninput={() => (dirty = true)} disabled={!admin} /></td>
               <td class="row-acts">{#if admin}
-                <button class="ui-btn sm ghost" title="Up" onclick={() => move(i, -1)}><ArrowUp size={12} /></button>
-                <button class="ui-btn sm ghost" title="Down" onclick={() => move(i, 1)}><ArrowDown size={12} /></button>
-                <button class="ui-btn sm ghost" title="Remove" onclick={() => del(i)}><Trash size={12} /></button>
+                <button class="ui-btn sm ghost" title={t('Up')} onclick={() => move(i, -1)}><ArrowUp size={12} /></button>
+                <button class="ui-btn sm ghost" title={t('Down')} onclick={() => move(i, 1)}><ArrowDown size={12} /></button>
+                <button class="ui-btn sm ghost" title={t('Remove')} onclick={() => del(i)}><Trash size={12} /></button>
               {/if}</td>
             </tr>
           {:else}
-            <tr><td colspan="8" class="muted">No rules: only the defaults above apply.</td></tr>
+            <tr><td colspan="8" class="muted">{t('No rules: only the defaults above apply.')}</td></tr>
           {/each}
         </tbody>
       </table>
       {#if admin}
         <div class="adds">
-          <button class="ui-btn sm" onclick={() => add()}><Plus size={13} /> Rule</button>
+          <button class="ui-btn sm" onclick={() => add()}><Plus size={13} /> {t('Rule')}</button>
           {#each PRESETS as p (p.label)}<button class="ui-btn sm ghost" onclick={() => add(p.rule)}>+ {p.label}</button>{/each}
         </div>
       {/if}
     {/if}
     {#if admin}
       <footer>
-        <button class="ui-btn primary" disabled={!dirty || saving} onclick={save}><Save size={14} /> {saving ? 'Saving…' : 'Save firewall'}</button>
-        {#if dirty}<button class="ui-btn ghost" onclick={load}>Discard</button>{/if}
+        <button class="ui-btn primary" disabled={!dirty || saving} onclick={save}><Save size={14} /> {saving ? 'Saving…' : t('Save firewall')}</button>
+        {#if dirty}<button class="ui-btn ghost" onclick={load}>{t('Discard')}</button>{/if}
       </footer>
     {/if}
   </section>

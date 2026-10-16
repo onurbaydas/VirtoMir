@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Admins: sign-in with LDAP and OpenID Connect (ADR-0023). Local accounts always keep
   // working, so a wrong setting here can never lock anyone out.
   import Network from '@lucide/svelte/icons/network'
@@ -41,7 +42,7 @@
       const r = await api.saveSigninConfig($state.snapshot(cfg) as SigninConfig)
       cfg = r.config
       saved = JSON.stringify(r.config)
-      toasts.push({ kind: 'info', title: 'Sign-in settings saved' })
+      toasts.push({ kind: 'info', title: t('Sign-in settings saved') })
     } catch (e) {
       error = errorText(e)
     } finally {
@@ -54,40 +55,40 @@
   <!-- -auth none: nothing to configure -->
 {:else if cfg}
   <section class="ui-panel card">
-    <h2>Sign-in</h2>
-    <p class="hint">Besides accounts on this host (always on), people can sign in with your directory. They appear as <span class="mono">name@ldap</span> or <span class="mono">name@sso</span>; their role comes from their groups.</p>
+    <h2>{t('Sign-in')}</h2>
+    <p class="hint">{t('Besides accounts on this host (always on), people can sign in with your directory. They appear as')} <span class="mono">{t('name@ldap')}</span> {t('or')} <span class="mono">{t('name@sso')}</span>{t('; their role comes from their groups.')}</p>
 
     <div class="block">
-      <label class="ui-switch head"><input type="checkbox" bind:checked={cfg.ldap.enabled} /> <Network size={15} /> <b>LDAP / Active Directory</b></label>
+      <label class="ui-switch head"><input type="checkbox" bind:checked={cfg.ldap.enabled} /> <Network size={15} /> <b>{t('LDAP / Active Directory')}</b></label>
       {#if cfg.ldap.enabled}
         <div class="grid2">
-          <label class="ui-field"><span class="label">Server</span><input class="ui-input mono" bind:value={cfg.ldap.url} placeholder="ldaps://dc1.example.com" /></label>
+          <label class="ui-field"><span class="label">{t('Server')}</span><input class="ui-input mono" bind:value={cfg.ldap.url} placeholder={t('ldaps://dc1.example.com')} /></label>
           <div class="checks">
-            <label class="ui-switch"><input type="checkbox" bind:checked={cfg.ldap.startTLS} /> StartTLS (for ldap://)</label>
-            <label class="ui-switch"><input type="checkbox" bind:checked={cfg.ldap.insecureSkipVerify} /> Accept a self-signed certificate</label>
+            <label class="ui-switch"><input type="checkbox" bind:checked={cfg.ldap.startTLS} /> {t('StartTLS (for ldap://)')}</label>
+            <label class="ui-switch"><input type="checkbox" bind:checked={cfg.ldap.insecureSkipVerify} /> {t('Accept a self-signed certificate')}</label>
           </div>
-          <label class="ui-field"><span class="label">Search as (bind DN)</span><input class="ui-input mono" bind:value={cfg.ldap.bindDN} placeholder="cn=virtomir,ou=services,dc=example,dc=com" /></label>
-          <label class="ui-field"><span class="label">Its password</span><input class="ui-input mono" type="password" bind:value={cfg.ldap.bindPassword} autocomplete="off" /></label>
-          <label class="ui-field"><span class="label">Users under</span><input class="ui-input mono" bind:value={cfg.ldap.userBase} placeholder="ou=people,dc=example,dc=com" /></label>
-          <label class="ui-field"><span class="label">User filter</span><input class="ui-input mono" bind:value={cfg.ldap.userFilter} placeholder="(uid=%s) or (sAMAccountName=%s)" /></label>
-          <label class="ui-field"><span class="label">Groups attribute</span><input class="ui-input mono" bind:value={cfg.ldap.groupAttr} placeholder="memberOf" /></label>
+          <label class="ui-field"><span class="label">{t('Search as (bind DN)')}</span><input class="ui-input mono" bind:value={cfg.ldap.bindDN} placeholder={t('cn=virtomir,ou=services,dc=example,dc=com')} /></label>
+          <label class="ui-field"><span class="label">{t('Its password')}</span><input class="ui-input mono" type="password" bind:value={cfg.ldap.bindPassword} autocomplete="off" /></label>
+          <label class="ui-field"><span class="label">{t('Users under')}</span><input class="ui-input mono" bind:value={cfg.ldap.userBase} placeholder={t('ou=people,dc=example,dc=com')} /></label>
+          <label class="ui-field"><span class="label">{t('User filter')}</span><input class="ui-input mono" bind:value={cfg.ldap.userFilter} placeholder={t('(uid=%s) or (sAMAccountName=%s)')} /></label>
+          <label class="ui-field"><span class="label">{t('Groups attribute')}</span><input class="ui-input mono" bind:value={cfg.ldap.groupAttr} placeholder={t('memberOf')} /></label>
         </div>
         {@render roles(cfg.ldap.roles)}
       {/if}
     </div>
 
     <div class="block">
-      <label class="ui-switch head"><input type="checkbox" bind:checked={cfg.oidc.enabled} /> <KeyRound size={15} /> <b>Single sign-on (OpenID Connect)</b></label>
+      <label class="ui-switch head"><input type="checkbox" bind:checked={cfg.oidc.enabled} /> <KeyRound size={15} /> <b>{t('Single sign-on (OpenID Connect)')}</b></label>
       {#if cfg.oidc.enabled}
-        <p class="hint">Register VirtoMir at your provider (Keycloak, Authentik, Entra ID, Google…) with this redirect URL:
-          <button class="link mono" onclick={() => copy(redirectUrl, 'Redirect URL')}>{redirectUrl}</button></p>
+        <p class="hint">{t('Register VirtoMir at your provider (Keycloak, Authentik, Entra ID, Google…) with this redirect URL:')}
+          <button class="link mono" onclick={() => copy(redirectUrl, t('Redirect URL'))}>{redirectUrl}</button></p>
         <div class="grid2">
-          <label class="ui-field"><span class="label">Issuer</span><input class="ui-input mono" bind:value={cfg.oidc.issuer} placeholder="https://idp.example.com/realms/main" /></label>
-          <label class="ui-field"><span class="label">Button text</span><input class="ui-input" bind:value={cfg.oidc.label} /></label>
-          <label class="ui-field"><span class="label">Client ID</span><input class="ui-input mono" bind:value={cfg.oidc.clientId} placeholder="virtomir" /></label>
-          <label class="ui-field"><span class="label">Client secret</span><input class="ui-input mono" type="password" bind:value={cfg.oidc.clientSecret} autocomplete="off" /></label>
-          <label class="ui-field"><span class="label">User name claim</span><input class="ui-input mono" bind:value={cfg.oidc.usernameClaim} placeholder="preferred_username" /></label>
-          <label class="ui-field"><span class="label">Groups claim</span><input class="ui-input mono" bind:value={cfg.oidc.groupsClaim} placeholder="groups" /></label>
+          <label class="ui-field"><span class="label">{t('Issuer')}</span><input class="ui-input mono" bind:value={cfg.oidc.issuer} placeholder={t('https://idp.example.com/realms/main')} /></label>
+          <label class="ui-field"><span class="label">{t('Button text')}</span><input class="ui-input" bind:value={cfg.oidc.label} /></label>
+          <label class="ui-field"><span class="label">{t('Client ID')}</span><input class="ui-input mono" bind:value={cfg.oidc.clientId} placeholder={t('virtomir')} /></label>
+          <label class="ui-field"><span class="label">{t('Client secret')}</span><input class="ui-input mono" type="password" bind:value={cfg.oidc.clientSecret} autocomplete="off" /></label>
+          <label class="ui-field"><span class="label">{t('User name claim')}</span><input class="ui-input mono" bind:value={cfg.oidc.usernameClaim} placeholder={t('preferred_username')} /></label>
+          <label class="ui-field"><span class="label">{t('Groups claim')}</span><input class="ui-input mono" bind:value={cfg.oidc.groupsClaim} placeholder={t('groups')} /></label>
         </div>
         {@render roles(cfg.oidc.roles)}
       {/if}

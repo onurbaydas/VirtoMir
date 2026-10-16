@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // An abstract-expressionist panel (ADR-0038): stacked colour fields with torn, brushed
   // edges (after Rothko) crossed by black gestural strokes and drips (after Kline and
   // Pollock). Pure SVG — the roughness comes from turbulence displacement filters.

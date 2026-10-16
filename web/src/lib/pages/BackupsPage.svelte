@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import Archive from '@lucide/svelte/icons/archive'
   import FolderCog from '@lucide/svelte/icons/folder-cog'
   import { api, errorText, type BackupInfo } from '../api'
@@ -78,43 +79,43 @@
         dir = target
         toasts.push({
           kind: failed.length ? 'warn' : 'info',
-          title: failed.length ? `Saved on ${res.length - failed.length} of ${res.length} hosts` : 'Backup location saved on every host',
-          detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') || 'New backups go there; existing ones stay where they are.',
+          title: failed.length ? t('Saved on {v} of {length} hosts', { v: res.length - failed.length, length: res.length }) : t('Backup location saved on every host'),
+          detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') || t('New backups go there; existing ones stay where they are.'),
         })
       } else {
         const r = await api.saveBackupSettings(target)
         dir = r.backupDir
-        toasts.push({ kind: 'info', title: 'Backup location saved', detail: 'New backups go there; existing ones stay where they are.' })
+        toasts.push({ kind: 'info', title: t('Backup location saved'), detail: t('New backups go there; existing ones stay where they are.') })
       }
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Not saved', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Not saved'), detail: errorText(e) })
     }
   }
 </script>
 
-<svelte:head><title>Backups · VirtoMir</title></svelte:head>
+<svelte:head><title>{t('Backups · VirtoMir')}</title></svelte:head>
 
 <header class="page-head">
   <div>
-    <h1>Backups</h1>
-    <p class="lead">Full copies of machines, safe from the disks they came from. Turn on automatic backups on each machine's Backups tab.</p>
+    <h1>{t('Backups')}</h1>
+    <p class="lead">{t('Full copies of machines, safe from the disks they came from. Turn on automatic backups on each machine\'s Backups tab.')}</p>
   </div>
 </header>
 
 <section class="ui-panel card loc">
   <FolderCog size={18} />
   <div class="loc-text">
-    <span class="label">Backup location{cluster.clustered && cluster.current ? ` on ${cluster.current.name}` : ""}</span>
+    <span class="label">{t('Backup location{v}', { v: cluster.clustered && cluster.current ? ` on ${cluster.current.name}` : "" })}</span>
     {#if session.can('admin')}
       <div class="loc-edit">
-        <input class="ui-input mono" bind:value={newDir} aria-label="Backup location" />
-        <button class="ui-btn" disabled={!newDir.trim() || (newDir.trim() === dir && !(cluster.clustered && dirEverywhere))} onclick={saveDir}>Save</button>
+        <input class="ui-input mono" bind:value={newDir} aria-label={t('Backup location')} />
+        <button class="ui-btn" disabled={!newDir.trim() || (newDir.trim() === dir && !(cluster.clustered && dirEverywhere))} onclick={saveDir}>{t('Save')}</button>
       </div>
       {#if cluster.clustered}
-        <label class="everywhere"><input type="checkbox" bind:checked={dirEverywhere} /> Use this location on every host (e.g. each host's own folder on a shared NFS mount)</label>
+        <label class="everywhere"><input type="checkbox" bind:checked={dirEverywhere} /> {t('Use this location on every host (e.g. each host\'s own folder on a shared NFS mount)')}</label>
       {/if}
-      <span class="hint">Ideally another disk or an NFS mount — a backup on the same disk does not survive that disk.</span>
+      <span class="hint">{t('Ideally another disk or an NFS mount — a backup on the same disk does not survive that disk.')}</span>
     {:else}
       <span class="mono">{dir}</span>
     {/if}
@@ -130,12 +131,12 @@
 {#if error}
   <div class="ui-error-box">{error}</div>
 {:else if backups === null}
-  <p class="muted">Loading…</p>
+  <p class="muted">{t('Loading…')}</p>
 {:else if backups.length === 0}
   <div class="empty ui-panel">
     <Archive size={28} strokeWidth={1.5} />
-    <strong>No backups yet</strong>
-    <span>Open a machine, go to Backups and press "Back up now" — or turn on automatic backups.</span>
+    <strong>{t('No backups yet')}</strong>
+    <span>{t('Open a machine, go to Backups and press "Back up now" — or turn on automatic backups.')}</span>
   </div>
 {:else}
   {#each groups as g (g.key)}
@@ -157,7 +158,7 @@
         {:else if exists(g.uuid)}
           <a href={machineHref(g.uuid, 'backups')} onclick={router.link}>{g.name}</a>
         {:else}
-          <span>{g.name} <span class="gone">(machine deleted)</span></span>
+          <span>{g.name} <span class="gone">{t('(machine deleted)')}</span></span>
         {/if}
         <span class="hint">{g.list.length} · {formatBytes(g.size)}</span>
       </header>

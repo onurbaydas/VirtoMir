@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, lang, LANGS, setLang } from '../i18n.svelte'
   import Server from '@lucide/svelte/icons/server'
   import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard'
   import Sun from '@lucide/svelte/icons/sun'
@@ -30,26 +31,26 @@
   const STATUS_TEXT: Record<Status, string> = {
     up: 'Connected',
     degraded: 'libvirt unreachable',
-    down: 'VirtoMir unreachable',
+    down: t('VirtoMir unreachable'),
     pending: 'Connecting…',
   }
 
   const ALL_NAV = [
-    { name: 'overview', href: '/', label: 'Overview', icon: LayoutDashboard, role: 'viewer' },
-    { name: 'machines', href: '/machines', label: 'Machines', icon: Boxes, role: 'viewer' },
-    { name: 'storage', href: '/storage', label: 'Storage', icon: HardDrive, role: 'viewer' },
-    { name: 'networks', href: '/networks', label: 'Networks', icon: Network, role: 'viewer' },
-    { name: 'hardware', href: '/hardware', label: 'Hardware', icon: CircuitBoard, role: 'viewer' },
-    { name: 'backups', href: '/backups', label: 'Backups', icon: Archive, role: 'viewer' },
-    { name: 'alerts', href: '/alerts', label: 'Alerts', icon: Bell, role: 'viewer' },
-    { name: 'activity', href: '/activity', label: 'Activity', icon: ClockArrowUp, role: 'admin' },
-    { name: 'reports', href: '/reports', label: 'Reports', icon: FileText, role: 'viewer' },
+    { name: 'overview', href: '/', label: t('Overview'), icon: LayoutDashboard, role: 'viewer' },
+    { name: 'machines', href: '/machines', label: t('Machines'), icon: Boxes, role: 'viewer' },
+    { name: 'storage', href: '/storage', label: t('Storage'), icon: HardDrive, role: 'viewer' },
+    { name: 'networks', href: '/networks', label: t('Networks'), icon: Network, role: 'viewer' },
+    { name: 'hardware', href: '/hardware', label: t('Hardware'), icon: CircuitBoard, role: 'viewer' },
+    { name: 'backups', href: '/backups', label: t('Backups'), icon: Archive, role: 'viewer' },
+    { name: 'alerts', href: '/alerts', label: t('Alerts'), icon: Bell, role: 'viewer' },
+    { name: 'activity', href: '/activity', label: t('Activity'), icon: ClockArrowUp, role: 'admin' },
+    { name: 'reports', href: '/reports', label: t('Reports'), icon: FileText, role: 'viewer' },
   ] as const
   // Cluster: admins always (that is where hosts are added), others once there is one.
   let NAV = $derived([
     ...ALL_NAV.filter((n) => session.can(n.role)),
     ...(session.can('admin') || cluster.clustered
-      ? [{ name: 'cluster', href: '/cluster', label: 'Cluster', icon: Server, role: 'viewer' } as const]
+      ? [{ name: 'cluster', href: '/cluster', label: t('Cluster'), icon: Server, role: 'viewer' } as const]
       : []),
   ])
 
@@ -62,19 +63,19 @@
 
 
   const THEMES: { key: ThemePref; icon: typeof Sun; label: string }[] = [
-    { key: 'light', icon: Sun, label: 'Light' },
-    { key: 'system', icon: MonitorCog, label: 'Match system' },
-    { key: 'dark', icon: Moon, label: 'Dark' },
+    { key: 'light', icon: Sun, label: t('Light') },
+    { key: 'system', icon: MonitorCog, label: t('Match system') },
+    { key: 'dark', icon: Moon, label: t('Dark') },
   ]
 </script>
 
 <header class="mobile">
   <a class="m-brand" href="/" onclick={router.link}><img src="/favicon.svg" alt="VirtoMir" width="22" height="22" /></a>
-  <nav class="m-nav" aria-label="Main">
+  <nav class="m-nav" aria-label={t('Main')}>
     {#each NAV as n (n.name)}
       <a class:active={router.route.name === n.name} href={router.scoped(n.href)} onclick={router.link}>{n.label}</a>
     {/each}
-    <a class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} aria-label="New machine"><Plus size={16} /></a>
+    <a class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} aria-label={t('New machine')}><Plus size={16} /></a>
   </nav>
 </header>
 
@@ -88,18 +89,18 @@
     <span class="host-dot {status}" title={STATUS_TEXT[status]}></span>
     <div class="host-text">
       <span class="host-name">{(cluster.clustered ? cluster.current?.name : null) ?? live.host?.hostname?.split('.')[0] ?? '…'}</span>
-      <span class="host-status">{status === 'up' ? (cluster.clustered ? `${cluster.members.length} hosts in cluster` : 'Connected') : STATUS_TEXT[status]}</span>
+      <span class="host-status">{status === 'up' ? (cluster.clustered ? t('{length} hosts in cluster', { length: cluster.members.length }) : 'Connected') : STATUS_TEXT[status]}</span>
     </div>
   </div>
   {#if cluster.clustered}
-    <div class="hosts" role="radiogroup" aria-label="Shown host">
+    <div class="hosts" role="radiogroup" aria-label={t('Shown host')}>
       {#each cluster.members.filter((m) => m.id !== cluster.current?.id) as m (m.id)}
         <button
           class="item other-host"
           role="radio"
           aria-checked="false"
           disabled={!m.reachable}
-          title={m.reachable ? `Show ${m.name}` : (m.error ?? 'Not reachable')}
+          title={m.reachable ? `Show ${m.name}` : (m.error ?? t('Not reachable'))}
           onclick={() => cluster.open(m.id)}
         >
           <span class="mdot" class:on={m.reachable} class:crashed={!m.reachable}></span>
@@ -109,7 +110,7 @@
     </div>
   {/if}
 
-  <nav aria-label="Main">
+  <nav aria-label={t('Main')}>
     {#each NAV as n (n.name)}
       {@const Icon = n.icon}
       <a
@@ -124,22 +125,22 @@
         {#if n.name === 'machines' && domains.length > 0}
           <span class="count">{domains.length}</span>
         {:else if n.name === 'alerts' && alerts.open > 0}
-          <span class="count alert" class:crit={alerts.critical} title="{alerts.open} unacknowledged">{alerts.open}</span>
+          <span class="count alert" class:crit={alerts.critical} title={t('{open} unacknowledged', { open: alerts.open })}>{alerts.open}</span>
         {/if}
       </a>
     {/each}
   </nav>
 
   <div class="section">
-    <span>Machines</span>
+    <span>{t('Machines')}</span>
     {#if session.canCreate}
-      <a class="add" class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} title="New machine" aria-label="New machine">
+      <a class="add" class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} title={t('New machine')} aria-label={t('New machine')}>
         <Plus size={14} />
       </a>
     {/if}
   </div>
   {#if domains.length > 6}
-    <input class="filter" type="search" bind:value={vmFilter} placeholder="Filter" spellcheck="false" aria-label="Filter machines" />
+    <input class="filter" type="search" bind:value={vmFilter} placeholder={t('Filter')} spellcheck="false" aria-label={t('Filter machines')} />
   {/if}
   <div class="machines">
     {#each filteredDomains as d (d.uuid)}
@@ -153,29 +154,34 @@
       >
         <span class="mdot" class:on={isActive(d.state)} class:paused={d.state === 'paused'} class:crashed={d.state === 'crashed'}></span>
         <span class="mname">{d.name}</span>
-        {#if d.template}<span class="tag">template</span>{/if}
+        {#if d.template}<span class="tag">{t('template')}</span>{/if}
       </a>
     {:else}
-      <span class="empty">No machines yet</span>
+      <span class="empty">{t('No machines yet')}</span>
     {/each}
   </div>
 
   <footer>
     {#if session.info}
-      <a class="who" class:active={router.route.name === 'account'} href="/account" onclick={router.link} title="Your account, API tokens and updates">
+      <a class="who" class:active={router.route.name === 'account'} href="/account" onclick={router.link} title={t('Your account, API tokens and updates')}>
         <span class="avatar"><UserRound size={14} /></span>
         <span class="uname">{session.info.user ?? 'dev mode'}<small>{session.role}</small></span>
       </a>
       {#if session.info.user}
-        <button class="icon" title="Sign out" aria-label="Sign out" onclick={() => session.logout()}><LogOut size={15} /></button>
+        <button class="icon" title={t('Sign out')} aria-label={t('Sign out')} onclick={() => session.logout()}><LogOut size={15} /></button>
       {/if}
     {/if}
-    <div class="themes" role="radiogroup" aria-label="Theme">
+    <div class="themes" role="radiogroup" aria-label={t('Theme')}>
       {#each THEMES as t (t.key)}
         {@const Icon = t.icon}
         <button role="radio" aria-checked={theme.pref === t.key} class:active={theme.pref === t.key} title={t.label} aria-label={t.label} onclick={() => theme.set(t.key)}>
           <Icon size={14} />
         </button>
+      {/each}
+    </div>
+    <div class="themes langs" role="radiogroup" aria-label="Language / Dil">
+      {#each LANGS as l (l.id)}
+        <button role="radio" aria-checked={lang === l.id} class:active={lang === l.id} title={l.label} onclick={() => lang !== l.id && setLang(l.id)}>{l.id.toUpperCase()}</button>
       {/each}
     </div>
   </footer>
@@ -425,6 +431,7 @@
   }
   footer {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
     padding: 8px 10px;
@@ -436,7 +443,7 @@
     flex: 1;
     align-items: center;
     gap: 8px;
-    min-width: 0;
+    min-width: 120px; /* the theme and language switches wrap below instead of squeezing the name */
     padding: 3px 4px;
     color: var(--text);
     text-decoration: none;
@@ -500,6 +507,13 @@
     background: none;
     color: var(--text-2);
     cursor: pointer;
+  }
+  .langs {
+    margin-left: auto;
+  }
+  .langs button {
+    width: 26px;
+    font: 600 10.5px var(--font-mono, monospace);
   }
   .themes button.active {
     background: var(--invert-bg);

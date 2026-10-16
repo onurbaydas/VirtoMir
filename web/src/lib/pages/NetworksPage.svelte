@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import ObjectXmlDialog from '../components/ObjectXmlDialog.svelte'
   import FileCode from '@lucide/svelte/icons/file-code'
   let xmlNet = $state<string | null>(null)
@@ -53,7 +54,7 @@
       await api.networkAction(n.name, action)
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: `Could not ${action} ${n.name}`, detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Could not {action} {name}', { action: action, name: n.name }), detail: errorText(e) })
     }
   }
   async function autostart(n: VNetwork, on: boolean) {
@@ -61,16 +62,16 @@
       await api.networkAutostart(n.name, on)
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Autostart not changed', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Autostart not changed'), detail: errorText(e) })
     }
   }
 
   const MODE: Record<string, { label: string; hint: string }> = {
-    nat: { label: 'NAT', hint: 'Machines reach the outside world through the host; they are not reachable from the LAN.' },
-    route: { label: 'Routed', hint: 'Machines get their own subnet, routed by the host (needs a route on your router).' },
-    open: { label: 'Open', hint: 'Routed without any firewall rules from libvirt.' },
-    isolated: { label: 'Isolated', hint: 'Machines only talk to each other and to the host.' },
-    bridge: { label: 'Bridged', hint: 'Machines join the physical LAN through a host bridge, like real computers.' },
+    nat: { label: t('NAT'), hint: t('Machines reach the outside world through the host; they are not reachable from the LAN.') },
+    route: { label: t('Routed'), hint: t('Machines get their own subnet, routed by the host (needs a route on your router).') },
+    open: { label: t('Open'), hint: t('Routed without any firewall rules from libvirt.') },
+    isolated: { label: t('Isolated'), hint: t('Machines only talk to each other and to the host.') },
+    bridge: { label: t('Bridged'), hint: t('Machines join the physical LAN through a host bridge, like real computers.') },
   }
   const modeLabel = (m: string) => MODE[m]?.label ?? m
   const netLine = (n: VNetwork) =>
@@ -133,12 +134,12 @@
         if (failed.length === res.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
         toasts.push({
           kind: failed.length ? 'warn' : 'info',
-          title: failed.length ? `${spec.name} created on ${res.length - failed.length} of ${res.length} hosts` : `${spec.name} created on every host`,
+          title: failed.length ? t('{name} created on {v} of {length} hosts', { name: spec.name, v: res.length - failed.length, length: res.length }) : t('{name} created on every host', { name: spec.name }),
           detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') || undefined,
         })
       } else {
         await api.createNetwork(body)
-        toasts.push({ kind: 'info', title: `Network ${spec.name} created` })
+        toasts.push({ kind: 'info', title: t('Network {name} created', { name: spec.name }) })
       }
       dlg = false
       await load()
@@ -170,7 +171,7 @@
     resErr = ''
     try {
       await api.addDHCPHost(resNet.name, { mac: resMAC.trim(), ip: resIP.trim(), name: resName.trim() || undefined })
-      toasts.push({ kind: 'info', title: `${resIP} reserved`, detail: 'The machine gets it the next time it renews its lease (or reboots).' })
+      toasts.push({ kind: 'info', title: `${resIP} reserved`, detail: t('The machine gets it the next time it renews its lease (or reboots).') })
       resNet = null
       await load()
     } catch (err) {
@@ -189,7 +190,7 @@
 
 <ObjectXmlDialog
   open={!!xmlNet}
-  title="Network {xmlNet ?? ''}"
+  title={t('Network {v}', { v: xmlNet ?? '' })}
   kind="network"
   load={() => api.networkXML(xmlNet!)}
   save={(x) => api.saveNetworkXML(xmlNet!, x)}
@@ -199,16 +200,16 @@
   }}
 />
 
-<svelte:head><title>Networks · VirtoMir</title></svelte:head>
+<svelte:head><title>{t('Networks · VirtoMir')}</title></svelte:head>
 
 <header class="page-head">
   <div>
-    <h1>Networks</h1>
-    <p class="lead">Virtual networks connect machines to each other, to the host and to the outside world.</p>
+    <h1>{t('Networks')}</h1>
+    <p class="lead">{t('Virtual networks connect machines to each other, to the host and to the outside world.')}</p>
   </div>
   <div class="head-right">
-    <button class="ui-btn" onclick={() => (snifferOpen = true)}><Radio size={14} /> Packet capture</button>
-    <button class="ui-btn primary" disabled={!session.can('admin')} title={session.why('admin')} onclick={openNew}><Plus size={15} /> New network</button>
+    <button class="ui-btn" onclick={() => (snifferOpen = true)}><Radio size={14} /> {t('Packet capture')}</button>
+    <button class="ui-btn primary" disabled={!session.can('admin')} title={session.why('admin')} onclick={openNew}><Plus size={15} /> {t('New network')}</button>
   </div>
 </header>
 
@@ -217,12 +218,12 @@
 {#if error}
   <div class="ui-error-box">{error}</div>
 {:else if nets === null}
-  <p class="muted">Loading…</p>
+  <p class="muted">{t('Loading…')}</p>
 {:else if nets.length === 0}
   <div class="empty ui-panel">
     <Network size={28} strokeWidth={1.5} />
-    <strong>No virtual networks</strong>
-    <span>Create a NAT network so machines can reach the internet.</span>
+    <strong>{t('No virtual networks')}</strong>
+    <span>{t('Create a NAT network so machines can reach the internet.')}</span>
   </div>
 {:else}
   <div class="list">
@@ -245,30 +246,30 @@
             <div class="controls" inert={!session.can('admin')} title={session.why('admin')}>
               <label class="ui-switch small">
                 <input type="checkbox" checked={n.autostart} disabled={!n.persistent} onchange={(e) => autostart(n, e.currentTarget.checked)} />
-                Start with the host
+                {t('Start with the host')}
               </label>
               <span class="spacer"></span>
-              <button class="ui-btn sm ghost" onclick={() => (xmlNet = n.name)}><FileCode size={14} /> XML</button>
+              <button class="ui-btn sm ghost" onclick={() => (xmlNet = n.name)}><FileCode size={14} /> {t('XML')}</button>
               {#if n.active}
                 <ConfirmButton
-                  label="Stop"
-                  confirm={n.usedBy.length ? 'Machines lose network — stop?' : 'Stop network?'}
+                  label={t('Stop')}
+                  confirm={n.usedBy.length ? 'Machines lose network — stop?' : t('Stop network?')}
                   icon={Square}
                   run={() => act(n, 'stop')}
                 />
               {:else}
-                <button class="ui-btn sm" onclick={() => act(n, 'start')}><Play size={14} /> Start</button>
+                <button class="ui-btn sm" onclick={() => act(n, 'start')}><Play size={14} /> {t('Start')}</button>
               {/if}
               <ConfirmButton
-                label="Delete"
-                confirm="Delete network?"
+                label={t('Delete')}
+                confirm={t('Delete network?')}
                 icon={Trash}
                 disabled={n.usedBy.length > 0}
-                title={n.usedBy.length ? 'Used by ' + n.usedBy.join(', ') : 'Delete this network'}
-                failure="Could not delete {n.name}"
+                title={n.usedBy.length ? 'Used by ' + n.usedBy.join(', ') : t('Delete this network')}
+                failure={t('Could not delete {name}', { name: n.name })}
                 run={async () => {
                   await api.deleteNetwork(n.name)
-                  toasts.push({ kind: 'info', title: `Network ${n.name} deleted` })
+                  toasts.push({ kind: 'info', title: t('Network {name} deleted', { name: n.name }) })
                   open = null
                   await load()
                 }}
@@ -277,7 +278,7 @@
 
             {#if n.usedBy.length}
               <div class="block">
-                <h3>Connected machines</h3>
+                <h3>{t('Connected machines')}</h3>
                 <div class="chips">{#each n.usedBy as m (m)}<span class="chip">{m}</span>{/each}</div>
               </div>
             {/if}
@@ -285,11 +286,11 @@
             {#if n.dhcpStart}
               <div class="block">
                 <div class="block-head">
-                  <h3>Reserved addresses</h3>
-                  <button class="ui-btn sm ghost" inert={!session.can('admin')} onclick={() => openReserve(n)}><Pin size={14} /> Reserve an address</button>
+                  <h3>{t('Reserved addresses')}</h3>
+                  <button class="ui-btn sm ghost" inert={!session.can('admin')} onclick={() => openReserve(n)}><Pin size={14} /> {t('Reserve an address')}</button>
                 </div>
                 {#if !n.dhcpHosts?.length}
-                  <p class="muted">None. Reserve one so a machine always gets the same IP.</p>
+                  <p class="muted">{t('None. Reserve one so a machine always gets the same IP.')}</p>
                 {:else}
                   <div class="leases" role="table">
                     {#each n.dhcpHosts as h (h.mac)}
@@ -299,9 +300,9 @@
                         <span class="mono muted" role="cell">{h.mac}</span>
                         <span role="cell" inert={!session.can('admin')}>
                           <ConfirmButton
-                            label="Remove"
-                            confirm="Remove?"
-                            failure="Could not remove the reservation"
+                            label={t('Remove')}
+                            confirm={t('Remove?')}
+                            failure={t('Could not remove the reservation')}
                             run={async () => {
                               await api.deleteDHCPHost(n.name, h.mac)
                               await load()
@@ -315,15 +316,15 @@
               </div>
 
               <div class="block">
-                <h3>DHCP leases</h3>
+                <h3>{t('DHCP leases')}</h3>
                 {#if !n.active}
-                  <p class="muted">Start the network to see leases.</p>
+                  <p class="muted">{t('Start the network to see leases.')}</p>
                 {:else if typeof leases[n.name] === 'string'}
                   <div class="ui-error-box">{leases[n.name]}</div>
                 {:else if !leases[n.name]}
-                  <p class="muted">Loading…</p>
+                  <p class="muted">{t('Loading…')}</p>
                 {:else if (leases[n.name] as Lease[]).length === 0}
-                  <p class="muted">No leases handed out right now.</p>
+                  <p class="muted">{t('No leases handed out right now.')}</p>
                 {:else}
                   <div class="leases" role="table">
                     {#each leases[n.name] as Lease[] as l (l.mac + l.ip)}
@@ -331,10 +332,10 @@
                         <span class="mono" role="cell">{l.ip}</span>
                         <span role="cell">{l.machine ?? l.hostname ?? '—'}</span>
                         <span class="mono muted" role="cell">{l.mac}</span>
-                        <span class="muted" role="cell" title="Lease expires in">
-                          {#if reserved(n, l.mac)}<span class="pinned"><Pin size={12} /> fixed</span>{:else}
+                        <span class="muted" role="cell" title={t('Lease expires in')}>
+                          {#if reserved(n, l.mac)}<span class="pinned"><Pin size={12} /> {t('fixed')}</span>{:else}
                             {expires(l.expires)}
-                            {#if session.can('admin')}<button class="pin" title="Always give this machine this address" onclick={() => openReserve(n, l)}><Pin size={13} /></button>{/if}
+                            {#if session.can('admin')}<button class="pin" title={t('Always give this machine this address')} onclick={() => openReserve(n, l)}><Pin size={13} /></button>{/if}
                           {/if}
                         </span>
                       </div>
@@ -353,38 +354,38 @@
 
 <PcapSnifferModal open={snifferOpen} onclose={() => (snifferOpen = false)} />
 
-<Dialog open={resNet !== null} title="Reserve an address on {resNet?.name ?? ''}" onclose={() => (resNet = null)}>
+<Dialog open={resNet !== null} title={t('Reserve an address on {v}', { v: resNet?.name ?? '' })} onclose={() => (resNet = null)}>
   <form id="res-form" class="form" onsubmit={reserve}>
     <label class="ui-field">
-      <span class="label">MAC address of the machine's adapter</span>
+      <span class="label">{t('MAC address of the machine\'s adapter')}</span>
       <input class="ui-input mono" bind:value={resMAC} placeholder="52:54:00:12:34:56" required />
     </label>
     <div class="two-col">
       <label class="ui-field">
-        <span class="label">IP address</span>
+        <span class="label">{t('IP address')}</span>
         <input class="ui-input mono" bind:value={resIP} placeholder={resNet?.subnet?.replace(/\.\d+\/\d+$/, '.50')} required />
       </label>
       <label class="ui-field">
-        <span class="label">Host name (optional)</span>
+        <span class="label">{t('Host name (optional)')}</span>
         <input class="ui-input" bind:value={resName} />
       </label>
     </div>
-    <span class="hint">Must be inside {resNet?.subnet ?? 'the subnet'}; addresses outside the DHCP range ({resNet?.dhcpStart} – {resNet?.dhcpEnd}) avoid clashes.</span>
+    <span class="hint">{t('Must be inside {v}; addresses outside the DHCP range ({dhcpStart} – {dhcpEnd}) avoid clashes.', { v: resNet?.subnet ?? 'the subnet', dhcpStart: resNet?.dhcpStart, dhcpEnd: resNet?.dhcpEnd })}</span>
     {#if resErr}<div class="ui-error-box">{resErr}</div>{/if}
   </form>
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={() => (resNet = null)}>Cancel</button>
+    <button class="ui-btn ghost" onclick={() => (resNet = null)}>{t('Cancel')}</button>
     <button class="ui-btn primary" form="res-form" disabled={resBusy}>{resBusy ? 'Saving…' : 'Reserve'}</button>
   {/snippet}
 </Dialog>
 
-<Dialog open={dlg} title="New network" onclose={() => (dlg = false)} width={520}>
+<Dialog open={dlg} title={t('New network')} onclose={() => (dlg = false)} width={520}>
   <form id="net-form" class="form" onsubmit={create}>
     <label class="ui-field">
-      <span class="label">Name</span>
-      <input class="ui-input" bind:value={spec.name} placeholder="lab" required pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" />
+      <span class="label">{t('Name')}</span>
+      <input class="ui-input" bind:value={spec.name} placeholder={t('lab')} required pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" />
     </label>
-    <div class="modes" role="radiogroup" aria-label="Network type">
+    <div class="modes" role="radiogroup" aria-label={t('Network type')}>
       {#each ['nat', 'isolated', 'route', 'bridge'] as m (m)}
         <label class="mode-opt" class:on={spec.mode === m}>
           <input type="radio" name="mode" value={m} bind:group={spec.mode} />
@@ -395,49 +396,49 @@
     </div>
     {#if spec.mode === 'bridge'}
       <label class="ui-field">
-        <span class="label">Host bridge</span>
+        <span class="label">{t('Host bridge')}</span>
         <input class="ui-input mono" bind:value={spec.bridge} placeholder="br0" required />
-        <span class="hint">The bridge must already exist on the host (e.g. created with NetworkManager, netplan or ovs-vsctl).</span>
+        <span class="hint">{t('The bridge must already exist on the host (e.g. created with NetworkManager, netplan or ovs-vsctl).')}</span>
       </label>
-      <label class="ui-switch"><input type="checkbox" bind:checked={spec.ovs} /> It is an Open vSwitch bridge</label>
+      <label class="ui-switch"><input type="checkbox" bind:checked={spec.ovs} /> {t('It is an Open vSwitch bridge')}</label>
       {#if spec.ovs}
         <label class="ui-field">
-          <span class="label">VLAN <span class="opt">(optional)</span></span>
-          <input class="ui-input mono" type="number" min="1" max="4094" bind:value={spec.vlan} placeholder="untagged" />
-          <span class="hint">Every machine on this network is put into that VLAN. Adapters can also get their own tag.</span>
+          <span class="label">{t('VLAN')} <span class="opt">{t('(optional)')}</span></span>
+          <input class="ui-input mono" type="number" min="1" max="4094" bind:value={spec.vlan} placeholder={t('untagged')} />
+          <span class="hint">{t('Every machine on this network is put into that VLAN. Adapters can also get their own tag.')}</span>
         </label>
       {:else}
-        <span class="hint">VLANs on a plain Linux bridge: create a bridge on the VLAN interface (e.g. br0.10) and use that.</span>
+        <span class="hint">{t('VLANs on a plain Linux bridge: create a bridge on the VLAN interface (e.g. br0.10) and use that.')}</span>
       {/if}
     {:else}
-      <label class="ui-switch"><input type="checkbox" bind:checked={withV4} /> IPv4</label>
+      <label class="ui-switch"><input type="checkbox" bind:checked={withV4} /> {t('IPv4')}</label>
       {#if withV4}
         <label class="ui-field">
-          <span class="label">Subnet</span>
+          <span class="label">{t('Subnet')}</span>
           <input class="ui-input mono" bind:value={spec.subnet} placeholder="192.168.100.0/24" required />
-          <span class="hint">The host becomes .1; with DHCP, machines get the rest.</span>
+          <span class="hint">{t('The host becomes .1; with DHCP, machines get the rest.')}</span>
         </label>
-        <label class="ui-switch"><input type="checkbox" bind:checked={spec.dhcp} /> Hand out addresses with DHCP</label>
+        <label class="ui-switch"><input type="checkbox" bind:checked={spec.dhcp} /> {t('Hand out addresses with DHCP')}</label>
       {/if}
-      <label class="ui-switch"><input type="checkbox" bind:checked={withV6} /> IPv6</label>
+      <label class="ui-switch"><input type="checkbox" bind:checked={withV6} /> {t('IPv6')}</label>
       {#if withV6}
         <label class="ui-field">
-          <span class="label">IPv6 subnet</span>
-          <input class="ui-input mono" bind:value={spec.subnet6} placeholder="fd12:3456:789a:1::/64" required />
-          <span class="hint">A /64. The host becomes ::1 and announces the prefix, so machines configure themselves (SLAAC){spec.mode === 'nat' ? '; their IPv6 traffic is translated to the host’s address (NAT66)' : ''}. A random private (fd…) prefix is filled in; use your own global prefix for routed networks.</span>
+          <span class="label">{t('IPv6 subnet')}</span>
+          <input class="ui-input mono" bind:value={spec.subnet6} placeholder={t('fd12:3456:789a:1::/64')} required />
+          <span class="hint">{t('A /64. The host becomes ::1 and announces the prefix, so machines configure themselves (SLAAC){v}. A random private (fd…) prefix is filled in; use your own global prefix for routed networks.', { v: spec.mode === 'nat' ? '; their IPv6 traffic is translated to the host’s address (NAT66)' : '' })}</span>
         </label>
-        <label class="ui-switch"><input type="checkbox" bind:checked={spec.dhcp6} /> Also hand out addresses with DHCPv6 (::100 – ::ffff)</label>
+        <label class="ui-switch"><input type="checkbox" bind:checked={spec.dhcp6} /> {t('Also hand out addresses with DHCPv6 (::100 – ::ffff)')}</label>
       {/if}
-      {#if !withV4 && !withV6}<div class="ui-error-box">Choose IPv4, IPv6 or both.</div>{/if}
+      {#if !withV4 && !withV6}<div class="ui-error-box">{t('Choose IPv4, IPv6 or both.')}</div>{/if}
     {/if}
     {#if cluster.clustered}
-      <label class="ui-switch"><input type="checkbox" bind:checked={everywhere} /> Create it on every host of the cluster (machines keep their network when they move)</label>
+      <label class="ui-switch"><input type="checkbox" bind:checked={everywhere} /> {t('Create it on every host of the cluster (machines keep their network when they move)')}</label>
     {/if}
     {#if formErr}<div class="ui-error-box">{formErr}</div>{/if}
   </form>
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={() => (dlg = false)}>Cancel</button>
-    <button class="ui-btn primary" form="net-form" disabled={busy}>{busy ? 'Creating…' : 'Create network'}</button>
+    <button class="ui-btn ghost" onclick={() => (dlg = false)}>{t('Cancel')}</button>
+    <button class="ui-btn primary" form="net-form" disabled={busy}>{busy ? 'Creating…' : t('Create network')}</button>
   {/snippet}
 </Dialog>
 

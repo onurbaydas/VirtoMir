@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // First-run setup (ADR-0045): what this host needs before the first machine, each with a
   // one-click fix. Reachable again from Account → "Run the setup again".
   import Check from '@lucide/svelte/icons/check'
@@ -50,7 +51,7 @@
       toasts.push({ kind: 'info', title: done })
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'That did not work', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('That did not work'), detail: errorText(e) })
     } finally {
       busy = ''
     }
@@ -62,7 +63,7 @@
     step('pool', async () => {
       const taken = new Set((await api.pools()).map((p) => p.name))
       await api.createPool({ name: taken.has('default') ? 'images' : 'default', path: poolPath.trim() })
-    }, 'Storage pool created')
+    }, t('Storage pool created'))
 
   const createNetwork = () =>
     step('network', async () => {
@@ -72,19 +73,19 @@
       while (used.has(`192.168.${x}`) && x < 250) x++
       const name = nets.some((n) => n.name === 'default') ? 'nat' : 'default'
       await api.createNetwork({ name, mode: 'nat', subnet: `192.168.${x}.0/24`, dhcp: true })
-    }, 'NAT network created')
+    }, t('NAT network created'))
 
-  const saveBackups = () => step('backups', () => api.saveBackupSettings(backupDir.trim()), 'Backup location saved')
+  const saveBackups = () => step('backups', () => api.saveBackupSettings(backupDir.trim()), t('Backup location saved'))
 
   // A first image: a cloud image boots in seconds with cloud-init (user, password, SSH key).
   let x86 = $derived(!/aarch64|arm/i.test(arch))
   let images = $derived([
     {
-      label: 'Debian 13 (trixie) cloud image',
+      label: t('Debian 13 (trixie) cloud image'),
       url: x86 ? 'https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2' : 'https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-arm64.qcow2',
     },
     {
-      label: 'Ubuntu 24.04 LTS cloud image',
+      label: t('Ubuntu 24.04 LTS cloud image'),
       url: x86 ? 'https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img' : 'https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img',
     },
   ])
@@ -95,7 +96,7 @@
       const job = await ent.download(imagePool, url, name, '')
       track(job, { success: `${name} is ready in ${imagePool}` })
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Download not started', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Download not started'), detail: errorText(e) })
     }
   }
 
@@ -109,21 +110,21 @@
   }
 </script>
 
-<svelte:head><title>Setup · VirtoMir</title></svelte:head>
+<svelte:head><title>{t('Setup · VirtoMir')}</title></svelte:head>
 
 <header class="page-head">
   <div>
-    <h1>Welcome to VirtoMir</h1>
-    <p class="lead">A few things this host needs before the first machine. Each can be fixed from here; you can also skip and do it later.</p>
+    <h1>{t('Welcome to VirtoMir')}</h1>
+    <p class="lead">{t('A few things this host needs before the first machine. Each can be fixed from here; you can also skip and do it later.')}</p>
   </div>
 </header>
 
 {#if !session.can('admin')}
-  <p class="muted">Only admins set up a host.</p>
+  <p class="muted">{t('Only admins set up a host.')}</p>
 {:else if error}
   <div class="ui-error-box">{error}</div>
 {:else if !checks}
-  <p class="muted">Looking at this host…</p>
+  <p class="muted">{t('Looking at this host…')}</p>
 {:else}
   <ol class="steps">
     {#each checks as c (c.id)}
@@ -136,21 +137,21 @@
           <span class="detail">{c.detail}</span>
           {#if c.id === 'pool' && !c.ok}
             <div class="fix">
-              <input class="ui-input mono" bind:value={poolPath} aria-label="Directory for disks and images" />
-              <button class="ui-btn primary" disabled={busy === 'pool'} onclick={createPool}>{busy === 'pool' ? 'Creating…' : 'Create pool'}</button>
+              <input class="ui-input mono" bind:value={poolPath} aria-label={t('Directory for disks and images')} />
+              <button class="ui-btn primary" disabled={busy === 'pool'} onclick={createPool}>{busy === 'pool' ? 'Creating…' : t('Create pool')}</button>
             </div>
           {:else if c.id === 'network' && !c.ok}
             <div class="fix">
-              <button class="ui-btn primary" disabled={busy === 'network'} onclick={createNetwork}>{busy === 'network' ? 'Creating…' : 'Create a NAT network'}</button>
-              <a class="ui-btn ghost" href="/networks" onclick={router.link}>Bridge to the LAN instead…</a>
+              <button class="ui-btn primary" disabled={busy === 'network'} onclick={createNetwork}>{busy === 'network' ? 'Creating…' : t('Create a NAT network')}</button>
+              <a class="ui-btn ghost" href="/networks" onclick={router.link}>{t('Bridge to the LAN instead…')}</a>
             </div>
           {:else if c.id === 'backups'}
             <div class="fix">
-              <input class="ui-input mono" bind:value={backupDir} aria-label="Backup location" />
-              <button class="ui-btn" disabled={busy === 'backups' || !backupDir.trim()} onclick={saveBackups}>Save</button>
+              <input class="ui-input mono" bind:value={backupDir} aria-label={t('Backup location')} />
+              <button class="ui-btn" disabled={busy === 'backups' || !backupDir.trim()} onclick={saveBackups}>{t('Save')}</button>
             </div>
           {:else if c.id === 'offsite' && c.ok}
-            <div class="fix"><a class="ui-btn ghost" href="/backups" onclick={router.link}>Set up off-site copies…</a></div>
+            <div class="fix"><a class="ui-btn ghost" href="/backups" onclick={router.link}>{t('Set up off-site copies…')}</a></div>
           {/if}
         </div>
       </li>
@@ -159,19 +160,19 @@
       <li class="ui-panel step">
         <span class="mark"><Info size={18} /></span>
         <div class="body">
-          <b>Something to start from</b>
-          <span class="detail">Download a cloud image into {imagePool} (the host fetches it; nothing passes through this browser), or upload an installer ISO on the Storage page.</span>
+          <b>{t('Something to start from')}</b>
+          <span class="detail">{t('Download a cloud image into {imagePool} (the host fetches it; nothing passes through this browser), or upload an installer ISO on the Storage page.', { imagePool: imagePool })}</span>
           <div class="fix">
             {#each images as img (img.url)}<button class="ui-btn" onclick={() => download(img.url)}>{img.label}</button>{/each}
-            <a class="ui-btn ghost" href="/storage" onclick={router.link}>Upload an ISO…</a>
+            <a class="ui-btn ghost" href="/storage" onclick={router.link}>{t('Upload an ISO…')}</a>
           </div>
         </div>
       </li>
     {/if}
   </ol>
   <div class="end">
-    <button class="ui-btn primary" disabled={!ready} title={ready ? '' : 'Fix the red items first'} onclick={() => finish('/machines/new')}>Create the first machine</button>
-    <button class="ui-btn ghost" onclick={() => finish('/')}>{ready ? 'Done' : 'Skip for now'}</button>
+    <button class="ui-btn primary" disabled={!ready} title={ready ? '' : t('Fix the red items first')} onclick={() => finish('/machines/new')}>{t('Create the first machine')}</button>
+    <button class="ui-btn ghost" onclick={() => finish('/')}>{ready ? 'Done' : t('Skip for now')}</button>
   </div>
 {/if}
 

@@ -4,18 +4,19 @@
 </script>
 
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   let { value = $bindable(), live = true }: { value: Range; live?: boolean } = $props()
   const OPTIONS: { key: Range; label: string; title: string }[] = [
-    { key: 'live', label: 'Live', title: 'Last minute, every second' },
-    { key: '1h', label: '1h', title: 'Last hour (10 s steps)' },
-    { key: '6h', label: '6h', title: 'Last 6 hours (10 s steps)' },
-    { key: '24h', label: '24h', title: 'Last day (1 min steps)' },
-    { key: '7d', label: '7d', title: 'Last week (10 min steps)' },
-    { key: '30d', label: '30d', title: 'Last month (1 h steps)' },
+    { key: 'live', label: t('Live'), title: t('Last minute, every second') },
+    { key: '1h', label: '1h', title: t('Last hour (10 s steps)') },
+    { key: '6h', label: '6h', title: t('Last 6 hours (10 s steps)') },
+    { key: '24h', label: '24h', title: t('Last day (1 min steps)') },
+    { key: '7d', label: '7d', title: t('Last week (10 min steps)') },
+    { key: '30d', label: '30d', title: t('Last month (1 h steps)') },
   ]
 </script>
 
-<div class="tabs" role="radiogroup" aria-label="Time range">
+<div class="tabs" role="radiogroup" aria-label={t('Time range')}>
   {#each OPTIONS.filter((o) => live || o.key !== 'live') as o (o.key)}
     <button role="radio" aria-checked={value === o.key} class:on={value === o.key} title={o.title} onclick={() => (value = o.key)}>
       {o.label}

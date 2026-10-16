@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Every saved version of the machine's definition (ADR-0021): who changed what, when —
   // including changes made outside VirtoMir — and one click to go back to any of them.
   import History from '@lucide/svelte/icons/history'
@@ -54,7 +55,7 @@
     const r = await api.revertConfig(uuid, v.id)
     toasts.push({
       kind: 'info',
-      title: 'Earlier version restored',
+      title: t('Earlier version restored'),
       detail: r.appliesOnNextBoot ? 'The machine is running: it uses the restored definition from its next start.' : undefined,
     })
     onchange()
@@ -71,20 +72,20 @@
 {#if error}
   <div class="ui-error-box">{error}</div>
 {:else if versions === null}
-  <p class="muted">Loading…</p>
+  <p class="muted">{t('Loading…')}</p>
 {:else if versions.length === 0}
   <div class="empty ui-panel">
     <History size={28} strokeWidth={1.5} />
-    <strong>No versions yet</strong>
-    <span>VirtoMir saves the definition whenever it changes; the first one appears within a minute.</span>
+    <strong>{t('No versions yet')}</strong>
+    <span>{t('VirtoMir saves the definition whenever it changes; the first one appears within a minute.')}</span>
   </div>
 {:else}
   <div class="layout">
-    <ol class="ui-panel list" aria-label="Versions">
+    <ol class="ui-panel list" aria-label={t('Versions')}>
       {#each versions as v, i (v.id)}
         <li>
           <button class:on={selected === v.id} onclick={() => (selected = v.id)}>
-            <span class="t">{when(v.time)} {#if i === 0}<span class="cur">current</span>{/if}</span>
+            <span class="t">{when(v.time)} {#if i === 0}<span class="cur">{t('current')}</span>{/if}</span>
             <span class="w" class:outside={v.source === 'outside'}>{who(v)}</span>
           </button>
         </li>
@@ -100,24 +101,24 @@
           </div>
           {#if !isCurrent}
             <ConfirmButton
-              label="Restore this version"
-              confirm="Replace the current definition?"
+              label={t('Restore this version')}
+              confirm={t('Replace the current definition?')}
               icon={RotateCcw}
               size="md"
               disabled={!session.can('admin')}
-              title={session.why('admin') || (active ? 'Takes effect at the next start' : 'Makes this the definition again')}
-              failure="Not restored"
+              title={session.why('admin') || (active ? 'Takes effect at the next start' : t('Makes this the definition again'))}
+              failure={t('Not restored')}
               run={() => restore(sel!)}
             />
           {/if}
         </header>
-        <div class="diff mono" aria-label="What this change did">
+        <div class="diff mono" aria-label={t('What this change did')}>
           {#if diffErr}
             <p class="err">{diffErr}</p>
           {:else if !diff}
-            <p class="muted">Comparing…</p>
+            <p class="muted">{t('Comparing…')}</p>
           {:else if diff.every((l) => l === null || l.kind === 'same')}
-            <p class="muted">No visible difference.</p>
+            <p class="muted">{t('No visible difference.')}</p>
           {:else}
             {#each diff as l, i (i)}
               {#if l === null}<div class="gap">⋯</div>{:else}<div class="dl {l.kind}"><span class="sign">{l.kind === 'add' ? '+' : l.kind === 'del' ? '−' : ' '}</span>{l.text}</div>{/if}
