@@ -599,8 +599,9 @@ export interface Lease {
 export interface PoolSpec {
   name: string
   path: string
-  /** dir (default), netfs (NFS host:export mounted at path), iscsi (portal host + target IQN), rbd (Ceph). */
-  type?: 'dir' | 'netfs' | 'iscsi' | 'rbd'
+  /** dir (default), netfs (NFS host:export mounted at path), iscsi (portal host + target IQN), rbd (Ceph),
+   *  logical (LVM volume group in source; devices make a new one), zfs (existing zpool/dataset in source). */
+  type?: 'dir' | 'netfs' | 'iscsi' | 'rbd' | 'logical' | 'zfs'
   host?: string
   export?: string
   target?: string
@@ -608,6 +609,8 @@ export interface PoolSpec {
   cephPool?: string
   cephUser?: string
   cephKey?: string
+  source?: string
+  devices?: string[]
 }
 
 export interface HostPCI {

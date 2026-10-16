@@ -83,7 +83,7 @@
         const [p, n] = await Promise.all([api.pools(), api.networks()])
         pools = p.filter((x) => x.active)
         networks = n.filter((x) => x.active)
-        if (!pools.some((x) => x.name === pool) && pools[0]) pool = pools[0].name
+        if (!filePools.some((x) => x.name === pool) && filePools[0]) pool = filePools[0].name
         if (!networks.some((x) => x.name === 'default')) netChoice = networks[0] ? `network:${networks[0].name}` : 'none'
         const lists = await Promise.all(pools.map(async (p) => ({ p: p.name, v: await api.volumes(p.name).catch(() => []) })))
         isos = lists.flatMap(({ p, v }) => v.filter((x) => x.format === 'iso').map((vol) => ({ pool: p, vol })))
@@ -111,6 +111,8 @@
   }
 
   let templates = $derived((live.snapshot?.domains ?? []).filter((d) => d.template).sort((a, b) => a.name.localeCompare(b.name)))
+  // The new system disk is a qcow2 file: block pools (LVM, ZFS, Ceph, iSCSI) cannot hold it.
+  let filePools = $derived(pools.filter((p) => ['dir', 'netfs', 'fs'].includes(p.type)))
   let selectedPool = $derived(pools.find((p) => p.name === pool))
   let diskTooBig = $derived(!!selectedPool && withDisk && diskGiB * 2 ** 30 > selectedPool.availableBytes)
   let nameValid = $derived(/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(name))
@@ -334,7 +336,7 @@
           <label class="ui-field">
             <span class="label">Storage pool</span>
             <select class="ui-input" bind:value={pool}>
-              {#each pools as p (p.name)}<option value={p.name}>{p.name} — {formatBytes(p.availableBytes)} free</option>{/each}
+              {#each filePools as p (p.name)}<option value={p.name}>{p.name} — {formatBytes(p.availableBytes)} free</option>{/each}
             </select>
           </label>
         </div>
@@ -353,7 +355,7 @@
           <label class="ui-field">
             <span class="label">Storage pool</span>
             <select class="ui-input" bind:value={pool}>
-              {#each pools as p (p.name)}
+              {#each filePools as p (p.name)}
                 <option value={p.name}>{p.name} — {formatBytes(p.availableBytes)} free</option>
               {/each}
             </select>

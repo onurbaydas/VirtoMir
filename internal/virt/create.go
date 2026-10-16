@@ -228,6 +228,11 @@ func (c *Client) CreateDomain(spec CreateSpec) (CreateResult, error) {
 	if _, err := l.DomainLookupByName(spec.Name); err == nil {
 		return CreateResult{}, refusedf("A machine named %s already exists.", spec.Name)
 	}
+	// The system disk is a qcow2 file and the cloud-init seed an ISO file; block pools
+	// (LVM, ZFS, Ceph, iSCSI) hold neither. Their volumes are added from the Hardware tab.
+	if spec.Pool != "" && (spec.BaseImage != "" || (spec.DiskPath == "" && spec.DiskGiB > 0) || spec.CloudInit != nil) && !poolKeepsFiles(l, spec.Pool) {
+		return CreateResult{}, invalidf("Pool %s holds block volumes, not disk image files. Create the machine in a directory or NFS pool, then add a disk from %s on its Hardware tab.", spec.Pool, spec.Pool)
+	}
 
 	diskPath, diskFormat := spec.DiskPath, ""
 	var created []libvirt.StorageVol

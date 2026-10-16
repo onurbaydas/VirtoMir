@@ -166,7 +166,10 @@
   let poolDlg = $state(false)
   let pName = $state('')
   let pPath = $state('')
-  let pType = $state<'dir' | 'netfs' | 'iscsi' | 'rbd'>('dir')
+  let pType = $state<'dir' | 'netfs' | 'iscsi' | 'rbd' | 'logical' | 'zfs'>('dir')
+  let pSource = $state('')
+  let pNewVG = $state(false)
+  let pDevices = $state('')
   let pTarget = $state('')
   let pMonitors = $state('')
   let pCephPool = $state('')
@@ -175,6 +178,8 @@
   let pHost = $state('')
   let pExport = $state('')
   let pEverywhere = $state(true)
+  // Disks named by path are this host's own; never offer to format the same path everywhere.
+  let localDisks = $derived(pType === 'logical' && pNewVG)
   let pBusy = $state(false)
   let pErr = $state('')
   async function createPool(e: SubmitEvent) {
@@ -196,9 +201,13 @@
                 cephUser: pCephUser.trim(),
                 cephKey: pCephKey.trim(),
               }
-            : { name: pName, path: pPath }
+            : pType === 'logical'
+              ? { name: pName, path: '', type: 'logical', source: pSource.trim(), devices: pNewVG ? pDevices.split(/[\s,]+/).filter(Boolean) : [] }
+              : pType === 'zfs'
+                ? { name: pName, path: '', type: 'zfs', source: pSource.trim() }
+                : { name: pName, path: pPath }
     try {
-      if (cluster.clustered && pEverywhere) {
+      if (cluster.clustered && pEverywhere && !localDisks) {
         const res = await api.createClusterPool(spec)
         const failed = res.filter((r) => !r.ok)
         if (failed.length === res.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
@@ -453,6 +462,8 @@
       <button type="button" role="radio" aria-checked={pType === 'netfs'} class:on={pType === 'netfs'} onclick={() => (pType = 'netfs')}>NFS share</button>
       <button type="button" role="radio" aria-checked={pType === 'iscsi'} class:on={pType === 'iscsi'} onclick={() => (pType = 'iscsi')}>iSCSI</button>
       <button type="button" role="radio" aria-checked={pType === 'rbd'} class:on={pType === 'rbd'} onclick={() => (pType = 'rbd')}>Ceph RBD</button>
+      <button type="button" role="radio" aria-checked={pType === 'logical'} class:on={pType === 'logical'} onclick={() => (pType = 'logical')}>LVM</button>
+      <button type="button" role="radio" aria-checked={pType === 'zfs'} class:on={pType === 'zfs'} onclick={() => (pType = 'zfs')}>ZFS</button>
     </div>
     <label class="ui-field">
       <span class="label">Name</span>
@@ -502,6 +513,30 @@
         <input class="ui-input mono" type="password" bind:value={pCephKey} placeholder="from: ceph auth get-key client.libvirt" autocomplete="off" />
         <span class="hint">Stored in a libvirt secret on the host, never in the pool definition.</span>
       </label>
+    {:else if pType === 'logical'}
+      <label class="ui-field">
+        <span class="label">Volume group</span>
+        <input class="ui-input mono" bind:value={pSource} placeholder="vg-fast" required />
+      </label>
+      <label class="check">
+        <input type="checkbox" bind:checked={pNewVG} />
+        <span>Create this volume group from empty disks</span>
+      </label>
+      {#if pNewVG}
+        <label class="ui-field">
+          <span class="label">Disks</span>
+          <input class="ui-input mono" bind:value={pDevices} placeholder="/dev/disk/by-id/nvme-…, /dev/sdc" required />
+        </label>
+        <div class="warn">The disks become this volume group. Only empty ones are accepted: a disk with a partition table, file system or LVM label is refused, so nothing is overwritten.</div>
+      {:else}
+        <span class="hint">An existing volume group (see <span class="mono">vgs</span>). Each logical volume becomes a volume; new disks are raw logical volumes.</span>
+      {/if}
+    {:else if pType === 'zfs'}
+      <label class="ui-field">
+        <span class="label">Pool or dataset</span>
+        <input class="ui-input mono" bind:value={pSource} placeholder="tank/vms" required />
+        <span class="hint">An existing zpool or dataset (see <span class="mono">zfs list</span>); new disks are ZFS volumes (zvols). The host needs libvirt's ZFS driver (libvirt-daemon-driver-storage-zfs).</span>
+      </label>
     {/if}
     {#if pType === 'dir' || pType === 'netfs'}
     <label class="ui-field">
@@ -510,7 +545,7 @@
       <span class="hint">{pType === 'netfs' ? 'Mounted now and on every boot (the host needs the NFS client, e.g. nfs-common).' : 'Created if it does not exist. The pool starts now and on every boot.'}</span>
     </label>
     {/if}
-    {#if cluster.clustered}
+    {#if cluster.clustered && !localDisks}
       <label class="check">
         <input type="checkbox" bind:checked={pEverywhere} />
         <span>Create it on every host of the cluster{pType === 'netfs' ? ' — machines on it can then move between hosts without copying their disks' : ''}</span>
@@ -563,6 +598,14 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+  }
+  .warn {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    border-left: 3px solid var(--warn);
+    color: var(--text-2);
+    font-size: 12.5px;
   }
   .check {
     display: flex;
