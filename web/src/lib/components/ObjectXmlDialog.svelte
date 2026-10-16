@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Raw XML of a network or storage pool (P4): everything the forms do not offer. The
   // browser checks well-formedness while typing; libvirt validates on save. Changes show as
   // a line diff before they are written.
@@ -55,7 +56,7 @@
       toasts.push({
         kind: r.restartNeeded ? 'warn' : 'info',
         title: `${title} saved`,
-        detail: r.restartNeeded ? `The ${kind} is running: stop and start it to use the new definition.` : undefined,
+        detail: r.restartNeeded ? t('The {kind} is running: stop and start it to use the new definition.', { kind: kind }) : undefined,
       })
       onclose(true)
     } catch (e) {
@@ -66,10 +67,10 @@
   }
 </script>
 
-<Dialog {open} {title} subtitle="Definition XML · validated by libvirt on save" width={820} onclose={() => onclose(false)}>
+<Dialog {open} {title} subtitle={t('Definition XML · validated by libvirt on save')} width={820} onclose={() => onclose(false)}>
   {#if error}<div class="ui-error-box">{error}</div>{/if}
   {#if original === null && !error}
-    <p class="muted">Loading…</p>
+    <p class="muted">{t('Loading…')}</p>
   {:else if review}
     <div class="diff mono">
       {#each diff as l, i (i)}
@@ -81,13 +82,13 @@
     {#if parseError}<p class="err">{parseError}</p>{/if}
   {/if}
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={() => onclose(false)}>Cancel</button>
+    <button class="ui-btn ghost" onclick={() => onclose(false)}>{t('Cancel')}</button>
     {#if review}
-      <button class="ui-btn" onclick={() => (review = false)}>Edit</button>
+      <button class="ui-btn" onclick={() => (review = false)}>{t('Edit')}</button>
       <button class="ui-btn primary" disabled={saving} onclick={submit}><Save size={14} /> {saving ? 'Saving…' : 'Save'}</button>
     {:else}
-      <button class="ui-btn" disabled={!dirty} onclick={() => (text = original ?? '')}>Undo changes</button>
-      <button class="ui-btn primary" disabled={!dirty || !!parseError} onclick={() => (review = true)}>Review changes</button>
+      <button class="ui-btn" disabled={!dirty} onclick={() => (text = original ?? '')}>{t('Undo changes')}</button>
+      <button class="ui-btn primary" disabled={!dirty || !!parseError} onclick={() => (review = true)}>{t('Review changes')}</button>
     {/if}
   {/snippet}
 </Dialog>

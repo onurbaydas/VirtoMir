@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Cluster (ADR-0020): which hosts belong together, add one with a join code, join one,
   // remove one. Every host keeps working on its own; this only connects them.
   import Copy from '@lucide/svelte/icons/copy'
@@ -45,7 +46,7 @@
     try {
       invite = await api.invite()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'No join code', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('No join code'), detail: errorText(e) })
     } finally {
       inviting = false
     }
@@ -62,7 +63,7 @@
     try {
       await api.join(code.trim())
       code = ''
-      toasts.push({ kind: 'info', title: 'Joined the cluster', detail: 'The other hosts are now in the host switcher.' })
+      toasts.push({ kind: 'info', title: t('Joined the cluster'), detail: t('The other hosts are now in the host switcher.') })
       await cluster.refresh()
     } catch (e) {
       joinError = errorText(e)
@@ -73,41 +74,41 @@
 
   async function remove(id: string, name: string, isSelf: boolean) {
     await api.removeMember(id)
-    toasts.push({ kind: 'info', title: isSelf ? 'Left the cluster' : `${name} removed`, detail: 'Its machines keep running; it is just not shown here any more.' })
+    toasts.push({ kind: 'info', title: isSelf ? 'Left the cluster' : `${name} removed`, detail: t('Its machines keep running; it is just not shown here any more.') })
     if (!isSelf && cluster.current?.id === id) cluster.open(self?.id ?? '')
     await cluster.refresh()
   }
 </script>
 
-<svelte:head><title>Cluster · VirtoMir</title></svelte:head>
+<svelte:head><title>{t('Cluster · VirtoMir')}</title></svelte:head>
 
 <header class="page-head">
   <div>
-    <h1>Cluster</h1>
-    <p class="lead">Manage several hosts from one place. Every host keeps running VirtoMir on its own — if one is down, the others carry on.</p>
+    <h1>{t('Cluster')}</h1>
+    <p class="lead">{t('Manage several hosts from one place. Every host keeps running VirtoMir on its own — if one is down, the others carry on.')}</p>
   </div>
 </header>
 
 {#if info === null}
-  <p class="muted">Loading…</p>
+  <p class="muted">{t('Loading…')}</p>
 {:else if !info.enabled}
   <div class="ui-panel card notice">
     <Unplug size={18} />
     <div>
-      <strong>This host runs without HTTPS</strong>
-      <p>Hosts recognize each other by their certificates, so joining needs HTTPS. Start virtomird with <span class="mono">-tls auto</span> (the default) or your own certificate.</p>
+      <strong>{t('This host runs without HTTPS')}</strong>
+      <p>{t('Hosts recognize each other by their certificates, so joining needs HTTPS. Start virtomird with')} <span class="mono">{t('-tls auto')}</span> {t('(the default) or your own certificate.')}</p>
     </div>
   </div>
 {:else}
   <div class="cluster-tabs">
     <button class="c-tab" class:active={currentTab === 'members'} onclick={() => currentTab = 'members'}>
-      Members
+      {t('Members')}
     </button>
     <button class="c-tab" class:active={currentTab === 'ha'} onclick={() => currentTab = 'ha'}>
-      High availability
+      {t('High availability')}
     </button>
     <button class="c-tab" class:active={currentTab === 'pools'} onclick={() => currentTab = 'pools'}>
-      Resource pools
+      {t('Resource pools')}
     </button>
   </div>
 
@@ -118,31 +119,31 @@
   {:else}
     {#if cluster.clustered}
       <ClusterOverview />
-      <h2 class="sub">Members</h2>
-      <section class="ui-panel members" aria-label="Hosts">
+      <h2 class="sub">{t('Members')}</h2>
+      <section class="ui-panel members" aria-label={t('Hosts')}>
       {#each cluster.members as m (m.id)}
         <div class="member" class:current={cluster.current?.id === m.id}>
-          <span class="dot" class:ok={m.reachable} title={m.reachable ? 'Reachable' : 'Not reachable'}></span>
+          <span class="dot" class:ok={m.reachable} title={m.reachable ? 'Reachable' : t('Not reachable')}></span>
           <div class="m-main">
             <div class="m-name">
               {m.name}
-              {#if m.self}<span class="pill">this host</span>{/if}
-              {#if cluster.current?.id === m.id}<span class="pill accent">shown</span>{/if}
+              {#if m.self}<span class="pill">{t('this host')}</span>{/if}
+              {#if cluster.current?.id === m.id}<span class="pill accent">{t('shown')}</span>{/if}
             </div>
             <div class="m-sub">{m.address}</div>
             {#if m.error}<div class="m-err">{m.error}</div>{/if}
           </div>
-          <div class="m-ver" class:warn={m.version && self?.version && m.version !== self.version} title={m.version && self?.version && m.version !== self.version ? 'Runs another VirtoMir version than this host' : 'VirtoMir version'}>
+          <div class="m-ver" class:warn={m.version && self?.version && m.version !== self.version} title={m.version && self?.version && m.version !== self.version ? 'Runs another VirtoMir version than this host' : t('VirtoMir version')}>
             {m.version ?? '—'}
           </div>
           <div class="m-actions">
-            <button class="ui-btn sm" disabled={!m.reachable || cluster.current?.id === m.id} onclick={() => cluster.open(m.id)}>Open</button>
+            <button class="ui-btn sm" disabled={!m.reachable || cluster.current?.id === m.id} onclick={() => cluster.open(m.id)}>{t('Open')}</button>
             {#if admin}
               <ConfirmButton
                 label={m.self ? 'Leave' : 'Remove'}
                 confirm={m.self ? 'Leave the cluster' : `Remove ${m.name}`}
-                title={m.self ? 'This host stops being part of the cluster' : 'Its machines keep running; it is only disconnected from the others'}
-                failure="Not removed"
+                title={m.self ? 'This host stops being part of the cluster' : t('Its machines keep running; it is only disconnected from the others')}
+                failure={t('Not removed')}
                 run={() => remove(m.id, m.name, m.self)}
               />
             {/if}
@@ -153,47 +154,47 @@
   {:else}
     <div class="empty ui-panel">
       <Server size={28} strokeWidth={1.5} />
-      <strong>This host is on its own</strong>
-      <span>Add another host to manage both from here, or join this one to an existing cluster.</span>
+      <strong>{t('This host is on its own')}</strong>
+      <span>{t('Add another host to manage both from here, or join this one to an existing cluster.')}</span>
     </div>
   {/if}
 
   {#if admin}
     <div class="cards">
       <section class="ui-panel card">
-        <h2><KeyRound size={16} /> Add a host</h2>
+        <h2><KeyRound size={16} /> {t('Add a host')}</h2>
         <ol class="steps">
-          <li>Install VirtoMir on the new host.</li>
-          <li>Create a join code here.</li>
-          <li>On the new host, open <strong>Cluster</strong> and paste the code under <strong>Join a cluster</strong>.</li>
+          <li>{t('Install VirtoMir on the new host.')}</li>
+          <li>{t('Create a join code here.')}</li>
+          <li>{t('On the new host, open')} <strong>{t('Cluster')}</strong> {t('and paste the code under')} <strong>{t('Join a cluster')}</strong>.</li>
         </ol>
         {#if invite && left > 0}
           <div class="code">
             <code class="mono">{invite.code}</code>
-            <button class="ui-btn sm" onclick={() => copy(invite!.code, 'Join code')}><Copy size={14} /> Copy</button>
+            <button class="ui-btn sm" onclick={() => copy(invite!.code, t('Join code'))}><Copy size={14} /> {t('Copy')}</button>
           </div>
-          <p class="hint">Works once, for {leftText} more. The new host will connect to <span class="mono">{invite.address}</span>.</p>
+          <p class="hint">{t('Works once, for {leftText} more. The new host will connect to', { leftText: leftText })} <span class="mono">{invite.address}</span>.</p>
           {#if loopback}
-            <p class="warn-text">You opened VirtoMir through a local address, so the code points there. Open VirtoMir through an address the new host can reach and create the code again.</p>
+            <p class="warn-text">{t('You opened VirtoMir through a local address, so the code points there. Open VirtoMir through an address the new host can reach and create the code again.')}</p>
           {/if}
         {:else}
-          <button class="ui-btn primary" class:busy={inviting} disabled={inviting} onclick={createInvite}>Create join code</button>
-          {#if invite}<p class="hint">The code expired. Create a new one.</p>{/if}
+          <button class="ui-btn primary" class:busy={inviting} disabled={inviting} onclick={createInvite}>{t('Create join code')}</button>
+          {#if invite}<p class="hint">{t('The code expired. Create a new one.')}</p>{/if}
         {/if}
       </section>
 
       {#if !cluster.clustered}
         <section class="ui-panel card">
-          <h2><LogIn size={16} /> Join a cluster</h2>
-          <p class="hint">Paste a code created on any host of the cluster. This host's machines stay where they are.</p>
-          <textarea class="ui-input" rows="3" placeholder="vmj1-…" bind:value={code} aria-label="Join code" spellcheck="false"></textarea>
+          <h2><LogIn size={16} /> {t('Join a cluster')}</h2>
+          <p class="hint">{t('Paste a code created on any host of the cluster. This host\'s machines stay where they are.')}</p>
+          <textarea class="ui-input" rows="3" placeholder={t('vmj1-…')} bind:value={code} aria-label={t('Join code')} spellcheck="false"></textarea>
           {#if joinError}<div class="ui-error-box">{joinError}</div>{/if}
-          <button class="ui-btn primary" class:busy={joining} disabled={joining || !code.trim().startsWith('vmj1-')} onclick={join}>Join</button>
+          <button class="ui-btn primary" class:busy={joining} disabled={joining || !code.trim().startsWith('vmj1-')} onclick={join}>{t('Join')}</button>
         </section>
       {/if}
     </div>
   {:else}
-    <p class="muted">Adding and removing hosts needs the admin role.</p>
+    <p class="muted">{t('Adding and removing hosts needs the admin role.')}</p>
   {/if}
 {/if}
 {/if}

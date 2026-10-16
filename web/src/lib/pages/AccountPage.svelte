@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t as tt, lang, LANGS, setLang, type Lang } from '../i18n.svelte'
   import { router } from '../router.svelte'
   import QuotasCard from '../components/QuotasCard.svelte'
   import SigninCard from '../components/SigninCard.svelte'
@@ -35,9 +36,9 @@
   })
 
   const ROLES: { key: Role; label: string; can: string }[] = [
-    { key: 'viewer', label: 'Viewer', can: 'Sees machines, metrics and XML. Changes nothing.' },
-    { key: 'operator', label: 'Operator', can: 'Also starts and stops machines, opens consoles, changes CDs, takes and reverts snapshots.' },
-    { key: 'admin', label: 'Admin', can: 'Also creates, deletes and reconfigures machines, storage and networks.' },
+    { key: 'viewer', label: tt('Viewer'), can: tt('Sees machines, metrics and XML. Changes nothing.') },
+    { key: 'operator', label: tt('Operator'), can: tt('Also starts and stops machines, opens consoles, changes CDs, takes and reverts snapshots.') },
+    { key: 'admin', label: tt('Admin'), can: tt('Also creates, deletes and reconfigures machines, storage and networks.') },
   ]
   let allowedRoles = $derived(ROLES.filter((r) => session.can(r.key)))
   let me = $derived(ROLES.find((r) => r.key === session.role))
@@ -78,26 +79,32 @@
   const ago = (s?: string) => {
     if (!s) return 'never'
     const m = Math.round((Date.now() - Date.parse(s)) / 60000)
-    return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : date(s)
+    return m < 1 ? 'just now' : m < 60 ? tt('{m} min ago', { m: m }) : m < 1440 ? `${Math.round(m / 60)} h ago` : date(s)
   }
 </script>
 
-<svelte:head><title>Account · VirtoMir</title></svelte:head>
+<svelte:head><title>{tt('Account · VirtoMir')}</title></svelte:head>
 
 <header class="page-head">
   <div>
-    <h1>Account</h1>
-    <p class="lead">Your role and the API tokens your scripts use.</p>
+    <h1>{tt('Account')}</h1>
+    <p class="lead">{tt('Your role and the API tokens your scripts use.')}</p>
   </div>
 </header>
 
 <section class="ui-panel card who">
   <span class="avatar"><ShieldUser size={22} /></span>
   <div>
-    <div class="name">{session.info?.user ?? 'Development mode (no sign-in)'}</div>
+    <div class="name">{session.info?.user ?? tt('Development mode (no sign-in)')}</div>
     <div class="role">{me?.label} · {me?.can}</div>
   </div>
-  {#if session.can('admin')}<a class="ui-btn sm ghost setup" href="/setup" onclick={router.link}>Run the host setup again</a>{/if}
+  <label class="lang-pick">
+    <span>{tt('Language')}</span>
+    <select class="ui-input" value={lang} onchange={(e) => setLang(e.currentTarget.value as Lang)}>
+      {#each LANGS as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+    </select>
+  </label>
+  {#if session.can('admin')}<a class="ui-btn sm ghost setup" href="/setup" onclick={router.link}>{tt('Run the host setup again')}</a>{/if}
 </section>
 
 {#if session.can('admin')}<UpdatesCard />{/if}
@@ -109,18 +116,17 @@
 <section class="ui-panel card">
   <header class="head">
     <div>
-      <h2>API tokens</h2>
+      <h2>{tt('API tokens')}</h2>
       <p class="hint">
-        For scripts, CI and tools: send <span class="mono">Authorization: Bearer &lt;token&gt;</span>. A token never has more rights than you,
-        and loses them when you do.
+        {tt('For scripts, CI and tools: send')} <span class="mono">Authorization: Bearer &lt;token&gt;</span>{tt('. A token never has more rights than you, and loses them when you do.')}
       </p>
     </div>
     <div class="head-tools">
       {#if session.can('admin')}
-        <label class="ui-switch small"><input type="checkbox" bind:checked={showAll} /> Everyone's</label>
+        <label class="ui-switch small"><input type="checkbox" bind:checked={showAll} /> {tt('Everyone\'s')}</label>
       {/if}
       <button class="ui-btn primary" onclick={openNew} disabled={session.info?.mode === 'none'} title={session.info?.mode === 'none' ? 'Tokens need sign-in to be enabled' : ''}>
-        <Plus size={15} /> New token
+        <Plus size={15} /> {tt('New token')}
       </button>
     </div>
   </header>
@@ -128,18 +134,18 @@
   {#if error}
     <div class="ui-error-box">{error}</div>
   {:else if tokens === null}
-    <p class="muted">Loading…</p>
+    <p class="muted">{tt('Loading…')}</p>
   {:else if tokens.length === 0}
-    <p class="empty"><KeyRound size={20} /> No tokens yet.</p>
+    <p class="empty"><KeyRound size={20} /> {tt('No tokens yet.')}</p>
   {:else}
-    <div class="table" role="table" aria-label="API tokens">
+    <div class="table" role="table" aria-label={tt('API tokens')}>
       <div class="row head-row" role="row">
-        <span role="columnheader">Name</span>
-        <span role="columnheader">Role</span>
-        {#if showAll}<span role="columnheader">Owner</span>{/if}
-        <span role="columnheader">Last used</span>
-        <span role="columnheader">Expires</span>
-        <span role="columnheader" class="sr">Actions</span>
+        <span role="columnheader">{tt('Name')}</span>
+        <span role="columnheader">{tt('Role')}</span>
+        {#if showAll}<span role="columnheader">{tt('Owner')}</span>{/if}
+        <span role="columnheader">{tt('Last used')}</span>
+        <span role="columnheader">{tt('Expires')}</span>
+        <span role="columnheader" class="sr">{tt('Actions')}</span>
       </div>
       {#each tokens as t (t.id)}
         <div class="row" class:all={showAll} role="row">
@@ -150,13 +156,13 @@
           <span role="cell" class="muted" class:soon={!!t.expires && Date.parse(t.expires) - Date.now() < 7 * 864e5}>{t.expires ? date(t.expires) : 'never'}</span>
           <span role="cell" class="act">
             <ConfirmButton
-              label="Revoke"
-              confirm="Revoke now?"
+              label={tt('Revoke')}
+              confirm={tt('Revoke now?')}
               icon={Trash}
-              failure="Could not revoke {t.name}"
+              failure={tt('Could not revoke {name}', { name: t.name })}
               run={async () => {
                 await api.revokeToken(t.id)
-                toasts.push({ kind: 'info', title: `Token ${t.name} revoked` })
+                toasts.push({ kind: 'info', title: tt('Token {name} revoked', { name: t.name }) })
                 await load()
               }}
             />
@@ -167,21 +173,21 @@
   {/if}
 </section>
 
-<Dialog open={dlg} title={secret ? 'Your new token' : 'New API token'} onclose={() => (dlg = false)} width={520}>
+<Dialog open={dlg} title={secret ? 'Your new token' : tt('New API token')} onclose={() => (dlg = false)} width={520}>
   {#if secret}
     <div class="secret">
-      <p>Copy it now — VirtoMir only keeps a hash and cannot show it again.</p>
+      <p>{tt('Copy it now — VirtoMir only keeps a hash and cannot show it again.')}</p>
       <div class="secret-box mono">{secret}</div>
-      <button class="ui-btn" onclick={() => copy(secret, 'Token')}><Copy size={14} /> Copy token</button>
+      <button class="ui-btn" onclick={() => copy(secret, 'Token')}><Copy size={14} /> {tt('Copy token')}</button>
       <pre class="mono example">curl -H "Authorization: Bearer {secret.slice(0, 12)}…" {location.origin}/api/v1/domains</pre>
     </div>
   {:else}
     <form id="tok-form" class="form" onsubmit={create}>
       <label class="ui-field">
-        <span class="label">Name</span>
-        <input class="ui-input" bind:value={name} placeholder="terraform, backup-script, grafana…" required maxlength="64" />
+        <span class="label">{tt('Name')}</span>
+        <input class="ui-input" bind:value={name} placeholder={tt('terraform, backup-script, grafana…')} required maxlength="64" />
       </label>
-      <div class="roles" role="radiogroup" aria-label="Token role">
+      <div class="roles" role="radiogroup" aria-label={tt('Token role')}>
         {#each allowedRoles as r (r.key)}
           <label class="role-opt" class:on={role === r.key}>
             <input type="radio" name="role" value={r.key} bind:group={role} />
@@ -191,13 +197,13 @@
         {/each}
       </div>
       <label class="ui-field">
-        <span class="label">Expires</span>
+        <span class="label">{tt('Expires')}</span>
         <select class="ui-input" bind:value={ttl}>
-          <option value={7}>in 7 days</option>
-          <option value={30}>in 30 days</option>
-          <option value={90}>in 90 days</option>
-          <option value={365}>in a year</option>
-          <option value={0}>never</option>
+          <option value={7}>{tt('in 7 days')}</option>
+          <option value={30}>{tt('in 30 days')}</option>
+          <option value={90}>{tt('in 90 days')}</option>
+          <option value={365}>{tt('in a year')}</option>
+          <option value={0}>{tt('never')}</option>
         </select>
       </label>
       {#if formErr}<div class="ui-error-box">{formErr}</div>{/if}
@@ -205,10 +211,10 @@
   {/if}
   {#snippet footer()}
     {#if secret}
-      <button class="ui-btn primary" onclick={() => (dlg = false)}>Done</button>
+      <button class="ui-btn primary" onclick={() => (dlg = false)}>{tt('Done')}</button>
     {:else}
-      <button class="ui-btn ghost" onclick={() => (dlg = false)}>Cancel</button>
-      <button class="ui-btn primary" form="tok-form" disabled={busy}>{busy ? 'Creating…' : 'Create token'}</button>
+      <button class="ui-btn ghost" onclick={() => (dlg = false)}>{tt('Cancel')}</button>
+      <button class="ui-btn primary" form="tok-form" disabled={busy}>{busy ? 'Creating…' : tt('Create token')}</button>
     {/if}
   {/snippet}
 </Dialog>
@@ -224,8 +230,13 @@
     padding: 16px 18px;
     margin-bottom: 16px;
   }
-  .who .setup {
+  .who .lang-pick {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--text-2);
   }
   .who {
     display: flex;

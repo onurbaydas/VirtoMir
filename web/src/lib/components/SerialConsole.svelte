@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { wsURL } from '../api'
   // Text console (serial port / virtio console) with xterm.js over virtomird's WebSocket bridge.
   // Reconnects by itself; takes over a console someone else left open (virsh console).
@@ -114,14 +115,14 @@
   <div class="bar">
     <span class="status {conn}"><span class="dot"></span>{conn === 'connected' ? 'Connected' : conn === 'connecting' ? 'Connecting…' : 'Reconnecting…'}</span>
     {#if devices.length > 1}
-      <select class="ui-input dev" value={device || devices[0]} onchange={(e) => switchDevice(e.currentTarget.value)} aria-label="Console device">
+      <select class="ui-input dev" value={device || devices[0]} onchange={(e) => switchDevice(e.currentTarget.value)} aria-label={t('Console device')}>
         {#each devices as d (d)}<option value={d}>{d}</option>{/each}
       </select>
     {/if}
     <span class="spacer"></span>
-    <span class="hint">Text console of the guest (serial / virtio). Shows boot messages and a login if the guest offers one there.</span>
-    <button class="tb" onclick={() => term?.clear()} title="Clear the screen"><Eraser size={14} /></button>
-    <button class="tb" onclick={() => switchDevice(device)} title="Reconnect"><RefreshCw size={14} /></button>
+    <span class="hint">{t('Text console of the guest (serial / virtio). Shows boot messages and a login if the guest offers one there.')}</span>
+    <button class="tb" onclick={() => term?.clear()} title={t('Clear the screen')}><Eraser size={14} /></button>
+    <button class="tb" onclick={() => switchDevice(device)} title={t('Reconnect')}><RefreshCw size={14} /></button>
   </div>
   <div class="term" bind:this={el}></div>
 </div>

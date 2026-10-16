@@ -21,6 +21,7 @@
 </script>
 
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { api, errorText, type DomainDetail, type HostMDev } from '../api'
   import { toasts } from '../toast.svelte'
   import { router } from '../router.svelte'
@@ -130,11 +131,11 @@
         kind: r.liveError ? 'warn' : 'info',
         title: `${title} added`,
         detail: r.liveError
-          ? `Saved for the next start; it could not be added live: ${r.liveError}`
+          ? t('Saved for the next start; it could not be added live: {liveError}', { liveError: r.liveError })
           : r.appliesOnNextBoot
             ? 'The machine gets it from its next start (shut it down and start it again; a restart from inside the guest is not enough).'
             : kind === 'filesystem'
-              ? `Inside the guest: mount -t virtiofs ${tag} /mnt`
+              ? t('Inside the guest: mount -t virtiofs {tag} /mnt', { tag: tag })
               : active
                 ? 'Added to the running machine.'
                 : undefined,
@@ -149,9 +150,9 @@
   }
 </script>
 
-<Dialog {open} title={start === 'video' ? 'Video card and monitors' : 'Add a device'} subtitle="Hardware for {detail.name}" {onclose} width={600}>
+<Dialog {open} title={start === 'video' ? 'Video card and monitors' : t('Add a device')} subtitle={t('Hardware for {name}', { name: detail.name })} {onclose} width={600}>
   <form id="add-device" class="form" onsubmit={(e) => (e.preventDefault(), add())}>
-    <div class="kinds" role="radiogroup" aria-label="Device">
+    <div class="kinds" role="radiogroup" aria-label={t('Device')}>
       {#each KINDS as k (k.kind)}
         {@const has = k.once && present.has(k.kind)}
         <label class="kind" class:on={kind === k.kind} class:off={has}>
@@ -167,53 +168,53 @@
 
     {#if kind === 'filesystem'}
       <label class="ui-field">
-        <span class="label">Folder on the host</span>
+        <span class="label">{t('Folder on the host')}</span>
         <input class="ui-input mono" placeholder="/srv/share" bind:value={source} aria-invalid={source !== '' && !sourceOK} />
-        <span class="hint">An absolute path. The folder must exist; the guest sees the files as the host's QEMU user can.</span>
+        <span class="hint">{t('An absolute path. The folder must exist; the guest sees the files as the host\'s QEMU user can.')}</span>
       </label>
       <div class="two">
         <label class="ui-field">
-          <span class="label">Mount tag</span>
+          <span class="label">{t('Mount tag')}</span>
           <input class="ui-input mono" bind:value={tag} oninput={() => (tagTouched = true)} aria-invalid={tag !== '' && !tagOK} />
-          {#if usedTags.has(tag)}<span class="error">Already used by another shared folder.</span>{/if}
+          {#if usedTags.has(tag)}<span class="error">{t('Already used by another shared folder.')}</span>{/if}
         </label>
-        <label class="ui-switch ro"><input type="checkbox" bind:checked={readOnly} /> Read-only for the guest</label>
+        <label class="ui-switch ro"><input type="checkbox" bind:checked={readOnly} /> {t('Read-only for the guest')}</label>
       </div>
       <p class="prep">
-        <span class="prep-title">Inside the guest (Linux)</span>
+        <span class="prep-title">{t('Inside the guest (Linux)')}</span>
         <code class="mono">mount -t virtiofs {tag || '<tag>'} /mnt</code>
-        <span>Windows needs the VirtIO-FS driver and service from the virtio-win ISO.</span>
+        <span>{t('Windows needs the VirtIO-FS driver and service from the virtio-win ISO.')}</span>
       </p>
-      {#if active}<p class="hint">The machine's memory has to be shared for this; if it is not yet, the folder appears after the next start.</p>{/if}
+      {#if active}<p class="hint">{t('The machine\'s memory has to be shared for this; if it is not yet, the folder appears after the next start.')}</p>{/if}
     {:else if kind === 'clipboard'}
-      <p class="text">Adds a <span class="mono">qemu-vdagent</span> channel. The guest needs <span class="mono">spice-vdagent</span> (Linux) or the SPICE guest tools (Windows); the mouse then follows the pointer exactly too. Takes effect from the next start.</p>
+      <p class="text">{t('Adds a')} <span class="mono">{t('qemu-vdagent')}</span> {t('channel. The guest needs')} <span class="mono">{t('spice-vdagent')}</span> {t('(Linux) or the SPICE guest tools (Windows); the mouse then follows the pointer exactly too. Takes effect from the next start.')}</p>
     {:else if kind === 'video'}
       <div class="two">
         <label class="ui-field">
-          <span class="label">Model</span>
+          <span class="label">{t('Model')}</span>
           <select class="ui-input" bind:value={videoModel}>
-            <option value="virtio">VirtIO (best for Linux; Windows needs the driver)</option>
-            <option value="qxl">QXL (Windows with SPICE tools)</option>
-            <option value="vga">Standard VGA (works everywhere)</option>
-            <option value="bochs">Bochs (UEFI, no driver needed)</option>
-            <option value="ramfb">ramfb (minimal, for passthrough GPUs)</option>
-            <option value="cirrus">Cirrus (old guests)</option>
+            <option value="virtio">{t('VirtIO (best for Linux; Windows needs the driver)')}</option>
+            <option value="qxl">{t('QXL (Windows with SPICE tools)')}</option>
+            <option value="vga">{t('Standard VGA (works everywhere)')}</option>
+            <option value="bochs">{t('Bochs (UEFI, no driver needed)')}</option>
+            <option value="ramfb">{t('ramfb (minimal, for passthrough GPUs)')}</option>
+            <option value="cirrus">{t('Cirrus (old guests)')}</option>
           </select>
         </label>
         <label class="ui-field">
-          <span class="label">Monitors</span>
+          <span class="label">{t('Monitors')}</span>
           <select class="ui-input" bind:value={heads}>
             {#each [1, 2, 3, 4] as n (n)}<option value={n}>{n}</option>{/each}
           </select>
-          {#if !multiHeadOK}<span class="error">Several monitors need VirtIO or QXL.</span>{/if}
+          {#if !multiHeadOK}<span class="error">{t('Several monitors need VirtIO or QXL.')}</span>{/if}
         </label>
       </div>
-      <p class="hint">Replaces the current video card; takes effect from the next start.</p>
+      <p class="hint">{t('Replaces the current video card; takes effect from the next start.')}</p>
     {:else if kind === 'mdev'}
       {#if !mdevs}
-        <p class="text">Looking at the host's mediated devices…</p>
+        <p class="text">{t('Looking at the host\'s mediated devices…')}</p>
       {:else}
-        <div class="hd-list" role="radiogroup" aria-label="vGPU slice">
+        <div class="hd-list" role="radiogroup" aria-label={t('vGPU slice')}>
           {#each mdevs as m (m.uuid)}
             {@const taken = m.usedBy.length > 0}
             <label class="hd" class:off={taken}>
@@ -225,53 +226,53 @@
               </span>
             </label>
           {:else}
-            <p class="text">This host has no vGPU slices yet. Create one on the <a href={router.scoped('/hardware')} onclick={(e) => (router.link(e), onclose())}>Hardware</a> page (the card's driver must support mediated devices).</p>
+            <p class="text">{t('This host has no vGPU slices yet. Create one on the')} <a href={router.scoped('/hardware')} onclick={(e) => (router.link(e), onclose())}>{t('Hardware')}</a> {t('page (the card\'s driver must support mediated devices).')}</p>
           {/each}
         </div>
       {/if}
     {:else if kind === 'watchdog'}
       <div class="two">
         <label class="ui-field">
-          <span class="label">When the guest stops answering</span>
+          <span class="label">{t('When the guest stops answering')}</span>
           <select class="ui-input" bind:value={wdAction}>
-            <option value="reset">Reset the machine</option>
-            <option value="poweroff">Power it off</option>
-            <option value="shutdown">Ask the guest to shut down</option>
-            <option value="pause">Pause it</option>
-            <option value="dump">Save a memory dump</option>
-            <option value="inject-nmi">Send an NMI</option>
-            <option value="none">Do nothing (log only)</option>
+            <option value="reset">{t('Reset the machine')}</option>
+            <option value="poweroff">{t('Power it off')}</option>
+            <option value="shutdown">{t('Ask the guest to shut down')}</option>
+            <option value="pause">{t('Pause it')}</option>
+            <option value="dump">{t('Save a memory dump')}</option>
+            <option value="inject-nmi">{t('Send an NMI')}</option>
+            <option value="none">{t('Do nothing (log only)')}</option>
           </select>
         </label>
         <label class="ui-field">
-          <span class="label">Model</span>
+          <span class="label">{t('Model')}</span>
           <select class="ui-input" bind:value={wdModel}>
-            <option value="i6300esb">i6300ESB (PCI, hot-pluggable)</option>
-            <option value="itco">iTCO (built into q35)</option>
+            <option value="i6300esb">{t('i6300ESB (PCI, hot-pluggable)')}</option>
+            <option value="itco">{t('iTCO (built into q35)')}</option>
           </select>
         </label>
       </div>
       <p class="hint">
-        The action applies to every watchdog of the machine (q35 machines always have the built-in iTCO). The guest must run a watchdog daemon (e.g. <span class="mono">systemd</span> with RuntimeWatchdogSec) that keeps it from firing.
+        {t('The action applies to every watchdog of the machine (q35 machines always have the built-in iTCO). The guest must run a watchdog daemon (e.g.')} <span class="mono">{t('systemd')}</span> {t('with RuntimeWatchdogSec) that keeps it from firing.')}
       </p>
     {:else if kind === 'tpm'}
       <label class="ui-field">
-        <span class="label">Interface</span>
+        <span class="label">{t('Interface')}</span>
         <select class="ui-input" bind:value={tpmModel}>
-          <option value="tpm-crb">CRB (recommended, TPM 2.0)</option>
-          <option value="tpm-tis">TIS (older guests)</option>
+          <option value="tpm-crb">{t('CRB (recommended, TPM 2.0)')}</option>
+          <option value="tpm-tis">{t('TIS (older guests)')}</option>
         </select>
       </label>
-      <p class="hint">An emulated TPM 2.0 (swtpm); its state is kept with the machine. Takes effect from the next start.</p>
+      <p class="hint">{t('An emulated TPM 2.0 (swtpm); its state is kept with the machine. Takes effect from the next start.')}</p>
     {:else if kind === 'rng'}
-      <p class="text">A VirtIO random number generator fed from the host's <span class="mono">/dev/urandom</span>.</p>
+      <p class="text">{t('A VirtIO random number generator fed from the host\'s')} <span class="mono">/dev/urandom</span>.</p>
     {/if}
 
     {#if error}<div class="ui-error-box">{error}</div>{/if}
   </form>
   {#snippet footer()}
-    <button class="ui-btn ghost" onclick={onclose}>Cancel</button>
-    <button class="ui-btn primary" form="add-device" disabled={busy || !ready}>{busy ? 'Adding…' : 'Add device'}</button>
+    <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
+    <button class="ui-btn primary" form="add-device" disabled={busy || !ready}>{busy ? 'Adding…' : t('Add device')}</button>
   {/snippet}
 </Dialog>
 

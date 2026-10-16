@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Live two-series throughput chart (e.g. read/write, receive/send) over the last minute.
   // Auto-scales, but never below `floor`, so idle noise does not look like a spike.
   import uPlot from 'uplot'
@@ -26,7 +27,7 @@
     /** Shown instead of the chart when there is no data at all. */
     empty?: string
   }
-  let { title, a, b, tick, height = 120, floor = 64 * 1024, empty = 'No data yet' }: Props = $props()
+  let { title, a, b, tick, height = 120, floor = 64 * 1024, empty = t('No data yet') }: Props = $props()
 
   let el: HTMLDivElement
   let plot: uPlot | undefined

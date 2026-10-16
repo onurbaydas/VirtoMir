@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Pop-out console: the whole window is the machine's screen.
   import { live } from '../live.svelte'
   import ConsolePanel from '../components/ConsolePanel.svelte'
@@ -7,14 +8,14 @@
   let d = $derived(live.snapshot?.domains.find((x) => x.uuid === uuid))
 </script>
 
-<svelte:head><title>{d ? `${d.name} · console` : 'Console · VirtoMir'}</title></svelte:head>
+<svelte:head><title>{d ? `${d.name} · console` : t('Console · VirtoMir')}</title></svelte:head>
 
 {#if d}
   <ConsolePanel {d} {head} standalone />
 {:else if live.snapshot}
-  <p class="msg">This machine does not exist (any more).</p>
+  <p class="msg">{t('This machine does not exist (any more).')}</p>
 {:else}
-  <p class="msg">Connecting…</p>
+  <p class="msg">{t('Connecting…')}</p>
 {/if}
 
 <style>

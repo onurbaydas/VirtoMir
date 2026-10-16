@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import Monitor from '@lucide/svelte/icons/monitor'
   import LayoutTemplate from '@lucide/svelte/icons/layout-template'
   import type { Domain } from '../api'
@@ -24,20 +25,20 @@
 <div class="row" class:off={!active && d.state !== 'paused'} class:selected role="row">
   <div class="name" role="cell">
     {#if onselect}
-      <input class="sel" type="checkbox" checked={selected} aria-label="Select {d.name}" onchange={(e) => onselect(e.currentTarget.checked)} />
+      <input class="sel" type="checkbox" checked={selected} aria-label={t('Select {name}', { name: d.name })} onchange={(e) => onselect(e.currentTarget.checked)} />
     {/if}
     <span class="avatar" class:on={active} title={d.template ? 'Template' : undefined}>{#if d.template}<LayoutTemplate size={16} />{:else}<Monitor size={16} />{/if}</span>
     <div class="titles">
       <a class="title" href={machineHref(d.uuid)} onclick={router.link}>{d.name}</a>
-      <span class="uuid mono" title={d.uuid}>{d.uuid.slice(0, 8)}{#if !d.persistent} · transient{/if}{#if d.autostart} · autostart{/if}{#if d.template} · template{:else if d.linkedFrom} · linked clone{/if}</span>
+      <span class="uuid mono" title={d.uuid}>{d.uuid.slice(0, 8)}{#if !d.persistent} {t('· transient')}{/if}{#if d.autostart} {t('· autostart')}{/if}{#if d.template} {t('· template')}{:else if d.linkedFrom} {t('· linked clone')}{/if}</span>
     </div>
   </div>
 
   <div role="cell"><StatePill state={d.state} progress={pending ? ACTIONS[pending.action].progress : undefined} /></div>
 
-  <div class="metric num" role="cell" title="Virtual CPUs">{plural(d.vcpus, 'vCPU')}</div>
+  <div class="metric num" role="cell" title={t('Virtual CPUs')}>{plural(d.vcpus, 'vCPU')}</div>
 
-  <div class="metric num" role="cell" title={d.memoryKiB === d.maxMemoryKiB ? 'Memory' : 'Current / maximum memory (balloon)'}>{memLabel}</div>
+  <div class="metric num" role="cell" title={d.memoryKiB === d.maxMemoryKiB ? 'Memory' : t('Current / maximum memory (balloon)')}>{memLabel}</div>
 
   <div class="cpu" role="cell">
     {#if active}

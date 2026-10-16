@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { onMount } from 'svelte'
   import Play from '@lucide/svelte/icons/play'
   import Power from '@lucide/svelte/icons/power'
@@ -88,13 +89,13 @@
     >
       {#if active}
         <Power size={size === 'lg' ? 15 : 13} />
-        <span>Shut down</span>
+        <span>{t('Shut down')}</span>
       {:else if paused}
         <Play size={size === 'lg' ? 15 : 13} />
-        <span>Resume</span>
+        <span>{t('Resume')}</span>
       {:else}
         <Play size={size === 'lg' ? 15 : 13} />
-        <span>Start</span>
+        <span>{t('Start')}</span>
       {/if}
     </button>
 
@@ -105,9 +106,9 @@
       class:running={active}
       class:menu-open={open}
       disabled={!!pending || !session.can('operator')}
-      title="Advanced Power Control Options"
+      title={t('Advanced Power Control Options')}
       onclick={toggleMenu}
-      aria-label="Power menu options"
+      aria-label={t('Power menu options')}
     >
       <ChevronDown size={14} />
     </button>
@@ -117,39 +118,39 @@
   {#if open}
     <div class="power-dropdown">
       <div class="dropdown-header">
-        <span>Power</span>
+        <span>{t('Power')}</span>
       </div>
 
       {#if active}
         <button class="menu-item" onclick={() => handleAction('shutdown')}>
           <Power size={13} />
           <div class="item-text">
-            <strong>Shut down</strong>
-            <span class="sub">Graceful in-guest OS signal</span>
+            <strong>{t('Shut down')}</strong>
+            <span class="sub">{t('Graceful in-guest OS signal')}</span>
           </div>
         </button>
 
         <button class="menu-item" onclick={() => handleAction('reboot')}>
           <RotateCw size={13} />
           <div class="item-text">
-            <strong>Reboot</strong>
-            <span class="sub">Standard OS restart</span>
+            <strong>{t('Reboot')}</strong>
+            <span class="sub">{t('Standard OS restart')}</span>
           </div>
         </button>
 
         <button class="menu-item" onclick={() => handleAction('pause')}>
           <Pause size={13} />
           <div class="item-text">
-            <strong>Pause</strong>
-            <span class="sub">Freeze the vCPUs; memory stays in use</span>
+            <strong>{t('Pause')}</strong>
+            <span class="sub">{t('Freeze the vCPUs; memory stays in use')}</span>
           </div>
         </button>
 
         <button class="menu-item" onclick={() => handleAction('hibernate')}>
           <HardDriveDownload size={13} />
           <div class="item-text">
-            <strong>Save to disk</strong>
-            <span class="sub">Write memory to disk and stop; next start resumes</span>
+            <strong>{t('Save to disk')}</strong>
+            <span class="sub">{t('Write memory to disk and stop; next start resumes')}</span>
           </div>
         </button>
 
@@ -158,16 +159,16 @@
         <button class="menu-item warn-item" class:armed={armed === 'hard-reset'} onclick={() => handleAction('hard-reset')}>
           <RotateCw size={13} />
           <div class="item-text">
-            <strong>{armed === 'hard-reset' ? `Click again to reset ${d.name}` : 'Hard reset'}</strong>
-            <span class="sub">Like the reset button: no shutdown</span>
+            <strong>{armed === 'hard-reset' ? t('Click again to reset {name}', { name: d.name }) : t('Hard reset')}</strong>
+            <span class="sub">{t('Like the reset button: no shutdown')}</span>
           </div>
         </button>
 
         <button class="menu-item danger-item" class:armed={armed === 'force-off'} onclick={() => handleAction('force-off')}>
           <Zap size={13} />
           <div class="item-text">
-            <strong>{armed === 'force-off' ? `Click again to force off ${d.name}` : 'Force off'}</strong>
-            <span class="sub">Like pulling the plug: unsaved data is lost</span>
+            <strong>{armed === 'force-off' ? t('Click again to force off {name}', { name: d.name }) : t('Force off')}</strong>
+            <span class="sub">{t('Like pulling the plug: unsaved data is lost')}</span>
           </div>
         </button>
       {:else}
@@ -175,7 +176,7 @@
           <Play size={13} />
           <div class="item-text">
             <strong>{paused ? 'Resume' : 'Start'}</strong>
-            <span class="sub">{paused ? 'Continue where it was frozen' : 'Boot (or resume a machine saved to disk)'}</span>
+            <span class="sub">{paused ? 'Continue where it was frozen' : t('Boot (or resume a machine saved to disk)')}</span>
           </div>
         </button>
       {/if}

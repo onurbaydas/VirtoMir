@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import Composition from '../components/Composition.svelte'
   import LogIn from '@lucide/svelte/icons/log-in'
   import KeyRound from '@lucide/svelte/icons/key-round'
@@ -55,16 +56,16 @@
   }
 </script>
 
-<svelte:head><title>Sign in · VirtoMir</title></svelte:head>
+<svelte:head><title>{t('Sign in · VirtoMir')}</title></svelte:head>
 
 <div class="wrap">
-  <div class="art"><Composition /><div class="claim">Every<br />setting.<br />Nothing<br />hidden.</div></div>
+  <div class="art"><Composition /><div class="claim">{t('Every')}<br />{t('setting.')}<br />{t('Nothing')}<br />{t('hidden.')}</div></div>
   <form class="card" onsubmit={submit}>
     <div class="brand">
       <img src="/favicon.svg" alt="" width="40" height="40" />
       <div>
         <div class="wordmark">VirtoMir</div>
-        <div class="tagline">Sign in with your account on this host{methods.ldap ? ' or in the directory' : ''}</div>
+        <div class="tagline">{t('Sign in with your account on this host{v}', { v: methods.ldap ? ' or in the directory' : '' })}</div>
       </div>
     </div>
 
@@ -72,23 +73,23 @@
       <div class="code-step">
         <ShieldCheck size={22} />
         <div>
-          <strong>Two-step sign-in</strong>
-          <p>Enter the 6-digit code from your authenticator app for <span class="mono">{user}</span>, or one of your recovery codes.</p>
+          <strong>{t('Two-step sign-in')}</strong>
+          <p>{t('Enter the 6-digit code from your authenticator app for')} <span class="mono">{user}</span>{t(', or one of your recovery codes.')}</p>
         </div>
       </div>
       <label class="ui-field">
-        <span class="label">Code</span>
+        <span class="label">{t('Code')}</span>
         <!-- svelte-ignore a11y_autofocus -->
         <input class="ui-input mono code" bind:value={code} autocomplete="one-time-code" inputmode="numeric" spellcheck="false" maxlength="11" required autofocus />
       </label>
     {:else}
       <label class="ui-field">
-        <span class="label">User name</span>
+        <span class="label">{t('User name')}</span>
         <!-- svelte-ignore a11y_autofocus -->
         <input class="ui-input" bind:value={user} autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus />
       </label>
       <label class="ui-field">
-        <span class="label">Password</span>
+        <span class="label">{t('Password')}</span>
         <input class="ui-input" type="password" bind:value={password} autocomplete="current-password" required />
       </label>
     {/if}
@@ -100,12 +101,12 @@
       {busy ? 'Signing in…' : pending ? 'Verify' : 'Sign in'}
     </button>
     {#if pending}
-      <button type="button" class="ui-btn ghost" onclick={back}>Use another account</button>
+      <button type="button" class="ui-btn ghost" onclick={back}>{t('Use another account')}</button>
     {:else if methods.oidc}
-      <div class="or"><span>or</span></div>
-      <a class="ui-btn sso" href="/api/v1/auth/oidc/start"><KeyRound size={15} /> {methods.oidcLabel || 'Sign in with single sign-on'}</a>
+      <div class="or"><span>{t('or')}</span></div>
+      <a class="ui-btn sso" href="/api/v1/auth/oidc/start"><KeyRound size={15} /> {methods.oidcLabel || t('Sign in with single sign-on')}</a>
     {/if}
-    <p class="note">Root and members of the <span class="mono">libvirt</span> group can sign in{methods.ldap || methods.oidc ? ', and directory users whose groups have a role' : ''}.</p>
+    <p class="note">{t('Root and members of the')} <span class="mono">{t('libvirt')}</span> {t('group can sign in{v}.', { v: methods.ldap || methods.oidc ? ', and directory users whose groups have a role' : '' })}</p>
   </form>
 </div>
 

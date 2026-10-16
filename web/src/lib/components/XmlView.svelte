@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { session } from '../session.svelte'
   import Copy from '@lucide/svelte/icons/copy'
   import Download from '@lucide/svelte/icons/download'
@@ -80,37 +81,37 @@
   {:else}
   <header class="bar">
     {#if active && persistent}
-      <div class="seg" role="radiogroup" aria-label="Which configuration">
+      <div class="seg" role="radiogroup" aria-label={t('Which configuration')}>
         <button role="radio" aria-checked={which === 'live'} class:on={which === 'live'} onclick={() => (which = 'live')}>
-          Running now
+          {t('Running now')}
         </button>
         <button role="radio" aria-checked={which === 'next'} class:on={which === 'next'} onclick={() => (which = 'next')}>
-          Next boot
+          {t('Next boot')}
         </button>
       </div>
     {:else}
       <span class="what">{active ? 'Running configuration (transient machine)' : 'Configuration'}</span>
     {/if}
     <span class="spacer"></span>
-    <button class="tool" onclick={() => load()} disabled={loading} title="Reload">
+    <button class="tool" onclick={() => load()} disabled={loading} title={t('Reload')}>
       <span class:spin={loading}><RefreshCw size={14} /></span>
     </button>
-    <button class="tool" onclick={() => xml && copy(xml, 'XML')} disabled={!xml}><Copy size={14} /> Copy</button>
-    <button class="tool" onclick={download} disabled={!xml}><Download size={14} /> Download</button>
+    <button class="tool" onclick={() => xml && copy(xml, 'XML')} disabled={!xml}><Copy size={14} /> {t('Copy')}</button>
+    <button class="tool" onclick={download} disabled={!xml}><Download size={14} /> {t('Download')}</button>
     {#if persistent || !active}
-      <button class="tool edit" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (editing = true)}><Pencil size={14} /> Edit</button>
+      <button class="tool edit" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (editing = true)}><Pencil size={14} /> {t('Edit')}</button>
     {/if}
   </header>
 
   {#if error}
-    <div class="err">Could not load the XML: {error}</div>
+    <div class="err">{t('Could not load the XML: {error}', { error: error })}</div>
   {:else if xml === null}
     <div class="sk-wrap">
       {#each [70, 45, 60, 52, 38, 66] as w, i (i)}<span class="sk" style:width="{w}%"></span>{/each}
     </div>
   {:else}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex (scrollable region must be keyboard-scrollable) -->
-    <div class="code mono" role="region" aria-label="Domain XML" tabindex="0">
+    <div class="code mono" role="region" aria-label={t('Domain XML')} tabindex="0">
       <ol>
         {#each lines as l, i (i)}
           <li><span class="ln" aria-hidden="true">{i + 1}</span><span class="src">{@html l || ' '}</span></li>
@@ -119,7 +120,7 @@
     </div>
   {/if}
   <p class="hint">
-    {persistent || !active ? 'Edit changes the saved definition, validated by libvirt.' : 'Transient machines have no saved definition to edit.'}
+    {persistent || !active ? 'Edit changes the saved definition, validated by libvirt.' : t('Transient machines have no saved definition to edit.')}
   </p>
   {/if}
 </section>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { onMount } from 'svelte'
   import { live, isActive } from '../live.svelte'
   import { machineHref, router } from '../router.svelte'
@@ -67,18 +68,18 @@
 
     // 1. Pages
     const pages = [
-      { path: '/', title: 'Overview', detail: 'Datacenter & Host Telemetry' },
-      { path: '/machines', title: 'Virtual Machines', detail: 'Guest Workload Inventory & Fleet Management' },
-      { path: '/storage', title: 'Storage Pools', detail: 'Disks, Datastores, ISOs & Volumes' },
-      { path: '/networks', title: 'Virtual Networks', detail: 'Bridges, VLANs & Virtual Switches' },
-      { path: '/hardware', title: 'Hardware & Devices', detail: 'PCI Passthrough, GPUs & Host Devices' },
-      { path: '/backups', title: 'Backups & Schedules', detail: 'CBT Backups, Targets & Retention' },
-      { path: '/alerts', title: 'System Alerts', detail: 'Open Alerts, Rules & Notifications' },
-      { path: '/activity', title: 'Activity & Audit Log', detail: 'User actions & changing API logs' },
-      { path: '/reports', title: 'Reports & Compliance', detail: 'Automated capacity forecasting & backup SLA audits' },
-      { path: '/cluster', title: 'Cluster Overview', detail: 'Multi-host federation and node status' },
-      { path: '/account', title: 'Account & Quotas', detail: 'Roles, API tokens and sign-in config' },
-      { path: '/machines/new', title: 'New Virtual Machine', detail: 'Step-by-step VM creation wizard' },
+      { path: '/', title: t('Overview'), detail: t('Datacenter & Host Telemetry') },
+      { path: '/machines', title: t('Virtual Machines'), detail: t('Guest Workload Inventory & Fleet Management') },
+      { path: '/storage', title: t('Storage Pools'), detail: t('Disks, Datastores, ISOs & Volumes') },
+      { path: '/networks', title: t('Virtual Networks'), detail: t('Bridges, VLANs & Virtual Switches') },
+      { path: '/hardware', title: t('Hardware & Devices'), detail: t('PCI Passthrough, GPUs & Host Devices') },
+      { path: '/backups', title: t('Backups & Schedules'), detail: t('CBT Backups, Targets & Retention') },
+      { path: '/alerts', title: t('System Alerts'), detail: t('Open Alerts, Rules & Notifications') },
+      { path: '/activity', title: t('Activity & Audit Log'), detail: t('User actions & changing API logs') },
+      { path: '/reports', title: t('Reports & Compliance'), detail: t('Automated capacity forecasting & backup SLA audits') },
+      { path: '/cluster', title: t('Cluster Overview'), detail: t('Multi-host federation and node status') },
+      { path: '/account', title: t('Account & Quotas'), detail: t('Roles, API tokens and sign-in config') },
+      { path: '/machines/new', title: t('New Virtual Machine'), detail: t('Step-by-step VM creation wizard') },
     ]
     for (const p of pages) {
       list.push({
@@ -100,7 +101,7 @@
         id: `vm-${d.uuid}`,
         title: d.name,
         category: 'VM',
-        detail: `State: ${d.state} · ${d.vcpus} vCPU · ${Math.round(d.memoryKiB / 1024)} MB`,
+        detail: t('State: {state} · {vcpus} vCPU · {v} MB', { state: d.state, vcpus: d.vcpus, v: Math.round(d.memoryKiB / 1024) }),
         badge: active ? 'Running' : 'Stopped',
         run: () => {
           router.navigate(machineHref(d.uuid))
@@ -114,7 +115,7 @@
           id: `cmd-start-${d.uuid}`,
           title: `> start ${d.name}`,
           category: 'Command',
-          detail: `Power on virtual machine ${d.name}`,
+          detail: t('Power on virtual machine {name}', { name: d.name }),
           badge: 'Action',
           run: () => {
             close()
@@ -126,7 +127,7 @@
           id: `cmd-reboot-${d.uuid}`,
           title: `> reboot ${d.name}`,
           category: 'Command',
-          detail: `ACPI reboot signal to ${d.name}`,
+          detail: t('ACPI reboot signal to {name}', { name: d.name }),
           badge: 'Action',
           run: () => {
             close()
@@ -137,7 +138,7 @@
           id: `cmd-stop-${d.uuid}`,
           title: `> shutdown ${d.name}`,
           category: 'Command',
-          detail: `Clean ACPI shutdown of ${d.name}`,
+          detail: t('Clean ACPI shutdown of {name}', { name: d.name }),
           badge: 'Action',
           run: () => {
             close()
@@ -152,7 +153,7 @@
       id: 'theme-dark',
       title: '> theme dark',
       category: 'Command',
-      detail: 'Switch to Matte Obsidian dark theme',
+      detail: t('Switch to Matte Obsidian dark theme'),
       badge: 'Theme',
       run: () => {
         theme.set('dark')
@@ -163,7 +164,7 @@
       id: 'theme-light',
       title: '> theme light',
       category: 'Command',
-      detail: 'Switch to Warm Limestone light theme',
+      detail: t('Switch to Warm Limestone light theme'),
       badge: 'Theme',
       run: () => {
         theme.set('light')
@@ -209,7 +210,7 @@
       class="palette"
       role="dialog"
       aria-modal="true"
-      aria-label="Command Palette"
+      aria-label={t('Command Palette')}
       tabindex="-1"
       onclick={(e) => e.stopPropagation()}
     >
@@ -223,7 +224,7 @@
           spellcheck="false"
           autocomplete="off"
         />
-        <button type="button" class="esc" onclick={close} aria-label="Close palette">ESC</button>
+        <button type="button" class="esc" onclick={close} aria-label={t('Close palette')}>{t('ESC')}</button>
       </header>
 
       <ul class="results" role="listbox">
@@ -249,14 +250,14 @@
             {/if}
           </li>
         {:else}
-          <li class="empty">No matching resources or commands.</li>
+          <li class="empty">{t('No matching resources or commands.')}</li>
         {/each}
       </ul>
 
       <footer class="footer">
-        <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
-        <span><kbd>↵</kbd> Select</span>
-        <span><kbd>ESC</kbd> Close</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd> {t('Navigate')}</span>
+        <span><kbd>↵</kbd> {t('Select')}</span>
+        <span><kbd>{t('ESC')}</kbd> {t('Close')}</span>
         <span class="count">{filteredItems.length} results</span>
       </footer>
     </div>

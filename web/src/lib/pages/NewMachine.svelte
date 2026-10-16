@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { session } from '../session.svelte'
   import ArrowLeft from '@lucide/svelte/icons/arrow-left'
   import Disc from '@lucide/svelte/icons/disc'
@@ -20,9 +21,9 @@
 
   type OS = CreateSpec['os']
   const OSES: { key: OS; label: string; hint: string }[] = [
-    { key: 'linux', label: 'Linux', hint: 'Debian, Ubuntu, Fedora, Arch… Fast VirtIO devices.' },
-    { key: 'windows', label: 'Windows', hint: 'Windows 10/11 and Server. UEFI, Secure Boot and TPM 2.0.' },
-    { key: 'other', label: 'Other', hint: 'BSD, older systems. Widely compatible devices.' },
+    { key: 'linux', label: t('Linux'), hint: t('Debian, Ubuntu, Fedora, Arch… Fast VirtIO devices.') },
+    { key: 'windows', label: t('Windows'), hint: t('Windows 10/11 and Server. UEFI, Secure Boot and TPM 2.0.') },
+    { key: 'other', label: t('Other'), hint: t('BSD, older systems. Widely compatible devices.') },
   ]
   const DEFAULTS: Record<OS, { vcpus: number; memGiB: number; diskGiB: number; secureBoot: boolean; tpm: boolean }> = {
     linux: { vcpus: 2, memGiB: 2, diskGiB: 20, secureBoot: false, tpm: false },
@@ -171,7 +172,7 @@
     error = ''
     try {
       const res = await api.create(spec, respool || undefined)
-      if (res.startError) toasts.push({ kind: 'warn', title: `${name} was created but did not start`, detail: res.startError })
+      if (res.startError) toasts.push({ kind: 'warn', title: t('{name} was created but did not start', { name: name }), detail: res.startError })
       else toasts.push({ kind: 'info', title: start ? `${name} is starting` : `${name} created` })
       router.navigate(machineHref(res.uuid))
     } catch (err) {
@@ -182,22 +183,22 @@
   }
 </script>
 
-<svelte:head><title>New machine · VirtoMir</title></svelte:head>
+<svelte:head><title>{t('New machine · VirtoMir')}</title></svelte:head>
 
-<a class="back" href="/" onclick={router.link}><ArrowLeft size={15} /> Overview</a>
+<a class="back" href="/" onclick={router.link}><ArrowLeft size={15} /> {t('Overview')}</a>
 <header class="page-head">
   <div>
-    <h1>New machine</h1>
-    <p class="lead">Pick an operating system and installation media; everything else has a sensible default.</p>
+    <h1>{t('New machine')}</h1>
+    <p class="lead">{t('Pick an operating system and installation media; everything else has a sensible default.')}</p>
   </div>
-  <a class="ui-btn" href={router.scoped('/machines/import')} onclick={router.link}>Import OVA or XML…</a>
+  <a class="ui-btn" href={router.scoped('/machines/import')} onclick={router.link}>{t('Import OVA or XML…')}</a>
 </header>
 
 {#if loadErr}<div class="ui-error-box">{loadErr}</div>{/if}
 
 {#if templates.length}
   <section class="ui-panel templates">
-    <span class="t-label"><LayoutTemplate size={15} /> Start from a template — ready in seconds</span>
+    <span class="t-label"><LayoutTemplate size={15} /> {t('Start from a template — ready in seconds')}</span>
     <div class="t-list">
       {#each templates as t (t.uuid)}
         <button type="button" class="t-card" disabled={!session.canCreate} onclick={() => openDeploy(t)}>
@@ -212,21 +213,21 @@
 <form class="layout" onsubmit={create}>
   <div class="steps">
     <section class="ui-panel step">
-      <h2><span class="n">1</span> Name and system</h2>
+      <h2><span class="n">1</span> {t('Name and system')}</h2>
       <label class="ui-field">
-        <span class="label">Name</span>
+        <span class="label">{t('Name')}</span>
         <input
           class="ui-input"
           bind:value={name}
           oninput={() => (nameTouched = true)}
-          placeholder="web-server"
+          placeholder={t('web-server')}
           aria-invalid={name !== '' && (!nameValid || nameTaken)}
           spellcheck="false"
         />
-        {#if name && !nameValid}<span class="error">Letters, digits, '.', '_', '+' and '-', starting with a letter or digit.</span>
-        {:else if nameTaken}<span class="error">A machine with this name already exists.</span>{/if}
+        {#if name && !nameValid}<span class="error">{t('Letters, digits, \'.\', \'_\', \'+\' and \'-\', starting with a letter or digit.')}</span>
+        {:else if nameTaken}<span class="error">{t('A machine with this name already exists.')}</span>{/if}
       </label>
-      <div class="choices" role="radiogroup" aria-label="Operating system">
+      <div class="choices" role="radiogroup" aria-label={t('Operating system')}>
         {#each OSES as o (o.key)}
           <label class="choice" class:on={os === o.key}>
             <input type="radio" name="os" checked={os === o.key} onchange={() => pickOS(o.key)} />
@@ -238,122 +239,122 @@
     </section>
 
     <section class="ui-panel step">
-      <h2><span class="n">2</span> <Disc size={16} /> Source</h2>
-      <div class="seg" role="radiogroup" aria-label="Where the system comes from">
-        <label class:on={source === 'iso'}><input type="radio" bind:group={source} value="iso" /> Install from ISO</label>
-        <label class:on={source === 'cloud'}><input type="radio" bind:group={source} value="cloud" /> Cloud image</label>
-        <label class:on={source === 'disk'}><input type="radio" bind:group={source} value="disk" /> Existing disk</label>
+      <h2><span class="n">2</span> <Disc size={16} /> {t('Source')}</h2>
+      <div class="seg" role="radiogroup" aria-label={t('Where the system comes from')}>
+        <label class:on={source === 'iso'}><input type="radio" bind:group={source} value="iso" /> {t('Install from ISO')}</label>
+        <label class:on={source === 'cloud'}><input type="radio" bind:group={source} value="cloud" /> {t('Cloud image')}</label>
+        <label class:on={source === 'disk'}><input type="radio" bind:group={source} value="disk" /> {t('Existing disk')}</label>
       </div>
       {#if source === 'iso'}
         <label class="ui-field">
-          <span class="label">Boot from</span>
+          <span class="label">{t('Boot from')}</span>
           <select class="ui-input" bind:value={iso}>
-            <option value="">No installation media</option>
+            <option value="">{t('No installation media')}</option>
             {#each isos as i (i.vol.path)}
               <option value={i.vol.path}>{i.vol.name} — {i.pool}, {formatBytes(i.vol.capacityBytes)}</option>
             {/each}
           </select>
           <span class="hint">
-            {#if isos.length === 0}No ISO images found.{/if}
-            <a href="/storage" onclick={router.link}>Upload an ISO</a> in Storage.
+            {#if isos.length === 0}{t('No ISO images found.')}{/if}
+            <a href="/storage" onclick={router.link}>{t('Upload an ISO')}</a> {t('in Storage.')}
           </span>
         </label>
       {:else if source === 'cloud'}
         <label class="ui-field">
-          <span class="label">Cloud image</span>
+          <span class="label">{t('Cloud image')}</span>
           <select class="ui-input" bind:value={baseImage}>
-            <option value="" disabled>Choose an image…</option>
+            <option value="" disabled>{t('Choose an image…')}</option>
             {#each images as i (i.vol.path)}
               <option value={i.vol.path}>{i.vol.name} — {i.pool}, {formatBytes(i.vol.capacityBytes)}</option>
             {/each}
           </select>
           <span class="hint">
-            Copied, so the original stays clean.
-            <a href="/storage" onclick={router.link}>Upload one</a> in Storage.
+            {t('Copied, so the original stays clean.')}
+            <a href="/storage" onclick={router.link}>{t('Upload one')}</a> {t('in Storage.')}
           </span>
         </label>
         <div class="ci">
           <div class="two">
             <label class="ui-field">
-              <span class="label">User</span>
+              <span class="label">{t('User')}</span>
               <input class="ui-input mono" bind:value={ciUser} autocapitalize="off" spellcheck="false" />
             </label>
             <label class="ui-field">
-              <span class="label">Password</span>
-              <input class="ui-input" type="password" bind:value={ciPassword} autocomplete="new-password" placeholder="optional with an SSH key" />
+              <span class="label">{t('Password')}</span>
+              <input class="ui-input" type="password" bind:value={ciPassword} autocomplete="new-password" placeholder={t('optional with an SSH key')} />
             </label>
           </div>
           <label class="ui-field">
-            <span class="label">SSH public keys (one per line)</span>
-            <textarea class="ui-input mono" rows="2" bind:value={ciKeys} placeholder="ssh-ed25519 AAAA… you@laptop" spellcheck="false"></textarea>
-            <span class="hint">cloud-init creates the user with sudo, sets the hostname to the machine name and installs the QEMU guest agent.</span>
+            <span class="label">{t('SSH public keys (one per line)')}</span>
+            <textarea class="ui-input mono" rows="2" bind:value={ciKeys} placeholder={t('ssh-ed25519 AAAA… you@laptop')} spellcheck="false"></textarea>
+            <span class="hint">{t('cloud-init creates the user with sudo, sets the hostname to the machine name and installs the QEMU guest agent.')}</span>
           </label>
           {#if ciProblem}<p class="error">{ciProblem}</p>{/if}
         </div>
       {:else}
         <label class="ui-field">
-          <span class="label">Disk image</span>
+          <span class="label">{t('Disk image')}</span>
           <select class="ui-input" bind:value={existingDisk}>
-            <option value="" disabled>Choose an unused volume…</option>
+            <option value="" disabled>{t('Choose an unused volume…')}</option>
             {#each images as i (i.vol.path)}
               <option value={i.vol.path}>{i.vol.name} — {i.pool}, {formatBytes(i.vol.capacityBytes)}</option>
             {/each}
           </select>
-          <span class="hint">The machine boots this image directly (not a copy) — e.g. a disk imported from another host.</span>
+          <span class="hint">{t('The machine boots this image directly (not a copy) — e.g. a disk imported from another host.')}</span>
         </label>
       {/if}
     </section>
 
     <section class="ui-panel step">
-      <h2><span class="n">3</span> <Cpu size={16} /> Processor and memory</h2>
+      <h2><span class="n">3</span> <Cpu size={16} /> {t('Processor and memory')}</h2>
       <div class="slider">
-        <label for="vcpus">Virtual CPUs</label>
+        <label for="vcpus">{t('Virtual CPUs')}</label>
         <input id="vcpus" type="range" min="1" max={maxCPUs} bind:value={vcpus} />
-        <input class="ui-input num-in" type="number" min="1" max="512" bind:value={vcpus} aria-label="Virtual CPUs" />
-        <span class="hint">The host has {maxCPUs} threads; machines may share them.</span>
+        <input class="ui-input num-in" type="number" min="1" max="512" bind:value={vcpus} aria-label={t('Virtual CPUs')} />
+        <span class="hint">{t('The host has {maxCPUs} threads; machines may share them.', { maxCPUs: maxCPUs })}</span>
       </div>
       <div class="slider">
-        <label for="mem">Memory (GiB)</label>
+        <label for="mem">{t('Memory (GiB)')}</label>
         <input id="mem" type="range" min="1" max={maxMemGiB} step="1" bind:value={memGiB} />
-        <input class="ui-input num-in" type="number" min="0.25" step="0.25" bind:value={memGiB} aria-label="Memory in GiB" />
+        <input class="ui-input num-in" type="number" min="0.25" step="0.25" bind:value={memGiB} aria-label={t('Memory in GiB')} />
         <span class="hint" class:warn={memGiB > maxMemGiB * 0.8}>
-          {memGiB > maxMemGiB * 0.8 ? 'Close to all host memory — the host may start swapping. ' : ''}The host has {formatKiB(live.host?.memoryKiB ?? 0)}.
+          {t('{v}The host has {memoryKiB}.', { v: memGiB > maxMemGiB * 0.8 ? 'Close to all host memory — the host may start swapping. ' : '', memoryKiB: formatKiB(live.host?.memoryKiB ?? 0) })}
         </span>
       </div>
     </section>
 
     <section class="ui-panel step">
-      <h2><span class="n">4</span> <HardDrive size={16} /> Disk</h2>
+      <h2><span class="n">4</span> <HardDrive size={16} /> {t('Disk')}</h2>
       {#if source === 'disk'}
-        <p class="hint">Uses the selected disk image as it is.</p>
+        <p class="hint">{t('Uses the selected disk image as it is.')}</p>
       {:else if source === 'cloud'}
         <div class="two">
           <label class="ui-field">
-            <span class="label">Grow to (GiB)</span>
+            <span class="label">{t('Grow to (GiB)')}</span>
             <input class="ui-input" type="number" min={baseCapGiB || 1} max="65536" bind:value={diskGiB} />
-            <span class="hint">The image is {baseCapGiB || '?'} GiB; cloud-init grows the file system on first boot.</span>
+            <span class="hint">{t('The image is {v} GiB; cloud-init grows the file system on first boot.', { v: baseCapGiB || '?' })}</span>
           </label>
           <label class="ui-field">
-            <span class="label">Storage pool</span>
+            <span class="label">{t('Storage pool')}</span>
             <select class="ui-input" bind:value={pool}>
               {#each filePools as p (p.name)}<option value={p.name}>{p.name} — {formatBytes(p.availableBytes)} free</option>{/each}
             </select>
           </label>
         </div>
       {:else}
-      <label class="ui-switch"><input type="checkbox" bind:checked={withDisk} /> Create a new disk</label>
+      <label class="ui-switch"><input type="checkbox" bind:checked={withDisk} /> {t('Create a new disk')}</label>
       {/if}
       {#if source === 'iso' && withDisk}
         <div class="two">
           <label class="ui-field">
-            <span class="label">Size (GiB)</span>
+            <span class="label">{t('Size (GiB)')}</span>
             <input class="ui-input" type="number" min="1" max="65536" bind:value={diskGiB} aria-invalid={diskTooBig} />
             <span class="hint" class:warn={diskTooBig}>
-              Thin provisioned: it only uses what the guest writes.{diskTooBig ? ' Larger than the free space in the pool.' : ''}
+              {t('Thin provisioned: it only uses what the guest writes.{v}', { v: diskTooBig ? ' Larger than the free space in the pool.' : '' })}
             </span>
           </label>
           <label class="ui-field">
-            <span class="label">Storage pool</span>
+            <span class="label">{t('Storage pool')}</span>
             <select class="ui-input" bind:value={pool}>
               {#each filePools as p (p.name)}
                 <option value={p.name}>{p.name} — {formatBytes(p.availableBytes)} free</option>
@@ -362,25 +363,25 @@
           </label>
         </div>
       {:else if source === 'iso' && !iso}
-        <p class="error">Without a disk the machine needs installation media to boot from.</p>
+        <p class="error">{t('Without a disk the machine needs installation media to boot from.')}</p>
       {/if}
     </section>
 
     <section class="ui-panel step">
-      <h2><span class="n">5</span> <Network size={16} /> Network</h2>
+      <h2><span class="n">5</span> <Network size={16} /> {t('Network')}</h2>
       <label class="ui-field">
-        <span class="label">Connect to</span>
+        <span class="label">{t('Connect to')}</span>
         <select class="ui-input" bind:value={netChoice}>
           {#each networks as n (n.name)}
             <option value="network:{n.name}">{n.name} ({n.mode === 'nat' ? 'NAT, internet through the host' : n.mode})</option>
           {/each}
-          <option value="bridge">A host bridge (machine appears on your LAN)</option>
-          <option value="none">No network</option>
+          <option value="bridge">{t('A host bridge (machine appears on your LAN)')}</option>
+          <option value="none">{t('No network')}</option>
         </select>
       </label>
       {#if netChoice === 'bridge'}
         <label class="ui-field">
-          <span class="label">Bridge</span>
+          <span class="label">{t('Bridge')}</span>
           <input class="ui-input mono" bind:value={bridge} placeholder="br0" />
         </label>
       {/if}
@@ -388,7 +389,7 @@
 
     <section class="ui-panel step">
       <button type="button" class="adv" aria-expanded={advanced} onclick={() => (advanced = !advanced)}>
-        <ShieldCheck size={16} /> Firmware and security
+        <ShieldCheck size={16} /> {t('Firmware and security')}
         <span class="adv-sum">{firmware === 'uefi' ? 'UEFI' : 'BIOS'}{secureBoot && firmware === 'uefi' ? ' · Secure Boot' : ''}{tpm ? ' · TPM 2.0' : ''}</span>
         <span class="chev" class:up={advanced}><ChevronDown size={16} /></span>
       </button>
@@ -396,52 +397,52 @@
         <div class="adv-body">
           <div class="two">
             <label class="ui-field">
-              <span class="label">Firmware</span>
+              <span class="label">{t('Firmware')}</span>
               <select class="ui-input" bind:value={firmware}>
-                <option value="uefi">UEFI (modern, recommended)</option>
-                <option value="bios">BIOS (legacy)</option>
+                <option value="uefi">{t('UEFI (modern, recommended)')}</option>
+                <option value="bios">{t('BIOS (legacy)')}</option>
               </select>
             </label>
           </div>
-          <label class="ui-switch"><input type="checkbox" bind:checked={secureBoot} disabled={firmware === 'bios'} /> Secure Boot</label>
-          <label class="ui-switch"><input type="checkbox" bind:checked={tpm} /> TPM 2.0 (required by Windows 11)</label>
+          <label class="ui-switch"><input type="checkbox" bind:checked={secureBoot} disabled={firmware === 'bios'} /> {t('Secure Boot')}</label>
+          <label class="ui-switch"><input type="checkbox" bind:checked={tpm} /> {t('TPM 2.0 (required by Windows 11)')}</label>
         </div>
       {/if}
     </section>
   </div>
 
   <aside class="summary ui-panel">
-    <h2>Summary</h2>
+    <h2>{t('Summary')}</h2>
     <dl>
-      <dt>Name</dt><dd>{name || '—'}</dd>
-      <dt>System</dt><dd>{OSES.find((o) => o.key === os)?.label}</dd>
-      <dt>Source</dt><dd class="mono small">{(source === 'iso' ? iso : source === 'cloud' ? baseImage : existingDisk).split('/').pop() || (source === 'iso' && withDisk ? 'Empty disk' : '—')}</dd>
-      <dt>CPU / RAM</dt><dd>{vcpus} vCPU · {memGiB} GiB</dd>
-      <dt>Disk</dt><dd>{source === 'disk' ? 'Existing image' : source === 'cloud' ? `${Math.max(diskGiB, baseCapGiB)} GiB copy in ${pool}` : withDisk ? `${diskGiB} GiB in ${pool}` : 'None'}</dd>
-      {#if source === 'cloud'}<dt>Sign-in</dt><dd class="mono small">{ciUser}{ciPassword ? ' · password' : ''}{keys.length ? ` · ${keys.length} key${keys.length > 1 ? 's' : ''}` : ''}</dd>{/if}
-      <dt>Network</dt><dd>{netChoice.startsWith('network:') ? netChoice.slice(8) : netChoice === 'bridge' ? bridge : 'None'}</dd>
-      <dt>Firmware</dt><dd>{firmware === 'uefi' ? 'UEFI' : 'BIOS'}{secureBoot && firmware === 'uefi' ? ', Secure Boot' : ''}{tpm ? ', TPM' : ''}</dd>
+      <dt>{t('Name')}</dt><dd>{name || '—'}</dd>
+      <dt>{t('System')}</dt><dd>{OSES.find((o) => o.key === os)?.label}</dd>
+      <dt>{t('Source')}</dt><dd class="mono small">{(source === 'iso' ? iso : source === 'cloud' ? baseImage : existingDisk).split('/').pop() || (source === 'iso' && withDisk ? 'Empty disk' : '—')}</dd>
+      <dt>{t('CPU / RAM')}</dt><dd>{t('{vcpus} vCPU · {memGiB} GiB', { vcpus: vcpus, memGiB: memGiB })}</dd>
+      <dt>{t('Disk')}</dt><dd>{source === 'disk' ? 'Existing image' : source === 'cloud' ? t('{v} GiB copy in {pool}', { v: Math.max(diskGiB, baseCapGiB), pool: pool }) : withDisk ? `${diskGiB} GiB in ${pool}` : 'None'}</dd>
+      {#if source === 'cloud'}<dt>{t('Sign-in')}</dt><dd class="mono small">{ciUser}{ciPassword ? ' · password' : ''}{keys.length ? ` · ${keys.length} key${keys.length > 1 ? 's' : ''}` : ''}</dd>{/if}
+      <dt>{t('Network')}</dt><dd>{netChoice.startsWith('network:') ? netChoice.slice(8) : netChoice === 'bridge' ? bridge : 'None'}</dd>
+      <dt>{t('Firmware')}</dt><dd>{firmware === 'uefi' ? 'UEFI' : 'BIOS'}{secureBoot && firmware === 'uefi' ? ', Secure Boot' : ''}{tpm ? ', TPM' : ''}</dd>
     </dl>
     {#if respools.length}
       <label class="ui-field">
-        <span class="label">Resource pool</span>
+        <span class="label">{t('Resource pool')}</span>
         <select class="ui-input" bind:value={respool}>
-          <option value="">None</option>
+          <option value="">{t('None')}</option>
           {#each respools as rp (rp.id)}<option value={rp.id}>{rp.name}</option>{/each}
         </select>
       </label>
     {/if}
-    <label class="ui-switch"><input type="checkbox" bind:checked={start} /> Start it right away</label>
+    <label class="ui-switch"><input type="checkbox" bind:checked={start} /> {t('Start it right away')}</label>
     {#if error}<div class="ui-error-box">{error}</div>{/if}
-    {#if !session.canCreate}<p class="error">{session.why('admin')} Operators can create machines when an admin gives them a quota.</p>{/if}
+    {#if !session.canCreate}<p class="error">{t('{v} Operators can create machines when an admin gives them a quota.', { v: session.why('admin') })}</p>{/if}
     {#if session.quota?.rule && session.quota.used}
-      <p class="hint">Your quota: {session.quota.used.machines} of {session.quota.rule.machines} machines, {session.quota.used.vcpus} of {session.quota.rule.vcpus} vCPUs, {session.quota.used.memoryMiB} of {session.quota.rule.memoryMiB} MiB{session.quota.rule.diskGiB != null ? `, ${session.quota.used.diskGiB ?? 0} of ${session.quota.rule.diskGiB} GiB disk` : ''} in use.</p>
+      <p class="hint">{t('Your quota: {machines} of {machines2} machines, {vcpus} of {vcpus2} vCPUs, {memoryMiB} of {memoryMiB2} MiB{v} in use.', { machines: session.quota.used.machines, machines2: session.quota.rule.machines, vcpus: session.quota.used.vcpus, vcpus2: session.quota.rule.vcpus, memoryMiB: session.quota.used.memoryMiB, memoryMiB2: session.quota.rule.memoryMiB, v: session.quota.rule.diskGiB != null ? `, ${session.quota.used.diskGiB ?? 0} of ${session.quota.rule.diskGiB} GiB disk` : '' })}</p>
     {/if}
     <button class="ui-btn primary create" disabled={!canCreate || busy || !session.canCreate}>
       <Rocket size={15} />
       {busy ? 'Creating…' : start ? 'Create and start' : 'Create'}
     </button>
-    {#if !bootable}<span class="error">Add a disk or installation media.</span>{/if}
+    {#if !bootable}<span class="error">{t('Add a disk or installation media.')}</span>{/if}
 
     <IaCPanel {spec} />
   </aside>

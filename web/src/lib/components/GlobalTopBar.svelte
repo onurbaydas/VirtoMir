@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // The bar above every page: where you are, search / commands, and only the signals that
   // need attention (an update, lost quorum, a full or stopped pool, alerts, running tasks).
   import { live } from '../live.svelte'
@@ -53,15 +54,15 @@
   })
 
   const PAGE: Record<string, string> = {
-    overview: 'Overview', machines: 'Machines', new: 'New machine', import: 'Import', storage: 'Storage',
-    networks: 'Networks', backups: 'Backups', alerts: 'Alerts', activity: 'Activity', account: 'Account',
-    hardware: 'Hardware', reports: 'Reports', cluster: 'Cluster',
+    overview: t('Overview'), machines: t('Machines'), new: t('New machine'), import: t('Import'), storage: t('Storage'),
+    networks: t('Networks'), backups: t('Backups'), alerts: t('Alerts'), activity: t('Activity'), account: t('Account'),
+    hardware: t('Hardware'), reports: t('Reports'), cluster: t('Cluster'), setup: t('Setup'),
   }
   let hostName = $derived((cluster.clustered ? cluster.current?.name : null) ?? live.host?.hostname?.split('.')[0] ?? '')
   let machineName = $derived(
     router.route.name === 'machine' ? (live.snapshot?.domains.find((d) => d.uuid === (router.route as { uuid: string }).uuid)?.name ?? '') : '',
   )
-  let pageName = $derived(router.route.name === 'machine' ? 'Machines' : (PAGE[router.route.name] ?? ''))
+  let pageName = $derived(router.route.name === 'machine' ? t('Machines') : (PAGE[router.route.name] ?? ''))
 
   const openPalette = () => window.dispatchEvent(new CustomEvent('open-command-palette'))
   const toggleDrawer = () => window.dispatchEvent(new CustomEvent('toggle-drawer'))
@@ -69,7 +70,7 @@
 </script>
 
 <header class="bar">
-  <nav class="crumbs" aria-label="Location">
+  <nav class="crumbs" aria-label={t('Location')}>
     {#if hostName}<span class="host">{hostName}</span><span class="sep">/</span>{/if}
     {#if machineName}
       <a href="/machines" onclick={router.link}>{pageName}</a><span class="sep">/</span><span class="here">{machineName}</span>
@@ -78,31 +79,31 @@
     {/if}
   </nav>
 
-  <button class="search" onclick={openPalette} title="Search machines and pages, or run a command">
+  <button class="search" onclick={openPalette} title={t('Search machines and pages, or run a command')}>
     <Search size={14} />
-    <span>Search or run a command…</span>
+    <span>{t('Search or run a command…')}</span>
     <kbd>{isMac ? '⌘' : 'Ctrl'} K</kbd>
   </button>
 
   <div class="right">
     {#if newer}
-      <a class="signal accent" href="/account" onclick={router.link} title="A newer VirtoMir release is available"><ArrowUpCircle size={14} /> {newer}</a>
+      <a class="signal accent" href="/account" onclick={router.link} title={t('A newer VirtoMir release is available')}><ArrowUpCircle size={14} /> {newer}</a>
     {/if}
     {#if quorum && !quorum.ok}
-      <a class="signal danger" href="/cluster" onclick={router.link} title="High availability: this host sees {quorum.votes} of {quorum.total} votes"><TriangleAlert size={14} /> No quorum</a>
+      <a class="signal danger" href="/cluster" onclick={router.link} title={t('High availability: this host sees {votes} of {total} votes', { votes: quorum.votes, total: quorum.total })}><TriangleAlert size={14} /> {t('No quorum')}</a>
     {/if}
     {#if storageIssue}
       <a class="signal warn" href="/storage" onclick={router.link}><TriangleAlert size={14} /> {storageIssue}</a>
     {/if}
     {#if alerts.open > 0}
-      <a class="signal" class:danger={alerts.critical} class:warn={!alerts.critical} href="/alerts" onclick={router.link} title="Unacknowledged alerts"><Bell size={14} /> {alerts.open}</a>
+      <a class="signal" class:danger={alerts.critical} class:warn={!alerts.critical} href="/alerts" onclick={router.link} title={t('Unacknowledged alerts')}><Bell size={14} /> {alerts.open}</a>
     {/if}
     <button class="icon-btn" onclick={toggleDrawer} title="Tasks, recent changes and API calls (`)">
       <ListChecks size={16} />
       {#if running}<span class="dot-count">{running}</span>{/if}
     </button>
     {#if session.canCreate}
-      <a class="ui-btn primary sm" href="/machines/new" onclick={router.link}><Plus size={14} /> New machine</a>
+      <a class="ui-btn primary sm" href="/machines/new" onclick={router.link}><Plus size={14} /> {t('New machine')}</a>
     {/if}
   </div>
 </header>

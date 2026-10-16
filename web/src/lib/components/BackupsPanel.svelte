@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // The machine page's Backups tab: back up now, the machine's backups, its schedules.
   import Archive from '@lucide/svelte/icons/archive'
   import { api, errorText, type BackupInfo } from '../api'
@@ -33,7 +34,7 @@
       const job = await api.backupNow(uuid)
       track(job, { success: `${name} backed up`, onSuccess: () => void load() })
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Backup not started', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Backup not started'), detail: errorText(e) })
     }
   }
 </script>
@@ -43,22 +44,22 @@
 <section class="ui-panel card">
   <header class="head">
     <div>
-      <h2><Archive size={16} /> Backups</h2>
+      <h2><Archive size={16} /> {t('Backups')}</h2>
       <p class="muted">
-        Stored in <span class="mono">{dir || '…'}</span>.
-        {active ? 'Backing up a running machine does not stop it.' : 'The machine is off: its disks are copied as they are.'}
+        {t('Stored in')} <span class="mono">{dir || '…'}</span>.
+        {active ? 'Backing up a running machine does not stop it.' : t('The machine is off: its disks are copied as they are.')}
       </p>
     </div>
     <button class="ui-btn primary" disabled={!session.can('operator')} title={session.why('operator')} onclick={backupNow}>
-      <Archive size={15} /> Back up now
+      <Archive size={15} /> {t('Back up now')}
     </button>
   </header>
   {#if error}
     <div class="ui-error-box">{error}</div>
   {:else if backups === null}
-    <p class="muted">Loading…</p>
+    <p class="muted">{t('Loading…')}</p>
   {:else if backups.length === 0}
-    <p class="empty">No backups yet. Back up now, or turn on automatic backups above.</p>
+    <p class="empty">{t('No backups yet. Back up now, or turn on automatic backups above.')}</p>
   {:else}
     <BackupList {backups} onchange={load} />
   {/if}

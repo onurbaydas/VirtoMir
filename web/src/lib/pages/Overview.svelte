@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { session } from '../session.svelte'
   import Cpu from '@lucide/svelte/icons/cpu'
   import MemoryStick from '@lucide/svelte/icons/memory-stick'
@@ -46,16 +47,16 @@
     <h1>{host?.hostname ?? 'Overview'}</h1>
     {#if host}
       <div class="chips">
-        <span class="chip mono" title="Hypervisor">{host.hypervisor} {host.hypervisorVersion}</span>
-        <span class="chip mono" title="libvirt">libvirt {host.libvirtVersion}</span>
-        <span class="chip mono" title="CPU architecture">{host.cpuModel}</span>
-        {#if host.numaNodes > 1}<span class="chip mono">{plural(host.numaNodes, 'NUMA node')}</span>{/if}
+        <span class="chip mono" title={t('Hypervisor')}>{host.hypervisor} {host.hypervisorVersion}</span>
+        <span class="chip mono" title={t('libvirt')}>libvirt {host.libvirtVersion}</span>
+        <span class="chip mono" title={t('CPU architecture')}>{host.cpuModel}</span>
+        {#if host.numaNodes > 1}<span class="chip mono">{plural(host.numaNodes, t('NUMA node'))}</span>{/if}
       </div>
     {/if}
   </div>
   <div class="head-right">
     {#if live.streamOpen && snap?.connected}
-      <span class="live" title="Updated every second"><span class="live-dot"></span>Live</span>
+      <span class="live" title={t('Updated every second')}><span class="live-dot"></span>{t('Live')}</span>
     {/if}
   </div>
 </header>
@@ -63,27 +64,27 @@
 <HostChassisCard hostname={host?.hostname ?? ''} />
 
 <section class="stats">
-  <StatCard label="Host CPU" icon={Cpu} value={formatPercent(snap?.host.cpuPercent ?? 0)} unit="%" sub={topology} {loading}>
+  <StatCard label={t('Host CPU')} icon={Cpu} value={formatPercent(snap?.host.cpuPercent ?? 0)} unit="%" sub={topology} {loading}>
     {#snippet chart()}<Sparkline data={live.hostCpu} tick={live.tick} height={72} />{/snippet}
   </StatCard>
 
   <StatCard
-    label="Host memory"
+    label={t('Host memory')}
     icon={MemoryStick}
     value={formatKiB(memUsed).split(' ')[0]}
-    unit="{formatKiB(memUsed).split(' ')[1]} of {formatKiB(memTotal)}"
-    sub="{formatPercent(memPct)} % in use · {formatKiB(memAllocated)} assigned to running machines"
+    unit={t('{unit} of {total}', { unit: formatKiB(memUsed).split(' ')[1], total: formatKiB(memTotal) })}
+    sub={t('{memPct} % in use · {memAllocated} assigned to running machines', { memPct: formatPercent(memPct), memAllocated: formatKiB(memAllocated) })}
     {loading}
   >
     {#snippet chart()}<Sparkline data={live.hostMem} tick={live.tick} height={72} color="--accent-2" />{/snippet}
   </StatCard>
 
   <StatCard
-    label="Machines"
+    label={t('Machines')}
     icon={Boxes}
     value={String(running.length)}
-    unit="of {domains.length} running"
-    sub="{plural(vcpusInUse, 'vCPU')} in use{paused ? ` · ${paused} paused` : ''}"
+    unit={t('of {length} running', { length: domains.length })}
+    sub={t('{vcpus} in use', { vcpus: plural(vcpusInUse, 'vCPU') }) + (paused ? t(' · {paused} paused', { paused }) : '')}
     loading={!snap}
   >
     {#snippet chart()}
@@ -105,17 +106,17 @@
 {#if snap?.host.io || live.hostIO.diskRead.some((v) => v !== null)}
   <section class="ui-panel hostio">
     <IOChart
-      title="Host disks"
-      a={{ label: 'Read', data: live.hostIO.diskRead, color: '--accent' }}
-      b={{ label: 'Write', data: live.hostIO.diskWrite, color: '--accent-2' }}
+      title={t('Host disks')}
+      a={{ label: t('Read'), data: live.hostIO.diskRead, color: '--accent' }}
+      b={{ label: t('Write'), data: live.hostIO.diskWrite, color: '--accent-2' }}
       tick={live.tick}
       height={90}
       floor={1024 * 1024}
     />
     <IOChart
-      title="Host network"
-      a={{ label: 'Receive', data: live.hostIO.netRx, color: '--accent' }}
-      b={{ label: 'Send', data: live.hostIO.netTx, color: '--accent-2' }}
+      title={t('Host network')}
+      a={{ label: t('Receive'), data: live.hostIO.netRx, color: '--accent' }}
+      b={{ label: t('Send'), data: live.hostIO.netTx, color: '--accent-2' }}
       tick={live.tick}
       height={90}
       floor={128 * 1024}
@@ -129,35 +130,35 @@
 
 <section class="ui-panel history">
   <header class="h-head">
-    <h2>Host history</h2>
+    <h2>{t('Host history')}</h2>
     <RangeTabs bind:value={histRange} live={false} />
   </header>
   <div class="h-grid">
     <HistoryChart
-      title="CPU and memory"
+      title={t('CPU and memory')}
       unit="percent"
       range={histRange as HistoryRange}
       lines={[
-        { key: 'host.cpu', label: 'CPU', color: '--accent' },
-        { key: 'host.mem', label: 'Memory', color: '--accent-2', dashed: true },
+        { key: 'host.cpu', label: t('CPU'), color: '--accent' },
+        { key: 'host.mem', label: t('Memory'), color: '--accent-2', dashed: true },
       ]}
     />
     <HistoryChart
-      title="Disks"
+      title={t('Disks')}
       unit="bps"
       range={histRange as HistoryRange}
       lines={[
-        { key: 'host.disk.read', label: 'Read', color: '--accent' },
-        { key: 'host.disk.write', label: 'Write', color: '--accent-2', dashed: true },
+        { key: 'host.disk.read', label: t('Read'), color: '--accent' },
+        { key: 'host.disk.write', label: t('Write'), color: '--accent-2', dashed: true },
       ]}
     />
     <HistoryChart
-      title="Network"
+      title={t('Network')}
       unit="bps"
       range={histRange as HistoryRange}
       lines={[
-        { key: 'host.net.rx', label: 'Receive', color: '--accent' },
-        { key: 'host.net.tx', label: 'Send', color: '--accent-2', dashed: true },
+        { key: 'host.net.rx', label: t('Receive'), color: '--accent' },
+        { key: 'host.net.tx', label: t('Send'), color: '--accent-2', dashed: true },
       ]}
     />
   </div>

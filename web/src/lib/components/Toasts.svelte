@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t as tt } from '../i18n.svelte'
   import { fly } from 'svelte/transition'
   import { flip } from 'svelte/animate'
   import X from '@lucide/svelte/icons/x'
@@ -29,7 +30,7 @@
           >
         {/if}
       </div>
-      <button class="close" aria-label="Dismiss" onclick={() => toasts.dismiss(t.id)}><X size={15} /></button>
+      <button class="close" aria-label={tt('Dismiss')} onclick={() => toasts.dismiss(t.id)}><X size={15} /></button>
     </div>
   {/each}
 </div>

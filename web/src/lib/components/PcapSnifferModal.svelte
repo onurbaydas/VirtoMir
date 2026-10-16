@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Packet capture on a host interface: tcpdump on the host, its lines streamed here, or the
   // raw capture as a .pcap file for Wireshark. Admins only (it shows other people's traffic).
   import Dialog from './Dialog.svelte'
@@ -60,11 +61,11 @@
           const kind = /^event: (.*)$/m.exec(ev)?.[1]
           const data = /^data: (.*)$/m.exec(ev)?.[1] ?? ''
           if (kind === 'packet') lines = [...lines.slice(-1999), data]
-          else if (kind === 'end') status = data === 'finished' ? `Finished: ${lines.length} packets` : data
+          else if (kind === 'end') status = data === 'finished' ? t('Finished: {length} packets', { length: lines.length }) : data
         }
       }
     } catch (e) {
-      status = (e as Error).name === 'AbortError' ? `Stopped: ${lines.length} packets` : errorText(e)
+      status = (e as Error).name === 'AbortError' ? t('Stopped: {length} packets', { length: lines.length }) : errorText(e)
     } finally {
       running = false
       ctrl = null
@@ -79,28 +80,28 @@
   }
 </script>
 
-<Dialog {open} title="Packet capture" subtitle="tcpdump on this host" width={860} onclose={close}>
+<Dialog {open} title={t('Packet capture')} subtitle={t('tcpdump on this host')} width={860} onclose={close}>
   <div class="form">
-    <label class="ui-field"><span class="label">Interface</span>
+    <label class="ui-field"><span class="label">{t('Interface')}</span>
       <select class="ui-input mono" bind:value={iface} disabled={running}>
         {#each ifs as i (i.name)}<option value={i.name}>{i.name} · {i.kind}{vmOf.get(i.name) ? ` · ${vmOf.get(i.name)}` : ''}</option>{/each}
       </select></label>
-    <label class="ui-field grow"><span class="label">Filter (tcpdump syntax)</span>
-      <input class="ui-input mono" placeholder="e.g. tcp port 443 and host 10.0.0.5" bind:value={filter} disabled={running} /></label>
-    <label class="ui-field"><span class="label">Packets</span><input class="ui-input" type="number" min="1" max="20000" bind:value={count} disabled={running} /></label>
-    <label class="ui-field"><span class="label">Seconds</span><input class="ui-input" type="number" min="1" max="120" bind:value={seconds} disabled={running} /></label>
+    <label class="ui-field grow"><span class="label">{t('Filter (tcpdump syntax)')}</span>
+      <input class="ui-input mono" placeholder={t('e.g. tcp port 443 and host 10.0.0.5')} bind:value={filter} disabled={running} /></label>
+    <label class="ui-field"><span class="label">{t('Packets')}</span><input class="ui-input" type="number" min="1" max="20000" bind:value={count} disabled={running} /></label>
+    <label class="ui-field"><span class="label">{t('Seconds')}</span><input class="ui-input" type="number" min="1" max="120" bind:value={seconds} disabled={running} /></label>
   </div>
   <div class="bar">
     {#if running}
-      <button class="ui-btn danger-soft" onclick={stop}><Square size={13} /> Stop</button>
+      <button class="ui-btn danger-soft" onclick={stop}><Square size={13} /> {t('Stop')}</button>
     {:else}
-      <button class="ui-btn primary" disabled={!iface} onclick={start}><Play size={13} /> Capture here</button>
-      <a class="ui-btn" class:disabled={!iface} href={iface ? ent.captureURL(iface, filter, count, seconds, true) : undefined} download><Download size={13} /> Save as .pcap</a>
+      <button class="ui-btn primary" disabled={!iface} onclick={start}><Play size={13} /> {t('Capture here')}</button>
+      <a class="ui-btn" class:disabled={!iface} href={iface ? ent.captureURL(iface, filter, count, seconds, true) : undefined} download><Download size={13} /> {t('Save as .pcap')}</a>
     {/if}
     <span class="status">{status}</span>
   </div>
-  <pre class="out mono">{lines.join('\n') || 'No packets yet.'}</pre>
-  <p class="hint">The .pcap download starts when the capture ends ({count} packets or {seconds} s). Needs tcpdump on the host.</p>
+  <pre class="out mono">{lines.join('\n') || t('No packets yet.')}</pre>
+  <p class="hint">{t('The .pcap download starts when the capture ends ({count} packets or {seconds} s). Needs tcpdump on the host.', { count: count, seconds: seconds })}</p>
 </Dialog>
 
 <style>

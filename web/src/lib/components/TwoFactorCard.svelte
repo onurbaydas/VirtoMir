@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Two-step sign-in for one's own account (authenticator app + recovery codes), and for
   // admins: who has it, and a reset for someone who lost their phone.
   import ShieldCheck from '@lucide/svelte/icons/shield-check'
@@ -66,11 +67,11 @@
     try {
       if (disabling) {
         await api.twoFactorDisable(code.trim())
-        toasts.push({ kind: 'info', title: 'Two-step sign-in is off' })
+        toasts.push({ kind: 'info', title: t('Two-step sign-in is off') })
         dlg = false
       } else {
         recovery = (await api.twoFactorConfirm(code.trim())).recovery
-        toasts.push({ kind: 'info', title: 'Two-step sign-in is on' })
+        toasts.push({ kind: 'info', title: t('Two-step sign-in is on') })
       }
       await load()
     } catch (err) {
@@ -87,37 +88,37 @@
   <section class="ui-panel card">
     <header class="head">
       <div>
-        <h2><ShieldCheck size={16} /> Two-step sign-in</h2>
+        <h2><ShieldCheck size={16} /> {t('Two-step sign-in')}</h2>
         <p class="hint">
           {#if status.enabled}
-            On since {date(status.since)} · {status.recoveryLeft} recovery codes left. Signing in asks for a code from your authenticator app.
+            {t('On since {since} · {recoveryLeft} recovery codes left. Signing in asks for a code from your authenticator app.', { since: date(status.since), recoveryLeft: status.recoveryLeft })}
           {:else}
-            Off. With it on, signing in needs your password <em>and</em> a code from an app like Google Authenticator, Aegis or 1Password.
+            {t('Off. With it on, signing in needs your password')} <em>{t('and')}</em> {t('a code from an app like Google Authenticator, Aegis or 1Password.')}
           {/if}
         </p>
       </div>
       {#if status.enabled}
-        <button class="ui-btn" onclick={startDisable}><ShieldOff size={15} /> Turn off</button>
+        <button class="ui-btn" onclick={startDisable}><ShieldOff size={15} /> {t('Turn off')}</button>
       {:else}
-        <button class="ui-btn primary" onclick={start}><ShieldCheck size={15} /> Turn on</button>
+        <button class="ui-btn primary" onclick={start}><ShieldCheck size={15} /> {t('Turn on')}</button>
       {/if}
     </header>
     {#if error}<div class="ui-error-box">{error}</div>{/if}
 
     {#if session.can('admin') && users.length > 0}
       <div class="users">
-        <span class="label">Accounts with two-step sign-in on this host</span>
+        <span class="label">{t('Accounts with two-step sign-in on this host')}</span>
         {#each users as u (u)}
           <div class="user">
             <span class="mono">{u}</span>
             {#if u !== session.info?.user}
               <ConfirmButton
-                label="Reset"
-                confirm="Turn off for {u}?"
-                failure="Could not reset {u}"
+                label={t('Reset')}
+                confirm={t('Turn off for {u}?', { u: u })}
+                failure={t('Could not reset {u}', { u: u })}
                 run={async () => {
                   await api.twoFactorReset(u)
-                  toasts.push({ kind: 'info', title: `Two-step sign-in turned off for ${u}` })
+                  toasts.push({ kind: 'info', title: t('Two-step sign-in turned off for {u}', { u: u }) })
                   await load()
                 }}
               />
@@ -129,43 +130,43 @@
   </section>
 {/if}
 
-<Dialog open={dlg} title={disabling ? 'Turn off two-step sign-in' : recovery.length ? 'Save your recovery codes' : 'Turn on two-step sign-in'} onclose={() => (dlg = false)} width={480}>
+<Dialog open={dlg} title={disabling ? 'Turn off two-step sign-in' : recovery.length ? 'Save your recovery codes' : t('Turn on two-step sign-in')} onclose={() => (dlg = false)} width={480}>
   {#if recovery.length}
     <div class="rec">
-      <p class="warn">Each code signs you in once if your phone is gone. Keep them somewhere safe — they are not shown again.</p>
+      <p class="warn">{t('Each code signs you in once if your phone is gone. Keep them somewhere safe — they are not shown again.')}</p>
       <div class="codes mono">
         {#each recovery as r (r)}<span>{r}</span>{/each}
       </div>
-      <button class="ui-btn" onclick={() => copy(recovery.join('\n'), 'Recovery codes')}><Copy size={14} /> Copy all</button>
+      <button class="ui-btn" onclick={() => copy(recovery.join('\n'), t('Recovery codes'))}><Copy size={14} /> {t('Copy all')}</button>
     </div>
   {:else}
     <form id="tf-form" class="form" onsubmit={submit}>
       {#if !disabling}
         {#if setup}
           <ol class="steps">
-            <li>Scan this with your authenticator app:</li>
+            <li>{t('Scan this with your authenticator app:')}</li>
           </ol>
           <img class="qr" src={setup.qr} alt="QR code for the authenticator app" width="200" height="200" />
-          <p class="hint">Can't scan? Enter this key: <span class="mono key">{setup.secret.replace(/(.{4})/g, '$1 ').trim()}</span></p>
-          <ol class="steps" start="2"><li>Enter the 6-digit code it shows:</li></ol>
+          <p class="hint">{t('Can\'t scan? Enter this key:')} <span class="mono key">{setup.secret.replace(/(.{4})/g, '$1 ').trim()}</span></p>
+          <ol class="steps" start="2"><li>{t('Enter the 6-digit code it shows:')}</li></ol>
         {:else if !formErr}
-          <p class="hint">Preparing…</p>
+          <p class="hint">{t('Preparing…')}</p>
         {/if}
       {:else}
-        <p class="hint">Enter a current code from your authenticator app (or a recovery code) to confirm it's you.</p>
+        <p class="hint">{t('Enter a current code from your authenticator app (or a recovery code) to confirm it\'s you.')}</p>
       {/if}
       {#if disabling || setup}
         <!-- svelte-ignore a11y_autofocus -->
-        <input class="ui-input mono code" bind:value={code} autocomplete="one-time-code" inputmode="numeric" maxlength="11" required autofocus aria-label="Code" />
+        <input class="ui-input mono code" bind:value={code} autocomplete="one-time-code" inputmode="numeric" maxlength="11" required autofocus aria-label={t('Code')} />
       {/if}
       {#if formErr}<div class="ui-error-box">{formErr}</div>{/if}
     </form>
   {/if}
   {#snippet footer()}
     {#if recovery.length}
-      <button class="ui-btn primary" onclick={() => (dlg = false)}>I saved them</button>
+      <button class="ui-btn primary" onclick={() => (dlg = false)}>{t('I saved them')}</button>
     {:else}
-      <button class="ui-btn ghost" onclick={() => (dlg = false)}>Cancel</button>
+      <button class="ui-btn ghost" onclick={() => (dlg = false)}>{t('Cancel')}</button>
       <button class="ui-btn {disabling ? 'danger' : 'primary'}" form="tf-form" disabled={busy || code.trim().length < 6}>
         {busy ? 'Checking…' : disabling ? 'Turn off' : 'Turn on'}
       </button>

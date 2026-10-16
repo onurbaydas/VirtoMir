@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Deleting a machine is the one action that asks for its name (P1: friction only where
   // the loss is permanent). Force off and hard reset confirm with a second click instead.
   import Dialog from './Dialog.svelte'
@@ -38,22 +39,22 @@
     <div class="hazard-stripes banner-header">
       <div class="banner-content">
         <TriangleAlert size={20} />
-        <span class="banner-title">This cannot be undone</span>
+        <span class="banner-title">{t('This cannot be undone')}</span>
       </div>
     </div>
 
     <div class="guardrail-body">
       <div class="action-alert">
         <p class="lead-warn">
-          You are about to <strong>delete</strong> machine
+          {t('You are about to')} <strong>{t('delete')}</strong> {t('machine')}
           <span class="target-chip">{targetName}</span>.
         </p>
-        <p class="sub-warn">Its definition, snapshots and (if ticked) its disk images are removed. Backups stay.</p>
+        <p class="sub-warn">{t('Its definition, snapshots and (if ticked) its disk images are removed. Backups stay.')}</p>
       </div>
 
       {#if targetUuid}
         <div class="uuid-bar">
-          <span class="lbl">UUID</span>
+          <span class="lbl">{t('UUID')}</span>
           <span class="val">{targetUuid}</span>
         </div>
       {/if}
@@ -61,13 +62,13 @@
       <div class="checkbox-group">
         <label class="check-row">
           <input type="checkbox" bind:checked={purgeDisks} />
-          <span>Also delete its own disk images (shared images, ISOs and template disks are kept)</span>
+          <span>{t('Also delete its own disk images (shared images, ISOs and template disks are kept)')}</span>
         </label>
       </div>
 
       <div class="verification-box">
         <label for="verify-input" class="verify-label">
-          To proceed, type exact machine name <strong>"{targetName}"</strong>:
+          {t('To proceed, type exact machine name')} <strong>"{targetName}"</strong>:
         </label>
         <input
           id="verify-input"
@@ -82,17 +83,17 @@
     </div>
 
     <div class="guardrail-footer">
-      <button class="ui-btn" onclick={onclose}>Cancel</button>
+      <button class="ui-btn" onclick={onclose}>{t('Cancel')}</button>
       <button
         class="ui-btn danger-confirm"
         disabled={!canConfirm}
         onclick={confirm}
       >
         {#if !canConfirm}
-          <span>Type the name to continue</span>
+          <span>{t('Type the name to continue')}</span>
         {:else}
           <Trash size={14} />
-          <span>Delete for good</span>
+          <span>{t('Delete for good')}</span>
         {/if}
       </button>
     </div>

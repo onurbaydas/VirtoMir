@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // The drawer at the bottom: background jobs, recent changes, active alerts, and the API
   // calls this browser made (copyable as curl). All of it live; nothing here is sample data.
   import { onMount } from 'svelte'
@@ -57,14 +58,14 @@
       await api.ackAlert(id, host)
       void alerts.refresh()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Not acknowledged', detail: String(e) })
+      toasts.push({ kind: 'error', title: t('Not acknowledged'), detail: String(e) })
     }
   }
 
   async function copy(text: string) {
     try {
       await navigator.clipboard.writeText(text)
-      toasts.push({ kind: 'info', title: 'Copied', detail: 'Create a token under Account → API tokens and export it as VIRTOMIR_TOKEN.' })
+      toasts.push({ kind: 'info', title: t('Copied'), detail: t('Create a token under Account → API tokens and export it as VIRTOMIR_TOKEN.') })
     } catch {
       /* the clipboard needs https */
     }
@@ -72,25 +73,25 @@
 </script>
 
 {#if isOpen}
-  <section class="drawer" aria-label="Tasks and activity">
+  <section class="drawer" aria-label={t('Tasks and activity')}>
     <header>
       <div class="tabs" role="tablist">
         <button role="tab" aria-selected={activeTab === 'tasks'} class:on={activeTab === 'tasks'} onclick={() => show('tasks')}>Tasks{running ? ` · ${running} running` : ''}</button>
-        {#if session.can('admin')}<button role="tab" aria-selected={activeTab === 'events'} class:on={activeTab === 'events'} onclick={() => show('events')}>Recent changes</button>{/if}
+        {#if session.can('admin')}<button role="tab" aria-selected={activeTab === 'events'} class:on={activeTab === 'events'} onclick={() => show('events')}>{t('Recent changes')}</button>{/if}
         <button role="tab" aria-selected={activeTab === 'alerts'} class:on={activeTab === 'alerts'} onclick={() => show('alerts')}>Alerts{alerts.open ? ` · ${alerts.open}` : ''}</button>
-        <button role="tab" aria-selected={activeTab === 'inspector'} class:on={activeTab === 'inspector'} onclick={() => show('inspector')}>API calls</button>
+        <button role="tab" aria-selected={activeTab === 'inspector'} class:on={activeTab === 'inspector'} onclick={() => show('inspector')}>{t('API calls')}</button>
       </div>
       <span class="hint">Press ` to toggle</span>
-      <button class="close" onclick={toggle} aria-label="Close"><X size={16} /></button>
+      <button class="close" onclick={toggle} aria-label={t('Close')}><X size={16} /></button>
     </header>
 
     <div class="body">
       {#if activeTab === 'tasks'}
         {#if jobs.length === 0}
-          <p class="empty">No background tasks since VirtoMir started.</p>
+          <p class="empty">{t('No background tasks since VirtoMir started.')}</p>
         {:else}
           <table>
-            <thead><tr><th>Started</th><th>Task</th><th>Detail</th><th>Status</th></tr></thead>
+            <thead><tr><th>{t('Started')}</th><th>{t('Task')}</th><th>{t('Detail')}</th><th>{t('Status')}</th></tr></thead>
             <tbody>
               {#each jobs.slice().sort((a, b) => Date.parse(b.started) - Date.parse(a.started)) as j (j.id)}
                 <tr>
@@ -105,10 +106,10 @@
         {/if}
       {:else if activeTab === 'events'}
         {#if activities.length === 0}
-          <p class="empty">No recent changes.</p>
+          <p class="empty">{t('No recent changes.')}</p>
         {:else}
           <table>
-            <thead><tr><th>Time</th><th>User</th><th>Change</th><th>Status</th></tr></thead>
+            <thead><tr><th>{t('Time')}</th><th>{t('User')}</th><th>{t('Change')}</th><th>{t('Status')}</th></tr></thead>
             <tbody>
               {#each activities as a, idx (idx)}
                 <tr>
@@ -120,27 +121,27 @@
               {/each}
             </tbody>
           </table>
-          <a class="more" href="/activity" onclick={router.link}>All activity →</a>
+          <a class="more" href="/activity" onclick={router.link}>{t('All activity →')}</a>
         {/if}
       {:else if activeTab === 'alerts'}
         {#if alerts.active.length === 0}
-          <p class="empty">No active alerts.</p>
+          <p class="empty">{t('No active alerts.')}</p>
         {:else}
           {#each alerts.active as a (a.key)}
             <div class="alert" class:crit={a.severity === 'critical'}>
               <span class="sev">{a.severity}</span>
               <span class="text">{a.hostName ? `${a.hostName}: ` : ''}{a.subject} — {a.message}</span>
               {#if a.ackedBy}<span class="muted">acknowledged by {a.ackedBy}</span>
-              {:else if session.can('operator')}<button class="ui-btn sm" onclick={() => ack(a.id, a.hostId)}>Acknowledge</button>{/if}
+              {:else if session.can('operator')}<button class="ui-btn sm" onclick={() => ack(a.id, a.hostId)}>{t('Acknowledge')}</button>{/if}
             </div>
           {/each}
         {/if}
       {:else}
         {#if apiLog.calls.length === 0}
-          <p class="empty">No API calls recorded yet (the live stream and polling are not listed).</p>
+          <p class="empty">{t('No API calls recorded yet (the live stream and polling are not listed).')}</p>
         {:else}
           <table>
-            <thead><tr><th>Time</th><th>Call</th><th>Status</th><th>ms</th><th></th></tr></thead>
+            <thead><tr><th>{t('Time')}</th><th>{t('Call')}</th><th>{t('Status')}</th><th>ms</th><th></th></tr></thead>
             <tbody>
               {#each apiLog.calls as c, idx (idx)}
                 <tr>
@@ -148,7 +149,7 @@
                   <td class="mono">{c.method} {c.path}</td>
                   <td><span class="st" class:succeeded={c.status > 0 && c.status < 300} class:failed={c.status === 0 || c.status >= 400}>{c.status || 'network'}</span></td>
                   <td class="muted">{c.ms}</td>
-                  <td><button class="ui-btn sm ghost" onclick={() => copy(asCurl(c))}>Copy as curl</button></td>
+                  <td><button class="ui-btn sm ghost" onclick={() => copy(asCurl(c))}>{t('Copy as curl')}</button></td>
                 </tr>
               {/each}
             </tbody>

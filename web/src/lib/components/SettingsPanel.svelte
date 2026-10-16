@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { router } from '../router.svelte'
   import { session } from '../session.svelte'
   // The common settings as a form. Form and XML editor read and write the same persistent
@@ -89,16 +90,16 @@
     if (!form) return [] as string[]
     const p: string[] = []
     if (form.sockets * form.cores * form.threads !== form.maxVcpus)
-      p.push(`Sockets × cores × threads (${form.sockets * form.cores * form.threads}) must equal the maximum vCPUs (${form.maxVcpus}).`)
-    if (form.vcpus < 1 || form.vcpus > form.maxVcpus) p.push('Active vCPUs must be between 1 and the maximum.')
-    if (form.cpuMode === 'custom' && !form.cpuModel?.trim()) p.push('Name the CPU model for custom mode.')
-    if (form.currentMemoryMiB > form.memoryMiB) p.push('Current memory cannot be larger than the assigned memory.')
-    if (form.memoryMiB < 64) p.push('Memory must be at least 64 MiB.')
-    if (form.firmware === 'bios' && form.secureBoot) p.push('Secure Boot needs UEFI.')
+      p.push(t('Sockets × cores × threads ({v}) must equal the maximum vCPUs ({maxVcpus}).', { v: form.sockets * form.cores * form.threads, maxVcpus: form.maxVcpus }))
+    if (form.vcpus < 1 || form.vcpus > form.maxVcpus) p.push( t('Active vCPUs must be between 1 and the maximum.'))
+    if (form.cpuMode === 'custom' && !form.cpuModel?.trim()) p.push( t('Name the CPU model for custom mode.'))
+    if (form.currentMemoryMiB > form.memoryMiB) p.push( t('Current memory cannot be larger than the assigned memory.'))
+    if (form.memoryMiB < 64) p.push( t('Memory must be at least 64 MiB.'))
+    if (form.firmware === 'bios' && form.secureBoot) p.push( t('Secure Boot needs UEFI.'))
     const bad = form.pinning.findIndex(badSet)
-    if (bad >= 0) p.push(`vCPU ${bad}: use host CPU numbers and ranges like 2, 4-5 or 0,2.`)
-    if (badSet(form.emulatorPin)) p.push('Emulator threads: use host CPU numbers and ranges.')
-    if (form.numaMode && (!form.numaNodes || badSet(form.numaNodes))) p.push('Name the NUMA nodes memory may come from, e.g. 0.')
+    if (bad >= 0) p.push(t('vCPU {bad}: use host CPU numbers and ranges like 2, 4-5 or 0,2.', { bad: bad }))
+    if (badSet(form.emulatorPin)) p.push( t('Emulator threads: use host CPU numbers and ranges.'))
+    if (form.numaMode && (!form.numaNodes || badSet(form.numaNodes))) p.push( t('Name the NUMA nodes memory may come from, e.g. 0.'))
     return p
   })
   let firmwareChanged = $derived(!!form && !!view && (form.firmware !== view.firmware || form.secureBoot !== view.secureBoot))
@@ -134,13 +135,13 @@
     saveErr = ''
     try {
       const res = await api.saveSettings(uuid, $state.snapshot(form))
-      const liveNote = res.appliedLive.length ? `Applied now: ${res.appliedLive.join(', ')}. ` : ''
+      const liveNote = res.appliedLive.length ? t('Applied now: {v}. ', { v: res.appliedLive.join(', ') }) : ''
       toasts.push({
         kind: res.liveErrors.length ? 'warn' : 'info',
-        title: 'Settings saved',
+        title: t('Settings saved'),
         detail:
           liveNote +
-          (res.liveErrors.length ? `Not applied live (next boot): ${res.liveErrors.join('; ')}` : res.appliesOnNextBoot ? 'Other changes take effect at the next boot.' : ''),
+          (res.liveErrors.length ? t('Not applied live (next boot): {v}', { v: res.liveErrors.join('; ') }) : res.appliesOnNextBoot ? 'Other changes take effect at the next boot.' : ''),
       })
       await load()
       onsaved()
@@ -152,10 +153,10 @@
   }
 
   const MODES = [
-    { key: 'host-passthrough', label: 'Same as host', hint: 'Fastest; the guest sees your real CPU. Live migration only to hosts with the identical CPU.' },
-    { key: 'host-model', label: 'Closest to host', hint: 'Nearly as fast, a bit more portable.' },
-    { key: 'maximum', label: 'Everything supported', hint: 'All features the hypervisor can offer.' },
-    { key: 'custom', label: 'Named model', hint: 'A fixed CPU model, e.g. for migration across different hosts.' },
+    { key: 'host-passthrough', label: t('Same as host'), hint: t('Fastest; the guest sees your real CPU. Live migration only to hosts with the identical CPU.') },
+    { key: 'host-model', label: t('Closest to host'), hint: t('Nearly as fast, a bit more portable.') },
+    { key: 'maximum', label: t('Everything supported'), hint: t('All features the hypervisor can offer.') },
+    { key: 'custom', label: t('Named model'), hint: t('A fixed CPU model, e.g. for migration across different hosts.') },
   ] as const
 
   // A model every host of the cluster runs, so the machine can be live-migrated anywhere.
@@ -167,9 +168,9 @@
       const b = await api.cpuBaseline()
       form.cpuMode = 'custom'
       form.cpuModel = b.model
-      toasts.push({ kind: 'info', title: `${b.model} runs on all ${b.hosts} hosts`, detail: 'Save, then restart the machine for it to take effect.' })
+      toasts.push({ kind: 'info', title: t('{model} runs on all {hosts} hosts', { model: b.model, hosts: b.hosts }), detail: t('Save, then restart the machine for it to take effect.') })
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'No common CPU model', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('No common CPU model'), detail: errorText(e) })
     } finally {
       baselineBusy = false
     }
@@ -179,42 +180,42 @@
 {#if loadErr}
   <div class="ui-error-box">{loadErr}</div>
 {:else if !form || !view}
-  <p class="muted">Loading…</p>
+  <p class="muted">{t('Loading…')}</p>
 {:else}
   <div class="settings">
     {#if active}
       <div class="note">
         <TriangleAlert size={15} />
-        <span>The machine is running. Active vCPUs and current memory are applied immediately when possible; everything else at the next boot.</span>
+        <span>{t('The machine is running. Active vCPUs and current memory are applied immediately when possible; everything else at the next boot.')}</span>
       </div>
     {/if}
 
     <section class="ui-panel card">
-      <h2>Processor</h2>
+      <h2>{t('Processor')}</h2>
       <div class="grid3">
         <label class="ui-field">
-          <span class="label">Maximum vCPUs</span>
+          <span class="label">{t('Maximum vCPUs')}</span>
           <input class="ui-input" type="number" min="1" max="512" value={form.maxVcpus} oninput={(e) => setMaxVcpus(+e.currentTarget.value)} />
-          <span class="hint">Host has {hostThreads} threads.</span>
+          <span class="hint">{t('Host has {hostThreads} threads.', { hostThreads: hostThreads })}</span>
         </label>
         <label class="ui-field">
-          <span class="label">Active at boot</span>
+          <span class="label">{t('Active at boot')}</span>
           <input class="ui-input" type="number" min="1" max={form.maxVcpus} bind:value={form.vcpus} />
-          <span class="hint">Fewer than maximum leaves room to hot-plug.</span>
+          <span class="hint">{t('Fewer than maximum leaves room to hot-plug.')}</span>
         </label>
         <div class="ui-field">
-          <span class="label">Topology</span>
+          <span class="label">{t('Topology')}</span>
           <div class="topo">
-            <input class="ui-input" type="number" min="1" bind:value={form.sockets} aria-label="Sockets" title="Sockets" />
+            <input class="ui-input" type="number" min="1" bind:value={form.sockets} aria-label={t('Sockets')} title={t('Sockets')} />
             <span>×</span>
-            <input class="ui-input" type="number" min="1" bind:value={form.cores} aria-label="Cores" title="Cores per socket" />
+            <input class="ui-input" type="number" min="1" bind:value={form.cores} aria-label={t('Cores')} title={t('Cores per socket')} />
             <span>×</span>
-            <input class="ui-input" type="number" min="1" bind:value={form.threads} aria-label="Threads" title="Threads per core" />
+            <input class="ui-input" type="number" min="1" bind:value={form.threads} aria-label={t('Threads')} title={t('Threads per core')} />
           </div>
-          <span class="hint">sockets × cores × threads</span>
+          <span class="hint">{t('sockets × cores × threads')}</span>
         </div>
       </div>
-      <div class="modes" role="radiogroup" aria-label="CPU model">
+      <div class="modes" role="radiogroup" aria-label={t('CPU model')}>
         {#each MODES as m (m.key)}
           <label class="mode" class:on={form.cpuMode === m.key} title={m.hint}>
             <input type="radio" name="cpumode" value={m.key} bind:group={form.cpuMode} />
@@ -225,32 +226,32 @@
       </div>
       {#if form.cpuMode === 'custom'}
         <label class="ui-field narrow">
-          <span class="label">CPU model</span>
-          <input class="ui-input mono" bind:value={form.cpuModel} placeholder="Skylake-Client, EPYC-Rome, Westmere…" />
+          <span class="label">{t('CPU model')}</span>
+          <input class="ui-input mono" bind:value={form.cpuModel} placeholder={t('Skylake-Client, EPYC-Rome, Westmere…')} />
         </label>
       {/if}
       {#if cluster.clustered}
         <button class="ui-btn sm baseline" class:busy={baselineBusy} disabled={baselineBusy || !session.can('admin')} onclick={useBaseline}>
-          Use a model every cluster host supports
+          {t('Use a model every cluster host supports')}
         </button>
       {/if}
     </section>
 
     <section class="ui-panel card">
-      <h2>Memory</h2>
+      <h2>{t('Memory')}</h2>
       <div class="grid3">
         <label class="ui-field">
-          <span class="label">Assigned (MiB)</span>
+          <span class="label">{t('Assigned (MiB)')}</span>
           <input class="ui-input" type="number" min="64" step="256" bind:value={form.memoryMiB} />
-          <span class="hint">{formatKiB(form.memoryMiB * 1024)} of the host's {formatKiB(hostMemMiB * 1024)}{view.hotplugMemoryMiB ? ` · hot-plug max ${formatKiB(view.hotplugMemoryMiB * 1024)}` : ''}</span>
+          <span class="hint">{t('{memoryMiB} of the host\'s {hostMemMiB}{v}', { memoryMiB: formatKiB(form.memoryMiB * 1024), hostMemMiB: formatKiB(hostMemMiB * 1024), v: view.hotplugMemoryMiB ? ` · hot-plug max ${formatKiB(view.hotplugMemoryMiB * 1024)}` : '' })}</span>
         </label>
         <label class="ui-field">
-          <span class="label">Current (MiB)</span>
+          <span class="label">{t('Current (MiB)')}</span>
           <input class="ui-input" type="number" min="64" max={form.memoryMiB} step="256" bind:value={form.currentMemoryMiB} />
-          <span class="hint">Balloon target: the guest gives memory back below the assigned amount.</span>
+          <span class="hint">{t('Balloon target: the guest gives memory back below the assigned amount.')}</span>
         </label>
         <div class="ui-field">
-          <span class="label">Quick</span>
+          <span class="label">{t('Quick')}</span>
           <div class="chips">
             {#each [1, 2, 4, 8, 16] as g (g)}
               <button type="button" class="chip-btn" class:on={form.memoryMiB === g * 1024} onclick={() => form && ((form.memoryMiB = g * 1024), (form.currentMemoryMiB = g * 1024))}>{g} GiB</button>
@@ -262,68 +263,68 @@
 
     <section class="ui-panel card">
       <button class="fold" type="button" aria-expanded={tuningOpen || tuned} onclick={() => (tuningOpen = !tuningOpen)}>
-        <h2>Performance tuning</h2>
-        <span class="hint">{tuned ? `${pinned ? `${pinned} pinned vCPU${pinned > 1 ? 's' : ''}` : 'no pinning'}${form.hugePages ? ' · huge pages' : ''}${form.numaMode ? ` · NUMA ${form.numaMode} ${form.numaNodes}` : ''}` : 'Default: the host schedules everything. For latency-sensitive guests.'}</span>
+        <h2>{t('Performance tuning')}</h2>
+        <span class="hint">{tuned ? `${pinned ? `${pinned} pinned vCPU${pinned > 1 ? 's' : ''}` : 'no pinning'}${form.hugePages ? ' · huge pages' : ''}${form.numaMode ? ` · NUMA ${form.numaMode} ${form.numaNodes}` : ''}` : t('Default: the host schedules everything. For latency-sensitive guests.')}</span>
       </button>
       {#if tuningOpen || tuned}
         <div class="tuning">
           <div>
-            <span class="label">vCPU pinning <span class="hint">— host CPUs each vCPU may run on (this host has {hostThreads || '?'}: 0–{Math.max(0, hostThreads - 1)}; <a href="/hardware" onclick={router.link}>CPU map</a>)</span></span>
+            <span class="label">{t('vCPU pinning')} <span class="hint">{t('— host CPUs each vCPU may run on (this host has {v}: 0–{v2};', { v: hostThreads || '?', v2: Math.max(0, hostThreads - 1) })} <a href="/hardware" onclick={router.link}>{t('CPU map')}</a>)</span></span>
             <div class="pins">
               {#each form.pinning as _, i (i)}
                 <label class="pin">
                   <span class="mono">vCPU {i}</span>
-                  <input class="ui-input mono" bind:value={form.pinning[i]} placeholder="any" aria-invalid={badSet(form.pinning[i])} />
+                  <input class="ui-input mono" bind:value={form.pinning[i]} placeholder={t('any')} aria-invalid={badSet(form.pinning[i])} />
                 </label>
               {/each}
             </div>
             <div class="pin-tools">
-              <span class="hint">One host CPU each, starting at</span>
+              <span class="hint">{t('One host CPU each, starting at')}</span>
               <input class="ui-input mono tiny" type="number" min="0" max={Math.max(0, hostThreads - 1)} bind:value={pinFrom} />
-              <button class="ui-btn sm" type="button" onclick={pinOneToOne}>Pin 1:1</button>
-              <button class="ui-btn sm ghost" type="button" onclick={() => form && (form.pinning = form.pinning.map(() => ''))}>Clear</button>
+              <button class="ui-btn sm" type="button" onclick={pinOneToOne}>{t('Pin 1:1')}</button>
+              <button class="ui-btn sm ghost" type="button" onclick={() => form && (form.pinning = form.pinning.map(() => ''))}>{t('Clear')}</button>
             </div>
           </div>
           <div class="grid2">
             <label class="ui-field">
-              <span class="label">Emulator threads on</span>
-              <input class="ui-input mono" bind:value={form.emulatorPin} placeholder="any (e.g. 0-1)" aria-invalid={badSet(form.emulatorPin)} />
-              <span class="hint">QEMU's own work (I/O, timers) — keep it off the pinned vCPUs' cores.</span>
+              <span class="label">{t('Emulator threads on')}</span>
+              <input class="ui-input mono" bind:value={form.emulatorPin} placeholder={t('any (e.g. 0-1)')} aria-invalid={badSet(form.emulatorPin)} />
+              <span class="hint">{t('QEMU\'s own work (I/O, timers) — keep it off the pinned vCPUs\' cores.')}</span>
             </label>
             <label class="ui-field">
-              <span class="label">Memory from NUMA nodes</span>
+              <span class="label">{t('Memory from NUMA nodes')}</span>
               <div class="numa">
                 <select class="ui-input" bind:value={form.numaMode}>
-                  <option value="">Any node (default)</option>
-                  <option value="strict">Only these (strict)</option>
-                  <option value="preferred">Prefer this one</option>
-                  <option value="interleave">Spread over these</option>
-                  <option value="restrictive">Only these, movable</option>
+                  <option value="">{t('Any node (default)')}</option>
+                  <option value="strict">{t('Only these (strict)')}</option>
+                  <option value="preferred">{t('Prefer this one')}</option>
+                  <option value="interleave">{t('Spread over these')}</option>
+                  <option value="restrictive">{t('Only these, movable')}</option>
                 </select>
                 {#if form.numaMode}<input class="ui-input mono" bind:value={form.numaNodes} placeholder="0" aria-invalid={badSet(form.numaNodes) || !form.numaNodes} />{/if}
               </div>
-              <span class="hint">This host has {live.host?.numaNodes ?? '?'} NUMA node{live.host?.numaNodes === 1 ? '' : 's'}.</span>
+              <span class="hint">{t('This host has {v} NUMA node{v2}.', { v: live.host?.numaNodes ?? '?', v2: live.host?.numaNodes === 1 ? '' : 's' })}</span>
             </label>
           </div>
-          <label class="ui-switch"><input type="checkbox" bind:checked={form.hugePages} /> Back memory with huge pages <span class="hint">— faster for big guests; the host must reserve them (vm.nr_hugepages), or the machine will not start</span></label>
-          <span class="hint">Takes effect at the next start.</span>
+          <label class="ui-switch"><input type="checkbox" bind:checked={form.hugePages} /> {t('Back memory with huge pages')} <span class="hint">{t('— faster for big guests; the host must reserve them (vm.nr_hugepages), or the machine will not start')}</span></label>
+          <span class="hint">{t('Takes effect at the next start.')}</span>
         </div>
       {/if}
     </section>
 
     <section class="ui-panel card">
-      <h2>Boot</h2>
+      <h2>{t('Boot')}</h2>
       <ol class="boot">
         {#each form.bootOrder as key, i (key)}
           <li>
             <span class="n">{i + 1}</span>
             <span class="bl">{label(key)}</span>
-            <button type="button" class="ui-btn sm ghost" aria-label="Move up" disabled={i === 0} onclick={() => move(i, -1)}><ArrowUp size={14} /></button>
-            <button type="button" class="ui-btn sm ghost" aria-label="Move down" disabled={i === form.bootOrder.length - 1} onclick={() => move(i, 1)}><ArrowDown size={14} /></button>
-            <button type="button" class="ui-btn sm ghost" onclick={() => form && (form.bootOrder = form.bootOrder.filter((k) => k !== key))}>Remove</button>
+            <button type="button" class="ui-btn sm ghost" aria-label={t('Move up')} disabled={i === 0} onclick={() => move(i, -1)}><ArrowUp size={14} /></button>
+            <button type="button" class="ui-btn sm ghost" aria-label={t('Move down')} disabled={i === form.bootOrder.length - 1} onclick={() => move(i, 1)}><ArrowDown size={14} /></button>
+            <button type="button" class="ui-btn sm ghost" onclick={() => form && (form.bootOrder = form.bootOrder.filter((k) => k !== key))}>{t('Remove')}</button>
           </li>
         {/each}
-        {#if form.bootOrder.length === 0}<li class="empty">No boot device — the firmware decides.</li>{/if}
+        {#if form.bootOrder.length === 0}<li class="empty">{t('No boot device — the firmware decides.')}</li>{/if}
       </ol>
       {#if unused.length}
         <div class="add-boot">
@@ -332,39 +333,39 @@
           {/each}
         </div>
       {/if}
-      <label class="ui-switch"><input type="checkbox" bind:checked={form.bootMenu} /> Show the boot menu (press Esc/F12 at start)</label>
+      <label class="ui-switch"><input type="checkbox" bind:checked={form.bootMenu} /> {t('Show the boot menu (press Esc/F12 at start)')}</label>
     </section>
 
     <section class="ui-panel card">
-      <h2>Firmware</h2>
+      <h2>{t('Firmware')}</h2>
       <div class="grid3">
         <label class="ui-field">
-          <span class="label">Firmware</span>
+          <span class="label">{t('Firmware')}</span>
           <select class="ui-input" bind:value={form.firmware}>
-            <option value="uefi">UEFI</option>
-            <option value="bios">BIOS (legacy)</option>
+            <option value="uefi">{t('UEFI')}</option>
+            <option value="bios">{t('BIOS (legacy)')}</option>
           </select>
         </label>
-        <label class="ui-switch fw-sb"><input type="checkbox" bind:checked={form.secureBoot} disabled={form.firmware === 'bios'} /> Secure Boot</label>
+        <label class="ui-switch fw-sb"><input type="checkbox" bind:checked={form.secureBoot} disabled={form.firmware === 'bios'} /> {t('Secure Boot')}</label>
       </div>
       {#if firmwareChanged}
         <div class="warn-box">
           <TriangleAlert size={15} />
-          <span>Changing firmware resets the UEFI variables (boot entries), and an installed system usually only boots with the firmware it was installed with. Take a snapshot first.</span>
+          <span>{t('Changing firmware resets the UEFI variables (boot entries), and an installed system usually only boots with the firmware it was installed with. Take a snapshot first.')}</span>
         </div>
       {/if}
     </section>
 
     <section class="ui-panel card">
-      <h2>Name tag</h2>
+      <h2>{t('Name tag')}</h2>
       <div class="grid2">
         <label class="ui-field">
-          <span class="label">Title</span>
-          <input class="ui-input" bind:value={form.title} placeholder="Short description shown next to the name" />
+          <span class="label">{t('Title')}</span>
+          <input class="ui-input" bind:value={form.title} placeholder={t('Short description shown next to the name')} />
         </label>
         <label class="ui-field">
-          <span class="label">Description</span>
-          <textarea class="ui-input" rows="2" bind:value={form.description} placeholder="Notes for yourself and your team"></textarea>
+          <span class="label">{t('Description')}</span>
+          <textarea class="ui-input" rows="2" bind:value={form.description} placeholder={t('Notes for yourself and your team')}></textarea>
         </label>
       </div>
     </section>
@@ -372,10 +373,10 @@
     <ProtectionCard {uuid} name={owner?.name ?? uuid} />
 
     {#if diff}
-      <section class="ui-panel diff mono" aria-label="XML changes">
-        <header>What changes in the XML</header>
+      <section class="ui-panel diff mono" aria-label={t('XML changes')}>
+        <header>{t('What changes in the XML')}</header>
         {#if diff.every((l) => l === null || l.kind === 'same')}
-          <p class="muted">No changes.</p>
+          <p class="muted">{t('No changes.')}</p>
         {:else}
           {#each diff as l, i (i)}
             {#if l === null}<div class="gap">⋯</div>{:else}<div class="dl {l.kind}"><span class="sign">{l.kind === 'add' ? '+' : l.kind === 'del' ? '−' : ' '}</span>{l.text}</div>{/if}
@@ -386,10 +387,10 @@
 
     <footer class="ui-panel bar">
       <span class="status" class:bad={problems.length > 0}>
-        {problems[0] ?? (dirty ? 'Unsaved changes' : 'Everything is saved')}
+        {problems[0] ?? (dirty ? 'Unsaved changes' : t('Everything is saved'))}
       </span>
-      <button class="ui-btn ghost" onclick={() => view && ((form = pick(view)), (diff = null))} disabled={!dirty || saving}><Undo2 size={14} /> Reset</button>
-      <button class="ui-btn" onclick={review} disabled={!dirty || problems.length > 0 || diffBusy}><FileDiff size={14} /> {diffBusy ? 'Comparing…' : 'Review changes'}</button>
+      <button class="ui-btn ghost" onclick={() => view && ((form = pick(view)), (diff = null))} disabled={!dirty || saving}><Undo2 size={14} /> {t('Reset')}</button>
+      <button class="ui-btn" onclick={review} disabled={!dirty || problems.length > 0 || diffBusy}><FileDiff size={14} /> {diffBusy ? 'Comparing…' : t('Review changes')}</button>
       <button class="ui-btn primary" onclick={save} disabled={!dirty || problems.length > 0 || saving || !session.canManage(owner)} title={session.whyManage(owner)}><Save size={14} /> {saving ? 'Saving…' : 'Save'}</button>
     </footer>
     {#if saveErr}<div class="ui-error-box" role="alert">{saveErr}</div>{/if}

@@ -78,6 +78,7 @@
 </script>
 
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import ChevronDown from '@lucide/svelte/icons/chevron-down'
   import { formatBytes } from '../format'
   import PropList from './PropList.svelte'
@@ -100,12 +101,12 @@
     <span class="titles">
       <span class="title">
         {d.title}
-        {#if d.bootOrder}<span class="badge" title="Boot order (boot@order)">boot #{d.bootOrder}</span>{/if}
+        {#if d.bootOrder}<span class="badge" title={t('Boot order (boot@order)')}>boot #{d.bootOrder}</span>{/if}
       </span>
       {#if d.summary}<span class="summary">{d.summary}</span>{/if}
     </span>
     {#if d.capacityBytes}
-      <span class="size num" title="Allocated on the host / virtual size">
+      <span class="size num" title={t('Allocated on the host / virtual size')}>
         {d.allocationBytes ? `${formatBytes(d.allocationBytes)} / ` : ''}{formatBytes(d.capacityBytes)}
       </span>
     {/if}
@@ -127,7 +128,7 @@
       {#if d.props.length}
         <PropList props={d.props} />
       {:else}
-        <p class="none">No further settings. The XML tab shows the full definition.</p>
+        <p class="none">{t('No further settings. The XML tab shows the full definition.')}</p>
       {/if}
       {#if actions}<div class="actions">{@render actions()}</div>{/if}
     </div>

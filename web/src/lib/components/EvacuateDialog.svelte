@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Maintenance: live-migrate every running machine off this host, one after the other, to
   // the members with most free memory. The plan is made from real numbers (each member's
   // live summary) and machines that cannot move live (host devices) are named, not moved.
@@ -101,20 +102,20 @@
     }
     running = false
     const failed = steps.filter((s) => s.state === 'failed' || s.state === 'skipped').length
-    toasts.push({ kind: failed ? 'warn' : 'info', title: failed ? `${failed} machine(s) still on this host` : 'Host is empty', detail: failed ? undefined : 'It can be shut down for maintenance.' })
+    toasts.push({ kind: failed ? 'warn' : 'info', title: failed ? t('{failed} machine(s) still on this host', { failed: failed }) : t('Host is empty'), detail: failed ? undefined : t('It can be shut down for maintenance.') })
   }
 </script>
 
-<Dialog bind:open title="Maintenance: move all running machines away" width={640} onclose={() => !running && (open = false)}>
+<Dialog bind:open title={t('Maintenance: move all running machines away')} width={640} onclose={() => !running && (open = false)}>
   {#if error}<div class="ui-error-box">{error}</div>{/if}
   {#if planning}
-    <p class="muted">Asking every member how much memory it has free…</p>
+    <p class="muted">{t('Asking every member how much memory it has free…')}</p>
   {:else if steps.length === 0}
-    <p class="muted">No machine runs on this host.</p>
+    <p class="muted">{t('No machine runs on this host.')}</p>
   {:else}
-    <p class="muted">Live migration, one machine at a time, biggest first. Stopped machines stay (they are only defined here). Disks on local storage are copied during the move.</p>
+    <p class="muted">{t('Live migration, one machine at a time, biggest first. Stopped machines stay (they are only defined here). Disks on local storage are copied during the move.')}</p>
     <table class="t">
-      <thead><tr><th>Machine</th><th>Memory</th><th>To</th><th></th></tr></thead>
+      <thead><tr><th>{t('Machine')}</th><th>{t('Memory')}</th><th>{t('To')}</th><th></th></tr></thead>
       <tbody>
         {#each steps as s (s.uuid)}
           <tr>
@@ -128,8 +129,8 @@
     </table>
   {/if}
   {#snippet footer()}
-    <button class="ui-btn ghost" disabled={running} onclick={() => (open = false)}>Close</button>
-    <button class="ui-btn primary" disabled={running || planning || !steps.some((s) => s.state === 'planned')} onclick={run}>{running ? 'Moving…' : 'Start moving'}</button>
+    <button class="ui-btn ghost" disabled={running} onclick={() => (open = false)}>{t('Close')}</button>
+    <button class="ui-btn primary" disabled={running || planning || !steps.some((s) => s.state === 'planned')} onclick={run}>{running ? 'Moving…' : t('Start moving')}</button>
   {/snippet}
 </Dialog>
 

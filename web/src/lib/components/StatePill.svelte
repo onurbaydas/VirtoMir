@@ -1,22 +1,23 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import type { DomainState } from '../api'
 
   let { state, progress }: { state: DomainState; progress?: string } = $props()
 
   const LOOK: Record<DomainState, { label: string; tone: string }> = {
-    running: { label: 'Running', tone: 'ok' },
-    blocked: { label: 'Running', tone: 'ok' }, // blocked on I/O: still "on" to the user
-    paused: { label: 'Paused', tone: 'warn' },
-    'shutting-down': { label: 'Shutting down', tone: 'info' },
-    shutoff: { label: 'Off', tone: 'idle' },
-    crashed: { label: 'Crashed', tone: 'danger' },
-    'pm-suspended': { label: 'Suspended', tone: 'warn' },
-    unknown: { label: 'Unknown', tone: 'idle' },
+    running: { label: t('Running'), tone: 'ok' },
+    blocked: { label: t('Running'), tone: 'ok' }, // blocked on I/O: still "on" to the user
+    paused: { label: t('Paused'), tone: 'warn' },
+    'shutting-down': { label: t('Shutting down'), tone: 'info' },
+    shutoff: { label: t('Off'), tone: 'idle' },
+    crashed: { label: t('Crashed'), tone: 'danger' },
+    'pm-suspended': { label: t('Suspended'), tone: 'warn' },
+    unknown: { label: t('Unknown'), tone: 'idle' },
   }
   let look = $derived(LOOK[state] ?? LOOK.unknown)
 </script>
 
-<span class="pill {progress ? 'busy' : look.tone}" title="libvirt state: {state}">
+<span class="pill {progress ? 'busy' : look.tone}" title={t('libvirt state: {state}', { state: state })}>
   <span class="dot"></span>
   {progress ?? look.label}
 </span>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // All hosts at a glance: a live card per member and every machine of the cluster in one
   // list. Each member's newest snapshot is polled (GET …/summary), no stream per host.
   import Search from '@lucide/svelte/icons/search'
@@ -63,7 +64,7 @@
   const hostID = (m: ClusterMember) => (m.self ? null : m.id)
 </script>
 
-<section class="hosts" aria-label="Hosts">
+<section class="hosts" aria-label={t('Hosts')}>
   {#each cluster.members as m (m.id)}
     {@const s = snaps[m.id]}
     {@const doms = s?.domains ?? []}
@@ -71,26 +72,26 @@
       <div class="h-head">
         <span class="dot" class:ok={m.reachable && s?.connected !== false} class:warn={m.reachable && s?.connected === false}></span>
         <strong>{m.name}</strong>
-        {#if m.self}<span class="pill">this host</span>{/if}
+        {#if m.self}<span class="pill">{t('this host')}</span>{/if}
       </div>
       {#if !m.reachable}
-        <span class="h-err">{m.error ?? 'Not reachable'}</span>
+        <span class="h-err">{m.error ?? t('Not reachable')}</span>
       {:else if !s}
-        <span class="muted">Loading…</span>
+        <span class="muted">{t('Loading…')}</span>
       {:else if !s.connected}
-        <span class="h-err">libvirt is not answering</span>
+        <span class="h-err">{t('libvirt is not answering')}</span>
       {:else}
-        <div class="meter" title="CPU {s.host.cpuPercent.toFixed(1)} %">
-          <span class="m-label">CPU</span>
+        <div class="meter" title={t('CPU {v} %', { v: s.host.cpuPercent.toFixed(1) })}>
+          <span class="m-label">{t('CPU')}</span>
           <span class="bar"><span style:width="{Math.min(100, s.host.cpuPercent)}%"></span></span>
           <span class="m-val mono">{s.host.cpuPercent.toFixed(0)} %</span>
         </div>
         <div class="meter" title="{formatKiB(s.host.memUsedKiB)} of {formatKiB(s.host.memTotalKiB)}">
-          <span class="m-label">Memory</span>
+          <span class="m-label">{t('Memory')}</span>
           <span class="bar mem"><span style:width="{memPct(s)}%"></span></span>
           <span class="m-val mono">{memPct(s).toFixed(0)} %</span>
         </div>
-        <span class="muted">{doms.filter((d) => isActive(d.state)).length} of {doms.length} machines running</span>
+        <span class="muted">{t('{v} of {length} machines running', { v: doms.filter((d) => isActive(d.state)).length, length: doms.length })}</span>
       {/if}
     </button>
   {/each}
@@ -98,36 +99,36 @@
 
 <section class="ui-panel hist">
   <header class="a-head">
-    <h2>History by host</h2>
+    <h2>{t('History by host')}</h2>
     <RangeTabs bind:value={histRange} live={false} />
   </header>
   <div class="h-grid">
     {#key cluster.members.map((m) => m.id + m.reachable).join()}
-      <HistoryChart title="CPU" unit="percent" range={histRange as HistoryRange} lines={histLines('host.cpu')} />
-      <HistoryChart title="Memory" unit="percent" range={histRange as HistoryRange} lines={histLines('host.mem')} />
+      <HistoryChart title={t('CPU')} unit="percent" range={histRange as HistoryRange} lines={histLines('host.cpu')} />
+      <HistoryChart title={t('Memory')} unit="percent" range={histRange as HistoryRange} lines={histLines('host.mem')} />
     {/key}
   </div>
 </section>
 
 <section class="ui-panel all">
   <header class="a-head">
-    <h2>All machines <span class="count">{rows.length}</span></h2>
+    <h2>{t('All machines')} <span class="count">{rows.length}</span></h2>
     <label class="search">
       <Search size={14} />
-      <input class="ui-input" placeholder="Find by name, UUID or host" bind:value={filter} />
+      <input class="ui-input" placeholder={t('Find by name, UUID or host')} bind:value={filter} />
     </label>
   </header>
   {#if rows.length}
     <table>
       <thead>
-        <tr><th>Name</th><th>Host</th><th>State</th><th>CPUs</th><th>Memory</th><th class="num">CPU usage</th></tr>
+        <tr><th>{t('Name')}</th><th>{t('Host')}</th><th>{t('State')}</th><th>{t('CPUs')}</th><th>{t('Memory')}</th><th class="num">{t('CPU usage')}</th></tr>
       </thead>
       <tbody>
         {#each rows as r (r.host.id + r.uuid)}
           <tr>
             <td>
               <a href={router.hostHref(hostID(r.host), `/machines/${r.uuid}`)} onclick={(e) => { e.preventDefault(); router.go(hostID(r.host), `/machines/${r.uuid}`) }}>{r.name}</a>
-              {#if r.template}<span class="pill">template</span>{/if}
+              {#if r.template}<span class="pill">{t('template')}</span>{/if}
             </td>
             <td>{r.host.name}</td>
             <td><StatePill state={r.state} /></td>
@@ -139,7 +140,7 @@
       </tbody>
     </table>
   {:else}
-    <p class="muted empty">{filter ? 'Nothing matches.' : 'No machines on any host yet.'}</p>
+    <p class="muted empty">{filter ? 'Nothing matches.' : t('No machines on any host yet.')}</p>
   {/if}
 </section>
 

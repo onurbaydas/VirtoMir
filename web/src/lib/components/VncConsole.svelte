@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   import { wsURL } from '../api'
   // Graphical console: noVNC over virtomird's WebSocket bridge to the machine's local VNC
   // server. Designed around the usual console pain points:
@@ -61,13 +62,13 @@
     } else {
       const canvas = screen?.querySelector('canvas')
       if (!canvas) {
-        toasts.push({ kind: 'warn', title: 'Cannot record', detail: 'No video stream active' })
+        toasts.push({ kind: 'warn', title: t('Cannot record'), detail: t('No video stream active') })
         return
       }
       try {
         const stream = (canvas as any).captureStream ? (canvas as any).captureStream(30) : null
         if (!stream) {
-          toasts.push({ kind: 'error', title: 'Recording not supported', detail: 'Canvas captureStream unavailable' })
+          toasts.push({ kind: 'error', title: t('Recording not supported'), detail: t('Canvas captureStream unavailable') })
           return
         }
         recordedChunks = []
@@ -83,13 +84,13 @@
           a.download = `${name}-console-${Date.now()}.webm`
           a.click()
           URL.revokeObjectURL(url)
-          toasts.push({ kind: 'info', title: 'Video saved', detail: 'Console session recording exported as WebM' })
+          toasts.push({ kind: 'info', title: t('Video saved'), detail: t('Console session recording exported as WebM') })
         }
         mediaRecorder.start()
         recording = true
-        toasts.push({ kind: 'info', title: 'Recording started', detail: 'Capturing console canvas at 30 FPS' })
+        toasts.push({ kind: 'info', title: t('Recording started'), detail: t('Capturing console canvas at 30 FPS') })
       } catch (err) {
-        toasts.push({ kind: 'error', title: 'Could not record', detail: String(err) })
+        toasts.push({ kind: 'error', title: t('Could not record'), detail: String(err) })
       }
     }
   }
@@ -147,14 +148,14 @@
       // Reconnect with backoff: 1, 2, 4, … up to 15 s. A rebooting guest comes back on its own.
       const wait = Math.min(15, 2 ** retry) * 1000
       retry++
-      message = clean ? 'The console closed.' : 'Connection lost.'
+      message = clean ? 'The console closed.' : t('Connection lost.')
       retryTimer = setTimeout(connect, wait)
     })
     r.addEventListener('credentialsrequired', () => {
       if (password) r.sendCredentials({ password })
       else {
         conn = 'error'
-        message = 'The VNC server asks for a password VirtoMir does not know.'
+        message = t('The VNC server asks for a password VirtoMir does not know.')
       }
     })
     r.addEventListener('securityfailure', (e: Event) => {
@@ -209,12 +210,12 @@
   }
 
   const SHORTCUTS: { label: string; keys: Key[] }[] = [
-    { label: 'Ctrl + Alt + Backspace', keys: [K.ctrl, K.alt, K.bksp] },
-    { label: 'Alt + Tab', keys: [K.alt, K.tab] },
-    { label: 'Windows / Super', keys: [K.win] },
-    { label: 'Print Screen', keys: [K.print] },
-    { label: 'Escape', keys: [K.esc] },
-    { label: 'Ctrl + Esc', keys: [K.ctrl, K.esc] },
+    { label: t('Ctrl + Alt + Backspace'), keys: [K.ctrl, K.alt, K.bksp] },
+    { label: t('Alt + Tab'), keys: [K.alt, K.tab] },
+    { label: t('Windows / Super'), keys: [K.win] },
+    { label: t('Print Screen'), keys: [K.print] },
+    { label: t('Escape'), keys: [K.esc] },
+    { label: t('Ctrl + Esc'), keys: [K.ctrl, K.esc] },
   ]
 
   // Typing: each character becomes the key (and Shift/AltGr) that produces it on the
@@ -293,23 +294,23 @@
   <div class="bar">
     <span class="status {conn}">
       <span class="dot"></span>
-      {conn === 'connected' ? 'Connected' : conn === 'connecting' ? 'Connecting…' : conn === 'disconnected' ? 'Reconnecting…' : 'Not connected'}
+      {conn === 'connected' ? 'Connected' : conn === 'connecting' ? 'Connecting…' : conn === 'disconnected' ? 'Reconnecting…' : t('Not connected')}
     </span>
 
-    <button class="tb" onclick={() => rfb?.sendCtrlAltDel()} disabled={conn !== 'connected' || viewOnly} title="Send Ctrl+Alt+Del">Ctrl+Alt+Del</button>
+    <button class="tb" onclick={() => rfb?.sendCtrlAltDel()} disabled={conn !== 'connected' || viewOnly} title={t('Send Ctrl+Alt+Del')}>{t('Ctrl+Alt+Del')}</button>
 
     <div class="rel">
       <button class="tb pop-btn" onclick={() => ((keysOpen = !keysOpen), (clipOpen = false))} disabled={conn !== 'connected' || viewOnly} aria-expanded={keysOpen}>
-        <Keyboard size={14} /> Keys <ChevronDown size={12} />
+        <Keyboard size={14} /> {t('Keys')} <ChevronDown size={12} />
       </button>
       {#if keysOpen}
         <div class="pop keys" role="menu">
           <div class="fkeys">
             {#each Array.from({ length: 12 }, (_, i) => i + 1) as n (n)}
-              <button role="menuitem" onclick={() => combo(K.ctrl, K.alt, F(n))} title="Ctrl + Alt + F{n} (switch virtual terminal)">F{n}</button>
+              <button role="menuitem" onclick={() => combo(K.ctrl, K.alt, F(n))} title={t('Ctrl + Alt + F{n} (switch virtual terminal)', { n: n })}>F{n}</button>
             {/each}
           </div>
-          <span class="hint">Ctrl + Alt + F-key</span>
+          <span class="hint">{t('Ctrl + Alt + F-key')}</span>
           {#each SHORTCUTS as s (s.label)}
             <button role="menuitem" class="item" onclick={() => combo(...s.keys)}>{s.label}</button>
           {/each}
@@ -319,26 +320,26 @@
 
     <div class="rel">
       <button class="tb pop-btn" onclick={() => ((clipOpen = !clipOpen), (keysOpen = false))} disabled={conn !== 'connected' || viewOnly} aria-expanded={clipOpen}>
-        <Clipboard size={14} /> Type
+        <Clipboard size={14} /> {t('Type')}
       </button>
       {#if clipOpen}
         <div class="pop clip">
           <label class="ui-field">
-            <span class="label">Text to type into the machine</span>
+            <span class="label">{t('Text to type into the machine')}</span>
             <!-- svelte-ignore a11y_autofocus -->
-            <textarea class="ui-input mono" rows="4" bind:value={clipText} placeholder="Paste a password, a command, a long URL…" autofocus></textarea>
+            <textarea class="ui-input mono" rows="4" bind:value={clipText} placeholder={t('Paste a password, a command, a long URL…')} autofocus></textarea>
           </label>
           <div class="clip-actions">
-            <select class="ui-input layout" bind:value={guestLayout} title="Keyboard layout inside the machine">
+            <select class="ui-input layout" bind:value={guestLayout} title={t('Keyboard layout inside the machine')}>
               {#each LAYOUTS as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
             </select>
             <button class="ui-btn sm primary" disabled={!clipText || typing} onclick={() => typeText(clipText)}>{typing ? 'Typing…' : 'Type it'}</button>
           </div>
           {#if guestClip}
             <div class="guest-clip">
-              <span class="label">The machine copied:</span>
+              <span class="label">{t('The machine copied:')}</span>
               <code class="mono">{guestClip.length > 200 ? guestClip.slice(0, 200) + '…' : guestClip}</code>
-              <button class="ui-btn sm" onclick={() => navigator.clipboard.writeText(guestClip).then(() => toasts.push({ kind: 'info', title: 'Copied from the machine' }))}>Copy to my clipboard</button>
+              <button class="ui-btn sm" onclick={() => navigator.clipboard.writeText(guestClip).then(() => toasts.push({ kind: 'info', title: t('Copied from the machine') }))}>{t('Copy to my clipboard')}</button>
             </div>
           {/if}
         </div>
@@ -347,18 +348,18 @@
 
     <span class="spacer"></span>
 
-    <div class="seg" role="radiogroup" aria-label="Display size">
-      <button role="radio" aria-checked={view === 'fit'} class:on={view === 'fit'} onclick={() => (view = 'fit')} title="Scale the screen to fit">Fit</button>
-      <button role="radio" aria-checked={view === 'native'} class:on={view === 'native'} onclick={() => (view = 'native')} title="Real pixels, scroll if larger">1:1</button>
-      <button role="radio" aria-checked={view === 'resize'} class:on={view === 'resize'} onclick={() => (view = 'resize')} title="Ask the machine to use the window size (needs a resizable display, e.g. virtio-gpu)">Match window</button>
+    <div class="seg" role="radiogroup" aria-label={t('Display size')}>
+      <button role="radio" aria-checked={view === 'fit'} class:on={view === 'fit'} onclick={() => (view = 'fit')} title={t('Scale the screen to fit')}>{t('Fit')}</button>
+      <button role="radio" aria-checked={view === 'native'} class:on={view === 'native'} onclick={() => (view = 'native')} title={t('Real pixels, scroll if larger')}>1:1</button>
+      <button role="radio" aria-checked={view === 'resize'} class:on={view === 'resize'} onclick={() => (view = 'resize')} title={t('Ask the machine to use the window size (needs a resizable display, e.g. virtio-gpu)')}>{t('Match window')}</button>
     </div>
-    <button class="tb icon" class:on={viewOnly} onclick={() => (viewOnly = !viewOnly)} title={viewOnly ? 'View only (input is off)' : 'Turn input off (view only)'} aria-pressed={viewOnly}><Eye size={15} /></button>
-    <button class="tb icon" onclick={screenshot} disabled={conn !== 'connected'} title="Save a screenshot"><Camera size={15} /></button>
-    <button class="tb icon" class:recording onclick={toggleRecord} disabled={conn !== 'connected'} title={recording ? 'Stop and download WebM recording' : 'Record console to WebM'}>
+    <button class="tb icon" class:on={viewOnly} onclick={() => (viewOnly = !viewOnly)} title={viewOnly ? 'View only (input is off)' : t('Turn input off (view only)')} aria-pressed={viewOnly}><Eye size={15} /></button>
+    <button class="tb icon" onclick={screenshot} disabled={conn !== 'connected'} title={t('Save a screenshot')}><Camera size={15} /></button>
+    <button class="tb icon" class:recording onclick={toggleRecord} disabled={conn !== 'connected'} title={recording ? 'Stop and download WebM recording' : t('Record console to WebM')}>
       <Video size={15} />
     </button>
-    {#if !standalone}<button class="tb icon" onclick={popOut} title="Open in its own window"><ExternalLink size={15} /></button>{/if}
-    <button class="tb icon" onclick={fullscreen} title="Full screen (Esc leaves)"><Maximize size={15} /></button>
+    {#if !standalone}<button class="tb icon" onclick={popOut} title={t('Open in its own window')}><ExternalLink size={15} /></button>{/if}
+    <button class="tb icon" onclick={fullscreen} title={t('Full screen (Esc leaves)')}><Maximize size={15} /></button>
   </div>
 
   <div class="screen-wrap">
@@ -366,13 +367,13 @@
     {#if conn !== 'connected'}
       <div class="overlay">
         {#if conn === 'error'}
-          <strong>Console unavailable</strong>
+          <strong>{t('Console unavailable')}</strong>
           <span>{message}</span>
-          <button class="ui-btn sm" onclick={() => ((retry = 0), connect())}><RefreshCw size={14} /> Try again</button>
+          <button class="ui-btn sm" onclick={() => ((retry = 0), connect())}><RefreshCw size={14} /> {t('Try again')}</button>
         {:else}
           <span class="spin"></span>
           <span>{conn === 'connecting' ? `Connecting to ${name}…` : `${message} Reconnecting…`}</span>
-          {#if conn === 'disconnected'}<button class="ui-btn sm ghost" onclick={() => ((retry = 0), connect())}>Reconnect now</button>{/if}
+          {#if conn === 'disconnected'}<button class="ui-btn sm ghost" onclick={() => ((retry = 0), connect())}>{t('Reconnect now')}</button>{/if}
         {/if}
       </div>
     {/if}

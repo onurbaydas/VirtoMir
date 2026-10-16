@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Picks the right console for a machine: graphical (VNC or SPICE) or text (serial), and explains
   // what to do when the machine is off or has no console of that kind.
   import Monitor from '@lucide/svelte/icons/monitor'
@@ -53,10 +54,10 @@
     switching = true
     try {
       await api.put(`/api/v1/domains/${encodeURIComponent(d.uuid)}/display`, { protocol: to })
-      toasts.push({ kind: 'info', title: `${d.name} uses ${to.toUpperCase()} from its next start`, detail: running ? 'Shut it down and start it again (a reboot inside the guest is not enough).' : undefined })
+      toasts.push({ kind: 'info', title: t('{name} uses {v} from its next start', { name: d.name, v: to.toUpperCase() }), detail: running ? 'Shut it down and start it again (a reboot inside the guest is not enough).' : undefined })
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: 'Display not changed', detail: errorText(e) })
+      toasts.push({ kind: 'error', title: t('Display not changed'), detail: errorText(e) })
     } finally {
       switching = false
     }
@@ -72,16 +73,16 @@
 
 <div class="panel" class:standalone>
   {#if !standalone && info && (info.vnc || info.spice || info.serial.length)}
-    <div class="kinds" role="tablist" aria-label="Console type">
+    <div class="kinds" role="tablist" aria-label={t('Console type')}>
       <button role="tab" aria-selected={kind === 'vnc'} class:on={kind === 'vnc'} disabled={!info.vnc && !info.spice} onclick={() => (kind = 'vnc')}>
-        <Monitor size={14} /> Screen
+        <Monitor size={14} /> {t('Screen')}
       </button>
       <button role="tab" aria-selected={kind === 'serial'} class:on={kind === 'serial'} disabled={!info.serial.length} onclick={() => (kind = 'serial')}>
-        <SquareTerminal size={14} /> Text console
+        <SquareTerminal size={14} /> {t('Text console')}
       </button>
     </div>
     {#if kind === 'vnc' && !info.spice && (info.heads ?? 1) > 1}
-      <div class="kinds" role="tablist" aria-label="Monitor">
+      <div class="kinds" role="tablist" aria-label={t('Monitor')}>
         {#each Array.from({ length: info.heads ?? 1 }, (_, i) => i) as h (h)}
           <button role="tab" aria-selected={head === h} class:on={head === h} onclick={() => (head = h)}>Monitor {h + 1}</button>
         {/each}
@@ -97,9 +98,9 @@
     <div class="msg ui-panel">
       <Monitor size={32} strokeWidth={1.5} />
       <strong>{d.name} is off</strong>
-      <span>Start it to see its screen. The console connects by itself once it runs.</span>
+      <span>{t('Start it to see its screen. The console connects by itself once it runs.')}</span>
       <button class="ui-btn primary" disabled={!session.can('operator')} title={session.why('operator')} onclick={() => live.act(d, 'start')}>
-        <Play size={14} /> Start
+        <Play size={14} /> {t('Start')}
       </button>
     </div>
   {:else if kind === 'vnc' && info.spice}
@@ -114,17 +115,17 @@
     <SerialConsole uuid={d.uuid} devices={info.serial} {standalone} />
   {:else}
     <div class="msg ui-panel">
-      <strong>No console</strong>
-      <span>This machine has neither a VNC display nor a serial console. Add one in the XML editor (a <span class="mono">&lt;graphics type='vnc'/&gt;</span> device).</span>
+      <strong>{t('No console')}</strong>
+      <span>{t('This machine has neither a VNC display nor a serial console. Add one in the XML editor (a')} <span class="mono">&lt;graphics type='vnc'/&gt;</span> {t('device).')}</span>
     </div>
   {/if}
   {#if !standalone && info?.display && session.can('admin')}
     <p class="proto">
-      Screen over <b>{(liveProto || info.display).toUpperCase()}</b>{liveProto && info.display !== liveProto ? `, ${info.display.toUpperCase()} from the next start` : ''}.
+      {t('Screen over')} <b>{(liveProto || info.display).toUpperCase()}</b>{liveProto && info.display !== liveProto ? t(', {v} from the next start', { v: info.display.toUpperCase() }) : ''}.
       {#if info.display === 'vnc'}
-        <button class="link" disabled={switching} onclick={() => switchDisplay('spice')}>Use SPICE</button> — the guest's resolution follows the window and the clipboard works with spice-vdagent.
+        <button class="link" disabled={switching} onclick={() => switchDisplay('spice')}>{t('Use SPICE')}</button> {t('— the guest\'s resolution follows the window and the clipboard works with spice-vdagent.')}
       {:else}
-        <button class="link" disabled={switching} onclick={() => switchDisplay('vnc')}>Use VNC</button> — works without any guest agent, with keyboard layouts and several monitors.
+        <button class="link" disabled={switching} onclick={() => switchDisplay('vnc')}>{t('Use VNC')}</button> {t('— works without any guest agent, with keyboard layouts and several monitors.')}
       {/if}
     </p>
   {/if}

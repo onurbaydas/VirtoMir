@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte'
   // Live performance of one machine: disk and network throughput (1 min), per-vCPU load
   // and per-device rates. Data comes from the 1 s snapshot stream.
   import Activity from '@lucide/svelte/icons/activity'
@@ -30,9 +31,9 @@
 
 <section class="perf">
   <header class="head">
-    <h2><Activity size={15} /> Performance</h2>
+    <h2><Activity size={15} /> {t('Performance')}</h2>
     <span class="right">
-      {#if range === 'live' && active}<span class="hint">updated every second</span>{/if}
+      {#if range === 'live' && active}<span class="hint">{t('updated every second')}</span>{/if}
       <RangeTabs bind:value={range} />
     </span>
   </header>
@@ -41,60 +42,60 @@
     <div class="charts">
       <div class="full">
       <HistoryChart
-        title="CPU and memory"
+        title={t('CPU and memory')}
         unit="percent"
         {range}
         lines={[
-          { key: vm('cpu'), label: 'CPU', color: '--accent' },
-          { key: vm('mem'), label: 'Guest memory', color: '--accent-2', dashed: true },
+          { key: vm('cpu'), label: t('CPU'), color: '--accent' },
+          { key: vm('mem'), label: t('Guest memory'), color: '--accent-2', dashed: true },
         ]}
       />
       </div>
       <HistoryChart
-        title="Disk"
+        title={t('Disk')}
         unit="bps"
         {range}
         lines={[
-          { key: vm('disk.read'), label: 'Read', color: '--accent' },
-          { key: vm('disk.write'), label: 'Write', color: '--accent-2', dashed: true },
+          { key: vm('disk.read'), label: t('Read'), color: '--accent' },
+          { key: vm('disk.write'), label: t('Write'), color: '--accent-2', dashed: true },
         ]}
       />
       <HistoryChart
-        title="Network"
+        title={t('Network')}
         unit="bps"
         {range}
         lines={[
-          { key: vm('net.rx'), label: 'Receive', color: '--accent' },
-          { key: vm('net.tx'), label: 'Send', color: '--accent-2', dashed: true },
+          { key: vm('net.rx'), label: t('Receive'), color: '--accent' },
+          { key: vm('net.tx'), label: t('Send'), color: '--accent-2', dashed: true },
         ]}
       />
     </div>
   {:else if !active}
-    <p class="off">Live data appears while the machine is running. Pick a range above to see its history.</p>
+    <p class="off">{t('Live data appears while the machine is running. Pick a range above to see its history.')}</p>
   {:else}
     <div class="charts">
       <IOChart
-        title="Disk"
-        a={{ label: 'Read', data: io.diskRead, color: '--accent' }}
-        b={{ label: 'Write', data: io.diskWrite, color: '--accent-2' }}
+        title={t('Disk')}
+        a={{ label: t('Read'), data: io.diskRead, color: '--accent' }}
+        b={{ label: t('Write'), data: io.diskWrite, color: '--accent-2' }}
         tick={live.tick}
         empty={d.disks === undefined ? 'Collecting…' : 'No disks'}
       />
       <IOChart
-        title="Network"
-        a={{ label: 'Receive', data: io.netRx, color: '--accent' }}
-        b={{ label: 'Send', data: io.netTx, color: '--accent-2' }}
+        title={t('Network')}
+        a={{ label: t('Receive'), data: io.netRx, color: '--accent' }}
+        b={{ label: t('Send'), data: io.netTx, color: '--accent-2' }}
         tick={live.tick}
-        empty={d.nets === undefined ? 'Collecting…' : 'No network adapters'}
+        empty={d.nets === undefined ? 'Collecting…' : t('No network adapters')}
       />
     </div>
 
     {#if d.vcpuPercent?.length}
       <div class="block">
-        <h3>Per vCPU</h3>
+        <h3>{t('Per vCPU')}</h3>
         <div class="vcpus">
           {#each d.vcpuPercent as p, i (i)}
-            <div class="vcpu" title="vCPU {i}: {formatPercent(p)} %">
+            <div class="vcpu" title={t('vCPU {i}: {p} %', { i: i, p: formatPercent(p) })}>
               <div class="bar"><span style:height="{Math.max(p, 1.5)}%" class:hot={p >= 90}></span></div>
               <span class="pct mono">{Math.round(p)}</span>
               <span class="idx mono">{i}</span>
@@ -106,17 +107,17 @@
 
     {#if d.disks?.length || d.nets?.length}
       <div class="block">
-        <h3>Devices</h3>
-        <div class="table" role="table" aria-label="Per-device rates">
+        <h3>{t('Devices')}</h3>
+        <div class="table" role="table" aria-label={t('Per-device rates')}>
           {#each d.disks ?? [] as x (x.name)}
             <div class="row" role="row">
               <span class="dev" role="cell">{diskTitle(x.name)}</span>
               <span class="cell" role="cell">
-                <small>read</small><b class="mono">{formatBps(x.readBps)}</b>
+                <small>{t('read')}</small><b class="mono">{formatBps(x.readBps)}</b>
                 <small class="mono">{formatRate(x.readIops)} IOPS · {latency(x.readLatencyMs)}</small>
               </span>
               <span class="cell" role="cell">
-                <small>write</small><b class="mono">{formatBps(x.writeBps)}</b>
+                <small>{t('write')}</small><b class="mono">{formatBps(x.writeBps)}</b>
                 <small class="mono">{formatRate(x.writeIops)} IOPS · {latency(x.writeLatencyMs)}</small>
               </span>
             </div>
@@ -125,14 +126,14 @@
             <div class="row" role="row">
               <span class="dev" role="cell">{netTitle(x.name)}</span>
               <span class="cell" role="cell">
-                <small>receive</small><b class="mono">{formatBps(x.rxBps)}</b>
+                <small>{t('receive')}</small><b class="mono">{formatBps(x.rxBps)}</b>
                 <small class="mono">{formatRate(x.rxPps)} pkt/s</small>
               </span>
               <span class="cell" role="cell">
-                <small>send</small><b class="mono">{formatBps(x.txBps)}</b>
+                <small>{t('send')}</small><b class="mono">{formatBps(x.txBps)}</b>
                 <small class="mono">
                   {formatRate(x.txPps)} pkt/s
-                  {#if x.problemsPs}<span class="bad" title="Dropped or errored packets per second">· {formatRate(x.problemsPs)} dropped/s</span>{/if}
+                  {#if x.problemsPs}<span class="bad" title={t('Dropped or errored packets per second')}>· {formatRate(x.problemsPs)} dropped/s</span>{/if}
                 </small>
               </span>
             </div>
@@ -144,10 +145,10 @@
     {#if d.hostRssKiB || d.guestMemTotalKiB}
       <div class="mem-note">
         {#if d.guestMemTotalKiB}
-          Guest reports <b>{formatKiB(d.guestMemUsedKiB ?? 0)}</b> in use of {formatKiB(d.guestMemTotalKiB)}.
+          {t('Guest reports')} <b>{formatKiB(d.guestMemUsedKiB ?? 0)}</b> in use of {formatKiB(d.guestMemTotalKiB)}.
         {/if}
         {#if d.hostRssKiB}
-          The VM process uses <b>{formatKiB(d.hostRssKiB)}</b> of host memory.
+          {t('The VM process uses')} <b>{formatKiB(d.hostRssKiB)}</b> {t('of host memory.')}
         {/if}
       </div>
     {/if}
