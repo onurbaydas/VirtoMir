@@ -44,7 +44,7 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 - **Import**: OVA appliances, a libvirt domain XML, or a disk image already on the host
 - **Snapshots** as a tree: take, revert, delete
 - **Backups**: live (no downtime) or offline, restore as a new machine; **automatic snapshots and backups** on a schedule with retention
-- **Firewall per machine**: in/out rules by protocol, port and address, default policies and anti-spoofing — enforced on the host (libvirt network filters), so the guest cannot switch it off; applied live
+- **Firewall per machine**: in/out rules by protocol, port and IPv4/IPv6 address, default policies and anti-spoofing — enforced on the host (libvirt network filters), so the guest cannot switch it off; applied live
 - **As code**: the new-machine form shows its exact API request (curl, Ansible) and an equivalent `virt-install`
 
 ### Monitoring
@@ -61,8 +61,9 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 ### Storage & networks
 
 - Storage pools and volumes, **ISO / cloud image upload** with progress, grow volumes
-- Virtual networks (NAT, isolated, routed, bridged), DHCP leases with machine names, **reserved addresses**
+- Virtual networks (NAT, isolated, routed, bridged) with **IPv4 and IPv6** (SLAAC, DHCPv6, NAT66), DHCP leases with machine names, **reserved addresses**
 - **Host wiring** at a glance: physical ports, bonds, VLANs, bridges and which machines are plugged in
+- **Create bridges, bonds and VLAN interfaces on the host** — through netplan, NetworkManager or systemd-networkd, whichever the host uses; a bridge can take over the host's own address. Every change must be confirmed within two minutes, or the host undoes it by itself (so a change that cuts you off heals itself)
 - **Packet capture** on any host interface (tcpdump): watch it live or download a `.pcap` for Wireshark
 - **Download images from a URL** straight into a pool, verified against a SHA-256; find **unused disk images**
 - **NFS, iSCSI and Ceph RBD storage**, and one pool on every host of a cluster in a single step
@@ -183,7 +184,7 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 
 ## Roadmap
 
-SPICE console, IPv6 networks and firewall rules, creating bonds and bridges on the host, off-site backups (restic/S3), a Turkish UI and signed apt/rpm repositories.
+SPICE console, off-site backups (restic/S3), a Turkish UI and signed apt/rpm repositories.
 
 ## License
 
