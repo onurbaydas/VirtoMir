@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VirtoMir packages</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 16px;color:#1b1b1b;background:#f6f4ef}
+pre{background:#111;color:#eee;padding:12px 14px;overflow:auto;border-radius:4px}code{font-family:ui-monospace,monospace}
+@media (prefers-color-scheme:dark){body{background:#151515;color:#e8e6e1}}</style></head><body>
+<h1>VirtoMir packages</h1>
+<p>Signed repositories for <a href="https://github.com/onurbaydas/VirtoMir">VirtoMir</a>. Signing key fingerprint:
+<code>F54B0716A240B22E947B8DC6E410753BFE33A9F0</code> (<a href="virtomir.asc">virtomir.asc</a>).</p>
+<h2>Debian / Ubuntu</h2>
+<pre>sudo install -d -m 0755 /etc/apt/keyrings
+sudo curl -fsSL -o /etc/apt/keyrings/virtomir.asc https://onurbaydas.github.io/VirtoMir/virtomir.asc
+echo "deb [signed-by=/etc/apt/keyrings/virtomir.asc] https://onurbaydas.github.io/VirtoMir/apt stable main" | sudo tee /etc/apt/sources.list.d/virtomir.list
+sudo apt update &amp;&amp; sudo apt install virtomir</pre>
+<h2>Fedora / RHEL (experimental)</h2>
+<pre>sudo curl -fsSL -o /etc/yum.repos.d/virtomir.repo https://onurbaydas.github.io/VirtoMir/virtomir.repo
+sudo dnf install virtomir</pre>
+<p>Updates then come with <code>apt upgrade</code> / <code>dnf upgrade</code>.</p>
+</body></html>
