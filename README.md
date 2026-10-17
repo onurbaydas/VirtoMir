@@ -9,7 +9,7 @@ VirtoMir is a modern web control panel for **KVM / QEMU / libvirt** that tries t
 
 It installs on the Linux host you already have (Debian, Ubuntu, Fedora, …) as a single binary. No dedicated distribution, no database, no agents.
 
-> 🚧 **Status: early release (0.5).** Used and tested on single hosts and small clusters; high availability has not been tried on real BMC hardware yet. Test it before you trust it with production.
+> 🚧 **Status: early release (0.6).** Used and tested on single hosts and small clusters; high availability has not been tried on real BMC hardware yet. Test it before you trust it with production.
 
 ![Overview](docs/screenshots/overview.png)
 
@@ -110,7 +110,18 @@ VirtoMir sits in the middle: as easy as Cockpit, as deep as raw libvirt XML, as 
 
 - **English and Turkish** (Türkçe) user interface — the browser's language by default, switchable in the sidebar and on the Account page
 
-<sub>Screenshots from VirtoMir 0.4.0 on a test host (Ubuntu 26.04, libvirt 12) with real, small machines; the host name is shown as hv-01. Dark, light and "match system" themes; works on phones too.</sub>
+<sub>Screenshots from VirtoMir 0.4 on a test host (Ubuntu 26.04, libvirt 12) with real, small machines; the host name is shown as hv-01. Dark, light and "match system" themes; works on phones too.</sub>
+
+## What it does on your host
+
+Before you install it on a hypervisor you care about — or [try it in a throwaway VM](docs/try-in-a-vm.md) first:
+
+- **Runs as root**, as one service (`virtomird`), because it talks to the system libvirt socket and checks passwords through PAM.
+- **Listens on port 8420 (HTTPS)** — on all addresses when installed from a package or with `install.sh`, only on `127.0.0.1` when the binary is started by hand. Change it in `/etc/default/virtomird` (`/etc/sysconfig/virtomird` on Fedora/RHEL), e.g. to `127.0.0.1:8420` behind your own reverse proxy.
+- **Keeps its own state in `/var/lib/virtomir`** (certificate, history, settings, activity log). No database and no agents inside your machines.
+- **Never touches your existing machines on its own.** It reads what libvirt has and changes only what you ask for, directly or through something you set up (schedules, high availability); changes made through VirtoMir are in the activity log.
+- **Removes cleanly:** `sudo apt purge virtomir` (or `sudo ./install.sh --uninstall --purge`) deletes the service and `/var/lib/virtomir`; your machines, disks and networks stay.
+- **Security problems:** please report them privately, see [SECURITY.md](SECURITY.md).
 
 ## Install
 
@@ -203,11 +214,12 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 - Go (daemon, `cmd/` + `internal/`) and Svelte 5 + TypeScript (UI, `web/`).
 - `go test ./...` and `cd web && npm run check` run anywhere, no libvirt needed.
 - `scripts/dev-run.ps1` builds on Windows and runs on a Hyper-V dev host created by `dev/hyperv/New-VirtoMirDevHost.ps1` (Debian 13 with nested KVM).
-- Contributors and AI agents start at [AGENTS.md](AGENTS.md).
+- Work on the UI without any host: `cd web && npm run dev:demo` (the same pretend cluster as the [online demo](https://onurbaydas.github.io/VirtoMir/demo/)).
+- How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md). VirtoMir is developed with the help of AI coding agents; [AGENTS.md](AGENTS.md) is their entry point, and the best map of the code for people too.
 
 ## Roadmap
 
-Ideas welcome — open an issue.
+Ideas and questions: [Discussions](https://github.com/onurbaydas/VirtoMir/discussions). Found a bug or tried it on your hardware? [Open an issue](https://github.com/onurbaydas/VirtoMir/issues/new/choose) — test reports from setups we cannot reach (real BMCs, Ceph, GPUs, other distributions) help the most.
 
 ## License
 
