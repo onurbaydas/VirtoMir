@@ -80,7 +80,12 @@ sorted). To add a language:
 
 Untranslated keys fall back to English, so a partial translation is still useful.
 
-## License
+## License and CLA
 
-By contributing you agree that your contribution is licensed under the
-[GNU AGPL v3.0 or later](LICENSE), like the rest of VirtoMir.
+VirtoMir is licensed under the [GNU AGPL v3.0 or later](LICENSE), and is also offered under
+separate commercial licenses. So that both stay possible, contributors sign a short
+[Contributor License Agreement](CLA.md) once: on your first pull request a bot asks you to
+reply with one sentence, and that is all. You keep the copyright in your work; every version
+released under the AGPL stays under the AGPL.
+
+Contributing for your employer? Make sure you are allowed to (see section 4 of the CLA).

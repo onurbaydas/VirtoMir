@@ -225,4 +225,4 @@ Ideas and questions: [Discussions](https://github.com/onurbaydas/VirtoMir/discus
 
 VirtoMir is free software: **GNU Affero General Public License v3.0 or later** — see [LICENSE](LICENSE). You may use, study, change and share it; if you offer a changed VirtoMir to others over a network, you must offer them its source code too.
 
-Copyright © 2026 Onur Baydas. For a commercial license without the AGPL's obligations, contact the author through GitHub.
+Copyright © 2026 Onur Baydas. For a commercial license without the AGPL's obligations, contact the author through GitHub. Contributions are welcome under the [Contributor License Agreement](CLA.md), which keeps both licenses possible.

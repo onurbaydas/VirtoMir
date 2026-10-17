@@ -1,0 +1,41 @@
+name: CLA
+
+# Contributor License Agreement (CLA.md): every pull request author signs once, by commenting
+# the sentence the bot asks for. Signatures are kept in the "cla-signatures" branch, so they
+# never add commits to main. The workflow never checks out or runs the pull request's code,
+# which is what makes pull_request_target safe here.
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, closed, synchronize]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  cla:
+    runs-on: ubuntu-24.04
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.issue.pull_request &&
+       (github.event.comment.body == 'recheck' ||
+        github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'))
+    steps:
+      - name: CLA Assistant
+        # contributor-assistant/github-action v2.6.1, pinned to its commit
+        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          path-to-signatures: signatures/version1/cla.json
+          path-to-document: https://github.com/${{ github.repository }}/blob/main/CLA.md
+          branch: cla-signatures
+          allowlist: onurbaydas,*[bot]
+          custom-notsigned-prcomment: >-
+            Thank you for your contribution! Before it can be merged, please read the
+            [Contributor License Agreement](https://github.com/${{ github.repository }}/blob/main/CLA.md)
+            and sign it by commenting below with the sentence shown. You only need to do this once.
