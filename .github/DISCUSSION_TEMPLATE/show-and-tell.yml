@@ -1,0 +1,24 @@
+title: "My setup: "
+labels: ["setup"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Running VirtoMir somewhere? Tell us about it — it shows others what works, and shows us
+        what to test. Screenshots welcome (hide anything private).
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your setup
+      description: Hosts, hardware, distribution, storage, network — as much as you like.
+      placeholder: "3 × Ryzen 7950X, Debian 13, NFS on a TrueNAS box, 25 machines, HA with Redfish fencing"
+    validations:
+      required: true
+  - type: textarea
+    id: use
+    attributes:
+      label: What do you use it for?
+  - type: textarea
+    id: wish
+    attributes:
+      label: What would make it better for you?

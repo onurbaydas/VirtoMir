@@ -1,0 +1,31 @@
+name: Feature request
+description: Something VirtoMir should do, or do differently.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Not sure yet, or just an idea? [Discussions → Ideas](../../discussions/categories/ideas) is a fine place to start.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation and what gets in the way today — more useful than a finished solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could VirtoMir help?
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you do it today?
+      description: virsh, Cockpit, virt-manager, Proxmox, a script…
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - label: I can test it on my hosts
+        - label: I would like to try implementing it

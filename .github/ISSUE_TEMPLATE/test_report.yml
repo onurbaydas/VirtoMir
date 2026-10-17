@@ -1,0 +1,89 @@
+name: Test report
+description: You tried VirtoMir — tell us how it went, good or bad. Two minutes, and it helps a lot.
+title: "Test report: <distribution>, <single host / cluster>"
+labels: ["test report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for trying VirtoMir! Every report — "it just worked" included — tells us which
+        setups are safe and which need work. Nothing here is required except the first three.
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: How did it go?
+      options:
+        - Everything I tried worked
+        - Mostly worked, some rough edges
+        - Something important did not work
+        - I could not get it running
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Host distribution and version
+      placeholder: "Debian 13, Ubuntu 24.04, Fedora 42, …"
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did it run?
+      multiple: true
+      options:
+        - Online demo (browser only)
+        - Throwaway VM (dev/try, Multipass, Vagrant)
+        - A spare physical server
+        - A real host with machines I care about
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: "VirtoMir: Account → Updates (or `dpkg -s virtomir`); libvirt and QEMU: `virsh version`"
+      placeholder: "VirtoMir 0.6.0, libvirt 12.0.0, QEMU 10.1.0"
+  - type: dropdown
+    id: scale
+    attributes:
+      label: Hosts
+      options:
+        - One host
+        - A cluster of 2 hosts
+        - A cluster of 3 or more hosts
+  - type: checkboxes
+    id: tried
+    attributes:
+      label: What did you try?
+      options:
+        - label: First-run setup page
+        - label: Creating a machine (ISO, cloud image or existing disk)
+        - label: Console (screen or serial)
+        - label: Settings / XML editing
+        - label: Snapshots
+        - label: Backups and restore
+        - label: Templates and linked clones
+        - label: Storage pools (NFS, iSCSI, Ceph, LVM, ZFS)
+        - label: Networks, bridges, VLANs
+        - label: PCI/USB passthrough or vGPU
+        - label: Joining a cluster, moving / live-migrating machines
+        - label: High availability and fencing (IPMI, Redfish, watchdog)
+        - label: LDAP / Active Directory / OIDC sign-in
+        - label: Alerts and reports
+        - label: Phone or tablet
+  - type: textarea
+    id: good
+    attributes:
+      label: What worked well?
+  - type: textarea
+    id: bad
+    attributes:
+      label: What was confusing, slow or broken?
+      description: Steps to reproduce help most. For a clear bug, a separate bug report is even better.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "`journalctl -u virtomird --since -1h` around the problem. Remove anything private."
+      render: text

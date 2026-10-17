@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or "how do I…"
+    url: https://github.com/onurbaydas/VirtoMir/discussions/categories/q-a
+    about: Ask in Discussions; answers there help the next person too.
+  - name: Security vulnerability
+    url: https://github.com/onurbaydas/VirtoMir/security/advisories/new
+    about: Please report privately, not in a public issue.
+  - name: Try it first
+    url: https://github.com/onurbaydas/VirtoMir/blob/main/docs/try-in-a-vm.md
+    about: The online demo and a one-command throwaway test VM.
