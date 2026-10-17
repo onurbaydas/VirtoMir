@@ -46,6 +46,13 @@ function parse(path: string, hash: string): Route {
   return { name: 'not-found' }
 }
 
+// Where the UI is served: "" at the root (virtomird), e.g. "/VirtoMir/demo" for the online demo.
+// Routes are parsed without it and every history entry gets it back.
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
+const unbased = (p: string) => (BASE && (p === BASE || p.startsWith(BASE + '/')) ? p.slice(BASE.length) || '/' : p)
+const based = (p: string) => BASE + p
+const here = () => unbased(location.pathname)
+
 const HOST_RE = /^\/hosts\/([0-9a-f]{16})(?=\/|$)/
 
 /** Splits "/hosts/<id>/rest" into the member ID and "/rest". */
@@ -58,15 +65,15 @@ const withHost = (id: string | null, path: string) => (id ? `/hosts/${id}${path 
 
 class Router {
   /** Cluster member the pages are about; null = the host serving this page. */
-  host = $state<string | null>(splitHost(location.pathname).host)
-  route = $state<Route>(parse(splitHost(location.pathname).path, location.hash))
+  host = $state<string | null>(splitHost(here()).host)
+  route = $state<Route>(parse(splitHost(here()).path, location.hash))
 
   constructor() {
     window.addEventListener('popstate', () => this.#sync())
   }
 
   #sync() {
-    const { host, path } = splitHost(location.pathname)
+    const { host, path } = splitHost(here())
     this.host = host
     this.route = parse(path, location.hash)
   }
@@ -79,8 +86,8 @@ class Router {
   /** Shows the same kind of page for another member (machine pages fall back to its overview). */
   switchHost(id: string | null) {
     const keep = ['overview', 'machines', 'storage', 'networks', 'backups', 'alerts', 'activity', 'reports'].includes(this.route.name)
-    const path = keep ? splitHost(location.pathname).path : '/'
-    history.pushState(null, '', withHost(id, path))
+    const path = keep ? splitHost(here()).path : '/'
+    history.pushState(null, '', based(withHost(id, path)))
     this.#sync()
   }
 
@@ -91,17 +98,17 @@ class Router {
 
   /** Opens a page on a given member (null: the host serving the UI). */
   go(id: string | null, path: string) {
-    history.pushState(null, '', withHost(id, path))
+    history.pushState(null, '', based(withHost(id, path)))
     this.#sync()
     window.scrollTo({ top: 0 })
   }
 
   navigate(href: string, opts: { replace?: boolean } = {}) {
     const url = new URL(href, location.href)
-    url.pathname = this.scoped(url.pathname)
-    if (url.pathname + url.hash === location.pathname + location.hash) return
-    const samePage = url.pathname === location.pathname
-    history[opts.replace ? 'replaceState' : 'pushState'](null, '', url.pathname + url.hash)
+    const path = this.scoped(unbased(url.pathname))
+    if (path + url.hash === here() + location.hash) return
+    const samePage = path === here()
+    history[opts.replace ? 'replaceState' : 'pushState'](null, '', based(path) + url.hash)
     this.#sync()
     if (!samePage) window.scrollTo({ top: 0 })
   }

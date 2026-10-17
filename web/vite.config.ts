@@ -14,7 +14,11 @@ const keepGitkeep: Plugin = {
 // `npm run dev` proxies the API to a running virtomird (default: the Hyper-V dev host).
 const api = process.env.VIRTOMIR_API ?? 'https://192.168.77.10:8420'
 
-export default defineConfig({
+// `npm run build:demo` (mode "demo", .env.demo): the online demo with a pretend API, built to
+// dist-demo/ so it never ends up in the binary. DEMO_BASE is where it is served, e.g.
+// /VirtoMir/demo/ on GitHub Pages; `npm run dev:demo` runs it locally without any host.
+export default defineConfig(({ mode }) => ({
+  base: mode === 'demo' ? (process.env.DEMO_BASE ?? '/') : '/',
   plugins: [svelte(), keepGitkeep],
   server: {
     // secure: false — the dev host serves a self-signed certificate.
@@ -23,7 +27,7 @@ export default defineConfig({
   build: {
     // noVNC uses top-level await.
     target: 'es2022',
-    outDir: 'dist',
+    outDir: mode === 'demo' ? 'dist-demo' : 'dist',
     emptyOutDir: true,
   },
-})
+}))

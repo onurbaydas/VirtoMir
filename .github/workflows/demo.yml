@@ -1,0 +1,67 @@
+name: Online demo
+
+# Builds the web UI in demo mode (a pretend API in the browser, no host behind it) and
+# publishes it to GitHub Pages at https://<owner>.github.io/<repo>/demo/, next to the apt/rpm
+# repositories from repos.yml. Also installs scripts/pages-404.html as the site's 404 page, so
+# deep links into the demo work. GitHub Pages serves the gh-pages branch (Settings → Pages).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'scripts/pages-404.html'
+      - '.github/workflows/demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Shares the gh-pages lock with repos.yml so the two never push over each other.
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  demo:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build the demo
+        working-directory: web
+        env:
+          DEMO_BASE: /${{ github.event.repository.name }}/demo/
+        run: |
+          npm ci --no-fund --no-audit
+          npm test
+          npm run build:demo
+
+      - name: Publish to gh-pages
+        run: |
+          if git fetch -q origin gh-pages; then
+            git worktree add site origin/gh-pages
+          else
+            git worktree add --orphan -b gh-pages site
+          fi
+          rm -rf site/demo
+          cp -r web/dist-demo site/demo
+          cp scripts/pages-404.html site/404.html
+          touch site/.nojekyll
+          cd site
+          git add -A
+          if git diff --cached --quiet; then
+            echo "The demo is already up to date."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Online demo from ${GITHUB_SHA::7}"
+          git push -q origin HEAD:gh-pages
+          echo "::notice::Demo published: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/demo/"

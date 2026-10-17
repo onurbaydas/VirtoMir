@@ -102,7 +102,7 @@
 </script>
 
 {#if session.info === null}
-  <div class="splash" aria-busy="true"><img src="/favicon.svg" alt="VirtoMir" width="44" height="44" /></div>
+  <div class="splash" aria-busy="true"><img src={import.meta.env.BASE_URL + 'favicon.svg'} alt="VirtoMir" width="44" height="44" /></div>
 {:else if !session.ready}
   <Login />
 {:else if route.name === 'console'}

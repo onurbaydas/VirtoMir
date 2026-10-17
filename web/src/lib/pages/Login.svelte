@@ -62,7 +62,7 @@
   <div class="art"><Composition /><div class="claim">{t('Every')}<br />{t('setting.')}<br />{t('Nothing')}<br />{t('hidden.')}</div></div>
   <form class="card" onsubmit={submit}>
     <div class="brand">
-      <img src="/favicon.svg" alt="" width="40" height="40" />
+      <img src={import.meta.env.BASE_URL + 'favicon.svg'} alt="" width="40" height="40" />
       <div>
         <div class="wordmark">VirtoMir</div>
         <div class="tagline">{t('Sign in with your account on this host{v}', { v: methods.ldap ? ' or in the directory' : '' })}</div>

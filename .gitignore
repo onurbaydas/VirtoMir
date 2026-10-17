@@ -5,6 +5,8 @@
 .env
 .env.*
 !.env.example
+# the online demo's build mode (no secrets: it only turns the pretend API on)
+!web/.env.demo
 *.pem
 *.key
 
@@ -25,6 +27,8 @@ dist/
 !web/dist/
 web/dist/*
 !web/dist/.gitkeep
+# the online demo (npm run build:demo), published to GitHub Pages, never embedded
+web/dist-demo/
 build/
 bin/
 out/

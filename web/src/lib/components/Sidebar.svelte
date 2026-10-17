@@ -70,7 +70,7 @@
 </script>
 
 <header class="mobile">
-  <a class="m-brand" href="/" onclick={router.link}><img src="/favicon.svg" alt="VirtoMir" width="22" height="22" /></a>
+  <a class="m-brand" href="/" onclick={router.link}><img src={import.meta.env.BASE_URL + 'favicon.svg'} alt="VirtoMir" width="22" height="22" /></a>
   <nav class="m-nav" aria-label={t('Main')}>
     {#each NAV as n (n.name)}
       <a class:active={router.route.name === n.name} href={router.scoped(n.href)} onclick={router.link}>{n.label}</a>
@@ -81,7 +81,7 @@
 
 <aside>
   <a class="brand" href="/" onclick={router.link}>
-    <img src="/favicon.svg" alt="" width="26" height="26" />
+    <img src={import.meta.env.BASE_URL + 'favicon.svg'} alt="" width="26" height="26" />
     <span class="wordmark">VirtoMir</span>
   </a>
 

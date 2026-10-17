@@ -130,6 +130,7 @@ pre{background:#111;color:#eee;padding:12px 14px;overflow:auto;border-radius:4px
 <h1>VirtoMir packages</h1>
 <p>Signed repositories for <a href="https://github.com/onurbaydas/VirtoMir">VirtoMir</a>. Signing key fingerprint:
 <code>$fpr</code> (<a href="virtomir.asc">virtomir.asc</a>).</p>
+<p>Want to look around first? The <a href="demo/">online demo</a> runs the real interface on made-up hosts, in your browser.</p>
 <h2>Debian / Ubuntu</h2>
 <pre>sudo install -d -m 0755 /etc/apt/keyrings
 sudo curl -fsSL -o /etc/apt/keyrings/virtomir.asc $REPO_URL/virtomir.asc

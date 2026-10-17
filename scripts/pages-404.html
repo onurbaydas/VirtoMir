@@ -1,0 +1,39 @@
+<!doctype html>
+<!--
+  GitHub Pages 404 page for the project site (copied to the gh-pages root by
+  .github/workflows/demo.yml). The online demo is a single-page app under /<repo>/demo/: Pages
+  has no fallback to index.html, so a deep link or reload there (/<repo>/demo/machines/<uuid>)
+  lands here and is sent on as /<repo>/demo/?p=/machines/<uuid>; the demo restores the path.
+  Anything else gets a plain "not found".
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Not found · VirtoMir</title>
+    <script>
+      ;(function () {
+        var m = /^(\/[^/]+\/demo)(\/.*)$/.exec(location.pathname)
+        if (m && m[2] !== '/' && !/^\/assets\//.test(m[2])) {
+          location.replace(m[1] + '/?p=' + encodeURIComponent(m[2]) + location.hash)
+        }
+      })()
+    </script>
+    <style>
+      body { margin: 0; display: grid; place-items: center; min-height: 100vh; font: 16px/1.5 system-ui, sans-serif; background: #f4f1e8; color: #111; }
+      main { max-width: 34rem; padding: 2rem; }
+      a { color: inherit; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Not found</h1>
+      <p>Nothing lives at this address. Try the <a id="home" href="/">package repository</a>, the <a id="demo" href="/">online demo</a> or <a href="https://github.com/onurbaydas/VirtoMir">VirtoMir on GitHub</a>.</p>
+    </main>
+    <script>
+      var site = '/' + (location.pathname.split('/')[1] || '')
+      document.getElementById('home').href = site + '/'
+      document.getElementById('demo').href = site + '/demo/'
+    </script>
+  </body>
+</html>
