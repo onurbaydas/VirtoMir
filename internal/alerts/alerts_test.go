@@ -212,3 +212,75 @@ func TestChannelFilter(t *testing.T) {
 		t.Error("resolved sent although the channel did not ask for it")
 	}
 }
+
+// A webhook URL is the credential (Slack, Discord, ntfy topics): viewers read the
+// configuration, so it is masked there, and sending the masked form back keeps the real one.
+func TestWebhookURLsAreMasked(t *testing.T) {
+	e, err := Open(filepath.Join(t.TempDir(), "alerts.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const secret = "https://hooks.slack.com/services/T000/B000/XXXXSECRET"
+	cfg := e.Config()
+	cfg.Channels = []Channel{{Name: "ops", Kind: "webhook", URL: secret, Format: "slack", MinSeverity: Warning, Enabled: true}}
+	if err := e.SetConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	shown := e.Config().Channels[0].URL
+	if strings.Contains(shown, "XXXXSECRET") || !strings.HasPrefix(shown, "https://hooks.slack.com/") {
+		t.Fatalf("shown URL %q: want the host only", shown)
+	}
+
+	// Saved back unchanged (e.g. after editing a rule): the real URL stays.
+	if err := e.SetConfig(e.Config()); err != nil {
+		t.Fatal(err)
+	}
+	if e.cfg.Channels[0].URL != secret {
+		t.Fatalf("stored URL became %q", e.cfg.Channels[0].URL)
+	}
+
+	// A new URL replaces it.
+	c := e.Config()
+	c.Channels[0].URL = "https://ntfy.sh/new-topic"
+	if err := e.SetConfig(c); err != nil {
+		t.Fatal(err)
+	}
+	if e.cfg.Channels[0].URL != "https://ntfy.sh/new-topic" {
+		t.Fatalf("new URL not saved: %q", e.cfg.Channels[0].URL)
+	}
+
+	// A masked URL this host does not know (another cluster member's settings) is refused,
+	// rather than saved as a broken webhook.
+	other := e.Config()
+	other.Channels[0].ID = "elsewhere"
+	if err := e.SetConfig(other); err == nil {
+		t.Error("an unknown masked URL was accepted")
+	}
+}
+
+func TestTestChannelUsesStoredURL(t *testing.T) {
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/hook/secret-part" {
+			hits++
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	e, err := Open(filepath.Join(t.TempDir(), "alerts.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := e.Config()
+	cfg.Channels = []Channel{{Name: "hook", Kind: "webhook", URL: srv.URL + "/hook/secret-part", Format: "json", MinSeverity: Warning, Enabled: true}}
+	if err := e.SetConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	// The UI sends the channel as it shows it: masked.
+	if err := e.Test(e.Config().Channels[0]); err != nil {
+		t.Fatal(err)
+	}
+	if hits != 1 {
+		t.Errorf("the test went to the masked URL, not the stored one (hits=%d)", hits)
+	}
+}

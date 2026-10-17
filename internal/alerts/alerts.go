@@ -11,9 +11,11 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -214,7 +216,9 @@ func (e *Engine) saveLocked() {
 	}
 }
 
-// Config returns the current configuration (SMTP password masked).
+// Config returns the current configuration with its secrets masked: the SMTP password, and
+// everything after the host in webhook URLs (a Slack or Discord webhook URL, or an ntfy topic,
+// is itself the credential, and viewers may read this configuration).
 func (e *Engine) Config() Config {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -224,14 +228,55 @@ func (e *Engine) Config() Config {
 	if c.SMTP.Password != "" {
 		c.SMTP.Password = maskedSecret
 	}
+	for i := range c.Channels {
+		if c.Channels[i].URL != "" {
+			c.Channels[i].URL = maskURL(c.Channels[i].URL)
+		}
+	}
 	return c
 }
 
 const maskedSecret = "••••••••"
 
-// SetConfig replaces the configuration after validating it. A masked SMTP password keeps
-// the stored one.
+// maskURL keeps the scheme and host of a webhook URL, so people can tell where it goes, and
+// hides the rest.
+func maskURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return maskedSecret
+	}
+	return u.Scheme + "://" + u.Host + "/" + maskedSecret
+}
+
+func isMaskedURL(s string) bool { return strings.HasSuffix(s, maskedSecret) }
+
+// unmaskChannel puts the stored URL back into a channel sent back with its URL still masked.
+// It fails when there is no stored channel to take it from (e.g. the same settings sent to
+// another cluster member that does not have this channel yet).
+func unmaskChannel(ch *Channel, stored []Channel) error {
+	if !isMaskedURL(ch.URL) {
+		return nil
+	}
+	for _, old := range stored {
+		if old.ID != "" && old.ID == ch.ID && maskURL(old.URL) == ch.URL {
+			ch.URL = old.URL
+			return nil
+		}
+	}
+	return fmt.Errorf("channel %q: enter its webhook URL again (it is hidden, and this host does not have it yet)", ch.Name)
+}
+
+// SetConfig replaces the configuration after validating it. A masked SMTP password or webhook
+// URL keeps the stored one.
 func (e *Engine) SetConfig(c Config) error {
+	e.mu.Lock()
+	stored := slices.Clone(e.cfg.Channels)
+	e.mu.Unlock()
+	for i := range c.Channels {
+		if err := unmaskChannel(&c.Channels[i], stored); err != nil {
+			return err
+		}
+	}
 	seen := map[string]bool{}
 	for i := range c.Rules {
 		r := &c.Rules[i]

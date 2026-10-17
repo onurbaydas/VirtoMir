@@ -134,12 +134,16 @@ func (e *Engine) Notice(subject, message string) {
 
 // Test sends a test notification through one channel and reports the outcome.
 func (e *Engine) Test(ch Channel) error {
+	e.mu.Lock()
+	smtp := e.cfg.SMTP
+	stored := slices.Clone(e.cfg.Channels)
+	e.mu.Unlock()
+	if err := unmaskChannel(&ch, stored); err != nil {
+		return err
+	}
 	if err := ch.validate(); err != nil {
 		return err
 	}
-	e.mu.Lock()
-	smtp := e.cfg.SMTP
-	e.mu.Unlock()
 	ch.Enabled = true
 	host, _ := os.Hostname()
 	return deliver(ch, smtp, Event{Type: TestEvent, Alert: Alert{
