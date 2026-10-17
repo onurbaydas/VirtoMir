@@ -1,9 +1,8 @@
 package virt
 
 import (
-	"encoding/json"
+	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -63,7 +62,7 @@ func (c *Client) PlanMove(uuid string) (MovePlan, error) {
 			return MovePlan{}, refusedf("Disk %s of %s is not an image file (a block device or network disk); it cannot be copied to another host.", disk.Target.Dev, d.Name)
 		}
 		path := disk.Source.File.File
-		if backing := backingFile(path); backing != "" {
+		if backing := backingFile(path, diskFormat(disk)); backing != "" {
 			return MovePlan{}, refusedf("Disk %s of %s is an overlay on %s; make a full copy of the machine and move that.", disk.Target.Dev, d.Name, backing)
 		}
 		st, err := os.Stat(path)
@@ -150,17 +149,15 @@ func (c *Client) AdoptDomain(doc string) (string, error) {
 	return formatUUID(d.UUID), nil
 }
 
-// backingFile is the backing image of a qcow2 file ("" for none or when it cannot be read).
-func backingFile(path string) string {
-	out, err := exec.Command("qemu-img", "info", "--output=json", "-U", path).Output()
-	if err != nil {
+// backingFile is the backing image of a disk opened as format ("" for none or when it cannot
+// be read). The format comes from the domain definition: probing would let a raw disk's
+// contents pretend to be an overlay (see imagefmt.go).
+func backingFile(path, format string) string {
+	chain, err := qemuImgInfo(context.Background(), path, format)
+	if err != nil || len(chain) == 0 {
 		return ""
 	}
-	var info struct {
-		Backing string `json:"backing-filename"`
-	}
-	_ = json.Unmarshal(out, &info)
-	return info.Backing
+	return chain[0].Backing
 }
 
 func appendUnique(xs []string, s string) []string {

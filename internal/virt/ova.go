@@ -241,7 +241,18 @@ func (c *Client) ImportOVA(ctx context.Context, pool, name string, r io.Reader, 
 			return CreateResult{}, refusedf("%s already exists in pool %s.", filepath.Base(dst), pool)
 		}
 		report(fmt.Sprintf("Converting disk %d of %d…", i+1, len(ovf.Disks)))
-		out, err := exec.CommandContext(ctx, "qemu-img", "convert", "-O", "qcow2", src, dst).CombinedOutput()
+		// The OVA comes from elsewhere: its disks are opened by their magic bytes, never probed
+		// by qemu-img, and may not refer to any other file (see imagefmt.go).
+		format, err := sniffFormat(src)
+		if err != nil {
+			cleanup()
+			return CreateResult{}, err
+		}
+		if _, err := checkedImage(ctx, src, format, false); err != nil {
+			cleanup()
+			return CreateResult{}, err
+		}
+		out, err := exec.CommandContext(ctx, "qemu-img", convertArgs(format, src, dst, false)...).CombinedOutput()
 		if err != nil {
 			cleanup()
 			return CreateResult{}, fmt.Errorf("convert %s: %v: %s", d, err, strings.TrimSpace(string(out)))

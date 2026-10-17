@@ -190,7 +190,12 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, a
 	} else {
 		for i, bd := range b.Disks {
 			report(fmt.Sprintf("Copying disk %s (%d of %d)…", bd.Target, i+1, len(b.Disks)))
-			cmd := exec.CommandContext(ctx, "qemu-img", "convert", "-O", "qcow2", "-c", bd.Source, filepath.Join(dest, bd.File))
+			// Opened as the format libvirt uses, never probed (see imagefmt.go).
+			format := diskFormat(disks[i])
+			if _, err := checkedImage(ctx, bd.Source, format, true); err != nil {
+				return fail(fmt.Errorf("copy %s: %w", bd.Target, err))
+			}
+			cmd := exec.CommandContext(ctx, "qemu-img", convertArgs(format, bd.Source, filepath.Join(dest, bd.File), true)...)
 			if out, err := cmd.CombinedOutput(); err != nil {
 				return fail(fmt.Errorf("copy %s: %v: %s", bd.Target, err, strings.TrimSpace(string(out))))
 			}
@@ -416,7 +421,13 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 			return "", refusedf("%s already exists in pool %s.", filepath.Base(dst), pool)
 		}
 		report(fmt.Sprintf("Restoring disk %s (%d of %d)…", bd.Target, i+1, len(b.Disks)))
-		cmd := exec.CommandContext(ctx, "qemu-img", "convert", "-O", "qcow2", filepath.Join(p, bd.File), dst)
+		// Backups are standalone qcow2 files VirtoMir wrote; anything else in the folder is refused.
+		src := filepath.Join(p, bd.File)
+		if _, err := checkedImage(ctx, src, "qcow2", false); err != nil {
+			rollback()
+			return "", fmt.Errorf("restore %s: %w", bd.Target, err)
+		}
+		cmd := exec.CommandContext(ctx, "qemu-img", convertArgs("qcow2", src, dst, false)...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			rollback()
 			return "", fmt.Errorf("restore %s: %v: %s", bd.Target, err, strings.TrimSpace(string(out)))

@@ -83,7 +83,7 @@ func (c *Client) PlanMigration(uuid string) (MigrationSource, error) {
 		}
 		ld := LiveDisk{Target: disk.Target.Dev, Path: path, CDROM: disk.Device == "cdrom" || disk.ReadOnly != nil,
 			Network: onNetworkFS(path), Writable: disk.ReadOnly == nil && disk.Shareable == nil && orDefault(disk.Device, "disk") == "disk"}
-		if ld.Writable && !ld.Network && backingFile(path) != "" {
+		if ld.Writable && !ld.Network && backingFile(path, diskFormat(disk)) != "" {
 			return MigrationSource{}, refusedf("Disk %s is an overlay on another image; that chain cannot be copied live.", disk.Target.Dev)
 		}
 		src.Disks = append(src.Disks, ld)
