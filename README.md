@@ -13,6 +13,8 @@ It installs on the Linux host you already have (Debian, Ubuntu, Fedora, …) as 
 
 ![Overview](docs/screenshots/overview.png)
 
+**Try it:** click through the [online demo](https://onurbaydas.github.io/VirtoMir/demo/) (made-up hosts, nothing to install), or get a throwaway test host in a VM with one command: [Try VirtoMir without touching your servers](docs/try-in-a-vm.md).
+
 ## Why?
 
 | Tool | Gap |

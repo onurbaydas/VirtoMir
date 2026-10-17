@@ -1,0 +1,34 @@
+# A throwaway VirtoMir test host with Vagrant (libvirt or VirtualBox provider).
+#
+#   cd dev/try && vagrant up                         # libvirt (Linux) or VirtualBox, whichever you have
+#   vagrant ssh -c 'sudo cat /root/virtomir-try-password'
+#   vagrant destroy -f                               # gone, with everything inside
+#
+# VirtoMir is then at https://localhost:8420/ (forwarded), user "virtomir".
+# Machines inside need nested virtualization: see docs/try-in-a-vm.md.
+
+Vagrant.configure("2") do |config|
+  # Ubuntu 24.04; the box depends on the provider (bento has no libvirt build).
+  config.vm.box = "bento/ubuntu-24.04"
+  config.vm.hostname = "virtomir-try"
+  config.vm.network "forwarded_port", guest: 8420, host: 8420, host_ip: "127.0.0.1"
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+
+  config.vm.provider "libvirt" do |v, override|
+    override.vm.box = "alvistack/ubuntu-24.04"
+    v.cpus = 4
+    v.memory = 6144
+    v.nested = true
+    v.cpu_mode = "host-passthrough"
+    v.machine_virtual_size = 40
+  end
+
+  config.vm.provider "virtualbox" do |v|
+    v.cpus = 4
+    v.memory = 6144
+    # Nested VT-x/AMD-V: VirtualBox 6.1 or newer.
+    v.customize ["modifyvm", :id, "--nested-hw-virt", "on"]
+  end
+
+  config.vm.provision "shell", path: "provision.sh"
+end
