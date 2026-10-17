@@ -1,7 +1,7 @@
 // Unit tests for the UI's pure helpers (P7): `npm test`.
 import { describe, expect, it } from 'vitest'
 import { diffLines, hunks } from './diff'
-import { ago, formatBps, formatBytes, formatKiB, formatPercent, plural } from './format'
+import { ago, formatBps, formatBytes, formatKiB, formatMHz, formatPercent, formatRate, plural } from './format'
 import { guessLayout, keysym, strokeFor } from './keymaps'
 import { highlightXML } from './xml'
 
@@ -33,6 +33,46 @@ describe('format', () => {
     expect(plural(2, 'disk')).toBe('2 disks')
     expect(ago(5000)).toBe('5 s ago')
     expect(ago(180_000)).toBe('3 min ago')
+  })
+  it.each([
+    [0, '0'],
+    [0.04, '0'],
+    [0.06, '0.1'],
+    [3.42, '3.4'],
+    [9.96, '10'],
+    [10.4, '10'],
+    [9999, '9999'],
+    [10_000, '10k'],
+    [12_345, '12.3k'],
+    [1_000_000_000, '1000000k'],
+    [-3.42, '-3.4'],
+  ])('formats a rate of %s as %s', (input, expected) => {
+    expect(formatRate(input)).toBe(expected)
+  })
+  it.each([
+    [0, '0 MHz'],
+    [999, '999 MHz'],
+    [1000, '1 GHz'],
+    [2456, '2.46 GHz'],
+    [1_000_000, '1000 GHz'],
+    [-1000, '-1000 MHz'],
+  ])('formats a frequency of %s MHz as %s', (input, expected) => {
+    expect(formatMHz(input)).toBe(expected)
+  })
+  it.each([
+    [0, '0 s ago'],
+    [499, '0 s ago'],
+    [500, '1 s ago'],
+    [59_499, '59 s ago'],
+    [59_500, '1 min ago'],
+    [3_569_000, '59 min ago'],
+    [3_570_000, '1 h ago'],
+    [7_200_000, '2 h ago'],
+    [86_400_000, '24 h ago'],
+    [7 * 86_400_000, '168 h ago'],
+    [-60_000, '0 s ago'],
+  ])('formats an elapsed time of %s ms as %s', (input, expected) => {
+    expect(ago(input)).toBe(expected)
   })
 })
 
