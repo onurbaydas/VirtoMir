@@ -1,0 +1,99 @@
+name: Package repositories
+
+# Signed apt and rpm repositories on GitHub Pages (ADR-0048), built from a published release's
+# .deb and .rpm files. The release workflow calls this for every stable tag; run it by hand
+# (Actions → Package repositories → Run workflow) to rebuild the repositories for a tag.
+# Needs the secret REPO_SIGNING_KEY: an armored private key (gpg --armor --export-secret-keys),
+# or the same text base64-encoded, and REPO_SIGNING_PASSPHRASE if that key has one.
+# GitHub Pages serves the gh-pages branch (Settings → Pages).
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, e.g. v0.6.0
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  repos:
+    runs-on: ubuntu-24.04
+    env:
+      SIGNING_KEY: ${{ secrets.REPO_SIGNING_KEY }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Signing key
+        id: key
+        run: |
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "::notice::REPO_SIGNING_KEY is not set: no apt/rpm repository was published."
+            echo "ok=false" >>"$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.key.outputs.ok == 'true'
+        with:
+          fetch-depth: 0
+
+      - name: Packages of the release
+        if: steps.key.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir pkgs --pattern '*.deb' --pattern '*.rpm'
+
+      - name: Tools and key
+        if: steps.key.outputs.ok == 'true'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq apt-utils createrepo-c rpm gnupg
+          key=$(mktemp)
+          printf '%s\n' "$SIGNING_KEY" | tr -d '\r' >"$key"
+          if ! grep -q -- '-----BEGIN PGP PRIVATE KEY BLOCK-----' "$key"; then
+            # Accept the armored key base64-encoded too (a common way to store it as a secret).
+            if base64 -d "$key" 2>/dev/null | grep -q -- '-----BEGIN PGP PRIVATE KEY BLOCK-----'; then
+              base64 -d "$key" >"$key.dec" && mv "$key.dec" "$key"
+            elif grep -q -- '-----BEGIN PGP PUBLIC KEY BLOCK-----' "$key"; then
+              echo "::error::REPO_SIGNING_KEY holds a public key; it needs the private key: gpg --armor --export-secret-keys <id>"
+              exit 1
+            else
+              echo "::error::REPO_SIGNING_KEY is not an armored private key ($(wc -c <"$key") bytes, no '-----BEGIN PGP PRIVATE KEY BLOCK-----' line). Store the output of: gpg --armor --export-secret-keys <id>"
+              exit 1
+            fi
+          fi
+          gpg --batch --import "$key"
+          rm -f "$key"
+          echo "GPG_KEY_ID=$(gpg --batch --with-colons --list-secret-keys | awk -F: '/^fpr/ {print $10; exit}')" >>"$GITHUB_ENV"
+
+      - name: Build the repositories
+        if: steps.key.outputs.ok == 'true'
+        env:
+          GPG_PASSPHRASE: ${{ secrets.REPO_SIGNING_PASSPHRASE }}
+          REPO_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+        run: |
+          if git fetch -q origin gh-pages; then
+            git worktree add site origin/gh-pages
+          else
+            git worktree add --orphan -b gh-pages site
+          fi
+          sh scripts/build-repos.sh pkgs site
+
+      - name: Publish to gh-pages
+        if: steps.key.outputs.ok == 'true'
+        run: |
+          cd site
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Packages for ${TAG}"
+          git push -q origin HEAD:gh-pages
