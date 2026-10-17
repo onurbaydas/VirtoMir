@@ -133,7 +133,7 @@ The repository is built by `scripts/build-repos.sh` in the release workflow (`In
 ### Debian / Ubuntu package
 
 ```sh
-sudo apt install ./virtomir_0.5.0_amd64.deb   # or _arm64.deb; pulls libvirt and QEMU if missing
+sudo apt install ./virtomir_0.6.0_amd64.deb   # or _arm64.deb; pulls libvirt and QEMU if missing
 ```
 
 It starts `virtomird` right away on port 8420 (self-signed HTTPS); the first admin to sign in is walked through what the host still needs (storage, a network, a backup location, a first image). Sign in with a Linux account in the `libvirt` group (admins), `virtomir-operator` or `virtomir-viewer`. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Later versions install from the UI (Account → Updates). Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
@@ -141,7 +141,7 @@ It starts `virtomird` right away on port 8420 (self-signed HTTPS); the first adm
 ### Fedora / RHEL package (experimental)
 
 ```sh
-sudo dnf install ./virtomir-0.5.0-1.x86_64.rpm   # or .aarch64.rpm; Fedora 40+ / RHEL 10
+sudo dnf install ./virtomir-0.6.0-1.x86_64.rpm   # or .aarch64.rpm; Fedora 40+ / RHEL 10
 ```
 
 Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf`, not from the UI. Built with `scripts/build-rpm.sh <version>`.
@@ -155,8 +155,8 @@ Requirements: a Linux host with **libvirt + QEMU/KVM** running and **systemd**.
 sudo apt install qemu-system-x86 libvirt-daemon-system ovmf swtpm
 
 # Download a release, unpack it and run the installer
-tar xzf virtomir_v0.5.0_linux_amd64.tar.gz
-sudo ./virtomir_v0.5.0_linux_amd64/install.sh
+tar xzf virtomir_v0.6.0_linux_amd64.tar.gz
+sudo ./virtomir_v0.6.0_linux_amd64/install.sh
 ```
 
 The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pam.d/virtomir`) and a systemd unit, starts it and prints the address — usually `https://<host>:8420/`. Your browser asks you to accept the self-signed certificate once.
@@ -189,7 +189,7 @@ git clone https://github.com/onurbaydas/VirtoMir && cd VirtoMir
 (cd web && npm ci && npm run build)                            # web UI, embedded into the binary
 CGO_ENABLED=1 go build -tags pam -o virtomird ./cmd/virtomird  # needs gcc + libpam0g-dev
 # or everything incl. a release tarball:
-sh scripts/build-release.sh v0.5.0-dev
+sh scripts/build-release.sh v0.6.0-dev
 ```
 
 Without `-tags pam` the binary builds anywhere (also cross-compiled from Windows/macOS), but can only run with `-auth none`.
