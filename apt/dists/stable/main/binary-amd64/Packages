@@ -102,3 +102,29 @@ Description: detailed web control deck for KVM/QEMU virtual machines
  changes. Open https://<host>:8420/ and sign in with a Linux account in the libvirt
  group (admins) or virtomir-operator / virtomir-viewer.
 
+Package: virtomir
+Architecture: amd64
+Version: 0.8.0
+Priority: optional
+Section: admin
+Maintainer: Onur Baydas <41346713+onurbaydas@users.noreply.github.com>
+Installed-Size: 16412
+Depends: libc6 (>= 2.34), libpam0g, libpam-runtime, libvirt-daemon-system, qemu-system-x86 | qemu-system-arm, adduser
+Recommends: qemu-utils, ovmf, swtpm, swtpm-tools, tcpdump, virtiofsd, restic
+Suggests: ipmitool, nfs-common, open-iscsi, ceph-common, openvswitch-switch, lvm2, zfsutils-linux, libvirt-daemon-driver-storage-zfs
+Filename: pool/main/virtomir_0.8.0_amd64.deb
+Size: 5604060
+MD5sum: dbddf0e4724fe3d7aa752cb24f41f678
+SHA1: f50a65a696971d3020e80a7d066dbeb6d6a7beb3
+SHA256: a48986931b907bbe29e55cfcaaa11afcdaaa4d75be227199596d21cd7f969102
+SHA512: 4f3ad77e229311c42f49bc494f6234ea3319ecb4fab0aa7169a8aa65f05a65cd0bd5ccf9766200a84a7b07cbfd0541943dc8a800ecbaa9694fbc14e4a45352ab
+Homepage: https://github.com/onurbaydas/VirtoMir
+Description: detailed web control deck for KVM/QEMU virtual machines
+ VirtoMir is a web UI and API for libvirt hosts: machines with consoles, snapshots,
+ backups, templates and live metrics; storage, networks and passthrough; several
+ hosts as one cluster with live migration and high availability.
+ .
+ It installs next to an existing libvirt; nothing about the host's distribution
+ changes. Open https://<host>:8420/ and sign in with a Linux account in the libvirt
+ group (admins) or virtomir-operator / virtomir-viewer.
+
