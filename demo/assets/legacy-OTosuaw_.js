@@ -1,0 +1,1 @@
+import{_t as e}from"./i18n.svelte-DVD-0AGk.js";e();
