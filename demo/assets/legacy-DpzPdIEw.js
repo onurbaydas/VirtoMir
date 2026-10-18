@@ -1,0 +1,1 @@
+import{_t as e}from"./i18n.svelte-B5lOmjER.js";e();
