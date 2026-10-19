@@ -600,6 +600,8 @@ export interface CreateSpec {
   baseImage?: string
   cloudInit?: CloudInit
   iso?: string
+  /** A second CD with drivers (virtio-win for Windows); never booted. */
+  driverIso?: string
   network?: NICSpec
   start: boolean
   /** The project the new machine belongs to (ADR-0060); empty = global. */

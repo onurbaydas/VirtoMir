@@ -35,9 +35,11 @@ type CreateSpec struct {
 	// CloudInit configures a cloud image on first boot (seed ISO attached as a CD-ROM).
 	CloudInit *CloudInit `json:"cloudInit,omitempty"`
 	// Installation media to boot from (optional).
-	ISO     string   `json:"iso,omitempty"`
-	Network *NICSpec `json:"network,omitempty"` // nil: no network adapter
-	Start   bool     `json:"start"`
+	ISO string `json:"iso,omitempty"`
+	// DriverISO is a second CD with drivers, e.g. virtio-win for Windows (optional, not booted).
+	DriverISO string   `json:"driverIso,omitempty"`
+	Network   *NICSpec `json:"network,omitempty"` // nil: no network adapter
+	Start     bool     `json:"start"`
 }
 
 // CreateResult reports the new machine; StartError is set when it was created but did not start.
@@ -239,6 +241,15 @@ func buildDomain(s CreateSpec, diskPath, diskFormat, seedPath string, diskVolume
 			Device:   "cdrom",
 			Driver:   &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "raw"},
 			Source:   &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: seedPath}},
+			Target:   &libvirtxml.DomainDiskTarget{Dev: nextTarget(x, "sd"), Bus: "sata"},
+			ReadOnly: &libvirtxml.DomainDiskReadOnly{},
+		})
+	}
+	if s.DriverISO != "" {
+		dev.Disks = append(dev.Disks, libvirtxml.DomainDisk{
+			Device:   "cdrom",
+			Driver:   &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "raw"},
+			Source:   &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: s.DriverISO}},
 			Target:   &libvirtxml.DomainDiskTarget{Dev: nextTarget(x, "sd"), Bus: "sata"},
 			ReadOnly: &libvirtxml.DomainDiskReadOnly{},
 		})

@@ -371,6 +371,21 @@ func TestBuildDomainWindows(t *testing.T) {
 			t.Errorf("windows XML lacks %s", must)
 		}
 	}
+
+	s.ISO, s.DriverISO = "/iso/win11.iso", "/iso/virtio-win.iso"
+	x := buildDomain(s, "/pool/win11.qcow2", "qcow2", "")
+	var cds []string
+	for _, d := range x.Devices.Disks {
+		if d.Device == "cdrom" {
+			cds = append(cds, d.Target.Dev+"="+d.Source.File.File)
+			if d.Boot != nil && d.Source.File.File == s.DriverISO {
+				t.Error("the drivers CD must not be a boot device")
+			}
+		}
+	}
+	if !slices.Equal(cds, []string{"sda=/iso/win11.iso", "sdc=/iso/virtio-win.iso"}) {
+		t.Errorf("CD-ROMs = %v", cds)
+	}
 }
 
 // Regression: libvirt reads a missing controller index as 0, so every PCI controller must

@@ -46,6 +46,10 @@
   let provisioning = $state<'thin' | 'thick'>('thin')
   let pool = $state('default')
   let iso = $state('')
+  // Windows: a second CD with the VirtIO drivers and guest agent, picked when one is in a pool.
+  let driverIso = $state('')
+  const VIRTIO_WIN = /virtio-win/i
+  const VIRTIO_WIN_URL = 'https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso'
   // Where the system comes from: an installer ISO, a ready cloud image, or an existing disk.
   let source = $state<'iso' | 'cloud' | 'disk'>('iso')
   let baseImage = $state('')
@@ -107,6 +111,7 @@
         if (!networks.some((x) => x.name === 'default')) netChoice = networks[0] ? `network:${networks[0].name}` : 'none'
         const lists = await Promise.all(pools.map(async (p) => ({ p: p.name, v: await api.volumes(p.name).catch(() => []) })))
         isos = lists.flatMap(({ p, v }) => v.filter((x) => x.format === 'iso').map((vol) => ({ pool: p, vol })))
+        driverIso = isos.find((i) => VIRTIO_WIN.test(i.vol.name))?.vol.path ?? ''
         images = lists.flatMap(({ p, v }) =>
           v.filter((x) => x.format !== 'iso' && x.usedBy.length === 0 && !x.name.endsWith('-cidata.iso')).map((vol) => ({ pool: p, vol })),
         )
@@ -259,6 +264,7 @@
     diskGiB: source === 'cloud' ? Math.max(diskGiB, baseCapGiB) : source === 'iso' && withDisk ? diskGiB : 0,
     provisioning: (source === 'iso' && withDisk) || source === 'cloud' ? provisioning : undefined,
     iso: source === 'iso' ? iso || undefined : undefined,
+    driverIso: source === 'iso' && os === 'windows' ? driverIso || undefined : undefined,
     baseImage: source === 'cloud' ? baseImage : undefined,
     diskPath: source === 'disk' ? existingDisk : undefined,
     cloudInit: source === 'cloud' ? { user: ciUser, password: ciPassword || undefined, sshKeys: keys } : undefined,
@@ -413,6 +419,21 @@
             <a href="/storage" onclick={router.link}>{t('Upload an ISO')}</a> {t('in Storage.')}
           </span>
         </label>
+        {#if os === 'windows'}
+          <label class="ui-field">
+            <span class="label">{t('Drivers CD (virtio-win)')}</span>
+            <select class="ui-input" bind:value={driverIso}>
+              <option value="">{t('None')}</option>
+              {#each isos as i (i.vol.path)}
+                <option value={i.vol.path}>{i.vol.name} — {i.pool}</option>
+              {/each}
+            </select>
+            <span class="hint">
+              {t('Windows installs without extra drivers; with virtio-win attached you can switch disks and adapters to the faster VirtIO later and install the guest agent.')}
+              {#if !isos.some((i) => VIRTIO_WIN.test(i.vol.name))}{t('Get it into a pool with Storage → Download from URL:')} <span class="mono">{VIRTIO_WIN_URL}</span>{/if}
+            </span>
+          </label>
+        {/if}
       {:else if source === 'cloud'}
         <label class="ui-field">
           <span class="label">{t('Cloud image')}</span>
