@@ -244,7 +244,7 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 
 ## How it's built, and where help is needed
 
-VirtoMir is built by one person, together with AI coding agents (their working rules are in [AGENTS.md](AGENTS.md)). That is how it grew this fast, and it is also why it needs more eyes than a typical side project. Help means the most here:
+VirtoMir is built by one person, together with AI coding agents (their working rules are in [AGENTS.md](AGENTS.md)). That is how it grew this fast, and it is also why it needs more eyes than a typical side project. It makes no claim to be finished or proven; with the help of others it can become far more than one person could build. Help means the most here:
 
 - **Run it** on Debian, Fedora or an older Ubuntu and tell us what breaks
 - **Review the security-sensitive parts**: it runs as root and handles sign-in (`internal/auth`, `internal/api`); please report problems privately, see [SECURITY.md](SECURITY.md)
