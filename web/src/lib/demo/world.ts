@@ -37,7 +37,7 @@ import type {
   VNetwork,
   Volume,
 } from '../api'
-import type { Chassis, Firewall, GPU, HAStatus, HostInterface, PoolView, ReportMeta, ReportSchedule, Topology } from '../enterprise'
+import type { Chassis, ClusterGPU, Firewall, GPU, GPUPool, GPUPoolView, GPUResource, HAStatus, HostInterface, PoolView, ReportMeta, ReportSchedule, Topology } from '../enterprise'
 
 export interface DemoHost {
   id: string
@@ -849,8 +849,61 @@ export const chassis: Chassis = {
 }
 
 export const gpus: GPU[] = [
-  { address: '0000:41:00.0', vendorId: '10de', deviceId: '26b9', vendor: 'NVIDIA', name: 'NVIDIA L40S', driver: 'nvidia', telemetry: 'nvidia-smi', utilPercent: 87, memTotalMiB: 46068, memUsedMiB: 11912, tempC: 63, powerW: 268, powerLimitW: 350 },
+  { address: '0000:41:00.0', vendorId: '10de', deviceId: '26b9', vendor: 'NVIDIA', name: 'NVIDIA L40S', driver: 'nvidia', telemetry: 'nvidia-smi', utilPercent: 87, memTotalMiB: 46068, memUsedMiB: 11912, tempC: 63, powerW: 268, powerLimitW: 350,
+    profile: 'mdev', passThroughReady: true, mdevTypes: [{ id: 'nvidia-1155', name: 'NVIDIA L40S-12Q', api: 'vfio-pci', available: 2 }], usedBy: [] },
 ]
+
+/** The other members' GPUs (ADR-0071): two whole L40S cards on hv-02, an A100 in MIG mode on hv-03. */
+export const memberGPUs: Record<string, GPU[]> = {
+  [HOSTS[1].id]: [
+    { address: '0000:41:00.0', vendorId: '10de', deviceId: '26b9', vendor: 'NVIDIA', name: 'NVIDIA L40S', driver: 'vfio-pci', profile: 'whole', passThroughReady: true, usedBy: ['render-01'] },
+    { address: '0000:42:00.0', vendorId: '10de', deviceId: '26b9', vendor: 'NVIDIA', name: 'NVIDIA L40S', driver: 'vfio-pci', profile: 'whole', passThroughReady: true, usedBy: [] },
+  ],
+  [HOSTS[2].id]: [
+    { address: '0000:c1:00.0', vendorId: '10de', deviceId: '20b5', vendor: 'NVIDIA', name: 'NVIDIA A100 80GB PCIe', driver: 'nvidia', telemetry: 'nvidia-smi', mig: 'enabled', profile: 'mig', passThroughReady: true,
+      migProfiles: [{ id: '1g.10gb', name: 'MIG 1g.10gb', giProfileId: 19, memoryMiB: 9728, count: 7, free: 4 }, { id: '3g.40gb', name: 'MIG 3g.40gb', giProfileId: 9, memoryMiB: 40192, count: 2, free: 1 }] },
+  ],
+}
+
+export const gpuPools: GPUPool[] = [
+  { id: 'l40s', name: 'L40S render', model: 'L40S', kind: 'whole', description: 'whole cards for rendering', created: ago(20 * D) },
+  { id: 'l40s-12q', name: 'L40S 12 GB vGPU', model: 'L40S', kind: 'mdev', profile: 'nvidia-1155', perHost: 2, created: ago(20 * D) },
+  { id: 'a100-1g', name: 'A100 1g.10gb', model: 'A100', kind: 'mig', profile: '1g.10gb', created: ago(6 * D) },
+]
+
+/** Every member's GPUs, with the pools each serves. */
+export function clusterGPUs(): ClusterGPU[] {
+  const all = HOSTS.flatMap((h) => (h.self ? gpus : (memberGPUs[h.id] ?? [])).map((g) => ({ ...g, hostId: h.id, hostName: h.name })))
+  return all.map((g) => ({
+    ...g,
+    pools: gpuPools.filter((p) => (g.name ?? '').toLowerCase().includes(p.model.toLowerCase()) && (p.kind === 'whole' ? g.profile === 'whole' : p.kind === 'mdev' ? g.mdevTypes?.some((m) => m.id === p.profile) : g.migProfiles?.some((m) => m.id === p.profile))).map((p) => p.id),
+  }))
+}
+
+/** A pool with what each member has of it. */
+export function gpuPoolView(p: GPUPool): GPUPoolView {
+  const hosts: GPUResource[] = []
+  for (const h of HOSTS) {
+    let total = 0
+    let used = 0
+    for (const g of clusterGPUs().filter((x) => x.hostId === h.id && x.pools.includes(p.id))) {
+      if (p.kind === 'whole') {
+        total++
+        if (g.usedBy?.length) used++
+      } else if (p.kind === 'mdev') {
+        const m = g.mdevTypes?.find((x) => x.id === p.profile)
+        total += (m?.available ?? 0) + 1 // gpu-train-01 holds one slice
+        used += 1
+      } else {
+        const m = g.migProfiles?.find((x) => x.id === p.profile)
+        total += m?.count ?? 0
+        used += (m?.count ?? 0) - (m?.free ?? 0)
+      }
+    }
+    if (total) hosts.push({ hostId: h.id, hostName: h.name, poolId: p.id, model: p.model, kind: p.kind, total, used, free: total - used })
+  }
+  return { ...p, hosts, total: hosts.reduce((a, h) => a + h.total, 0), used: hosts.reduce((a, h) => a + h.used, 0), free: hosts.reduce((a, h) => a + h.free, 0) }
+}
 
 export function topology(): Topology {
   const cpus = Array.from({ length: 64 }, (_, id) => {

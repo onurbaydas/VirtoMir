@@ -19,7 +19,7 @@
   import { machineHref, router } from '../router.svelte'
   import { toasts } from '../toast.svelte'
   import IaCPanel from '../components/IaCPanel.svelte'
-  import { ent, type DRSPlacement, type PoolView } from '../enterprise'
+  import { ent, type DRSPlacement, type GPUCandidate, type GPUPoolView, type PoolView } from '../enterprise'
   import { cluster } from '../cluster.svelte'
   import { projects } from '../projects.svelte'
 
@@ -186,6 +186,33 @@
   })
   let suggested = $derived(placement && cluster.current && placement.hostId !== cluster.current.id ? placement : null)
 
+  // GPUs from a GPU pool (ADR-0071): the machine is created where they are free.
+  let gpuPools = $state<GPUPoolView[]>([])
+  let withGPU = $state(false)
+  let gpuPool = $state('')
+  let gpuCount = $state(1)
+  let gpuWhere = $state<{ best: GPUCandidate } | null | undefined>(undefined)
+  $effect(() => {
+    ent.gpuPools()
+      .then((p) => {
+        gpuPools = p.filter((x) => x.kind !== 'mig')
+        if (!gpuPool && gpuPools.length) gpuPool = gpuPools[0].id
+      })
+      .catch(() => (gpuPools = []))
+  })
+  $effect(() => {
+    if (!withGPU || !gpuPool || kind !== 'vm') {
+      gpuWhere = undefined
+      return
+    }
+    const count = Math.max(1, gpuCount || 1)
+    const timer = setTimeout(() => {
+      ent.gpuPlacement(gpuPool, count).then((r) => (gpuWhere = r)).catch(() => (gpuWhere = null))
+    }, 300)
+    return () => clearTimeout(timer)
+  })
+  let gpuElsewhere = $derived(gpuWhere && cluster.current && gpuWhere.best.hostId !== cluster.current.id ? gpuWhere.best : null)
+
   // Memory encryption the host offers (libvirt's domain capabilities); usually none.
   let ccKinds = $state<string[]>([])
   $effect(() => {
@@ -271,6 +298,7 @@
     network,
     start,
     project: project || undefined,
+    gpu: kind === 'vm' && withGPU && gpuPool ? { pool: gpuPool, count: Math.max(1, gpuCount || 1) } : undefined,
   })
 
   async function create(e: SubmitEvent) {
@@ -497,6 +525,27 @@
           {t('{v}The host has {memoryKiB}.', { v: memGiB > maxMemGiB * 0.8 ? 'Close to all host memory — the host may start swapping. ' : '', memoryKiB: formatKiB(live.host?.memoryKiB ?? 0) })}
         </span>
       </div>
+      {#if kind === 'vm' && gpuPools.length}
+        <div class="gpu">
+          <label class="ui-switch"><input type="checkbox" bind:checked={withGPU} /> {t('Give it GPUs')}</label>
+          {#if withGPU}
+            <select class="ui-input" bind:value={gpuPool} aria-label={t('GPU pool')}>
+              {#each gpuPools as p (p.id)}<option value={p.id}>{p.name} ({t('{free} free', { free: p.free })})</option>{/each}
+            </select>
+            <input class="ui-input num-in" type="number" min="1" max="16" bind:value={gpuCount} aria-label={t('Number of GPUs')} />
+            <span class="hint" class:warn={gpuWhere === null || !!gpuElsewhere}>
+              {#if gpuWhere === null}
+                {t('No member has that many free GPUs of this pool.')}
+              {:else if gpuElsewhere}
+                {t('This host has not enough free; {host} has {n}.', { host: gpuElsewhere.hostName, n: gpuElsewhere.available })}
+                <button type="button" class="ui-btn sm" onclick={() => gpuElsewhere && cluster.open(gpuElsewhere.hostId)}>{t('Create it on {host}', { host: gpuElsewhere.hostName })}</button>
+              {:else if gpuWhere}
+                {t('This host has {n} free.', { n: gpuWhere.best.available })}
+              {/if}
+            </span>
+          {/if}
+        </div>
+      {/if}
     </section>
 
     {#if kind === 'vm'}
@@ -803,6 +852,16 @@
   .choice span {
     color: var(--text-3);
     font-size: 12px;
+  }
+  .gpu {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .gpu select {
+    max-width: 260px;
   }
   .slider {
     display: grid;

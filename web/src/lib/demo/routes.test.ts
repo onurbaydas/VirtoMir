@@ -622,4 +622,21 @@ describe('demo API', () => {
       vi.useRealTimers()
     }
   })
+
+  it('serves GPU pools and places GPUs', () => {
+    const pools = call('GET', '/api/v1/gpu/pools').json.pools
+    expect(pools.map((p: { id: string }) => p.id)).toEqual(['l40s', 'l40s-12q', 'a100-1g'])
+    const l40s = pools[0]
+    expect(l40s.total).toBe(2)
+    expect(l40s.free).toBe(1)
+    expect(call('GET', '/api/v1/cluster/gpus').json.gpus.length).toBe(4)
+    expect(call('POST', '/api/v1/gpu/placement', { poolId: 'l40s', count: 1 }).json.best.hostName).toBe('hv-02')
+    expect(call('POST', '/api/v1/gpu/placement', { poolId: 'l40s', count: 3 }).status).toBe(204)
+    expect(call('POST', '/api/v1/gpu/pools', { id: 'l40s', name: 'x', model: 'x', kind: 'whole' }).status).toBe(409)
+    expect(call('POST', '/api/v1/gpu/pools', { id: 'h100', name: 'H100', model: 'H100', kind: 'whole' }).status).toBe(201)
+    expect(call('PUT', '/api/v1/gpu/pools/h100', { name: 'H100 SXM' }).json.name).toBe('H100 SXM')
+    expect(call('GET', '/api/v1/gpu/pools/l40s/availability').json.hosts[0].hostName).toBe('hv-02')
+    expect(call('DELETE', '/api/v1/gpu/pools/h100').status).toBe(204)
+    expect(call('GET', '/api/v1/gpu/pools/h100').status).toBe(404)
+  })
 })

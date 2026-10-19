@@ -589,6 +589,8 @@ export interface ContainerImage {
 
 export interface CreateSpec {
   name: string
+  /** GPUs from a GPU pool (ADR-0071). */
+  gpu?: { pool: string; count: number }
   kind?: 'vm' | 'container'
   os: 'linux' | 'windows' | 'other'
   vcpus: number

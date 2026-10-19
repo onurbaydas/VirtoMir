@@ -1234,7 +1234,41 @@ export function handle(method: string, url: URL, body: any): Reply {
     case 'GET /api/v1/host/topology':
       return json(w.topology())
     case 'GET /api/v1/host/gpus':
-      return json({ gpus: host.self ? w.gpus : [] })
+      return json({ gpus: host.self ? w.gpus : (w.memberGPUs[host.id] ?? []) })
+    case 'GET /api/v1/cluster/gpus':
+      return json({ gpus: w.clusterGPUs() })
+    case 'GET /api/v1/gpu/pools':
+      return json({ pools: w.gpuPools.map(w.gpuPoolView) })
+    case 'POST /api/v1/gpu/pools': {
+      if (w.gpuPools.some((p) => p.id === body?.id)) return json({ error: `exists: a GPU pool ${body.id} exists already` }, 409)
+      const p = { ...body, created: new Date().toISOString() }
+      w.gpuPools.push(p)
+      return json(p, 201)
+    }
+    case `GET /api/v1/gpu/pools/${parts[2]}`:
+    case `PUT /api/v1/gpu/pools/${parts[2]}`:
+    case `DELETE /api/v1/gpu/pools/${parts[2]}`: {
+      const i = w.gpuPools.findIndex((p) => p.id === parts[2])
+      if (i < 0) return json({ error: 'no GPU pool ' + parts[2] }, 404)
+      if (method === 'GET') return json(w.gpuPoolView(w.gpuPools[i]))
+      if (method === 'DELETE') {
+        w.gpuPools.splice(i, 1)
+        return none()
+      }
+      w.gpuPools[i] = { ...w.gpuPools[i], ...body, id: parts[2] }
+      return json(w.gpuPools[i])
+    }
+    case `GET /api/v1/gpu/pools/${parts[2]}/availability`: {
+      const p = w.gpuPools.find((x) => x.id === parts[2])
+      return p ? json({ hosts: w.gpuPoolView(p).hosts }) : json({ error: 'no GPU pool ' + parts[2] }, 404)
+    }
+    case 'POST /api/v1/gpu/placement': {
+      const p = w.gpuPools.find((x) => x.id === body?.poolId)
+      if (!p) return json({ error: 'no GPU pool' }, 404)
+      const cands = (w.gpuPoolView(p).hosts ?? []).filter((h) => p.kind !== 'mig' && h.free >= (body?.count ?? 1)).sort((a, b) => b.free - a.free)
+        .map((h) => ({ hostId: h.hostId, hostName: h.hostName, available: h.free }))
+      return cands.length ? json({ best: cands[0], candidates: cands }) : none()
+    }
     case 'GET /api/v1/host/interfaces':
       return json({ interfaces: w.interfaces })
     case 'GET /api/v1/host/network':

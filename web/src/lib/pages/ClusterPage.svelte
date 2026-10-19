@@ -18,10 +18,11 @@
   import ResourcePoolsPanel from '../components/ResourcePoolsPanel.svelte'
   import PlacementPanel from '../components/PlacementPanel.svelte'
   import ClusterUpdatePanel from '../components/ClusterUpdatePanel.svelte'
+  import GpuPoolsPanel from '../components/GpuPoolsPanel.svelte'
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert'
   import { ent } from '../enterprise'
 
-  type Tab = 'members' | 'ha' | 'pools' | 'placement' | 'updates'
+  type Tab = 'members' | 'ha' | 'pools' | 'placement' | 'gpus' | 'updates'
   let currentTab = $state<Tab>('members')
   let hostLabels = $state<Record<string, Record<string, string>>>({})
 
@@ -130,6 +131,9 @@
     <button class="c-tab" class:active={currentTab === 'placement'} onclick={() => currentTab = 'placement'}>
       {t('Placement rules')}
     </button>
+    <button class="c-tab" class:active={currentTab === 'gpus'} onclick={() => currentTab = 'gpus'}>
+      {t('GPU pools')}
+    </button>
     <button class="c-tab" class:active={currentTab === 'updates'} onclick={() => currentTab = 'updates'}>
       {t('Updates')}
     </button>
@@ -152,6 +156,8 @@
     <ResourcePoolsPanel />
   {:else if currentTab === 'placement'}
     <PlacementPanel />
+  {:else if currentTab === 'gpus'}
+    <GpuPoolsPanel />
   {:else if currentTab === 'updates'}
     <ClusterUpdatePanel />
   {:else}

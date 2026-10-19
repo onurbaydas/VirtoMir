@@ -54,7 +54,14 @@
             {#if g.tempC !== undefined}<span class="lbl">{t('Temperature')}</span><span></span><span class="mono" class:hot={g.tempC >= 85}>{g.tempC.toFixed(0)} °C</span>{/if}
           </div>
           <p class="muted small">From {g.telemetry}.{g.mig === 'enabled' ? ' MIG instances are made with nvidia-smi on the host; they then show up as vGPU slices below.' : ''}</p>
-        {:else if !p?.usedBy.length && g.driver !== 'vfio-pci'}
+        {/if}
+        {#if g.migProfiles?.length}
+          <p class="muted small">{t('MIG profiles:')} {g.migProfiles.map((m) => `${m.id} ${m.free}/${m.count}`).join(' · ')}</p>
+        {/if}
+        {#if g.mdevTypes?.length}
+          <p class="muted small">{t('vGPU types:')} {g.mdevTypes.map((m) => `${m.name || m.id} (${m.available})`).join(' · ')}</p>
+        {/if}
+        {#if !g.telemetry && !p?.usedBy.length && g.driver !== 'vfio-pci'}
           <p class="muted small">{t('No load figures: {v}.', { v: g.vendor === 'NVIDIA' ? 'install the NVIDIA driver (nvidia-smi)' : 'its driver does not report them' })}</p>
         {/if}
       </section>

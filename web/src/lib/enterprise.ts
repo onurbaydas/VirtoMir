@@ -323,6 +323,59 @@ export interface GPU {
   powerW?: number
   powerLimitW?: number
   mig?: 'enabled' | 'disabled'
+  /** How the card can be handed out (ADR-0071). */
+  profile?: GPUKind
+  passThroughReady?: boolean
+  mdevTypes?: { id: string; name: string; api: string; available: number }[]
+  migProfiles?: { id: string; name: string; giProfileId?: number; memoryMiB?: number; count: number; free: number }[]
+  usedBy?: string[]
+}
+
+// ---- GPU pools (ADR-0071) ----------------------------------------------------------------------
+
+export type GPUKind = 'whole' | 'mdev' | 'mig'
+
+export interface GPUPool {
+  id: string
+  name: string
+  description?: string
+  model: string
+  kind: GPUKind
+  profile?: string
+  perHost?: number
+  created?: string
+}
+
+export interface GPUResource {
+  hostId: string
+  hostName: string
+  poolId: string
+  model: string
+  kind: string
+  total: number
+  used: number
+  free: number
+  reserved?: number
+  telemetry?: string
+}
+
+export interface GPUPoolView extends GPUPool {
+  hosts: GPUResource[] | null
+  total: number
+  used: number
+  free: number
+}
+
+export interface ClusterGPU extends GPU {
+  hostId: string
+  hostName: string
+  pools: string[]
+}
+
+export interface GPUCandidate {
+  hostId: string
+  hostName: string
+  available: number
 }
 
 export interface HostInterface {
@@ -428,6 +481,15 @@ export const ent = {
     api.put<KSMInfo>('/api/v1/host/ksm', { active, sleepMillisecs, pagesToScan }),
   topology: () => api.get<Topology>('/api/v1/host/topology'),
   gpus: async () => (await api.get<{ gpus: GPU[] }>('/api/v1/host/gpus')).gpus,
+  clusterGPUs: async () => (await api.get<{ gpus: ClusterGPU[] }>('/api/v1/cluster/gpus')).gpus,
+  gpuPools: async () => (await api.get<{ pools: GPUPoolView[] }>('/api/v1/gpu/pools')).pools,
+  createGPUPool: (p: GPUPool) => api.post<GPUPool>('/api/v1/gpu/pools', p),
+  saveGPUPool: (id: string, p: GPUPool) => api.put<GPUPool>(`/api/v1/gpu/pools/${enc(id)}`, p),
+  deleteGPUPool: (id: string) => api.delete<void>(`/api/v1/gpu/pools/${enc(id)}`),
+  gpuPoolAvailability: async (id: string) => (await api.get<{ hosts: GPUResource[] }>(`/api/v1/gpu/pools/${enc(id)}/availability`)).hosts,
+  /** The member with count free GPUs of the pool, or null when none has them. */
+  gpuPlacement: (poolId: string, count: number, uuid?: string) =>
+    api.post<{ best: GPUCandidate; candidates: GPUCandidate[] } | undefined>('/api/v1/gpu/placement', { poolId, count, uuid }).then((r) => r ?? null),
   interfaces: async () => (await api.get<{ interfaces: HostInterface[] }>('/api/v1/host/interfaces')).interfaces,
   hostNet: () => api.get<HostNetStatus>('/api/v1/host/network'),
   createHostIf: (s: HostIfSpec) => api.post<HostNetPending>('/api/v1/host/network/interfaces', s),
