@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 )
 
@@ -111,4 +112,24 @@ func ReconcileRoutes(ctx context.Context, nb NB, r Router) error {
 		}
 	}
 	return nil
+}
+
+// ReplaceRoutes moves a router from the static routes of old to those of next: routes
+// that are gone are deleted, the others added (ReconcileRoutes only adds).
+func ReplaceRoutes(ctx context.Context, nb NB, old, next Router) error {
+	lr := routerName(next.VPCID)
+	for _, rt := range old.Routes {
+		if !slices.Contains(next.Routes, rt) {
+			if _, err := nb.Run(ctx, "--if-exists", "lr-route-del", lr, rt.DestinationCIDR, rt.NextHopIP); err != nil {
+				return err
+			}
+		}
+	}
+	return ReconcileRoutes(ctx, nb, next)
+}
+
+// RemoveSubnetSNAT stops SNAT for a subnet that left a VPC with an external gateway.
+func RemoveSubnetSNAT(ctx context.Context, nb NB, vpcID, cidr string) error {
+	_, err := nb.Run(ctx, "--if-exists", "lr-nat-del", routerName(vpcID), "snat", cidr)
+	return err
 }

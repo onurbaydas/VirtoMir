@@ -67,3 +67,21 @@ func TestDeleteSubnetResources(t *testing.T) {
 		t.Errorf("%v", f.Calls)
 	}
 }
+
+func TestReplaceRoutes(t *testing.T) {
+	f := &FakeRunner{}
+	keep, gone, added := Route{DestinationCIDR: "10.9.0.0/16", NextHopIP: "10.0.1.254"}, Route{DestinationCIDR: "10.8.0.0/16", NextHopIP: "10.0.1.253"}, Route{DestinationCIDR: "10.7.0.0/16", NextHopIP: "10.0.1.252"}
+	err := ReplaceRoutes(t.Context(), NB{R: f}, Router{VPCID: "prod", Routes: []Route{keep, gone}}, Router{VPCID: "prod", Routes: []Route{keep, added}})
+	want := []string{
+		"ovn-nbctl --if-exists lr-route-del lr-prod 10.8.0.0/16 10.0.1.253",
+		"ovn-nbctl --may-exist lr-route-add lr-prod 10.9.0.0/16 10.0.1.254",
+		"ovn-nbctl --may-exist lr-route-add lr-prod 10.7.0.0/16 10.0.1.252",
+	}
+	if err != nil || !slices.Equal(f.Calls, want) {
+		t.Errorf("%v %v", err, f.Calls)
+	}
+	f = &FakeRunner{}
+	if err := RemoveSubnetSNAT(t.Context(), NB{R: f}, "prod", "10.0.1.0/24"); err != nil || !slices.Equal(f.Calls, []string{"ovn-nbctl --if-exists lr-nat-del lr-prod snat 10.0.1.0/24"}) {
+		t.Errorf("%v %v", err, f.Calls)
+	}
+}

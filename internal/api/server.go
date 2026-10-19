@@ -37,6 +37,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/reports"
 	"github.com/onurbaydas/virtomir/internal/respool"
 	"github.com/onurbaydas/virtomir/internal/schedule"
+	"github.com/onurbaydas/virtomir/internal/sdn"
 	"github.com/onurbaydas/virtomir/internal/update"
 	"github.com/onurbaydas/virtomir/internal/virt"
 	"github.com/onurbaydas/virtomir/internal/vmware"
@@ -183,6 +184,11 @@ type Options struct {
 	DRFailover     DRFailoverRunner
 	// GPools nil: no GPU pools (ADR-0071).
 	GPools *gpool.Store
+	// SDN nil: no software-defined networking on OVN (ADR-0072). SDNRunner runs ovs-vsctl,
+	// ovn-nbctl and ovn-sbctl; SDNNorthbound is the OVN northbound database ("" = local).
+	SDN           *sdn.Store
+	SDNRunner     sdn.Runner
+	SDNNorthbound string
 	// LCM nil: no rolling cluster upgrades (ADR-0070).
 	LCM *lcm.Store
 	// Upgrader nil: no OS package upgrades from VirtoMir.
@@ -250,6 +256,9 @@ type Server struct {
 	drFailover      DRFailoverRunner
 	lcm             *lcm.Store
 	gpools          *gpool.Store
+	sdn             *sdn.Store
+	sdnRunner       sdn.Runner
+	sdnDB           string
 	lcmRun          lcmState
 	upgrader        SystemUpgrader
 	// inner is the API without the sign-in guard: in-process calls that already carry an
@@ -303,7 +312,11 @@ func NewServer(o Options) *Server {
 		catalog: o.Catalog, leaseMgr: o.LeaseMgr,
 		content: o.Content, contentSync: o.ContentSync, insights: o.Insights,
 		drStore: o.DRStore, drOrchestrator: o.DROrchestrator, drFailover: o.DRFailover,
-		lcm: o.LCM, upgrader: o.Upgrader, gpools: o.GPools}
+		lcm: o.LCM, upgrader: o.Upgrader, gpools: o.GPools,
+		sdn: o.SDN, sdnRunner: o.SDNRunner, sdnDB: o.SDNNorthbound}
+	if s.sdnRunner == nil {
+		s.sdnRunner = sdn.Exec{}
+	}
 	if s.contentSync != nil {
 		s.contentSync.SetPeers(s)
 	}
@@ -367,6 +380,7 @@ func (s *Server) Handler() http.Handler {
 	s.drRoutes(mux)
 	s.lcmRoutes(mux)
 	s.gpoolRoutes(mux)
+	s.sdnRoutes(mux)
 	s.systemRoutes(mux)
 
 	s.inner = mux
@@ -531,11 +545,11 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 	var opErr *virt.OperationError
 	var invErr *virt.InvalidError
 	switch {
-	case errors.Is(err, virt.ErrNotFound), errors.Is(err, zfsrep.ErrNotFound), errors.Is(err, drs.ErrNotFound), errors.Is(err, placement.ErrNotFound), errors.Is(err, dr.ErrNotFound), errors.Is(err, gpool.ErrNotFound):
+	case errors.Is(err, virt.ErrNotFound), errors.Is(err, zfsrep.ErrNotFound), errors.Is(err, drs.ErrNotFound), errors.Is(err, placement.ErrNotFound), errors.Is(err, dr.ErrNotFound), errors.Is(err, gpool.ErrNotFound), errors.Is(err, sdn.ErrNotFound):
 		status = http.StatusNotFound
-	case errors.As(err, &invErr), errors.Is(err, zfsrep.ErrInvalid), errors.Is(err, drs.ErrInvalid), errors.Is(err, placement.ErrInvalid), errors.Is(err, dr.ErrInvalid), errors.Is(err, gpool.ErrInvalid):
+	case errors.As(err, &invErr), errors.Is(err, zfsrep.ErrInvalid), errors.Is(err, drs.ErrInvalid), errors.Is(err, placement.ErrInvalid), errors.Is(err, dr.ErrInvalid), errors.Is(err, gpool.ErrInvalid), errors.Is(err, sdn.ErrInvalid):
 		status = http.StatusUnprocessableEntity
-	case errors.As(err, &opErr), errors.Is(err, zfsrep.ErrBusy), errors.Is(err, dr.ErrBusy), errors.Is(err, dr.ErrConflict), errors.Is(err, gpool.ErrExists), errors.Is(err, gpool.ErrBusy):
+	case errors.As(err, &opErr), errors.Is(err, zfsrep.ErrBusy), errors.Is(err, dr.ErrBusy), errors.Is(err, dr.ErrConflict), errors.Is(err, gpool.ErrExists), errors.Is(err, gpool.ErrBusy), errors.Is(err, sdn.ErrExists), errors.Is(err, sdn.ErrBusy):
 		status = http.StatusConflict
 	case errors.Is(err, auth.ErrBadCredentials), errors.Is(err, auth.ErrNotAllowed):
 		status = http.StatusUnauthorized

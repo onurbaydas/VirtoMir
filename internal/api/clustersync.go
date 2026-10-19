@@ -14,11 +14,12 @@ import (
 	"github.com/onurbaydas/virtomir/internal/drs"
 	"github.com/onurbaydas/virtomir/internal/gpool"
 	"github.com/onurbaydas/virtomir/internal/placement"
+	"github.com/onurbaydas/virtomir/internal/sdn"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
 // Cluster-wide state that changes reach only the members online at that moment (#37):
-// DRS settings, placement rules and host labels, GPU pools, and the cluster-wide VXLAN overlays.
+// DRS settings, placement rules and host labels, GPU pools, the SDN, and the cluster-wide VXLAN overlays.
 // Every minute (SyncMembers) each member asks the others for theirs: settings with a
 // newer version are taken over, and a cluster overlay this host never had is created here,
 // with every member's peer list following the member list.
@@ -28,6 +29,7 @@ type SharedState struct {
 	DRS       *drs.Config       `json:"drs,omitempty"`
 	Placement *placement.Shared `json:"placement,omitempty"`
 	GPUPools  *gpool.Shared     `json:"gpuPools,omitempty"`
+	SDN       *sdn.Shared       `json:"sdn,omitempty"`
 	Overlays  []Overlay         `json:"overlays"`
 }
 
@@ -62,6 +64,10 @@ func (s *Server) sharedState() SharedState {
 	if s.gpools != nil {
 		g := s.gpools.Shared()
 		st.GPUPools = &g
+	}
+	if s.sdn != nil {
+		n := s.sdn.Shared()
+		st.SDN = &n
 	}
 	if nets, err := s.backend.ListNetworks(); err == nil {
 		for _, n := range nets {
@@ -106,6 +112,13 @@ func (s *Server) syncShared(ctx context.Context, members []cluster.Node) {
 				s.log.Info("GPU pools taken over from a member", "member", n.Name, "version", st.GPUPools.Version)
 			} else if err != nil {
 				s.log.Warn("GPU pools of a member", "member", n.Name, "err", err)
+			}
+		}
+		if st.SDN != nil && s.sdn != nil {
+			if ok, err := s.sdn.Adopt(*st.SDN); ok {
+				s.log.Info("SDN state taken over from a member", "member", n.Name, "version", st.SDN.Version)
+			} else if err != nil {
+				s.log.Warn("SDN state of a member", "member", n.Name, "err", err)
 			}
 		}
 		remote = append(remote, st.Overlays...)

@@ -144,7 +144,7 @@ func requiredRole(method, path string) auth.Role {
 		return auth.Operator // moving a machine into/out of a project: the handler checks both projects
 	case method == http.MethodGet || method == http.MethodHead:
 		return auth.Viewer
-	case operatorWrite(method, path):
+	case operatorWrite(method, path), sdnOperatorWrite(method, path):
 		return auth.Operator
 	}
 	return auth.Admin

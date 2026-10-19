@@ -27,8 +27,8 @@ import (
 	"github.com/onurbaydas/virtomir/internal/confighist"
 	"github.com/onurbaydas/virtomir/internal/content"
 	"github.com/onurbaydas/virtomir/internal/drs"
-	"github.com/onurbaydas/virtomir/internal/ha"
 	"github.com/onurbaydas/virtomir/internal/gpool"
+	"github.com/onurbaydas/virtomir/internal/ha"
 	"github.com/onurbaydas/virtomir/internal/history"
 	"github.com/onurbaydas/virtomir/internal/hostinfo"
 	"github.com/onurbaydas/virtomir/internal/hostnet"
@@ -43,6 +43,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/reports"
 	"github.com/onurbaydas/virtomir/internal/respool"
 	"github.com/onurbaydas/virtomir/internal/schedule"
+	"github.com/onurbaydas/virtomir/internal/sdn"
 	"github.com/onurbaydas/virtomir/internal/systemd"
 	"github.com/onurbaydas/virtomir/internal/update"
 	"github.com/onurbaydas/virtomir/internal/virt"
@@ -66,6 +67,7 @@ type config struct {
 	name                     string
 	updateRepo               string
 	drExperimental           bool
+	ovnNorthbound            string
 }
 
 func main() {
@@ -85,6 +87,7 @@ func main() {
 	flag.StringVar(&c.name, "name", "", "how this host is called in a cluster (default: its hostname)")
 	flag.StringVar(&c.updateRepo, "update-repo", "onurbaydas/VirtoMir", `GitHub repository whose releases the Updates card offers ("" turns the check off); a private one needs VIRTOMIR_GITHUB_TOKEN`)
 	flag.BoolVar(&c.drExperimental, "dr-experimental", false, "turn on disaster recovery (protection groups, recovery plans, failover); not tested on real hosts yet")
+	flag.StringVar(&c.ovnNorthbound, "ovn-nb", "", `OVN northbound database for the SDN, e.g. "tcp:10.0.0.11:6641" (default: the local one); the SDN is experimental`)
 	debug := flag.Bool("debug", false, "verbose logging")
 	flag.Parse()
 
@@ -306,6 +309,11 @@ func run(c config, log *slog.Logger) error {
 		log.Warn("GPU pools", "err", err)
 	} else {
 		opts.GPools = gp
+	}
+	if st, err := sdn.Open(filepath.Join(c.stateDir, "sdn.json")); err != nil {
+		log.Warn("SDN", "err", err)
+	} else {
+		opts.SDN, opts.SDNRunner, opts.SDNNorthbound = st, sdn.Exec{}, c.ovnNorthbound
 	}
 	apiServer := api.NewServer(opts)
 	go syncCluster(ctx, apiServer)

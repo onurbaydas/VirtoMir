@@ -30,6 +30,19 @@ func (s *Store) PortsOf(vmUUID string) []Port {
 	return out
 }
 
+// ListPorts lists the ports of a subnet (all ports when subnetID is "").
+func (s *Store) ListPorts(subnetID string) []Port {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []Port{}
+	for _, p := range sortedValues(s.st.Ports, func(p Port) string { return p.ID }) {
+		if subnetID == "" || p.SubnetID == subnetID {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // GetPort returns one port.
 func (s *Store) GetPort(id string) (Port, bool) {
 	s.mu.RLock()

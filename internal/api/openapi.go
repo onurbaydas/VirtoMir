@@ -361,6 +361,103 @@ var responseSchemas = map[string]any{
 	"GET /api/v1/gpu/pools/{id}/availability": map[string]any{"type": "object", "properties": map[string]any{
 		"hosts": map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/GPUResource"}},
 	}},
+	"GET /api/v1/sdn/vpcs":            listOf("vpcs", "VPC"),
+	"GET /api/v1/sdn/vpcs/{id}":       map[string]any{"$ref": "#/components/schemas/VPCDetail"},
+	"GET /api/v1/sdn/subnets":         listOf("subnets", "Subnet"),
+	"GET /api/v1/sdn/ports":           listOf("ports", "SDNPort"),
+	"GET /api/v1/sdn/floating-ips":    listOf("floatingIps", "FloatingIP"),
+	"GET /api/v1/sdn/security-groups": listOf("securityGroups", "SecurityGroup"),
+	"GET /api/v1/sdn/load-balancers":  listOf("loadBalancers", "LoadBalancer"),
+	"GET /api/v1/sdn/ipsec":           map[string]any{"$ref": "#/components/schemas/IPsecConfig"},
+}
+
+// sdnBody is the request body of an SDN write.
+func sdnBody(p string) (map[string]any, bool) {
+	ref := func(name string) map[string]any { return map[string]any{"$ref": "#/components/schemas/" + name} }
+	str := map[string]any{"type": "string"}
+	switch {
+	case !strings.HasPrefix(p, "/api/v1/sdn/"):
+		return nil, false
+	case strings.HasSuffix(p, "/routes"):
+		return map[string]any{"type": "object", "properties": map[string]any{"routes": map[string]any{"type": "array", "items": ref("SDNRoute")}}}, true
+	case strings.HasSuffix(p, "/gateway"):
+		return ref("ExternalGateway"), true
+	case strings.HasSuffix(p, "/assign"):
+		return map[string]any{"type": "object", "properties": map[string]any{"internalIp": str, "portId": str}}, true
+	case strings.HasSuffix(p, "/rules"):
+		return ref("SecurityRule"), true
+	case strings.HasSuffix(p, "/ports"):
+		return map[string]any{"type": "object", "properties": map[string]any{"portId": str}}, true
+	case strings.HasPrefix(p, "/api/v1/sdn/vpcs"):
+		return ref("VPC"), true
+	case strings.HasPrefix(p, "/api/v1/sdn/subnets"):
+		return ref("Subnet"), true
+	case strings.HasPrefix(p, "/api/v1/sdn/floating-ips"):
+		return ref("FloatingIP"), true
+	case strings.HasPrefix(p, "/api/v1/sdn/security-groups"):
+		return ref("SecurityGroup"), true
+	case strings.HasPrefix(p, "/api/v1/sdn/load-balancers"):
+		return ref("LoadBalancer"), true
+	case p == "/api/v1/sdn/ipsec":
+		return ref("IPsecConfig"), true
+	}
+	return map[string]any{"type": "object"}, true
+}
+
+func listOf(field, schema string) map[string]any {
+	return map[string]any{"type": "object", "properties": map[string]any{
+		field: map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/" + schema}},
+	}}
+}
+
+// sdnSchemas describe the SDN on OVN (ADR-0072).
+func sdnSchemas() map[string]any {
+	str := map[string]any{"type": "string"}
+	integer := map[string]any{"type": "integer"}
+	boolean := map[string]any{"type": "boolean"}
+	strs := map[string]any{"type": "array", "items": str}
+	obj := func(props map[string]any, required ...any) map[string]any {
+		o := map[string]any{"type": "object", "properties": props}
+		if len(required) > 0 {
+			o["required"] = required
+		}
+		return o
+	}
+	vpc := map[string]any{"id": str, "name": str, "description": str, "projectId": str, "ipv4Cidr": str, "defaultDeny": boolean, "created": str, "updated": str}
+	route := map[string]any{"$ref": "#/components/schemas/SDNRoute"}
+	router := obj(map[string]any{"id": str, "vpcId": str, "name": str, "logicalRouter": str, "routes": map[string]any{"type": "array", "items": route}})
+	gateway := obj(map[string]any{"vpcId": str, "externalNetwork": str, "gatewayIp": str, "externalIp": str, "enabled": boolean, "gatewayChassis": str})
+	detail := map[string]any{"router": router, "gateway": gateway}
+	for k, v := range vpc {
+		detail[k] = v
+	}
+	rule := obj(map[string]any{"id": str, "direction": map[string]any{"type": "string", "enum": []any{"ingress", "egress"}},
+		"action":   map[string]any{"type": "string", "enum": []any{"allow", "allow-related", "drop", "reject"}},
+		"priority": integer, "protocol": map[string]any{"type": "string", "enum": []any{"tcp", "udp", "icmp", "any"}},
+		"portMin": integer, "portMax": integer, "remoteCidr": str, "remoteGroupId": str, "description": str})
+	health := obj(map[string]any{"protocol": str, "port": integer, "intervalSeconds": integer, "timeoutSeconds": integer,
+		"fall": integer, "rise": integer, "httpPath": str, "sourceIp": str})
+	return map[string]any{
+		"VPC":       obj(vpc, "id", "name", "projectId", "ipv4Cidr"),
+		"SDNRoute":  obj(map[string]any{"destinationCidr": str, "nextHopIp": str}, "destinationCidr", "nextHopIp"),
+		"VPCDetail": obj(detail),
+		"Subnet": obj(map[string]any{"id": str, "vpcId": str, "name": str, "cidr": str, "gatewayIp": str, "dhcpEnabled": boolean,
+			"allocationPoolStart": str, "allocationPoolEnd": str, "dnsServers": strs, "ovnDhcpId": str, "logicalSwitch": str}, "id", "vpcId", "name", "cidr"),
+		"SDNPort":         obj(map[string]any{"id": str, "subnetId": str, "vmUuid": str, "mac": str, "ip": str, "securityGroups": strs}),
+		"ExternalGateway": gateway,
+		"FloatingIP": obj(map[string]any{"id": str, "projectId": str, "vpcId": str, "externalIp": str, "internalIp": str, "portId": str,
+			"description": str, "created": str}, "vpcId", "externalIp"),
+		"SecurityRule": rule,
+		"SecurityGroup": obj(map[string]any{"id": str, "projectId": str, "vpcId": str, "name": str, "description": str,
+			"rules": map[string]any{"type": "array", "items": rule}, "defaultDeny": boolean, "memberPorts": strs, "created": str, "updated": str}, "vpcId", "name"),
+		"LoadBalancer": obj(map[string]any{"id": str, "projectId": str, "vpcId": str, "name": str, "description": str, "vip": str,
+			"port": integer, "protocol": map[string]any{"type": "string", "enum": []any{"tcp", "udp"}}, "members": strs,
+			"attachedSwitches": strs, "attachedRouters": strs, "healthCheck": health, "status": str, "created": str, "updated": str},
+			"vpcId", "name", "vip", "port", "members"),
+		"IPsecConfig": obj(map[string]any{"enabled": boolean, "mode": map[string]any{"type": "string", "enum": []any{"cert"}},
+			"psk":      map[string]any{"type": "string", "description": "refused: OVN encrypts with certificates only; answers show it redacted"},
+			"certFile": str, "keyFile": str, "caCertFile": str, "status": str, "lastError": str}),
+	}
 }
 
 // gpuSchemas describe GPU pools (ADR-0071).
@@ -445,6 +542,9 @@ func (s *Server) openAPI(routes []route) map[string]any {
 			if strings.HasPrefix(p, "/api/v1/gpu/pools") {
 				body = map[string]any{"$ref": "#/components/schemas/GPUPool"}
 			}
+			if b, ok := sdnBody(p); ok {
+				body = b
+			}
 			if strings.HasPrefix(p, "/api/v1/content/items") {
 				body = map[string]any{"$ref": "#/components/schemas/ContentItem"}
 			}
@@ -514,6 +614,9 @@ func (s *Server) openAPI(routes []route) map[string]any {
 		"security": []any{map[string]any{"token": []any{}}, map[string]any{"session": []any{}}},
 	}
 	for name, sch := range gpuSchemas() {
+		doc["components"].(map[string]any)["schemas"].(map[string]any)[name] = sch
+	}
+	for name, sch := range sdnSchemas() {
 		doc["components"].(map[string]any)["schemas"].(map[string]any)[name] = sch
 	}
 	for name, sch := range catalogSchemas() { // self-service catalog (ADR-0065)

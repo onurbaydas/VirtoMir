@@ -122,6 +122,22 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 		s.createContainer(w, r, spec.CreateSpec, rp, spec.Project)
 		return
 	}
+	// An adapter on an SDN subnet (ADR-0072) is plugged in after the machine exists: its
+	// OVN port is named after the machine. The machine starts once it is plugged.
+	var ovnNIC *virt.NICSpec
+	startAfter := false
+	if spec.Network != nil && spec.Network.OVNSubnet != "" {
+		if spec.GPU != nil {
+			s.writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "a GPU machine cannot start on an SDN subnet yet; add the adapter once it is created"})
+			return
+		}
+		if !s.ovnNICAllowed(w, r, *spec.Network, spec.Project) {
+			return
+		}
+		nic := *spec.Network
+		ovnNIC, spec.Network = &nic, nil
+		startAfter, spec.Start = spec.Start, false
+	}
 	var res virt.CreateResult
 	if spec.GPU != nil {
 		var ok bool
@@ -138,6 +154,18 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 	s.recordOwner(r, res.UUID)
 	s.recordProject(res.UUID, spec.Project)
 	s.joinRespool(rp, res.UUID)
+	if ovnNIC != nil {
+		if err := s.plugOVN(r.Context(), res.UUID, *ovnNIC); err != nil {
+			res.StartError = "created without its network adapter: " + err.Error()
+		} else {
+			s.pushSDN(r.Context())
+			if startAfter {
+				if err := s.backend.DomainAction(res.UUID, virt.ActionStart); err != nil {
+					res.StartError = err.Error()
+				}
+			}
+		}
+	}
 	s.done(w, http.StatusCreated, res)
 }
 
@@ -231,6 +259,7 @@ func (s *Server) deleteDomain(w http.ResponseWriter, r *http.Request) {
 			s.log.Warn("firewall of deleted machine", "machine", uuid, "err", err)
 		}
 	}
+	s.unplugOVN(r.Context(), uuid, "")
 	// A deleted machine leaves its resource pool, and HA must not bring it back elsewhere.
 	if s.respools != nil {
 		s.respools.Forget(uuid)
@@ -394,7 +423,20 @@ func (s *Server) attachInterface(w http.ResponseWriter, r *http.Request) {
 	if !s.decode(w, r, &spec) {
 		return
 	}
-	if err := s.backend.AttachInterface(r.PathValue("uuid"), spec); err != nil {
+	uuid := r.PathValue("uuid")
+	if spec.OVNSubnet != "" {
+		if !s.ovnNICAllowed(w, r, spec, s.projectOf(uuid)) {
+			return
+		}
+		if err := s.plugOVN(r.Context(), uuid, spec); err != nil {
+			s.writeError(w, err)
+			return
+		}
+		s.pushSDN(r.Context())
+		s.done(w, http.StatusCreated, nil)
+		return
+	}
+	if err := s.backend.AttachInterface(uuid, spec); err != nil {
 		s.writeError(w, err)
 		return
 	}
@@ -410,6 +452,9 @@ func (s *Server) detachDevice(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.writeError(w, err)
 		return
+	}
+	if ref.Kind == "interface" && ref.MAC != "" {
+		s.unplugOVN(r.Context(), r.PathValue("uuid"), ref.MAC)
 	}
 	s.done(w, http.StatusOK, res)
 }
