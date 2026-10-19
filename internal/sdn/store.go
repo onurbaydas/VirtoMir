@@ -26,7 +26,10 @@ func invalidf(format string, a ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{ErrInvalid}, a...)...)
 }
 
-var slug = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$`)
+var (
+	slug       = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$`)
+	regexpName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`)
+)
 
 // state is everything the store keeps; it is also what members exchange.
 type state struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // FakeRunner records commands and answers them from a table: the longest key that the
@@ -44,3 +45,5 @@ func (f *FakeRunner) called(prefix string) bool {
 	}
 	return false
 }
+
+var testTime = time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC)

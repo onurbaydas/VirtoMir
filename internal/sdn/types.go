@@ -80,6 +80,9 @@ type ExternalGateway struct {
 	GatewayIP       string `json:"gatewayIp"`       // the upstream router
 	ExternalIP      string `json:"externalIp"`      // CIDR form, e.g. 203.0.113.10/24
 	Enabled         bool   `json:"enabled"`
+	// GatewayChassis is the OVN chassis (a host's system-id) that carries the VPC's
+	// external traffic; OVN needs one for SNAT.
+	GatewayChassis string `json:"gatewayChassis"`
 }
 
 // FloatingIP is an external address mapped one-to-one to a machine's private address.
