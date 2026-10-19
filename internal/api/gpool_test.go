@@ -3,12 +3,15 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/onurbaydas/virtomir/internal/gpool"
 	"github.com/onurbaydas/virtomir/internal/hostinfo"
+	"github.com/onurbaydas/virtomir/internal/project"
 )
 
 // gpuReader is a host with one card at addr named name (nvidia-smi answers for it).
@@ -68,5 +71,75 @@ func TestClusterGPUs(t *testing.T) {
 	}
 	if g := byHost["beta"]; g.Name != "NVIDIA A100" || len(g.Pools) != 0 {
 		t.Errorf("beta's card (over the peer protocol) %+v", g)
+	}
+}
+
+func TestGPUPoolCRUD(t *testing.T) {
+	a, b := gpoolNodes(t)
+	admin, viewer := a.signIn(t, "onur"), a.signIn(t, "view")
+	pool := `{"id":"l40s","name":"L40S render","model":"L40S","kind":"whole"}`
+	if resp, _ := viewer.req("POST", "/api/v1/gpu/pools", pool); resp.StatusCode != http.StatusForbidden {
+		t.Errorf("viewer created a pool: %d", resp.StatusCode)
+	}
+	if resp, body := admin.req("POST", "/api/v1/gpu/pools", pool); resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create: %d %s", resp.StatusCode, body)
+	}
+	if resp, _ := admin.req("POST", "/api/v1/gpu/pools", pool); resp.StatusCode != http.StatusConflict {
+		t.Errorf("duplicate: %d", resp.StatusCode)
+	}
+	if resp, _ := admin.req("POST", "/api/v1/gpu/pools", `{"id":"x1","name":"x","kind":"mig"}`); resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("MIG pool without a profile: %d", resp.StatusCode)
+	}
+	if _, ok := b.api.gpools.Get("l40s"); !ok {
+		t.Error("the pool did not reach the other member")
+	}
+
+	resp, body := viewer.req("GET", "/api/v1/gpu/pools", "")
+	var list struct{ Pools []GPUPoolView }
+	if err := json.Unmarshal([]byte(body), &list); err != nil || resp.StatusCode != 200 || len(list.Pools) != 1 {
+		t.Fatalf("list: %d %s", resp.StatusCode, body)
+	}
+	if p := list.Pools[0]; p.Total != 1 || p.Free != 1 || len(p.Hosts) != 1 || p.Hosts[0].HostName != "alpha" {
+		t.Errorf("availability %+v", p)
+	}
+	doc := loadOpenAPI(t)
+	c := contractChecker{schemas: doc.Components.Schemas}
+	var v any
+	_ = json.Unmarshal([]byte(body), &v)
+	if errs := c.validate(v, asMap(asMap(asMap(asMap(doc.Paths["/api/v1/gpu/pools"]["get"]["responses"])["2XX"])["content"])["application/json"])["schema"].(map[string]any), ""); len(errs) > 0 {
+		t.Errorf("answer does not follow the OpenAPI document: %v", errs)
+	}
+
+	if resp, body := admin.req("PUT", "/api/v1/gpu/pools/l40s", `{"name":"L40S","model":"L40S","kind":"whole","perHost":2}`); resp.StatusCode != 200 || !strings.Contains(body, `"perHost":2`) {
+		t.Errorf("update: %d %s", resp.StatusCode, body)
+	}
+	if p, _ := b.api.gpools.Get("l40s"); p.PerHost != 2 {
+		t.Error("the update did not reach the other member")
+	}
+
+	if _, err := a.projects.Create(project.Project{ID: "render", Name: "Render", Limits: project.Limits{GPUs: map[string]int{"l40s": 2}}}); err != nil {
+		t.Fatal(err)
+	}
+	if resp, body := admin.req("DELETE", "/api/v1/gpu/pools/l40s", ""); resp.StatusCode != http.StatusConflict || !strings.Contains(body, "GPU quota") {
+		t.Errorf("deleted a pool a project quota names: %d %s", resp.StatusCode, body)
+	}
+	_ = a.projects.Delete("render")
+	if resp, _ := admin.req("DELETE", "/api/v1/gpu/pools/l40s", ""); resp.StatusCode != http.StatusNoContent {
+		t.Errorf("delete: %d", resp.StatusCode)
+	}
+	if _, ok := b.api.gpools.Get("l40s"); ok {
+		t.Error("the delete did not reach the other member")
+	}
+}
+
+// A pool made while a member was down reaches it with the next member sync (#37).
+func TestGPUPoolsCatchUp(t *testing.T) {
+	a, b := gpoolNodes(t)
+	if _, err := a.api.gpools.Create(gpool.Pool{ID: "t4-2q", Name: "T4 2Q", Kind: gpool.KindMDev, Profile: "nvidia-222"}); err != nil {
+		t.Fatal(err)
+	}
+	b.api.SyncMembers(t.Context())
+	if _, ok := b.api.gpools.Get("t4-2q"); !ok {
+		t.Error("not caught up")
 	}
 }

@@ -47,6 +47,7 @@ var (
 	ErrInvalid  = errors.New("invalid")
 	ErrNotFound = errors.New("not found")
 	ErrExists   = errors.New("exists")
+	ErrBusy     = errors.New("in use")
 )
 
 func invalidf(format string, a ...any) error {
@@ -74,10 +75,11 @@ func (p Pool) Validate() error {
 
 // Store keeps the pools.
 type Store struct {
-	path    string
-	mu      sync.RWMutex
-	version int
-	pools   map[string]Pool
+	path     string
+	mu       sync.RWMutex
+	version  int
+	pools    map[string]Pool
+	reserved map[string]reservation // machine UUID → GPUs promised while it is created
 }
 
 type storeData struct {

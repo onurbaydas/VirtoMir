@@ -164,6 +164,9 @@ type Domain struct {
 	Project string `json:"project,omitempty"`
 	// Kind: "vm" (default) or "container" (LXC).
 	Kind string `json:"kind,omitempty"`
+	// GPUPool and GPUCount: the GPUs it got from a GPU pool (ADR-0071).
+	GPUPool  string `json:"gpuPool,omitempty"`
+	GPUCount int    `json:"gpuCount,omitempty"`
 }
 
 func (c *Client) ListDomains() ([]Domain, error) {

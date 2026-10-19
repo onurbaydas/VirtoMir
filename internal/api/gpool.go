@@ -17,6 +17,148 @@ import (
 
 func (s *Server) gpoolRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/cluster/gpus", s.clusterGPUs)
+	mux.HandleFunc("GET /api/v1/gpu/pools", s.listGPUPools)
+	mux.HandleFunc("POST /api/v1/gpu/pools", s.createGPUPool)
+	mux.HandleFunc("GET /api/v1/gpu/pools/{id}", s.getGPUPool)
+	mux.HandleFunc("PUT /api/v1/gpu/pools/{id}", s.updateGPUPool)
+	mux.HandleFunc("DELETE /api/v1/gpu/pools/{id}", s.deleteGPUPool)
+	mux.HandleFunc("GET /api/v1/gpu/pools/{id}/availability", s.gpuPoolAvailability)
+}
+
+func (s *Server) noGPools(w http.ResponseWriter) bool {
+	if s.gpools == nil {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "gpu pools are not available on this host"})
+		return true
+	}
+	return false
+}
+
+// GPUPoolView is a pool with what the cluster has of it.
+type GPUPoolView struct {
+	gpool.Pool
+	Hosts []gpool.GPUResource `json:"hosts"`
+	Total int                 `json:"total"`
+	Used  int                 `json:"used"`
+	Free  int                 `json:"free"`
+}
+
+func (s *Server) poolViews(ctx context.Context, id auth.Identity, pools []gpool.Pool) []GPUPoolView {
+	avail := gpool.ClusterAvailability(pools, s.clusterHardware(ctx, id))
+	out := make([]GPUPoolView, 0, len(pools))
+	for _, p := range pools {
+		v := GPUPoolView{Pool: p, Hosts: avail[p.ID]}
+		for i := range v.Hosts {
+			v.Hosts[i].Reserved = s.gpools.Reserved(p.ID, v.Hosts[i].HostID)
+			v.Total += v.Hosts[i].Total
+			v.Used += v.Hosts[i].Used
+			v.Free += v.Hosts[i].Free
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+func (s *Server) listGPUPools(w http.ResponseWriter, r *http.Request) {
+	if s.noGPools(w) {
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"pools": s.poolViews(r.Context(), identity(r), s.gpools.List())})
+}
+
+func (s *Server) getGPUPool(w http.ResponseWriter, r *http.Request) {
+	if s.noGPools(w) {
+		return
+	}
+	p, ok := s.gpools.Get(r.PathValue("id"))
+	if !ok {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "no GPU pool " + r.PathValue("id")})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, s.poolViews(r.Context(), identity(r), []gpool.Pool{p})[0])
+}
+
+func (s *Server) gpuPoolAvailability(w http.ResponseWriter, r *http.Request) {
+	if s.noGPools(w) {
+		return
+	}
+	p, ok := s.gpools.Get(r.PathValue("id"))
+	if !ok {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "no GPU pool " + r.PathValue("id")})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"hosts": s.poolViews(r.Context(), identity(r), []gpool.Pool{p})[0].Hosts})
+}
+
+func (s *Server) createGPUPool(w http.ResponseWriter, r *http.Request) {
+	if s.noGPools(w) {
+		return
+	}
+	var p gpool.Pool
+	if !s.decode(w, r, &p) {
+		return
+	}
+	created, err := s.gpools.Create(p)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.replicateToMembers(r, http.MethodPost, "/api/v1/gpu/pools", created)
+	s.writeJSON(w, http.StatusCreated, created)
+}
+
+func (s *Server) updateGPUPool(w http.ResponseWriter, r *http.Request) {
+	if s.noGPools(w) {
+		return
+	}
+	var p gpool.Pool
+	if !s.decode(w, r, &p) {
+		return
+	}
+	p.ID = r.PathValue("id")
+	saved, err := s.gpools.Update(p)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.replicateToMembers(r, http.MethodPut, "/api/v1/gpu/pools/"+p.ID, saved)
+	s.writeJSON(w, http.StatusOK, saved)
+}
+
+func (s *Server) deleteGPUPool(w http.ResponseWriter, r *http.Request) {
+	if s.noGPools(w) {
+		return
+	}
+	id := r.PathValue("id")
+	if r.URL.Query().Get("local") == "" { // the member that was asked checks; copies follow it
+		if why := s.gpoolInUse(r.Context(), identity(r), id); why != "" {
+			s.writeJSON(w, http.StatusConflict, map[string]string{"error": why})
+			return
+		}
+	}
+	if err := s.gpools.Delete(id); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.replicateToMembers(r, http.MethodDelete, "/api/v1/gpu/pools/"+id, nil)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// gpoolInUse says why pool id cannot go: machines hold its GPUs, or project quotas name it.
+func (s *Server) gpoolInUse(ctx context.Context, id auth.Identity, poolID string) string {
+	if s.projects != nil {
+		for _, p := range s.projects.List() {
+			if p.Limits.GPUs[poolID] > 0 {
+				return "project " + p.Name + " has a GPU quota for this pool; remove it first"
+			}
+		}
+	}
+	domains, _ := s.clusterDomains(ctx, id)
+	for _, d := range domains {
+		if d.GPUPool == poolID {
+			return "machine " + d.Name + " has GPUs of this pool; remove them first"
+		}
+	}
+	return ""
 }
 
 // ClusterGPU is a GPU with the member it sits in and the pools it belongs to.

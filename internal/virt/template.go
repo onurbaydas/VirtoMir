@@ -31,10 +31,13 @@ type vmMeta struct {
 	// Project is the multi-tenancy project the machine belongs to (ADR-0060).
 	Project string `xml:"project,attr,omitempty"`
 	Kind    string `xml:"kind,attr,omitempty"`
+	// GPUPool and GPUCount: the GPUs the machine got from a GPU pool (ADR-0071).
+	GPUPool  string `xml:"gpu-pool,attr,omitempty"`
+	GPUCount int    `xml:"gpu-count,attr,omitempty"`
 }
 
 func (m vmMeta) empty() bool {
-	return !m.Template && m.LinkedFrom == "" && m.Owner == "" && m.Project == "" && m.Kind == ""
+	return !m.Template && m.LinkedFrom == "" && m.Owner == "" && m.Project == "" && m.Kind == "" && m.GPUPool == ""
 }
 
 // metaCache spares the 1-second domain list a metadata RPC per machine. Entries VirtoMir
@@ -71,6 +74,7 @@ func (c *Client) meta(l *libvirt.Libvirt, d libvirt.Domain) vmMeta {
 func (c *Client) addMeta(l *libvirt.Libvirt, d libvirt.Domain, s *Domain) {
 	m := c.meta(l, d)
 	s.Template, s.LinkedFrom, s.Owner, s.Project, s.Kind = m.Template, m.LinkedFrom, m.Owner, m.Project, m.Kind
+	s.GPUPool, s.GPUCount = m.GPUPool, m.GPUCount
 	if s.Kind == "" {
 		s.Kind = "vm"
 	}
@@ -87,6 +91,23 @@ func (c *Client) SetOwner(uuid, owner string) error {
 		return err
 	}
 	m.Owner = owner
+	return c.writeMeta(l, d, m)
+}
+
+// SetGPUPool records the GPUs a machine got from a GPU pool ("" and 0 clear it).
+func (c *Client) SetGPUPool(uuid, pool string, count int) error {
+	l, d, err := c.lookup(uuid)
+	if err != nil {
+		return err
+	}
+	m, err := readMeta(l, d)
+	if err != nil {
+		return err
+	}
+	m.GPUPool, m.GPUCount = pool, count
+	if pool == "" {
+		m.GPUCount = 0
+	}
 	return c.writeMeta(l, d, m)
 }
 

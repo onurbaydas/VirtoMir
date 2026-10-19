@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -121,7 +122,7 @@ func TestPersistence(t *testing.T) {
 	if len(got.Members) != 2 || got.Members[0] != (Member{"user", "alice", "admin"}) || got.Members[1] != (Member{"group", "devs", "operator"}) {
 		t.Fatalf("members did not survive: %+v", got.Members)
 	}
-	if got.Limits != (Limits{10, 40, 65536, 500}) {
+	if !reflect.DeepEqual(got.Limits, Limits{Machines: 10, VCPUs: 40, MemoryMiB: 65536, DiskGiB: 500}) {
 		t.Fatalf("limits did not survive: %+v", got.Limits)
 	}
 
@@ -413,5 +414,28 @@ func TestConcurrent(t *testing.T) {
 	wg.Wait()
 	if list := s.List(); len(list) != 8*25 {
 		t.Fatalf("expected %d projects, got %d", 8*25, len(list))
+	}
+}
+
+func TestLimitsExceededGPUs(t *testing.T) {
+	l := Limits{GPUs: map[string]int{"l40s": 4, "a100": 0}}
+	for _, tc := range []struct {
+		name          string
+		used, demand  map[string]int
+		wantErr, pool string
+	}{
+		{"under", map[string]int{"l40s": 2}, map[string]int{"l40s": 2}, "", ""},
+		{"over", map[string]int{"l40s": 3}, map[string]int{"l40s": 2}, "GPU quota of 4", "l40s"},
+		{"unlimited pool", nil, map[string]int{"a100": 64}, "", ""},
+		{"pool not named", nil, map[string]int{"t4": 8}, "", ""},
+		{"no GPU asked", map[string]int{"l40s": 9}, nil, "", ""},
+	} {
+		err := l.Exceeded(Usage{GPUs: tc.used}, Usage{GPUs: tc.demand})
+		if (err != nil) != (tc.wantErr != "") || (err != nil && (!strings.Contains(err.Error(), tc.wantErr) || !strings.Contains(err.Error(), tc.pool))) {
+			t.Errorf("%s: %v", tc.name, err)
+		}
+	}
+	if (Limits{}).Exceeded(Usage{}, Usage{GPUs: map[string]int{"x": 1}}) != nil {
+		t.Error("a project without GPU quotas limited GPUs")
 	}
 }

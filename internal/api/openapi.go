@@ -354,6 +354,38 @@ var responseSchemas = map[string]any{
 		"projects": map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/Project"}},
 	}},
 	"GET /api/v1/projects/{id}": map[string]any{"$ref": "#/components/schemas/Project"},
+	"GET /api/v1/gpu/pools": map[string]any{"type": "object", "properties": map[string]any{
+		"pools": map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/GPUPoolView"}},
+	}},
+	"GET /api/v1/gpu/pools/{id}": map[string]any{"$ref": "#/components/schemas/GPUPoolView"},
+	"GET /api/v1/gpu/pools/{id}/availability": map[string]any{"type": "object", "properties": map[string]any{
+		"hosts": map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/GPUResource"}},
+	}},
+}
+
+// gpuSchemas describe GPU pools (ADR-0071).
+func gpuSchemas() map[string]any {
+	str := map[string]any{"type": "string"}
+	integer := map[string]any{"type": "integer"}
+	pool := map[string]any{
+		"id": str, "name": str, "description": str, "model": str,
+		"kind":    map[string]any{"type": "string", "enum": []any{"whole", "mdev", "mig"}},
+		"profile": map[string]any{"type": "string", "description": "the vGPU type (mdev) or MIG profile (mig)"},
+		"perHost": integer, "created": str,
+	}
+	view := map[string]any{"total": integer, "used": integer, "free": integer,
+		"hosts": map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/GPUResource"}}}
+	for k, v := range pool {
+		view[k] = v
+	}
+	return map[string]any{
+		"GPUPool":     map[string]any{"type": "object", "properties": pool, "required": []any{"id", "name", "kind"}},
+		"GPUPoolView": map[string]any{"type": "object", "properties": view},
+		"GPUResource": map[string]any{"type": "object", "properties": map[string]any{
+			"hostId": str, "hostName": str, "poolId": str, "model": str, "kind": str,
+			"total": integer, "used": integer, "free": integer, "reserved": integer, "telemetry": str,
+		}},
+	}
 }
 
 func (s *Server) openAPI(routes []route) map[string]any {
@@ -409,6 +441,9 @@ func (s *Server) openAPI(routes []route) map[string]any {
 			if strings.HasPrefix(p, "/api/v1/projects") {
 				// Projects (ADR-0060): bodies are whole Project objects.
 				body = map[string]any{"$ref": "#/components/schemas/Project"}
+			}
+			if strings.HasPrefix(p, "/api/v1/gpu/pools") {
+				body = map[string]any{"$ref": "#/components/schemas/GPUPool"}
 			}
 			if strings.HasPrefix(p, "/api/v1/content/items") {
 				body = map[string]any{"$ref": "#/components/schemas/ContentItem"}
@@ -477,6 +512,9 @@ func (s *Server) openAPI(routes []route) map[string]any {
 			},
 		},
 		"security": []any{map[string]any{"token": []any{}}, map[string]any{"session": []any{}}},
+	}
+	for name, sch := range gpuSchemas() {
+		doc["components"].(map[string]any)["schemas"].(map[string]any)[name] = sch
 	}
 	for name, sch := range catalogSchemas() { // self-service catalog (ADR-0065)
 		doc["components"].(map[string]any)["schemas"].(map[string]any)[name] = sch

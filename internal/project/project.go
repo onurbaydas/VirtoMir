@@ -32,6 +32,8 @@ type Limits struct {
 	VCPUs     int   `json:"vcpus"`
 	MemoryMiB int64 `json:"memoryMiB"`
 	DiskGiB   int64 `json:"diskGiB"`
+	// GPUs caps GPUs per GPU pool ID (ADR-0071); a pool missing or at 0 is not limited.
+	GPUs map[string]int `json:"gpus,omitempty"`
 }
 
 // Usage is what a project's machines take now.
@@ -40,6 +42,8 @@ type Usage struct {
 	VCPUs     int   `json:"vcpus"`
 	MemoryMiB int64 `json:"memoryMiB"`
 	DiskGiB   int64 `json:"diskGiB"`
+	// GPUs per GPU pool ID.
+	GPUs map[string]int `json:"gpus,omitempty"`
 }
 
 // Project is one tenant: its machines, storage pools and networks, who may use
@@ -113,6 +117,11 @@ func validateLocked(p Project, existing map[string]*Project, selfID string) erro
 	}
 	if p.Limits.Machines < 0 || p.Limits.VCPUs < 0 || p.Limits.MemoryMiB < 0 || p.Limits.DiskGiB < 0 {
 		return errors.New("limits cannot be negative")
+	}
+	for pool, n := range p.Limits.GPUs {
+		if n < 0 {
+			return fmt.Errorf("the GPU quota for pool %s cannot be negative", pool)
+		}
 	}
 	return nil
 }
@@ -368,6 +377,17 @@ func (l Limits) Exceeded(usage, demand Usage) error {
 	}
 	if l.DiskGiB > 0 && usage.DiskGiB+demand.DiskGiB > l.DiskGiB {
 		return fmt.Errorf("this would exceed the project's limit of %d GiB of disk space (%d used, this needs %d)", l.DiskGiB, usage.DiskGiB, demand.DiskGiB)
+	}
+	pools := make([]string, 0, len(l.GPUs))
+	for pool := range l.GPUs {
+		pools = append(pools, pool)
+	}
+	sort.Strings(pools) // the same error every time
+	for _, pool := range pools {
+		limit, used, need := l.GPUs[pool], usage.GPUs[pool], demand.GPUs[pool]
+		if limit > 0 && need > 0 && used+need > limit {
+			return fmt.Errorf("this would exceed the project's GPU quota of %d for pool %s (%d used, this needs %d)", limit, pool, used, need)
+		}
 	}
 	return nil
 }

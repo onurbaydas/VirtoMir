@@ -33,6 +33,12 @@ func (s *Server) projectUsage(projectID string) project.Usage {
 			u.VCPUs += d.VCPUs
 			u.MemoryMiB += int64(d.MaxMemoryKiB >> 10)
 			mine = append(mine, d.UUID)
+			if d.GPUPool != "" && d.GPUCount > 0 {
+				if u.GPUs == nil {
+					u.GPUs = map[string]int{}
+				}
+				u.GPUs[d.GPUPool] += d.GPUCount
+			}
 		}
 	}
 	u.DiskGiB = int64(s.diskGiB(mine))

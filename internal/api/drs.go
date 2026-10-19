@@ -528,7 +528,17 @@ func (s *Server) drsPlacement(w http.ResponseWriter, r *http.Request) {
 
 // getClusterInventoryMachines returns all machines across all nodes in the cluster.
 func (s *Server) getClusterInventoryMachines(w http.ResponseWriter, r *http.Request) {
-	id := identity(r)
+	out, err := s.clusterDomains(r.Context(), identity(r))
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, out)
+}
+
+// clusterDomains lists the machines of every member (a member that does not answer within
+// a few seconds is left out).
+func (s *Server) clusterDomains(ctx context.Context, id auth.Identity) ([]ClusterDomainSummary, error) {
 	selfID := ""
 	if s.cluster != nil {
 		selfID = s.cluster.SelfID()
@@ -536,10 +546,8 @@ func (s *Server) getClusterInventoryMachines(w http.ResponseWriter, r *http.Requ
 
 	localVMs, err := s.backend.ListDomains()
 	if err != nil {
-		s.writeError(w, err)
-		return
+		return nil, err
 	}
-
 	out := make([]ClusterDomainSummary, 0, len(localVMs))
 	for _, vm := range localVMs {
 		out = append(out, ClusterDomainSummary{Domain: vm, HostID: selfID, HostName: s.hostName})
@@ -556,7 +564,7 @@ func (s *Server) getClusterInventoryMachines(w http.ResponseWriter, r *http.Requ
 			wg.Add(1)
 			go func(n cluster.Node) {
 				defer wg.Done()
-				ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
+				ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 				defer cancel()
 				var remote struct {
 					Domains []virt.Domain `json:"domains"`
@@ -574,7 +582,7 @@ func (s *Server) getClusterInventoryMachines(w http.ResponseWriter, r *http.Requ
 		wg.Wait()
 	}
 
-	s.writeJSON(w, http.StatusOK, out)
+	return out, nil
 }
 
 // placements turns one host's live snapshot into DRS input.
