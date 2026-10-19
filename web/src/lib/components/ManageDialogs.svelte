@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | 'resize' | 'qos' | 'template' | 'move' | 'hostdev' | null
+  export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | 'resize' | 'diskmove' | 'qos' | 'template' | 'move' | 'hostdev' | null
 </script>
 
 
@@ -80,6 +80,14 @@
       qosTotalMbps = drive?.iotune?.totalBytesSec ? Math.round(drive.iotune.totalBytesSec / (1024 * 1024)) : 0
       qosReadMbps = drive?.iotune?.readBytesSec ? Math.round(drive.iotune.readBytesSec / (1024 * 1024)) : 0
       qosWriteMbps = drive?.iotune?.writeBytesSec ? Math.round(drive.iotune.writeBytesSec / (1024 * 1024)) : 0
+    }
+    if (which === 'diskmove') {
+      void activePools()
+        .then((p) => {
+          pools = p.filter((x) => ['dir', 'netfs', 'fs'].includes(x.type))
+          diskPool = pools[0]?.name ?? ''
+        })
+        .catch((e) => (error = errorText(e)))
     }
     if (which === 'disk' || which === 'media') {
       void (async () => {
@@ -253,6 +261,14 @@
       toasts.push({ kind: 'info', title: source ? `Inserted ${source.split('/').pop()}` : `Ejected ${drive.title}` })
       onchange()
       onclose()
+    })
+
+  const moveDisk = () =>
+    run(async () => {
+      if (!drive?.target) return
+      const job = await api.moveDisk(detail.uuid, drive.target, diskPool)
+      onclose()
+      track(job, { success: t('{title} moved to {pool}', { title: drive.title, pool: diskPool }), onSuccess: () => onchange() })
     })
 
   let currentGiB = $derived(drive?.capacityBytes ? drive.capacityBytes / 2 ** 30 : 0)
@@ -581,6 +597,23 @@
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
     <button class="ui-btn primary" form="grow" disabled={busy || growGiB <= currentGiB}>{busy ? 'Growing…' : t('Grow disk')}</button>
+  {/snippet}
+</Dialog>
+
+<Dialog open={which === 'diskmove'} title={t('Move {v}', { v: drive?.title ?? 'disk' })} subtitle={drive?.summary} {onclose}>
+  <form id="diskmove" class="form" onsubmit={(e) => (e.preventDefault(), moveDisk())}>
+    <label class="ui-field">
+      <span class="label">{t('Storage pool')}</span>
+      <select class="ui-input" bind:value={diskPool}>
+        {#each pools as p (p.name)}<option value={p.name}>{p.name} ({formatBytes(p.availableBytes)} {t('free')})</option>{/each}
+      </select>
+      <span class="hint">{active ? t('The machine keeps running: the disk is copied while it is in use, then it switches over.') : t('The disk is copied into the pool as a qcow2 image.')} {t('The old image is deleted afterwards. Machines with snapshots must delete them first.')}</span>
+    </label>
+    {#if error}<div class="ui-error-box">{error}</div>{/if}
+  </form>
+  {#snippet footer()}
+    <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
+    <button class="ui-btn primary" form="diskmove" disabled={busy || !diskPool}>{t('Move disk')}</button>
   {/snippet}
 </Dialog>
 

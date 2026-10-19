@@ -27,6 +27,7 @@ const RULES: Rule[] = [
   { method: 'PUT', re: /^\/api\/v1\/domains\/([^/]+)\/media$/, text: 'changed the CD/DVD of {vm}' },
   { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/disks$/, text: 'added storage to {vm}' },
   { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/disks\/([^/]+)\/resize$/, text: 'grew disk $2 of {vm}' },
+  { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/disks\/([^/]+)\/move$/, text: 'moved disk $2 of {vm} to another pool' },
   { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/interfaces$/, text: 'added a network adapter to {vm}' },
   { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/devices\/detach$/, text: 'removed a device from {vm}' },
   { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/snapshots$/, text: 'took a snapshot of {vm}' },

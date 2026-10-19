@@ -536,6 +536,7 @@
                     {/if}
                     {#if d.kind === 'disk' && d.target}
                       <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'resize'))}><Maximize2 size={14} /> {t('Grow…')}</button>
+                      <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'diskmove'))}><ArrowRightLeft size={14} /> {t('Move…')}</button>
                       <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'qos'))}><Gauge size={14} /> {t('QoS Limits…')}</button>
                     {/if}
 

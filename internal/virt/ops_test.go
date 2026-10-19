@@ -236,6 +236,24 @@ func TestSnapshotDoc(t *testing.T) {
 	}
 }
 
+func TestSetDiskImage(t *testing.T) {
+	block := libvirtxml.DomainDisk{
+		Driver:       &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "raw", Cache: "none"},
+		Source:       &libvirtxml.DomainDiskSource{Block: &libvirtxml.DomainDiskSourceBlock{Dev: "/dev/vg/web"}},
+		BackingStore: &libvirtxml.DomainDiskBackingStore{},
+	}
+	if !setDiskImage(&block, "/nfs/web-vda.qcow2") {
+		t.Fatal("block disk should change")
+	}
+	if src, _ := diskSource(block.Source); src != "/nfs/web-vda.qcow2" || block.Source.Block != nil ||
+		block.Driver.Type != "qcow2" || block.Driver.Cache != "none" || block.BackingStore != nil {
+		t.Errorf("moved disk = %+v / %+v", block.Source, block.Driver)
+	}
+	if setDiskImage(&block, "/nfs/web-vda.qcow2") {
+		t.Error("already pointing at the file: nothing to change")
+	}
+}
+
 func TestCreateSpecValidation(t *testing.T) {
 	ok := CreateSpec{Name: "web", VCPUs: 2, MemoryMiB: 2048, DiskGiB: 20}
 	if err := ok.normalize(); err != nil {

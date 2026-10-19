@@ -23,6 +23,7 @@ func (s *Server) extraRoutes(mux *routeMux) {
 	mux.HandleFunc("PUT /api/v1/domains/{uuid}/settings", s.saveSettings)
 	mux.HandleFunc("POST /api/v1/domains/{uuid}/disks/{target}/resize", s.resizeDisk)
 	mux.HandleFunc("PUT /api/v1/domains/{uuid}/disks/{target}/qos", s.setDiskQoS)
+	mux.HandleFunc("POST /api/v1/domains/{uuid}/disks/{target}/move", s.moveDisk)
 	mux.HandleFunc("POST /api/v1/storage/pools/{pool}/volumes/{vol}/resize", s.resizeVolume)
 	mux.HandleFunc("POST /api/v1/networks/{name}/dhcp-hosts", s.addDHCPHost)
 	mux.HandleFunc("DELETE /api/v1/networks/{name}/dhcp-hosts/{mac}", s.deleteDHCPHost)
