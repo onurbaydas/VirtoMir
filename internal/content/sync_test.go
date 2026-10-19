@@ -556,6 +556,13 @@ func TestReconcile(t *testing.T) {
 	if len(jm.List()) != 1 {
 		t.Errorf("expected duplicate job to be prevented by activeJobs, got %d jobs", len(jm.List()))
 	}
+
+	// The download job writes into targetDir; let it finish before the test removes it.
+	cancel()
+	deadline := time.Now().Add(5 * time.Second)
+	for jm.List()[0].State == jobs.Running && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 // waitForJob blocks until jobID leaves the Running state and fails the test on error or timeout.
