@@ -123,6 +123,32 @@ func TestPoolRuleUsesLastPools(t *testing.T) {
 	}
 }
 
+func TestVMAnomaly(t *testing.T) {
+	e, _ := Open("", nil)
+	e.notify = func(Event) {}
+	if e.ruleEnabled("vm-anomaly") {
+		t.Fatal("the anomaly rule must be off by default")
+	}
+	cfg := e.Config()
+	for i := range cfg.Rules {
+		if cfg.Rules[i].ID == "vm-anomaly" {
+			cfg.Rules[i].Enabled = true
+		}
+	}
+	if err := e.SetConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	odd := Observation{Time: t0, Connected: true, Machines: []Machine{{UUID: "a", Name: "web", State: "running", Anomaly: "web: disk.latency 120 (usually 10)"}}}
+	e.Observe(odd)
+	if l := e.List(); len(l) != 1 || l[0].Kind != VMAnomaly || l[0].Message != "web: disk.latency 120 (usually 10)" {
+		t.Fatalf("alerts = %+v", l)
+	}
+	e.Observe(Observation{Time: t0.Add(time.Minute), Connected: true, Machines: []Machine{{UUID: "a", Name: "web", State: "running"}}})
+	if l := e.List(); l[0].Resolved == nil {
+		t.Error("anomaly over: the alert resolves")
+	}
+}
+
 func TestAckAndConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "alerts.json")
 	e, err := Open(path, nil)

@@ -36,3 +36,5 @@ bin/
 out/
 coverage/
 *.log
+# Windows daemon binary (build artifact)
+virtomird.exe

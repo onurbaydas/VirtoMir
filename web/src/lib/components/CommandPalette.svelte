@@ -76,6 +76,7 @@
       { path: '/backups', title: t('Backups & Schedules'), detail: t('CBT Backups, Targets & Retention') },
       { path: '/alerts', title: t('System Alerts'), detail: t('Open Alerts, Rules & Notifications') },
       { path: '/activity', title: t('Activity & Audit Log'), detail: t('User actions & changing API logs') },
+      { path: '/insights', title: t('Insights'), detail: t('When the host and its pools fill up, and machines sized too big or too small') },
       { path: '/reports', title: t('Reports & Compliance'), detail: t('Automated capacity forecasting & backup SLA audits') },
       { path: '/cluster', title: t('Cluster Overview'), detail: t('Multi-host federation and node status') },
       { path: '/account', title: t('Account & Quotas'), detail: t('Roles, API tokens and sign-in config') },

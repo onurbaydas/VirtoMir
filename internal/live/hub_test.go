@@ -256,4 +256,8 @@ func TestRecordsHistory(t *testing.T) {
 	if len(rec[VMSeries("a", "disk.read")]) != 1 {
 		t.Errorf("disk series = %v", rec[VMSeries("a", "disk.read")])
 	}
+	// Disk latency is recorded alongside the I/O series.
+	if len(rec[VMSeries("a", "disk.latency")]) != 1 {
+		t.Errorf("disk latency series = %v", rec[VMSeries("a", "disk.latency")])
+	}
 }

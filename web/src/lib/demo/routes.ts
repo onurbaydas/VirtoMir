@@ -1215,6 +1215,26 @@ export function handle(method: string, url: URL, body: any): Reply {
     }
     case 'GET /api/v1/report-schedules':
       return json({ schedules: w.reportSchedules })
+    case 'GET /api/v1/insights': {
+      const f = (days: number, confidence: number) => ({ metric: '', slope: 0.4, daysUntilFull: days, confidence, insufficientData: false, seasonal: true })
+      const ms = w.machines.filter((m) => m.host === host.id)
+      return json({
+        host: { cpu: f(-1, 0.62), mem: f(143, 0.81) },
+        pools: [
+          { name: 'default', capacityBytes: 1.8e12, allocationBytes: 1.31e12, forecast: f(24, 0.9) },
+          { name: 'nvme-fast', capacityBytes: 3.6e12, allocationBytes: 0.9e12, forecast: f(-1, 0.4) },
+        ],
+        machines: ms.map((m, i) => {
+          const big = i % 3 === 0 && m.vcpus > 2
+          return {
+            uuid: m.uuid, name: m.name, state: m.state, currentVcpus: m.vcpus, currentMemMiB: m.memoryMiB,
+            suggestedVcpus: big ? Math.max(1, m.vcpus / 2) : m.vcpus, suggestedMemMiB: m.memoryMiB,
+            oversized: big, undersized: false,
+            reasons: big ? [`CPU is oversized (p95=6.2% < 15%, p99=21.0% < 35%): suggest reducing from ${m.vcpus} to ${Math.max(1, m.vcpus / 2)} vCPUs`] : [],
+          }
+        }),
+      })
+    }
 
     // VMware (ADR-0061)
     case 'GET /api/v1/vmware/connection':

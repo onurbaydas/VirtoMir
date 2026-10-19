@@ -25,6 +25,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/ha"
 	"github.com/onurbaydas/virtomir/internal/hostinfo"
 	"github.com/onurbaydas/virtomir/internal/hostnet"
+	"github.com/onurbaydas/virtomir/internal/insights"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/offsite"
 	"github.com/onurbaydas/virtomir/internal/placement"
@@ -168,6 +169,8 @@ type Options struct {
 	FIPSInfo compliance.FIPSInfo
 	// ComplianceScanner nil: standard scanner rooted at "/" is used (ADR-0064).
 	ComplianceScanner *compliance.Scanner
+	// Insights nil: no operations-intelligence engine (ADR-0066).
+	Insights *insights.Engine
 	// Content nil: no content library (ADR-0063).
 	Content     *content.Store
 	ContentSync *content.SyncManager
@@ -192,6 +195,7 @@ type Server struct {
 	auditVerifyMu     sync.Mutex
 	auditVerified     bool
 	auditVerifyAt     time.Time
+	insights          *insights.Engine
 
 	confighist   *confighist.Store
 	quotas       *quota.Store
@@ -273,7 +277,7 @@ func NewServer(o Options) *Server {
 		vmwareStore: o.VMwareStore, vmwareWaves: o.VMwareWaves, vmwareLister: vl, vmwarePreflight: vp, vmwareConverter: vc,
 		drs: o.DRS, placement: o.Placement, projects: o.Projects, rateLimiter: rl, zfsRep: o.ZFSRep,
 		catalog: o.Catalog, leaseMgr: o.LeaseMgr,
-		content: o.Content, contentSync: o.ContentSync}
+		content: o.Content, contentSync: o.ContentSync, insights: o.Insights}
 	if s.contentSync != nil {
 		s.contentSync.SetPeers(s)
 	}
@@ -303,6 +307,7 @@ func (s *Server) Handler() http.Handler {
 	s.accessRoutes(mux)
 	s.consoleRoutes(mux)
 	s.alertRoutes(mux)
+	s.insightsRoutes(mux)
 	s.backupRoutes(mux)
 	s.templateRoutes(mux)
 	s.clusterRoutes(mux)

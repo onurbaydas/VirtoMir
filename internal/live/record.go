@@ -25,7 +25,7 @@ const (
 )
 
 // VMSeries returns the name of a machine's series, e.g. VMSeries(uuid, "cpu").
-// Metrics: cpu, mem (guest-reported %), disk.read, disk.write, net.rx, net.tx.
+// Metrics: cpu, mem (guest-reported %), disk.latency, disk.read, disk.write, net.rx, net.tx.
 func VMSeries(uuid, metric string) string { return "vm." + uuid + "." + metric }
 
 func (h *Hub) record(s *Snapshot, now time.Time) {
@@ -56,11 +56,26 @@ func (h *Hub) record(s *Snapshot, now time.Time) {
 		}
 		if d.Disks != nil {
 			var rd, wr float64
+			var latSum float64
+			var active int
 			for _, x := range d.Disks {
 				rd, wr = rd+x.ReadBps, wr+x.WriteBps
+				if x.ReadLatencyMs > 0 {
+					latSum += x.ReadLatencyMs
+					active++
+				}
+				if x.WriteLatencyMs > 0 {
+					latSum += x.WriteLatencyMs
+					active++
+				}
 			}
 			r.Add(VMSeries(d.UUID, "disk.read"), now, rd)
 			r.Add(VMSeries(d.UUID, "disk.write"), now, wr)
+			var avgLatency float64
+			if active > 0 {
+				avgLatency = latSum / float64(active)
+			}
+			r.Add(VMSeries(d.UUID, "disk.latency"), now, avgLatency)
 		}
 		if d.Nets != nil {
 			var rx, tx float64

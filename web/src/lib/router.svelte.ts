@@ -23,6 +23,7 @@ export type Route =
   | { name: 'catalog'; tab: string }
   | { name: 'hardware' }
   | { name: 'reports' }
+  | { name: 'insights' }
   | { name: 'compliance' }
   | { name: 'setup' }
   | { name: 'library' }
@@ -47,6 +48,7 @@ function parse(path: string, hash: string): Route {
   if (path === '/catalog') return { name: 'catalog', tab: hash.replace(/^#/, '') }
   if (path === '/hardware') return { name: 'hardware' }
   if (path === '/reports') return { name: 'reports' }
+  if (path === '/insights') return { name: 'insights' }
   if (path === '/compliance') return { name: 'compliance' }
   if (path === '/setup') return { name: 'setup' }
   const c = /^\/console\/([0-9a-fA-F-]{36})$/.exec(path)

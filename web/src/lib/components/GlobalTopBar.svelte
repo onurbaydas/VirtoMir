@@ -56,7 +56,7 @@
   const PAGE: Record<string, string> = {
     overview: t('Overview'), machines: t('Machines'), new: t('New machine'), import: t('Import'), storage: t('Storage'),
     networks: t('Networks'), backups: t('Backups'), alerts: t('Alerts'), activity: t('Activity'), account: t('Account'),
-    hardware: t('Hardware'), reports: t('Reports'), cluster: t('Cluster'), setup: t('Setup'),
+    hardware: t('Hardware'), reports: t('Reports'), insights: t('Insights'), cluster: t('Cluster'), setup: t('Setup'),
   }
   let hostName = $derived((cluster.clustered ? cluster.current?.name : null) ?? live.host?.hostname?.split('.')[0] ?? '')
   let machineName = $derived(

@@ -172,6 +172,38 @@ export interface PoolView extends ResourcePool {
 
 // ---- Reports --------------------------------------------------------------------------------
 
+/** Operations intelligence (ADR-0066). daysUntilFull -1 = not growing towards full. */
+export interface Forecast {
+  metric: string
+  slope: number
+  daysUntilFull: number
+  confidence: number
+  insufficientData: boolean
+  seasonal: boolean
+}
+export interface Recommendation {
+  uuid: string
+  currentVcpus: number
+  currentMemMiB: number
+  suggestedVcpus: number
+  suggestedMemMiB: number
+  oversized: boolean
+  undersized: boolean
+  reasons: string[]
+}
+export interface Anomaly {
+  time: string
+  metric: string
+  value: number
+  baselineMedian: number
+  z: number
+}
+export interface Insights {
+  host: { cpu: Forecast; mem: Forecast }
+  pools: { name: string; capacityBytes: number; allocationBytes: number; forecast: Forecast }[]
+  machines: (Recommendation & { name: string; state: string })[]
+}
+
 export type ReportKind = 'capacity' | 'inventory' | 'backup_sla' | 'compliance'
 export type ReportFormat = 'html' | 'csv' | 'json'
 
@@ -377,6 +409,9 @@ export const ent = {
   deleteRespool: (id: string) => api.delete<void>(`/api/v1/respools/${enc(id)}`),
   /** pool "" takes the machine out of every pool. */
   assignRespool: (uuid: string, pool: string) => api.put<void>(`/api/v1/domains/${enc(uuid)}/respool`, { pool }),
+
+  insights: () => api.get<Insights>('/api/v1/insights'),
+  machineInsights: (uuid: string) => api.get<{ rightSize: Recommendation; anomalies: Anomaly[] }>(`/api/v1/insights/vms/${enc(uuid)}`),
 
   reports: async () => (await api.get<{ reports: ReportMeta[] }>('/api/v1/reports')).reports,
   generateReport: (kind: ReportKind, format: ReportFormat) => api.post<ReportMeta>('/api/v1/reports', { kind, format }),

@@ -16,6 +16,7 @@
   import Boxes from '@lucide/svelte/icons/boxes'
   import CircuitBoard from '@lucide/svelte/icons/circuit-board'
   import FileText from '@lucide/svelte/icons/file-text'
+  import TrendingUp from '@lucide/svelte/icons/trending-up'
   import ShieldCheck from '@lucide/svelte/icons/shield-check'
   import FolderKanban from '@lucide/svelte/icons/folder-kanban'
   import ShoppingBag from '@lucide/svelte/icons/shopping-bag'
@@ -51,6 +52,7 @@
     { name: 'activity', href: '/activity', label: t('Activity'), icon: ClockArrowUp, role: 'admin' },
     { name: 'projects', href: '/projects', label: t('Projects'), icon: FolderKanban, role: 'admin' },
     { name: 'catalog', href: '/catalog', label: t('Catalog'), icon: ShoppingBag, role: 'viewer' },
+    { name: 'insights', href: '/insights', label: t('Insights'), icon: TrendingUp, role: 'viewer' },
     { name: 'reports', href: '/reports', label: t('Reports'), icon: FileText, role: 'viewer' },
     { name: 'compliance', href: '/compliance', label: t('Compliance'), icon: ShieldCheck, role: 'viewer' },
   ] as const

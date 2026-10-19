@@ -31,6 +31,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/history"
 	"github.com/onurbaydas/virtomir/internal/hostinfo"
 	"github.com/onurbaydas/virtomir/internal/hostnet"
+	"github.com/onurbaydas/virtomir/internal/insights"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/live"
 	"github.com/onurbaydas/virtomir/internal/offsite"
@@ -156,13 +157,15 @@ func run(c config, log *slog.Logger) error {
 	}()
 	go saveHistory(ctx, hist, log)
 
+	insightsEngine := insights.New(hist)
+	go recordPools(ctx, client, hist)
 	hub := live.NewHub(client, time.Second, log)
 	hub.SetRecorder(hist)
 	alertEngine, err := alerts.Open(filepath.Join(c.stateDir, "alerts.json"), log)
 	if err != nil {
 		log.Warn("alerts", "err", err)
 	}
-	watchAlerts(ctx, hub, alertEngine, client)
+	watchAlerts(ctx, hub, alertEngine, client, insightsEngine)
 
 	jobManager := jobs.New(ctx)
 	hostName := c.name
@@ -189,7 +192,7 @@ func run(c config, log *slog.Logger) error {
 	opts := api.Options{
 		Backend: client, Live: hub, Jobs: jobManager, Auth: authMgr, Schedules: scheduler,
 		UI: web.Dist(), Version: version, Log: log, History: hist, Tokens: tokens, Activity: acts, Alerts: alertEngine,
-		FIPSInfo: fipsInfo, ComplianceScanner: compScanner,
+		Insights: insightsEngine, FIPSInfo: fipsInfo, ComplianceScanner: compScanner,
 	}
 	if err := setupCluster(c, tlsConf, &opts); err != nil {
 		log.Warn("cluster", "err", err)
@@ -390,6 +393,28 @@ func run(c config, log *slog.Logger) error {
 			return err
 		}
 		return nil
+	}
+}
+
+// recordPools adds every active pool's used bytes to the history every 10 minutes, the
+// series the pool capacity forecasts read (ADR-0066).
+func recordPools(ctx context.Context, c *virt.Client, h *history.Store) {
+	t := time.NewTicker(10 * time.Minute)
+	defer t.Stop()
+	for {
+		if pools, err := c.ListPools(); err == nil {
+			now := time.Now()
+			for _, p := range pools {
+				if p.Active && p.CapacityBytes > 0 {
+					h.Add(insights.PoolSeries(p.Name), now, float64(p.AllocationBytes))
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
 	}
 }
 

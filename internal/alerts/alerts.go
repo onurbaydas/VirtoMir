@@ -38,9 +38,10 @@ const (
 	VMDown      Kind = "vm.down"      // a machine set to autostart is not running
 	PoolFree    Kind = "pool.free"    // free space of a pool below Threshold %
 	LibvirtDown Kind = "libvirt.down" // virtomird cannot reach libvirt
+	VMAnomaly   Kind = "vm.anomaly"   // a machine's metric far from its usual (robust z-score, ADR-0066)
 )
 
-var kinds = []Kind{HostCPU, HostMem, VMCPU, VMCrashed, VMDown, PoolFree, LibvirtDown}
+var kinds = []Kind{HostCPU, HostMem, VMCPU, VMCrashed, VMDown, PoolFree, LibvirtDown, VMAnomaly}
 
 type Rule struct {
 	ID        string   `json:"id"`
@@ -85,6 +86,7 @@ func DefaultRules() []Rule {
 		{ID: "pool-free", Kind: PoolFree, Enabled: true, Threshold: 10, ForSec: 0, Severity: Warning},
 		{ID: "libvirt-down", Kind: LibvirtDown, Enabled: true, ForSec: 60, Severity: Critical},
 		{ID: "vm-cpu", Kind: VMCPU, Enabled: false, Threshold: 95, ForSec: 600, Severity: Warning},
+		{ID: "vm-anomaly", Kind: VMAnomaly, Enabled: false, Severity: Warning},
 	}
 }
 
@@ -123,6 +125,8 @@ type Machine struct {
 	State      string
 	Autostart  bool
 	CPU        float64
+	// Anomaly describes a recent metric far from the machine's usual; "" = none.
+	Anomaly string
 }
 
 type Pool struct {
@@ -473,7 +477,7 @@ func evaluate(r Rule, o Observation) []condition {
 			out = append(out, condition{key: key("host"), subject: "Host", value: o.HostMem,
 				message: fmt.Sprintf("Host memory at %.0f %% (threshold %.0f %%)", o.HostMem, r.Threshold)})
 		}
-	case VMCPU, VMCrashed, VMDown:
+	case VMCPU, VMCrashed, VMDown, VMAnomaly:
 		for _, m := range o.Machines {
 			if r.Target != "" && r.Target != m.UUID {
 				continue
@@ -487,6 +491,8 @@ func evaluate(r Rule, o Observation) []condition {
 			case r.Kind == VMDown && m.Autostart && m.State != "running" && m.State != "blocked" && m.State != "paused":
 				out = append(out, condition{key: key(m.UUID), subject: m.Name, subjectID: m.UUID,
 					message: m.Name + " should start with the host but is " + m.State})
+			case r.Kind == VMAnomaly && m.Anomaly != "":
+				out = append(out, condition{key: key(m.UUID), subject: m.Name, subjectID: m.UUID, message: m.Anomaly})
 			}
 		}
 	case PoolFree:
