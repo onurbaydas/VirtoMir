@@ -63,6 +63,7 @@ type config struct {
 	stateDir                 string
 	name                     string
 	updateRepo               string
+	drExperimental           bool
 }
 
 func main() {
@@ -81,6 +82,7 @@ func main() {
 	flag.StringVar(&c.stateDir, "state-dir", "/var/lib/virtomir", "where virtomird keeps its own files (TLS certificate)")
 	flag.StringVar(&c.name, "name", "", "how this host is called in a cluster (default: its hostname)")
 	flag.StringVar(&c.updateRepo, "update-repo", "onurbaydas/VirtoMir", `GitHub repository whose releases the Updates card offers ("" turns the check off); a private one needs VIRTOMIR_GITHUB_TOKEN`)
+	flag.BoolVar(&c.drExperimental, "dr-experimental", false, "turn on disaster recovery (protection groups, recovery plans, failover); not tested on real hosts yet")
 	debug := flag.Bool("debug", false, "verbose logging")
 	flag.Parse()
 
@@ -252,6 +254,9 @@ func run(c config, log *slog.Logger) error {
 		opts.ZFSRep = zr
 		go zr.Run(ctx)
 	}
+	if c.drExperimental {
+		wireDR(&opts, client, c.stateDir, log)
+	}
 	if drsEng, err := drs.New(c.stateDir); err != nil {
 		log.Warn("drs engine", "err", err)
 	} else {
@@ -293,6 +298,7 @@ func run(c config, log *slog.Logger) error {
 	go syncCluster(ctx, apiServer)
 	go apiServer.RunReportSchedules(ctx)
 	go apiServer.RunDRS(ctx)
+	go apiServer.RunDRRPO(ctx)
 	go keepTunnels(ctx, client, log)
 	if opts.Updater != nil {
 		opts.Updater.InitConfig(c.stateDir)

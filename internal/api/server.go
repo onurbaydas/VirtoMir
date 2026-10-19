@@ -21,6 +21,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/compliance"
 	"github.com/onurbaydas/virtomir/internal/confighist"
 	"github.com/onurbaydas/virtomir/internal/content"
+	"github.com/onurbaydas/virtomir/internal/dr"
 	"github.com/onurbaydas/virtomir/internal/drs"
 	"github.com/onurbaydas/virtomir/internal/ha"
 	"github.com/onurbaydas/virtomir/internal/hostinfo"
@@ -174,6 +175,10 @@ type Options struct {
 	// Content nil: no content library (ADR-0063).
 	Content     *content.Store
 	ContentSync *content.SyncManager
+	// DR nil: no disaster recovery (ADR-0069, -dr-experimental).
+	DRStore        DRStorer
+	DROrchestrator DROrchestrator
+	DRFailover     DRFailoverRunner
 }
 
 type Server struct {
@@ -232,6 +237,9 @@ type Server struct {
 	leaseMgr        *catalog.LeaseManager
 	content         *content.Store
 	contentSync     *content.SyncManager
+	drStore         DRStorer
+	drOrchestrator  DROrchestrator
+	drFailover      DRFailoverRunner
 }
 
 func NewServer(o Options) *Server {
@@ -277,7 +285,8 @@ func NewServer(o Options) *Server {
 		vmwareStore: o.VMwareStore, vmwareWaves: o.VMwareWaves, vmwareLister: vl, vmwarePreflight: vp, vmwareConverter: vc,
 		drs: o.DRS, placement: o.Placement, projects: o.Projects, rateLimiter: rl, zfsRep: o.ZFSRep,
 		catalog: o.Catalog, leaseMgr: o.LeaseMgr,
-		content: o.Content, contentSync: o.ContentSync, insights: o.Insights}
+		content: o.Content, contentSync: o.ContentSync, insights: o.Insights,
+		drStore: o.DRStore, drOrchestrator: o.DROrchestrator, drFailover: o.DRFailover}
 	if s.contentSync != nil {
 		s.contentSync.SetPeers(s)
 	}
@@ -338,6 +347,7 @@ func (s *Server) Handler() http.Handler {
 	s.catalogRoutes(mux)
 	s.complianceRoutes(mux)
 	s.contentRoutes(mux)
+	s.drRoutes(mux)
 
 	spec := s.openAPI(mux.routes) // everything above, built once
 	mux.HandleFunc("GET /api/v1/openapi.json", func(w http.ResponseWriter, _ *http.Request) {
@@ -500,11 +510,11 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 	var opErr *virt.OperationError
 	var invErr *virt.InvalidError
 	switch {
-	case errors.Is(err, virt.ErrNotFound), errors.Is(err, zfsrep.ErrNotFound), errors.Is(err, drs.ErrNotFound), errors.Is(err, placement.ErrNotFound):
+	case errors.Is(err, virt.ErrNotFound), errors.Is(err, zfsrep.ErrNotFound), errors.Is(err, drs.ErrNotFound), errors.Is(err, placement.ErrNotFound), errors.Is(err, dr.ErrNotFound):
 		status = http.StatusNotFound
-	case errors.As(err, &invErr), errors.Is(err, zfsrep.ErrInvalid), errors.Is(err, drs.ErrInvalid), errors.Is(err, placement.ErrInvalid):
+	case errors.As(err, &invErr), errors.Is(err, zfsrep.ErrInvalid), errors.Is(err, drs.ErrInvalid), errors.Is(err, placement.ErrInvalid), errors.Is(err, dr.ErrInvalid):
 		status = http.StatusUnprocessableEntity
-	case errors.As(err, &opErr), errors.Is(err, zfsrep.ErrBusy):
+	case errors.As(err, &opErr), errors.Is(err, zfsrep.ErrBusy), errors.Is(err, dr.ErrBusy), errors.Is(err, dr.ErrConflict):
 		status = http.StatusConflict
 	case errors.Is(err, auth.ErrBadCredentials), errors.Is(err, auth.ErrNotAllowed):
 		status = http.StatusUnauthorized
