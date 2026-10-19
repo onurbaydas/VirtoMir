@@ -123,7 +123,16 @@ func (s *Server) offsiteUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	bk := list[i]
 	job := s.jobs.Start("offsite", "Copy off-site: "+bk.Domain, func(ctx context.Context, report func(string)) (string, error) {
-		return o.Upload(ctx, string(dir), bk.ID, bk.DomainUUID, bk.Domain, report)
+		// An incremental backup is merged first, so the off-site copy stands alone.
+		root, cleanup := string(dir), func() {}
+		if f, ok := b.(Flattener); ok {
+			var err error
+			if root, cleanup, err = f.FlatCopy(ctx, dir, bk.ID, report); err != nil {
+				return "", err
+			}
+		}
+		defer cleanup()
+		return o.Upload(ctx, root, bk.ID, bk.DomainUUID, bk.Domain, report)
 	})
 	s.writeJSON(w, http.StatusAccepted, job)
 }

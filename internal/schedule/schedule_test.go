@@ -47,7 +47,7 @@ func (f *fakeRunner) DeleteSnapshot(uuid, name string) error {
 	f.snapshots[uuid] = slices.DeleteFunc(f.snapshots[uuid], func(n string) bool { return n == name })
 	return nil
 }
-func (f *fakeRunner) Backup(context.Context, string, string, func(string)) error {
+func (f *fakeRunner) Backup(context.Context, string, string, int, func(string)) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.backups++

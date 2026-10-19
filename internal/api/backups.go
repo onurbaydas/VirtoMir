@@ -11,9 +11,14 @@ import (
 // Backupper is the backup part of the backend (implemented by *virt.Client).
 type Backupper interface {
 	ListBackups(dir virt.BackupDir, uuid string) ([]virt.Backup, error)
-	BackupDomain(ctx context.Context, dir virt.BackupDir, uuid string, automatic bool, report func(string)) (virt.Backup, error)
+	BackupDomain(ctx context.Context, dir virt.BackupDir, uuid string, opts virt.BackupOptions, report func(string)) (virt.Backup, error)
 	DeleteBackup(dir virt.BackupDir, id string) error
 	RestoreBackup(ctx context.Context, dir virt.BackupDir, id, name, pool string, report func(string)) (string, error)
+}
+
+// Flattener merges an incremental backup's chain for an off-site copy (*virt.Client).
+type Flattener interface {
+	FlatCopy(ctx context.Context, dir virt.BackupDir, id string, report func(string)) (string, func(), error)
 }
 
 func (s *Server) backupRoutes(mux *routeMux) {
@@ -58,9 +63,20 @@ func (s *Server) backupNow(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Optional body {"incremental": true}: only what changed since the previous backup.
+	var body struct {
+		Incremental bool `json:"incremental"`
+	}
+	if r.ContentLength != 0 && !s.decode(w, r, &body) {
+		return
+	}
+	opts := virt.BackupOptions{}
+	if body.Incremental {
+		opts.FullEvery = virt.MaxManualChain
+	}
 	uuid := r.PathValue("uuid")
 	job := s.jobs.Start("backup", "Backup", func(ctx context.Context, report func(string)) (string, error) {
-		res, err := b.BackupDomain(ctx, dir, uuid, false, report)
+		res, err := b.BackupDomain(ctx, dir, uuid, opts, report)
 		return res.ID, err
 	})
 	s.writeJSON(w, http.StatusAccepted, job)

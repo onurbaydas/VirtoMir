@@ -43,6 +43,9 @@ type Schedule struct {
 	KeepWeekly  int    `json:"keepWeekly,omitempty"`  // GFS: weeks to keep
 	KeepMonthly int    `json:"keepMonthly,omitempty"` // GFS: months to keep
 	KeepYearly  int    `json:"keepYearly,omitempty"`  // GFS: years to keep
+	// FullEvery (backups): 0 or 1 = every backup is full; n > 1 = incremental backups (only what
+	// changed since the previous one) with a full one every n backups.
+	FullEvery int `json:"fullEvery,omitempty"`
 
 	LastRun    *time.Time `json:"lastRun,omitempty"`
 	LastError  string     `json:"lastError,omitempty"`
@@ -61,7 +64,8 @@ type Runner interface {
 	Snapshot(uuid, name, description string) error
 	ListAutoSnapshots(uuid string) ([]string, error) // names starting with AutoPrefix, oldest first
 	DeleteSnapshot(uuid, name string) error
-	Backup(ctx context.Context, dir, uuid string, report func(string)) error
+	// Backup backs up uuid into dir; fullEvery as in Schedule.FullEvery.
+	Backup(ctx context.Context, dir, uuid string, fullEvery int, report func(string)) error
 	// PruneBackups removes the automatic backups of uuid in dir that keep rejects; keep gets
 	// their creation times and answers which to keep.
 	PruneBackups(dir, uuid string, keep func([]time.Time) []bool) (int, error)
@@ -170,6 +174,9 @@ func (sc Schedule) validate() error {
 		if n < 0 || n > 1000 {
 			return errors.New("daily, weekly, monthly and yearly counts between 0 and 1000")
 		}
+	}
+	if sc.FullEvery < 0 || sc.FullEvery > 100 {
+		return errors.New("a full backup every 0 to 100 backups")
 	}
 	return nil
 }
@@ -367,7 +374,7 @@ func (s *Scheduler) execute(ctx context.Context, sc Schedule, dir string, report
 		}
 		return fmt.Sprintf("took %s, removed %d old", name, removed), nil
 	case Backups:
-		if err := s.runner.Backup(ctx, dir, sc.Domain, report); err != nil {
+		if err := s.runner.Backup(ctx, dir, sc.Domain, sc.FullEvery, report); err != nil {
 			return "", err
 		}
 		n, _ := s.runner.PruneBackups(dir, sc.Domain, sc.Policy().Keep)

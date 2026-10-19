@@ -29,6 +29,12 @@ type Backup struct {
 	SizeBytes   uint64       `json:"sizeBytes"`
 	DurationSec float64      `json:"durationSec"`
 	Note        string       `json:"note,omitempty"`
+	// Incremental: its disk files hold only what changed since Parent (another backup ID of
+	// the same machine) and build on Parent's files. Checkpoint is the libvirt checkpoint
+	// taken with it, which the next incremental backup starts from (see backup_incr.go).
+	Incremental bool   `json:"incremental,omitempty"`
+	Parent      string `json:"parent,omitempty"`
+	Checkpoint  string `json:"checkpoint,omitempty"`
 }
 
 type BackupDisk struct {
@@ -82,6 +88,11 @@ func readManifest(path string) (Backup, error) {
 	return b, json.Unmarshal(raw, &b)
 }
 
+func writeManifest(dest string, b Backup) error {
+	raw, _ := json.MarshalIndent(b, "", "  ")
+	return os.WriteFile(filepath.Join(dest, manifestName), raw, 0o640)
+}
+
 // backupPath resolves a backup ID inside dir, refusing anything that escapes it.
 func backupPath(dir BackupDir, id string) (string, error) {
 	p := filepath.Join(string(dir), filepath.FromSlash(id))
@@ -100,6 +111,9 @@ func (c *Client) DeleteBackup(dir BackupDir, id string) error {
 	p, err := backupPath(dir, id)
 	if err != nil {
 		return err
+	}
+	if deps := dependents(dir, id); len(deps) > 0 {
+		return refusedf("Incremental backup %s builds on %s. Delete the newer backups of its chain first.", deps[0], id)
 	}
 	if err := os.RemoveAll(p); err != nil {
 		return err
@@ -131,10 +145,11 @@ func machineFolder(name, uuid string) string {
 	return fmt.Sprintf("%s-%s", name, strings.ReplaceAll(uuid, "-", "")[:8])
 }
 
-// BackupDomain takes a full backup. Running machines are backed up live and consistently
-// with libvirt's backup job (no downtime, no snapshot left behind); stopped ones are copied
-// with qemu-img. Progress goes to report.
-func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, automatic bool, report func(string)) (Backup, error) {
+// BackupDomain takes a backup. Running machines are backed up live and consistently with
+// libvirt's backup job (no downtime, no snapshot left behind) — incrementally when opts and
+// the machine allow it (see backup_incr.go); stopped ones are copied in full with qemu-img.
+// Progress goes to report.
+func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, opts BackupOptions, report func(string)) (Backup, error) {
 	if err := dir.check(); err != nil {
 		return Backup{}, err
 	}
@@ -165,14 +180,27 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, a
 		return Backup{}, err
 	}
 
-	b := Backup{Domain: d.Name, DomainUUID: formatUUID(d.UUID), Created: started.UTC(), Automatic: automatic}
+	b := Backup{Domain: d.Name, DomainUUID: formatUUID(d.UUID), Created: started.UTC(), Automatic: opts.Automatic}
+	qcow2 := true
 	for _, disk := range disks {
 		src, _ := diskSource(disk.Source)
 		b.Disks = append(b.Disks, BackupDisk{Target: disk.Target.Dev, File: disk.Target.Dev + ".qcow2", Source: src})
+		qcow2 = qcow2 && diskFormat(disk) == "qcow2"
 	}
 
 	if isOn(sum.State) || sum.State == StatePaused {
 		b.Live = true
+		// Only qcow2 disks can keep the dirty bitmap a checkpoint needs.
+		var parent Backup
+		incremental := false
+		if qcow2 {
+			b.Checkpoint = checkpointPrefix + stamp
+			if earlier, err := c.ListBackups(dir, b.DomainUUID); err == nil {
+				parent, incremental = pickParent(earlier, checkpointNames(l, d), b.Disks, opts.FullEvery, func(id string) bool {
+					return backupFilesExist(dir, earlier, id)
+				})
+			}
+		}
 		// QEMU writes the copy itself, as its own unprivileged user.
 		uid, gid, ok := qemuOwner(l, d)
 		if ok {
@@ -180,11 +208,24 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, a
 				return fail(err)
 			}
 		}
-		err := c.liveBackup(ctx, l, d, dest, b.Disks, report)
+		from := ""
+		if incremental {
+			from = parent.Checkpoint
+		}
+		err := c.liveBackup(ctx, l, d, dest, b.Disks, from, b.Checkpoint, report)
 		if ok {
 			reclaim(dest)
 		}
+		if err == nil && incremental {
+			b.Incremental, b.Parent = true, parent.ID
+			err = rebaseOnParent(ctx, dest, b.Disks, parent)
+		}
 		if err != nil {
+			if b.Checkpoint != "" {
+				if cp, cerr := l.DomainCheckpointLookupByName(d, b.Checkpoint, 0); cerr == nil {
+					_ = l.DomainCheckpointDelete(cp, 0)
+				}
+			}
 			return fail(err)
 		}
 	} else {
@@ -217,14 +258,31 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, a
 		}
 	}
 	b.DurationSec = time.Since(started).Seconds()
-	raw, _ := json.MarshalIndent(b, "", "  ")
-	if err := os.WriteFile(filepath.Join(dest, manifestName), raw, 0o640); err != nil {
+	if err := writeManifest(dest, b); err != nil {
 		return fail(err)
 	}
 	rel, _ := filepath.Rel(string(dir), dest)
 	b.ID = filepath.ToSlash(rel)
-	c.log.Info("backup done", "domain", d.Name, "live", b.Live, "bytes", b.SizeBytes, "seconds", int(b.DurationSec))
+	// The new checkpoint is the base of the next incremental backup; older ones go.
+	if b.Checkpoint != "" {
+		c.dropCheckpoints(l, d, b.Checkpoint)
+	}
+	c.log.Info("backup done", "domain", d.Name, "live", b.Live, "incremental", b.Incremental, "bytes", b.SizeBytes, "seconds", int(b.DurationSec))
 	return b, nil
+}
+
+// backupFilesExist reports whether backup id (one of all) still has its manifest and disks.
+func backupFilesExist(dir BackupDir, all []Backup, id string) bool {
+	i := slices.IndexFunc(all, func(b Backup) bool { return b.ID == id })
+	if i < 0 {
+		return false
+	}
+	for _, bd := range all[i].Disks {
+		if _, err := os.Stat(filepath.Join(string(dir), filepath.FromSlash(id), bd.File)); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // backupXML is the push-mode <domainbackup> that writes each disk to a qcow2 file in dest.
@@ -239,14 +297,23 @@ func backupXML(dest string, disks []BackupDisk) string {
 	return xb.String()
 }
 
-// liveBackup runs a libvirt push-mode backup job into dest and waits for it.
-func (c *Client) liveBackup(ctx context.Context, l *libvirt.Libvirt, d libvirt.Domain, dest string, disks []BackupDisk, report func(string)) error {
-	report("Starting live backup…")
+// liveBackup runs a libvirt push-mode backup job into dest and waits for it: incremental
+// since checkpoint from unless that is "", taking checkpoint cp unless that is "".
+func (c *Client) liveBackup(ctx context.Context, l *libvirt.Libvirt, d libvirt.Domain, dest string, disks []BackupDisk, from, cp string, report func(string)) error {
+	if from != "" {
+		report("Starting incremental live backup…")
+	} else {
+		report("Starting live backup…")
+	}
+	var cpXML libvirt.OptString
+	if cp != "" {
+		cpXML = libvirt.OptString{checkpointXML(cp, disks)}
+	}
 	// Application consistency: with a guest agent, freeze the guest's filesystems only for
 	// the moment the job starts. The backup copies that point in time, so the guest thaws
 	// right away instead of staying frozen for the whole copy.
 	_, freezeErr := l.DomainFsfreeze(d, nil, 0)
-	err := l.DomainBackupBegin(d, backupXML(dest, disks), nil, 0)
+	err := l.DomainBackupBegin(d, backupXMLFrom(dest, disks, from), cpXML, 0)
 	if freezeErr == nil {
 		_, _ = l.DomainFsthaw(d, nil, 0)
 	}
@@ -434,9 +501,14 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 			return "", refusedf("%s already exists in pool %s.", filepath.Base(dst), pool)
 		}
 		report(fmt.Sprintf("Restoring disk %s (%d of %d)…", bd.Target, i+1, len(b.Disks)))
-		// Backups are standalone qcow2 files VirtoMir wrote; anything else in the folder is refused.
+		// Backups are qcow2 files VirtoMir wrote: standalone, or for an incremental backup a
+		// chain inside the machine's backup folder; anything else is refused.
 		src := filepath.Join(p, bd.File)
-		if _, err := checkedImage(ctx, src, "qcow2", false); err != nil {
+		chain, err := checkedImage(ctx, src, "qcow2", b.Incremental)
+		if err == nil {
+			err = chainInside(filepath.Dir(p), chain)
+		}
+		if err != nil {
 			rollback()
 			return "", fmt.Errorf("restore %s: %w", bd.Target, err)
 		}
@@ -476,7 +548,8 @@ func driverCache(d *libvirtxml.DomainDiskDriver) string {
 }
 
 // PruneBackups deletes the automatic backups of a machine that keep (given their creation
-// times, newest first) does not keep. Manual backups are never touched.
+// times, newest first) does not keep. Manual backups are never touched, and neither is a
+// backup that a kept incremental backup builds on.
 func (c *Client) PruneBackups(dir BackupDir, uuid string, keep func([]time.Time) []bool) (int, error) {
 	all, err := c.ListBackups(dir, uuid)
 	if err != nil {
@@ -489,10 +562,29 @@ func (c *Client) PruneBackups(dir BackupDir, uuid string, keep func([]time.Time)
 			auto, times = append(auto, b), append(times, b.Created)
 		}
 	}
-	n := 0
+	drop := map[string]bool{}
 	for i, k := range keep(times) {
 		if !k {
-			if err := c.DeleteBackup(dir, auto[i].ID); err == nil {
+			drop[auto[i].ID] = true
+		}
+	}
+	parent := map[string]string{}
+	for _, b := range all {
+		parent[b.ID] = b.Parent
+	}
+	for _, b := range all {
+		if drop[b.ID] {
+			continue
+		}
+		for p := b.Parent; p != ""; p = parent[p] {
+			delete(drop, p)
+		}
+	}
+	// Newest first, so a chain goes from its end and every delete finds no dependents.
+	n := 0
+	for _, b := range auto {
+		if drop[b.ID] {
+			if err := c.DeleteBackup(dir, b.ID); err == nil {
 				n++
 			}
 		}

@@ -44,12 +44,18 @@ func (r scheduleRunner) DeleteSnapshot(uuid, name string) error {
 	return r.c.DeleteSnapshot(uuid, name)
 }
 
-func (r scheduleRunner) Backup(ctx context.Context, dir, uuid string, report func(string)) error {
-	b, err := r.c.BackupDomain(ctx, virt.BackupDir(dir), uuid, true, report)
+func (r scheduleRunner) Backup(ctx context.Context, dir, uuid string, fullEvery int, report func(string)) error {
+	b, err := r.c.BackupDomain(ctx, virt.BackupDir(dir), uuid, virt.BackupOptions{Automatic: true, FullEvery: fullEvery}, report)
 	if err != nil || r.off == nil || !r.off.AfterScheduled() {
 		return err
 	}
-	if _, err := r.off.Upload(ctx, dir, b.ID, b.DomainUUID, b.Domain, report); err != nil {
+	// An incremental backup is merged first, so the off-site copy stands alone.
+	root, cleanup, err := r.c.FlatCopy(ctx, virt.BackupDir(dir), b.ID, report)
+	if err != nil {
+		return fmt.Errorf("backed up locally as %s, but the off-site copy failed: %w", b.ID, err)
+	}
+	defer cleanup()
+	if _, err := r.off.Upload(ctx, root, b.ID, b.DomainUUID, b.Domain, report); err != nil {
 		return fmt.Errorf("backed up locally as %s, but the off-site copy failed: %w", b.ID, err)
 	}
 	return nil

@@ -22,7 +22,7 @@
   function blank(kind: Kind): ScheduleInfo {
     return kind === 'snapshot'
       ? { id: '', kind, domain: uuid, enabled: false, every: 'daily', at: '03:00', weekday: 0, hours: 6, keep: 7 }
-      : { id: '', kind, domain: uuid, enabled: false, every: 'weekly', at: '02:00', weekday: 0, hours: 6, keep: 4, keepDaily: 7, keepWeekly: 4, keepMonthly: 12, keepYearly: 1 }
+      : { id: '', kind, domain: uuid, enabled: false, every: 'weekly', at: '02:00', weekday: 0, hours: 6, keep: 4, keepDaily: 7, keepWeekly: 4, keepMonthly: 12, keepYearly: 1, fullEvery: 7 }
   }
 
   async function load() {
@@ -123,6 +123,11 @@
               <label class="gfs-item">{t('Weekly')} <input class="ui-input gfs-num" type="number" min="0" max="52" bind:value={d.keepWeekly} placeholder="0" /></label>
               <label class="gfs-item">{t('Monthly')} <input class="ui-input gfs-num" type="number" min="0" max="120" bind:value={d.keepMonthly} placeholder="0" /></label>
               <label class="gfs-item">{t('Yearly')} <input class="ui-input gfs-num" type="number" min="0" max="10" bind:value={d.keepYearly} placeholder="0" /></label>
+            </div>
+            <div class="gfs-row" inert={!session.can('admin')}>
+              <label class="gfs-item" title={t('Between full backups only what changed is copied (running machines with qcow2 disks). 0 = every backup is full.')}>
+                {t('Full backup every')} <input class="ui-input gfs-num" type="number" min="0" max="100" bind:value={d.fullEvery} placeholder="0" /> {t('backups')}
+              </label>
             </div>
           {/if}
           <div class="status">

@@ -75,7 +75,11 @@
         {#if b.live}<Zap size={15} />{:else}<Power size={15} />{/if}
       </span>
       <div class="info">
-        <span class="when">{when(b.created)} {#if b.automatic}<span class="tag">{t('automatic')}</span>{/if}</span>
+        <span class="when">
+          {when(b.created)}
+          {#if b.automatic}<span class="tag">{t('automatic')}</span>{/if}
+          {#if b.incremental}<span class="tag" title={t('Holds only what changed since the backup before it, which it needs to be restored.')}>{t('incremental')}</span>{/if}
+        </span>
         <span class="meta">{formatBytes(b.sizeBytes)} · {b.disks.map((d) => d.target).join(', ')} · {b.live ? 'live' : 'offline'} · took {took(b.durationSec)}</span>
       </div>
       {#if offsite}

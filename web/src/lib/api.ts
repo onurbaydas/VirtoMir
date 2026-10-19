@@ -438,6 +438,9 @@ export interface BackupInfo {
   disks: { target: string; file: string; source: string; sizeBytes: number }[]
   sizeBytes: number
   durationSec: number
+  /** Only what changed since `parent` (another backup ID); it needs that backup to restore. */
+  incremental?: boolean
+  parent?: string
 }
 
 export interface ScheduleInfo {
@@ -454,6 +457,8 @@ export interface ScheduleInfo {
   keepWeekly?: number
   keepMonthly?: number
   keepYearly?: number
+  /** Backups: 0 = always full; n > 1 = incremental with a full backup every n. */
+  fullEvery?: number
   lastRun?: string
   lastError?: string
   lastResult?: string
@@ -1433,7 +1438,7 @@ export const api = {
 
   backups: async (domain?: string, host?: string) =>
     request<{ backups: BackupInfo[]; dir: string }>('GET', at(host, `/api/v1/backups${domain ? `?domain=${enc(domain)}` : ''}`)),
-  backupNow: (uuid: string) => request<Job>('POST', `${domainPath(uuid)}/backup`),
+  backupNow: (uuid: string, incremental = false) => request<Job>('POST', `${domainPath(uuid)}/backup`, { incremental }),
   deleteBackup: (id: string, host?: string) => request<void>('DELETE', at(host, `/api/v1/backups?id=${enc(id)}`)),
   restoreBackup: (id: string, name: string, pool: string, host?: string) =>
     request<Job>('POST', at(host, '/api/v1/backups/restore'), { id, name, pool }),

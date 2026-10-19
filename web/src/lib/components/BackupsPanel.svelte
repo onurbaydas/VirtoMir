@@ -14,6 +14,7 @@
   let backups = $state<BackupInfo[] | null>(null)
   let dir = $state('')
   let error = $state('')
+  let incremental = $state(true)
 
   async function load() {
     try {
@@ -31,7 +32,7 @@
 
   async function backupNow() {
     try {
-      const job = await api.backupNow(uuid)
+      const job = await api.backupNow(uuid, incremental)
       track(job, { success: `${name} backed up`, onSuccess: () => void load() })
     } catch (e) {
       toasts.push({ kind: 'error', title: t('Backup not started'), detail: errorText(e) })
@@ -50,9 +51,14 @@
         {active ? 'Backing up a running machine does not stop it.' : t('The machine is off: its disks are copied as they are.')}
       </p>
     </div>
-    <button class="ui-btn primary" disabled={!session.can('operator')} title={session.why('operator')} onclick={backupNow}>
-      <Archive size={15} /> {t('Back up now')}
-    </button>
+    <div class="now">
+      <button class="ui-btn primary" disabled={!session.can('operator')} title={session.why('operator')} onclick={backupNow}>
+        <Archive size={15} /> {t('Back up now')}
+      </button>
+      <label class="ui-switch" title={t('A running machine with qcow2 disks copies only what changed since its previous backup; otherwise the backup is full.')}>
+        <input type="checkbox" bind:checked={incremental} /> {t('Only what changed')}
+      </label>
+    </div>
   </header>
   {#if error}
     <div class="ui-error-box">{error}</div>
@@ -84,6 +90,12 @@
     margin: 0 0 4px;
     font-size: 14.5px;
     font-weight: 600;
+  }
+  .now {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
   }
   .muted {
     margin: 0;
