@@ -101,6 +101,38 @@ type Device struct {
 	Target string      `json:"target,omitempty"`
 	MAC    string      `json:"mac,omitempty"`
 	IoTune *DiskIoTune `json:"iotune,omitempty"`
+	// Bandwidth: an adapter's traffic limits, if any.
+	Bandwidth *NICBandwidth `json:"bandwidth,omitempty"`
+}
+
+// NICBandwidth limits an adapter's average traffic in Mbit/s (0 = no limit). In is traffic
+// into the machine, Out traffic it sends (libvirt <bandwidth> inbound/outbound).
+type NICBandwidth struct {
+	InMbps  uint `json:"inMbps"`
+	OutMbps uint `json:"outMbps"`
+}
+
+// libvirt's bandwidth unit is kilobytes (1024 bytes) per second: 1 Mbit/s ≈ 122 of them.
+const bitsPerMbit = 1_000_000
+
+func mbpsToKiBps(mbps uint) int { return int(uint64(mbps) * bitsPerMbit / 8 / 1024) }
+func kibpsToMbps(k int) uint    { return uint((uint64(k)*1024*8 + bitsPerMbit/2) / bitsPerMbit) }
+
+func bandwidthFromXML(b *libvirtxml.DomainInterfaceBandwidth) *NICBandwidth {
+	if b == nil {
+		return nil
+	}
+	var n NICBandwidth
+	if b.Inbound != nil && b.Inbound.Average != nil {
+		n.InMbps = kibpsToMbps(*b.Inbound.Average)
+	}
+	if b.Outbound != nil && b.Outbound.Average != nil {
+		n.OutMbps = kibpsToMbps(*b.Outbound.Average)
+	}
+	if n == (NICBandwidth{}) {
+		return nil
+	}
+	return &n
 }
 
 // DiskIoTune holds I/O QoS throughput and IOPS limits (QEMU iotune).
@@ -581,6 +613,14 @@ func interfaceDevice(v libvirtxml.DomainInterface) Device {
 	}
 	if v.FilterRef != nil {
 		dev.Props = append(dev.Props, props(Prop{"Network filter", v.FilterRef.Filter, "filterref@filter"})...)
+	}
+	if dev.Bandwidth = bandwidthFromXML(v.Bandwidth); dev.Bandwidth != nil {
+		if b := dev.Bandwidth.InMbps; b > 0 {
+			dev.Props = append(dev.Props, Prop{"Limit into the machine", fmt.Sprintf("%d Mbit/s", b), "bandwidth/inbound@average"})
+		}
+		if b := dev.Bandwidth.OutMbps; b > 0 {
+			dev.Props = append(dev.Props, Prop{"Limit out of the machine", fmt.Sprintf("%d Mbit/s", b), "bandwidth/outbound@average"})
+		}
 	}
 	if v.Boot != nil {
 		dev.Boot = v.Boot.Order

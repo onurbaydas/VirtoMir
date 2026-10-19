@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | 'resize' | 'diskmove' | 'qos' | 'template' | 'move' | 'hostdev' | null
+  export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | 'resize' | 'diskmove' | 'qos' | 'bandwidth' | 'template' | 'move' | 'hostdev' | null
 </script>
 
 
@@ -49,6 +49,8 @@
   let nicVlan = $state<number | null>(null)
   let bridge = $state('br0')
   let growGiB = $state(0)
+  let bwIn = $state(0)
+  let bwOut = $state(0)
   let qosTotalIops = $state(0)
   let qosReadIops = $state(0)
   let qosWriteIops = $state(0)
@@ -80,6 +82,10 @@
       qosTotalMbps = drive?.iotune?.totalBytesSec ? Math.round(drive.iotune.totalBytesSec / (1024 * 1024)) : 0
       qosReadMbps = drive?.iotune?.readBytesSec ? Math.round(drive.iotune.readBytesSec / (1024 * 1024)) : 0
       qosWriteMbps = drive?.iotune?.writeBytesSec ? Math.round(drive.iotune.writeBytesSec / (1024 * 1024)) : 0
+    }
+    if (which === 'bandwidth') {
+      bwIn = drive?.bandwidth?.inMbps ?? 0
+      bwOut = drive?.bandwidth?.outMbps ?? 0
     }
     if (which === 'diskmove') {
       void activePools()
@@ -259,6 +265,15 @@
       if (!drive?.target) return
       await api.changeMedia(detail.uuid, drive.target, source)
       toasts.push({ kind: 'info', title: source ? `Inserted ${source.split('/').pop()}` : `Ejected ${drive.title}` })
+      onchange()
+      onclose()
+    })
+
+  const saveBandwidth = () =>
+    run(async () => {
+      if (!drive?.mac) return
+      await api.setInterfaceBandwidth(detail.uuid, drive.mac, { inMbps: bwIn || 0, outMbps: bwOut || 0 })
+      toasts.push({ kind: 'info', title: t('Adapter limits saved') })
       onchange()
       onclose()
     })
@@ -597,6 +612,27 @@
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
     <button class="ui-btn primary" form="grow" disabled={busy || growGiB <= currentGiB}>{busy ? 'Growing…' : t('Grow disk')}</button>
+  {/snippet}
+</Dialog>
+
+<Dialog open={which === 'bandwidth'} title={t('Traffic limits: {v}', { v: drive?.mac ?? '' })} subtitle={drive?.summary} {onclose}>
+  <form id="bandwidth" class="form" onsubmit={(e) => (e.preventDefault(), saveBandwidth())}>
+    <div class="row">
+      <label class="ui-field">
+        <span class="label">{t('Into the machine (Mbit/s)')}</span>
+        <input class="ui-input" type="number" min="0" max="400000" bind:value={bwIn} placeholder="0" />
+      </label>
+      <label class="ui-field">
+        <span class="label">{t('Out of the machine (Mbit/s)')}</span>
+        <input class="ui-input" type="number" min="0" max="400000" bind:value={bwOut} placeholder="0" />
+      </label>
+    </div>
+    <span class="hint">{t('Average rate the adapter may use; 0 = no limit.')} {active ? t('Applied at once and kept for the next start.') : ''}</span>
+    {#if error}<div class="ui-error-box">{error}</div>{/if}
+  </form>
+  {#snippet footer()}
+    <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
+    <button class="ui-btn primary" form="bandwidth" disabled={busy}>{t('Save limits')}</button>
   {/snippet}
 </Dialog>
 

@@ -437,6 +437,34 @@ func orDefault(s, def string) string {
 	return s
 }
 
+// maxMbps keeps a typo from becoming a meaningless limit (400 Gbit/s).
+const maxMbps = 400_000
+
+// SetInterfaceBandwidth limits an adapter's average traffic, live and in the definition;
+// 0 removes a limit.
+func (c *Client) SetInterfaceBandwidth(uuid, mac string, bw NICBandwidth) error {
+	if bw.InMbps > maxMbps || bw.OutMbps > maxMbps {
+		return invalidf("A limit is at most %d Mbit/s.", maxMbps)
+	}
+	l, d, err := c.lookup(uuid)
+	if err != nil {
+		return err
+	}
+	flags, on, err := c.deviceFlags(l, d)
+	if err != nil {
+		return err
+	}
+	params := []libvirt.TypedParam{
+		{Field: "inbound.average", Value: *libvirt.NewTypedParamValueUint(uint32(mbpsToKiBps(bw.InMbps)))},
+		{Field: "outbound.average", Value: *libvirt.NewTypedParamValueUint(uint32(mbpsToKiBps(bw.OutMbps)))},
+	}
+	if err := l.DomainSetInterfaceParameters(d, strings.ToLower(mac), params, flags); err != nil {
+		return classify(err)
+	}
+	c.log.Info("adapter bandwidth updated", "domain", d.Name, "mac", mac, "inMbps", bw.InMbps, "outMbps", bw.OutMbps, "live", on)
+	return nil
+}
+
 // SetDiskQoS updates the I/O limits of a VM disk (QEMU iotune) both live and in the configuration.
 func (c *Client) SetDiskQoS(uuid, target string, qos DiskIoTune) error {
 	l, d, err := c.lookup(uuid)

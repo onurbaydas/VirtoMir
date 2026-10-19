@@ -674,6 +674,8 @@ function domainRoute(host: w.DemoHost, method: string, rest: string[], q: URLSea
     case method === 'POST' && rest[1] === 'disks' && rest[3] === 'resize':
       m.diskGiB = body?.sizeGiB ?? m.diskGiB
       return none()
+    case method === 'PUT' && rest[1] === 'interfaces' && rest[3] === 'bandwidth':
+      return none()
     case method === 'POST' && rest[1] === 'disks' && rest[3] === 'move':
       return json(job('disk-move', `Move ${rest[2]} to ${body?.pool ?? 'another pool'}`, 3000))
   }

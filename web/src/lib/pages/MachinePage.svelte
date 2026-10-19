@@ -539,6 +539,9 @@
                       <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'diskmove'))}><ArrowRightLeft size={14} /> {t('Move…')}</button>
                       <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'qos'))}><Gauge size={14} /> {t('QoS Limits…')}</button>
                     {/if}
+                    {#if d.kind === 'interface' && d.mac}
+                      <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'bandwidth'))}><Gauge size={14} /> {t('Limits…')}</button>
+                    {/if}
 
                     {#if d.kind === 'video'}
                       <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((addKind = 'video'), (addOpen = true))}><Pencil size={14} /> {t('Change…')}</button>

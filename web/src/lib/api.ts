@@ -107,6 +107,13 @@ export interface Device {
   target?: string
   mac?: string
   iotune?: DiskIoTune
+  /** Adapter: average traffic limits in Mbit/s (0 = none). */
+  bandwidth?: NICBandwidth
+}
+
+export interface NICBandwidth {
+  inMbps: number
+  outMbps: number
 }
 
 export interface DiskIoTune {
@@ -1512,6 +1519,8 @@ export const api = {
   saveSettings: (uuid: string, s: Settings) => request<SaveResult>('PUT', `${domainPath(uuid)}/settings`, s),
   resizeDisk: (uuid: string, target: string, sizeGiB: number) =>
     request<void>('POST', `${domainPath(uuid)}/disks/${enc(target)}/resize`, { sizeGiB }),
+  setInterfaceBandwidth: (uuid: string, mac: string, bw: NICBandwidth) =>
+    request<void>('PUT', `${domainPath(uuid)}/interfaces/${enc(mac)}/bandwidth`, bw),
   /** Moves a disk into another pool of the same host; a running machine keeps running. */
   moveDisk: (uuid: string, target: string, pool: string) =>
     request<Job>('POST', `${domainPath(uuid)}/disks/${enc(target)}/move`, { pool }),

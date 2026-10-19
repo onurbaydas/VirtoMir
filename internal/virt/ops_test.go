@@ -236,6 +236,26 @@ func TestSnapshotDoc(t *testing.T) {
 	}
 }
 
+func TestInterfaceBandwidth(t *testing.T) {
+	in, out := mbpsToKiBps(100), mbpsToKiBps(1000)
+	dev := interfaceDevice(libvirtxml.DomainInterface{
+		MAC: &libvirtxml.DomainInterfaceMAC{Address: "52:54:00:AA:BB:CC"},
+		Bandwidth: &libvirtxml.DomainInterfaceBandwidth{
+			Inbound:  &libvirtxml.DomainInterfaceBandwidthParams{Average: &in},
+			Outbound: &libvirtxml.DomainInterfaceBandwidthParams{Average: &out},
+		},
+	})
+	if dev.Bandwidth == nil || dev.Bandwidth.InMbps != 100 || dev.Bandwidth.OutMbps != 1000 {
+		t.Fatalf("bandwidth = %+v (in %d, out %d KiB/s)", dev.Bandwidth, in, out)
+	}
+	if !slices.ContainsFunc(dev.Props, func(p Prop) bool { return p.Value == "100 Mbit/s" }) {
+		t.Errorf("props = %+v", dev.Props)
+	}
+	if none := interfaceDevice(libvirtxml.DomainInterface{}); none.Bandwidth != nil {
+		t.Errorf("no limits = %+v", none.Bandwidth)
+	}
+}
+
 func TestSetDiskImage(t *testing.T) {
 	block := libvirtxml.DomainDisk{
 		Driver:       &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "raw", Cache: "none"},
