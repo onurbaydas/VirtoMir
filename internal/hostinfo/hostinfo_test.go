@@ -2,8 +2,10 @@ package hostinfo
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -219,5 +221,77 @@ func TestValidInterface(t *testing.T) {
 		if got := r.ValidInterface(name); got != want {
 			t.Errorf("ValidInterface(%q) = %v, want %v", name, got, want)
 		}
+	}
+}
+
+// D14: MIG profiles from "nvidia-smi mig -lgip", vGPU types from sysfs, passthrough readiness.
+func TestGPUsNvidiaMIG(t *testing.T) {
+	root := tree(t, map[string]string{
+		"sys/bus/pci/devices/0000:41:00.0/class":                                               "0x030200",
+		"sys/bus/pci/devices/0000:41:00.0/vendor":                                              "0x10de",
+		"sys/bus/pci/devices/0000:41:00.0/device":                                              "0x20b0",
+		"sys/bus/pci/devices/0000:81:00.0/class":                                               "0x030000",
+		"sys/bus/pci/devices/0000:81:00.0/vendor":                                              "0x10de",
+		"sys/bus/pci/devices/0000:81:00.0/device":                                              "0x1eb8",
+		"sys/bus/pci/devices/0000:81:00.0/mdev_supported_types/nvidia-222/name":                "GRID T4-2Q",
+		"sys/bus/pci/devices/0000:81:00.0/mdev_supported_types/nvidia-222/device_api":          "vfio-pci",
+		"sys/bus/pci/devices/0000:81:00.0/mdev_supported_types/nvidia-222/available_instances": "8",
+		"sys/bus/pci/devices/0000:00:02.0/class":                                               "0x030000",
+		"sys/bus/pci/devices/0000:00:02.0/vendor":                                              "0x8086",
+		"sys/bus/pci/devices/0000:00:02.0/device":                                              "0x46a6",
+	})
+	for _, d := range []string{"sys/bus/pci/drivers/nvidia", "sys/kernel/iommu_groups/12"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, a := range []string{"0000:41:00.0", "0000:81:00.0"} {
+		symlink(t, filepath.Join(root, "sys/bus/pci/drivers/nvidia"), filepath.Join(root, "sys/bus/pci/devices", a, "driver"))
+	}
+	symlink(t, filepath.Join(root, "sys/kernel/iommu_groups/12"), filepath.Join(root, "sys/bus/pci/devices/0000:41:00.0/iommu_group"))
+
+	const lgip = `+-----------------------------------------------------------------------------+
+| GPU instance profiles:                                                      |
+| GPU   Name             ID    Instances   Memory     P2P    SM    DEC   ENC  |
+|                              Free/Total   GiB              CE    JPEG  OFA  |
+|=============================================================================|
+|   0  MIG 1g.5gb        19     5/7        4.75       No     14     0     0   |
+|                                                             1     0     0   |
++-----------------------------------------------------------------------------+
+|   0  MIG 3g.20gb        9     1/2        19.62      No     42     2     0   |
+|                                                             3     0     0   |
++-----------------------------------------------------------------------------+
+|   1  MIG 1g.5gb        19     7/7        4.75       No     14     0     0   |
++-----------------------------------------------------------------------------+
+`
+	r := &Reader{Root: root, Command: func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "mig" {
+			return []byte(lgip), nil
+		}
+		return []byte("00000000:41:00.0, NVIDIA A100-PCIE-40GB, 0, 40960, 0, 31, 35.0, 250.00, Enabled, 0\n" +
+			"00000000:81:00.0, Tesla T4, 0, 15360, 0, 30, 20.0, 70.00, [N/A], 1\n"), nil
+	}}
+	gpus := r.GPUs(context.Background())
+	if len(gpus) != 3 {
+		t.Fatalf("gpus = %+v", gpus)
+	}
+	intel, a100, t4 := gpus[0], gpus[1], gpus[2]
+	if intel.Profile != "whole" || intel.PassThroughReady || intel.MIGProfiles != nil {
+		t.Errorf("intel = %+v", intel)
+	}
+	want := []MIGProfile{
+		{ID: "1g.5gb", Name: "MIG 1g.5gb", GIProfileID: 19, MemoryMiB: 4864, Count: 7, Free: 5},
+		{ID: "3g.20gb", Name: "MIG 3g.20gb", GIProfileID: 9, MemoryMiB: 20090, Count: 2, Free: 1},
+	}
+	if a100.Profile != "mig" || !a100.PassThroughReady || !reflect.DeepEqual(a100.MIGProfiles, want) {
+		t.Errorf("a100 = %+v profiles %+v", a100, a100.MIGProfiles)
+	}
+	if t4.Profile != "mdev" || t4.PassThroughReady || t4.MIGProfiles != nil ||
+		!reflect.DeepEqual(t4.MDevTypes, []MDevTypeInfo{{ID: "nvidia-222", Name: "GRID T4-2Q", API: "vfio-pci", Available: 8}}) {
+		t.Errorf("t4 (not in MIG mode, the index-1 row must not attach) = %+v", t4)
+	}
+	raw, _ := json.Marshal(intel)
+	if strings.Contains(string(raw), "migProfiles") || strings.Contains(string(raw), "index") {
+		t.Errorf("JSON of a plain card: %s", raw)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,6 +31,37 @@ type GPU struct {
 	PowerLimitW *float64 `json:"powerLimitW,omitempty"`
 	// MIG is "enabled"/"disabled" on NVIDIA cards that support Multi-Instance GPU.
 	MIG string `json:"mig,omitempty"`
+	// Profile is how the card can be handed to machines (D14, ADR-0071): "whole" (PCI
+	// passthrough), "mdev" (vGPU slices) or "mig" (NVIDIA MIG instances).
+	Profile string `json:"profile,omitempty"`
+	// PassThroughReady: the card sits in an IOMMU group, so it can be passed through.
+	PassThroughReady bool `json:"passThroughReady"`
+	// MDevTypes are the vGPU slices the card offers (sysfs mdev_supported_types).
+	MDevTypes []MDevTypeInfo `json:"mdevTypes,omitempty"`
+	// MIGProfiles are the MIG GPU-instance profiles, when MIG is enabled.
+	MIGProfiles []MIGProfile `json:"migProfiles,omitempty"`
+	// UsedBy are the machines that hold the card (filled in by the API from libvirt).
+	UsedBy []string `json:"usedBy,omitempty"`
+
+	index string // nvidia-smi's GPU index, to match its MIG listing
+}
+
+// MDevTypeInfo is a vGPU slice type a card offers.
+type MDevTypeInfo struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	API       string `json:"api"`
+	Available uint   `json:"available"`
+}
+
+// MIGProfile is an NVIDIA MIG GPU-instance profile with how many more fit.
+type MIGProfile struct {
+	ID          string `json:"id"` // 1g.10gb, 3g.40gb, …
+	Name        string `json:"name"`
+	GIProfileID int    `json:"giProfileId,omitempty"`
+	MemoryMiB   uint64 `json:"memoryMiB,omitempty"`
+	Count       int    `json:"count"`
+	Free        int    `json:"free"`
 }
 
 var gpuVendors = map[string]string{"0x10de": "NVIDIA", "0x1002": "AMD", "0x8086": "Intel", "0x1af4": "Virtio", "0x1234": "QEMU",
@@ -57,9 +89,40 @@ func (r *Reader) GPUs(ctx context.Context) []GPU {
 		if g.Driver == "amdgpu" {
 			r.amdgpu(rel, &g)
 		}
+		if _, err := os.Stat(filepath.Join(d, "iommu_group")); err == nil {
+			g.PassThroughReady = true
+		}
+		g.MDevTypes = r.mdevTypes(rel)
 		out = append(out, g)
 	}
 	r.nvidia(ctx, out)
+	r.nvidiaMIG(ctx, out)
+	for i := range out {
+		switch g := &out[i]; {
+		case len(g.MIGProfiles) > 0:
+			g.Profile = "mig"
+		case len(g.MDevTypes) > 0:
+			g.Profile = "mdev"
+		default:
+			g.Profile = "whole"
+		}
+	}
+	return out
+}
+
+// mdevTypes reads the vGPU slice types a card offers.
+func (r *Reader) mdevTypes(rel string) []MDevTypeInfo {
+	dirs, _ := filepath.Glob(r.path(rel + "/mdev_supported_types/*"))
+	sort.Strings(dirs)
+	var out []MDevTypeInfo
+	for _, d := range dirs {
+		t := rel + "/mdev_supported_types/" + filepath.Base(d)
+		m := MDevTypeInfo{ID: filepath.Base(d), Name: r.read(t + "/name"), API: r.read(t + "/device_api")}
+		if v, ok := r.readInt(t + "/available_instances"); ok && v > 0 {
+			m.Available = uint(v)
+		}
+		out = append(out, m)
+	}
 	return out
 }
 
@@ -93,7 +156,7 @@ func (r *Reader) amdgpu(rel string, g *GPU) {
 }
 
 // nvidiaQuery is what nvidia-smi is asked for, in this order.
-const nvidiaQuery = "pci.bus_id,name,utilization.gpu,memory.total,memory.used,temperature.gpu,power.draw,power.limit,mig.mode.current"
+const nvidiaQuery = "pci.bus_id,name,utilization.gpu,memory.total,memory.used,temperature.gpu,power.draw,power.limit,mig.mode.current,index"
 
 // nvidia fills in NVIDIA cards from nvidia-smi (only present with the proprietary driver,
 // i.e. not for cards bound to vfio-pci for passthrough).
@@ -134,7 +197,51 @@ func (r *Reader) nvidia(ctx context.Context, gpus []GPU) {
 			if m := strings.ToLower(row[8]); m == "enabled" || m == "disabled" {
 				g.MIG = m
 			}
+			if len(row) > 9 {
+				g.index = row[9]
+			}
 		}
+	}
+}
+
+// migProfileRow is a row of "nvidia-smi mig -lgip":
+// |   0  MIG 1g.10gb       19     7/7        9.50       No     14     0     0   |
+var migProfileRow = regexp.MustCompile(`^\|\s*(\d+)\s+MIG\s+(\S+)\s+(\d+)\s+(\d+)/(\d+)\s+([\d.]+)\s`)
+
+// nvidiaMIG lists the MIG profiles of the cards in MIG mode. nvidia-smi's XML report has
+// the instances that exist but not how many more of each profile fit; "mig -lgip" has.
+// Experimental: not tested on hardware (parsed from captured output).
+func (r *Reader) nvidiaMIG(ctx context.Context, gpus []GPU) {
+	byIndex := map[string]*GPU{}
+	for i := range gpus {
+		if g := &gpus[i]; g.Driver == "nvidia" && g.MIG == "enabled" && g.index != "" {
+			byIndex[g.index] = g
+		}
+	}
+	if len(byIndex) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := r.run(ctx, "nvidia-smi", "mig", "-lgip")
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		m := migProfileRow.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		g := byIndex[m[1]]
+		if g == nil {
+			continue
+		}
+		id, _ := strconv.Atoi(m[3])
+		free, _ := strconv.Atoi(m[4])
+		total, _ := strconv.Atoi(m[5])
+		gib, _ := strconv.ParseFloat(m[6], 64)
+		g.MIGProfiles = append(g.MIGProfiles, MIGProfile{ID: m[2], Name: "MIG " + m[2], GIProfileID: id,
+			MemoryMiB: uint64(gib * 1024), Count: total, Free: free})
 	}
 }
 
