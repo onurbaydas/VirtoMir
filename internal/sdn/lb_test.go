@@ -64,6 +64,12 @@ func TestLoadBalancerStore(t *testing.T) {
 			t.Errorf("%s accepted: %v", name, err)
 		}
 	}
+	// Without attachments it serves the whole VPC.
+	all, err := s.CreateLoadBalancer(LoadBalancer{VPCID: "prod", Name: "all", VIP: "10.0.1.101", Port: 80, Members: []string{"10.0.1.11:80"}})
+	if err != nil || !slices.Equal(all.AttachedSwitches, []string{"ls-prod-web"}) || !slices.Equal(all.AttachedRouters, []string{"lr-prod"}) {
+		t.Errorf("default attachments %+v %v", all, err)
+	}
+	_ = s.DeleteLoadBalancer(all.ID)
 	lb.Members = append(lb.Members, "10.0.1.12:8080")
 	if got, err := s.UpdateLoadBalancer(lb); err != nil || len(got.Members) != 2 {
 		t.Errorf("update %+v %v", got, err)

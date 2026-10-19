@@ -79,6 +79,17 @@ func validateLB(st *state, lb LoadBalancer) (LoadBalancer, error) {
 			}
 		}
 	}
+	// Without attachments OVN never sees the VIP: by default the load balancer serves the
+	// whole VPC, on every subnet's switch and its router.
+	if len(lb.AttachedSwitches) == 0 && len(lb.AttachedRouters) == 0 {
+		lb.AttachedSwitches = []string{}
+		for _, s := range sortedValues(st.Subnets, func(s Subnet) string { return s.ID }) {
+			if s.VPCID == lb.VPCID {
+				lb.AttachedSwitches = append(lb.AttachedSwitches, s.LogicalSwitch)
+			}
+		}
+		lb.AttachedRouters = []string{routerName(lb.VPCID)}
+	}
 	if lb.AttachedSwitches == nil {
 		lb.AttachedSwitches = []string{}
 	}
