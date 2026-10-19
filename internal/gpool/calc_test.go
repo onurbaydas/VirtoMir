@@ -22,9 +22,9 @@ func host() HostHardware {
 			{Address: "0000:90:00.0", Product: "Not a GPU"},
 		},
 		MDevs: []virt.HostMDev{
-			{Parent: "0000:81:00.0", Type: "nvidia-222", UsedBy: []string{"vdi-01"}},
-			{Parent: "0000:81:00.0", Type: "nvidia-222"},
-			{Parent: "0000:81:00.0", Type: "nvidia-223"},
+			{UUID: "m-used", Parent: "0000:81:00.0", Type: "nvidia-222", UsedBy: []string{"vdi-01"}},
+			{UUID: "m-free", Parent: "0000:81:00.0", Type: "nvidia-222"},
+			{UUID: "m-other", Parent: "0000:81:00.0", Type: "nvidia-223"},
 		},
 	}
 }

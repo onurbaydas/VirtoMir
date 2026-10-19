@@ -69,6 +69,8 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 		virt.CreateSpec
 		// Project is the multi-tenancy project the machine belongs to (ADR-0060); empty = global.
 		Project string `json:"project,omitempty"`
+		// GPU asks for GPUs of a GPU pool (ADR-0071).
+		GPU *GPURequest `json:"gpu,omitempty"`
 	}
 	if !s.decode(w, r, &spec) {
 		return
@@ -94,9 +96,17 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 	if spec.Network != nil {
 		networks = []string{spec.Network.Network}
 	}
-	if !s.checkProject(w, id.Name, id.Role, spec.Project, project.Usage{
+	demand := project.Usage{
 		Machines: 1, VCPUs: max(spec.VCPUs, 1), MemoryMiB: int64(max(spec.MemoryMiB, 1024)), DiskGiB: int64(newDisk),
-	}, pool, networks) {
+	}
+	if spec.GPU != nil {
+		if spec.GPU.Count < 1 || spec.Kind == "container" {
+			s.writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "a machine asks for one GPU or more (containers get none)"})
+			return
+		}
+		demand.GPUs = map[string]int{spec.GPU.Pool: spec.GPU.Count}
+	}
+	if !s.checkProject(w, id.Name, id.Role, spec.Project, demand, pool, networks) {
 		return
 	}
 	// ?respool=<id>: the machine goes into that resource pool if it fits its limits.
@@ -112,10 +122,18 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 		s.createContainer(w, r, spec.CreateSpec, rp, spec.Project)
 		return
 	}
-	res, err := s.backend.CreateDomain(spec.CreateSpec)
-	if err != nil {
-		s.writeError(w, err)
-		return
+	var res virt.CreateResult
+	if spec.GPU != nil {
+		var ok bool
+		if res, ok = s.createWithGPUs(w, r, spec.CreateSpec, *spec.GPU); !ok {
+			return
+		}
+	} else {
+		var err error
+		if res, err = s.backend.CreateDomain(spec.CreateSpec); err != nil {
+			s.writeError(w, err)
+			return
+		}
 	}
 	s.recordOwner(r, res.UUID)
 	s.recordProject(res.UUID, spec.Project)

@@ -81,6 +81,9 @@ func (s *Server) moveDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	id := identity(r)
 	uuid := r.PathValue("uuid")
+	if s.gpuMoveRefused(w, uuid) {
+		return
+	}
 
 	if s.placement != nil {
 		rules := s.placement.Rules()

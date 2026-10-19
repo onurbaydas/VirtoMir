@@ -23,6 +23,7 @@ func (s *Server) gpoolRoutes(mux *routeMux) {
 	mux.HandleFunc("PUT /api/v1/gpu/pools/{id}", s.updateGPUPool)
 	mux.HandleFunc("DELETE /api/v1/gpu/pools/{id}", s.deleteGPUPool)
 	mux.HandleFunc("GET /api/v1/gpu/pools/{id}/availability", s.gpuPoolAvailability)
+	mux.HandleFunc("POST /api/v1/gpu/placement", s.gpuPlacement)
 }
 
 func (s *Server) noGPools(w http.ResponseWriter) bool {
