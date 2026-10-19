@@ -150,20 +150,33 @@ func (f *Fencer) ipmi(ctx context.Context, a FenceAgent, action FenceAction) (st
 // waitOff polls the power state for up to a minute (BMCs report "off" a little later).
 func (f *Fencer) waitOff(ctx context.Context, status func() (string, error)) (string, error) {
 	deadline := time.Now().Add(time.Minute)
+	var last string
+	var lastErr error
+	answered := false
 	for {
 		p, err := status()
 		if err == nil && p == "off" {
 			return p, nil
 		}
+		if ctx.Err() == nil { // an answer of the BMC, not a call cut short
+			last, lastErr, answered = p, err, true
+		}
 		if time.Now().After(deadline) {
-			if err != nil {
-				return "", err
+			if lastErr != nil {
+				return "", lastErr
 			}
-			return p, nil
+			return last, nil
 		}
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			// Say what the BMC last answered: that is why the host counts as not fenced.
+			switch {
+			case !answered:
+				return "", fmt.Errorf("%w; the BMC did not answer", ctx.Err())
+			case lastErr != nil:
+				return "", fmt.Errorf("%w; the BMC last answered: %v", ctx.Err(), lastErr)
+			}
+			return "", fmt.Errorf("%w; the BMC still reports the power %q", ctx.Err(), last)
 		case <-time.After(f.Poll):
 		}
 	}
