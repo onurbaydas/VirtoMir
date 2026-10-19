@@ -347,6 +347,15 @@ func auditVerificationSchema() map[string]any {
 // openAPI builds an OpenAPI 3.1 document of the registered routes: path, method, parameters,
 // the role each needs and how to authenticate. Bodies are JSON unless noted; the types are
 // the ones in web/src/lib/api.ts.
+// responseSchemas are the success answers the document describes; openapi_test.go checks
+// the server's real answers against them, without fields they do not model (#15).
+var responseSchemas = map[string]any{
+	"GET /api/v1/projects": map[string]any{"type": "object", "properties": map[string]any{
+		"projects": map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/Project"}},
+	}},
+	"GET /api/v1/projects/{id}": map[string]any{"$ref": "#/components/schemas/Project"},
+}
+
 func (s *Server) openAPI(routes []route) map[string]any {
 	sorted := append([]route(nil), routes...)
 	sort.SliceStable(sorted, func(i, j int) bool {
@@ -371,6 +380,11 @@ func (s *Server) openAPI(routes []route) map[string]any {
 					"application/json": map[string]any{"schema": map[string]any{"$ref": "#/components/schemas/Error"}},
 				}},
 			},
+		}
+		if sch, ok := responseSchemas[r.method+" "+p]; ok {
+			op["responses"].(map[string]any)["2XX"] = map[string]any{"description": "success", "content": map[string]any{
+				"application/json": map[string]any{"schema": sch},
+			}}
 		}
 		tags[tagOf(r.path)] = true
 		if sum := sentence(r.handler); sum != "" {
