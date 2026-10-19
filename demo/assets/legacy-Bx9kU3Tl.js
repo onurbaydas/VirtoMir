@@ -1,0 +1,1 @@
+import{yt as e}from"./i18n.svelte-9Sv45Gw5.js";e();
