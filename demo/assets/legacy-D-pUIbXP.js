@@ -1,0 +1,1 @@
+import{yt as e}from"./i18n.svelte--GDSioCm.js";e();
