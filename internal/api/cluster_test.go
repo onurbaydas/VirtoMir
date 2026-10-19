@@ -517,3 +517,24 @@ func TestProjectChangesReachEveryMember(t *testing.T) {
 		t.Error("beta still has the project")
 	}
 }
+
+// #37: a rule made while a member was down reaches it with the next member sync.
+func TestSyncMembersCatchesUpPlacement(t *testing.T) {
+	a := newTestNode(t, "alpha", nil)
+	b := newTestNode(t, "beta", nil)
+	joinNodes(t, a, b)
+	// Straight into alpha's store: beta never got a copy, as if it had been down.
+	if _, err := a.placement.AddRule(placement.Rule{Name: "apart", Kind: placement.VMAntiAffinity, Domains: []string{"db1", "db2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(b.placement.Rules()) != 0 {
+		t.Fatal("beta has the rule already")
+	}
+	b.api.SyncMembers(t.Context())
+	if r := b.placement.Rules(); len(r) != 1 || r[0].Name != "apart" {
+		t.Fatalf("beta rules after sync = %+v", r)
+	}
+	if b.placement.Shared().Version != a.placement.Shared().Version {
+		t.Error("versions differ after sync")
+	}
+}

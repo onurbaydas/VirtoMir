@@ -559,3 +559,25 @@ func TestPlacementPicksTheLeastLoadedHostWithRoom(t *testing.T) {
 		t.Error("placed a machine no host has room for")
 	}
 }
+
+// #37: DRS settings are versioned; a member catches up with a newer version only.
+func TestConfigVersionAdopt(t *testing.T) {
+	a, _ := New(t.TempDir())
+	b, _ := New(t.TempDir())
+	if err := a.SetConfig(Config{Enabled: true, Mode: ModeFullyAutomated, ThresholdStdDev: 10}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := a.GetConfig()
+	if cfg.Version != 1 {
+		t.Fatalf("version = %d", cfg.Version)
+	}
+	if ok, err := b.Adopt(cfg); !ok || err != nil {
+		t.Fatalf("adopt: %v %v", ok, err)
+	}
+	if got := b.GetConfig(); got.Mode != ModeFullyAutomated || got.ThresholdStdDev != 10 || got.Version != 1 {
+		t.Errorf("adopted = %+v", got)
+	}
+	if ok, _ := b.Adopt(Config{Version: 1, Mode: ModeManual}); ok {
+		t.Error("the same version adopted again")
+	}
+}

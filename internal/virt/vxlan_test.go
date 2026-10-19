@@ -53,3 +53,20 @@ func TestVXLANNetworks(t *testing.T) {
 		t.Error("nil metadata")
 	}
 }
+
+func TestClusterVXLANMarker(t *testing.T) {
+	x, err := buildNetwork(NetworkSpec{Name: "ov", Mode: "vxlan", VNI: 7, Peers: []string{"10.0.0.2"}, Cluster: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := x.Marshal()
+	v, err := parseNetwork(doc)
+	if err != nil || !v.ClusterWide || v.VNI != 7 {
+		t.Fatalf("cluster overlay read back as %+v (%v)", v, err)
+	}
+	x, _ = buildNetwork(NetworkSpec{Name: "ov", Mode: "vxlan", VNI: 7, Peers: []string{"10.0.0.2"}})
+	doc, _ = x.Marshal()
+	if v, _ := parseNetwork(doc); v.ClusterWide {
+		t.Error("a hand-made overlay is not cluster-wide")
+	}
+}

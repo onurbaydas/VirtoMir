@@ -35,6 +35,8 @@ type VNetwork struct {
 	// VXLAN overlay: its VNI and the other hosts' addresses (ADR-0054).
 	VNI   uint     `json:"vni,omitempty"`
 	Peers []string `json:"peers,omitempty"`
+	// ClusterWide: a VXLAN overlay over the whole cluster, kept on every member (#37).
+	ClusterWide bool `json:"clusterWide,omitempty"`
 }
 
 func (c *Client) ListNetworks() ([]VNetwork, error) {
@@ -90,7 +92,7 @@ func parseNetwork(raw string) (VNetwork, error) {
 		v.Bridge = x.Bridge.Name
 	}
 	if vx, ok := parseVXLANMeta(x.Metadata); ok {
-		v.Mode, v.VNI, v.Peers = "vxlan", vx.VNI, vx.peers()
+		v.Mode, v.VNI, v.Peers, v.ClusterWide = "vxlan", vx.VNI, vx.peers(), vx.Cluster
 	}
 
 	if x.Domain != nil {
@@ -248,6 +250,9 @@ type NetworkSpec struct {
 	// the network is plain layer 2 here, served by the gateway elsewhere.
 	VNI   uint     `json:"vni,omitempty"`
 	Peers []string `json:"peers,omitempty"`
+	// Cluster marks an overlay over the whole cluster: members that join later get it too,
+	// and every member's peer list follows the member list.
+	Cluster bool `json:"cluster,omitempty"`
 }
 
 // buildNetwork turns a spec into network XML: gateway .1, DHCP .2 to the last usable address.

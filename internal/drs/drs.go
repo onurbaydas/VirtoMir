@@ -115,6 +115,8 @@ type Status struct {
 
 // Config stores persisted DRS configuration.
 type Config struct {
+	// Version counts the changes; across a cluster the newest version wins (#37).
+	Version         int            `json:"version"`
 	Enabled         bool           `json:"enabled"`
 	Mode            DRSMode        `json:"mode"`
 	ThresholdStdDev float64        `json:"thresholdStdDev"`
@@ -195,10 +197,39 @@ func (e *Engine) SetConfig(cfg Config) error {
 	if cfg.Mode != ModeManual && cfg.Mode != ModePartiallyAutomated && cfg.Mode != ModeFullyAutomated {
 		return invalidf("mode is manual, partially_automated or fully_automated")
 	}
+	prev := e.cfg
 	e.cfg.Enabled = cfg.Enabled
 	e.cfg.Mode = cfg.Mode
 	e.cfg.ThresholdStdDev = cfg.ThresholdStdDev
-	return e.saveLocked()
+	e.cfg.Version++
+	if err := e.saveLocked(); err != nil {
+		e.cfg = prev
+		return err
+	}
+	return nil
+}
+
+// Adopt takes the settings of another member if they are newer than these (a member that
+// was down when they changed catches up, #37). Rules live in the placement store.
+func (e *Engine) Adopt(cfg Config) (bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if cfg.Version <= e.cfg.Version {
+		return false, nil
+	}
+	if cfg.Mode != ModeManual && cfg.Mode != ModePartiallyAutomated && cfg.Mode != ModeFullyAutomated {
+		return false, invalidf("mode is manual, partially_automated or fully_automated")
+	}
+	prev := e.cfg
+	e.cfg.Version, e.cfg.Enabled, e.cfg.Mode, e.cfg.ThresholdStdDev = cfg.Version, cfg.Enabled, cfg.Mode, cfg.ThresholdStdDev
+	if e.cfg.ThresholdStdDev <= 0 {
+		e.cfg.ThresholdStdDev = 15.0
+	}
+	if err := e.saveLocked(); err != nil {
+		e.cfg = prev
+		return false, err
+	}
+	return true, nil
 }
 
 // ErrInvalid and ErrNotFound classify errors for the API (422 / 404).

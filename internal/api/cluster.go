@@ -33,6 +33,7 @@ func (s *Server) clusterRoutes(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/cluster/peer/join", s.peerJoin)
 	mux.HandleFunc("GET /api/v1/cluster/peer/members", s.peerMembers)
 	mux.HandleFunc("PUT /api/v1/cluster/peer/members", s.peerReplace)
+	mux.HandleFunc("GET /api/v1/cluster/peer/shared", s.peerShared)
 }
 
 func (s *Server) noCluster(w http.ResponseWriter) bool {
@@ -190,6 +191,7 @@ func (s *Server) createClusterNetwork(w http.ResponseWriter, r *http.Request) {
 // addresses as peers, and only this host gets the subnet, so the overlay has one gateway
 // and one DHCP server instead of one per host.
 func (s *Server) createClusterVXLAN(w http.ResponseWriter, r *http.Request, spec virt.NetworkSpec) {
+	spec.Cluster = true // members that join later get it too (syncOverlays)
 	members, _ := s.cluster.Members()
 	addr := map[string]string{}
 	for _, n := range members {
@@ -411,6 +413,10 @@ func (s *Server) SyncMembers(ctx context.Context) {
 	if peers > 0 && refused == peers {
 		s.log.Warn("no member accepts this host any more; leaving the cluster")
 		_ = s.cluster.Replace(nil, version+1)
+		return
+	}
+	if members, _ = s.cluster.Members(); len(members) > 1 {
+		s.syncShared(ctx, members)
 	}
 }
 

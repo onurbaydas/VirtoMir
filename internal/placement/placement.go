@@ -48,7 +48,7 @@ type Rule struct {
 	Kind     Kind     `json:"kind"`
 	Enabled  bool     `json:"enabled"`
 	Strength Strength `json:"strength"`
-	Domains  []string `json:"domains"`          // VM UUIDs
+	Domains  []string `json:"domains"`           // VM UUIDs
 	Hosts    []string `json:"hosts,omitempty"`   // for vm_host: cluster member IDs
 	Exclude  bool     `json:"exclude,omitempty"` // for vm_host: must/should NOT run on Hosts
 }
@@ -87,6 +87,8 @@ var (
 )
 
 type storeData struct {
+	// Version counts the changes; across a cluster the newest version wins (#37).
+	Version    int                          `json:"version,omitempty"`
 	Rules      []Rule                       `json:"rules"`
 	Labels     map[string]map[string]string `json:"labels,omitempty"`
 	HostLabels map[string]map[string]string `json:"hostLabels,omitempty"`
@@ -94,10 +96,11 @@ type storeData struct {
 
 // Store manages persisted placement rules and host labels.
 type Store struct {
-	path   string
-	mu     sync.RWMutex
-	rules  []Rule
-	labels map[string]map[string]string
+	path    string
+	mu      sync.RWMutex
+	version int
+	rules   []Rule
+	labels  map[string]map[string]string
 }
 
 // Open loads or initializes the placement store from the given JSON file path.
@@ -119,6 +122,7 @@ func Open(path string) (*Store, error) {
 		if err := json.Unmarshal(raw, &data); err != nil {
 			return nil, fmt.Errorf("read placement store: %w", err)
 		}
+		s.version = data.Version
 		if data.Rules != nil {
 			s.rules = data.Rules
 		}
@@ -199,8 +203,9 @@ func (s *Store) saveLocked() error {
 		return nil
 	}
 	data := storeData{
-		Rules:  s.rules,
-		Labels: s.labels,
+		Version: s.version,
+		Rules:   s.rules,
+		Labels:  s.labels,
 	}
 	b, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
@@ -282,8 +287,10 @@ func (s *Store) AddRule(rule Rule) (Rule, error) {
 		return rule, invalidf("placement conflict: %s", strings.Join(conflicts, "; "))
 	}
 
+	prev := s.rules
 	s.rules = candidateRules
-	if err := s.saveLocked(); err != nil {
+	if err := s.commitLocked(); err != nil {
+		s.rules = prev
 		return rule, err
 	}
 	return rule, nil
@@ -302,8 +309,13 @@ func (s *Store) DeleteRule(id string) error {
 	if idx < 0 {
 		return notFoundf("rule %q not found", id)
 	}
-	s.rules = slices.Delete(s.rules, idx, idx+1)
-	return s.saveLocked()
+	prev := s.rules
+	s.rules = slices.Delete(slices.Clone(s.rules), idx, idx+1)
+	if err := s.commitLocked(); err != nil {
+		s.rules = prev
+		return err
+	}
+	return nil
 }
 
 // SetLabels sets or updates the fault-domain labels for hostID.
@@ -326,12 +338,69 @@ func (s *Store) SetLabels(hostID string, labels map[string]string) error {
 		clean[k] = v
 	}
 
+	prev, had := s.labels[hostID]
 	if len(clean) == 0 {
 		delete(s.labels, hostID)
 	} else {
 		s.labels[hostID] = clean
 	}
-	return s.saveLocked()
+	if err := s.commitLocked(); err != nil {
+		if had {
+			s.labels[hostID] = prev
+		} else {
+			delete(s.labels, hostID)
+		}
+		return err
+	}
+	return nil
+}
+
+// commitLocked saves a change as a new version.
+func (s *Store) commitLocked() error {
+	s.version++
+	if err := s.saveLocked(); err != nil {
+		s.version--
+		return err
+	}
+	return nil
+}
+
+// Shared is what a cluster's members keep the same: the rules and host labels, versioned.
+type Shared struct {
+	Version int                          `json:"version"`
+	Rules   []Rule                       `json:"rules"`
+	Labels  map[string]map[string]string `json:"labels"`
+}
+
+// Shared returns the rules and labels with their version.
+func (s *Store) Shared() Shared {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	v := s.viewLocked()
+	return Shared{Version: s.version, Rules: v.Rules, Labels: v.Labels}
+}
+
+// Adopt takes the rules and labels of another member if they are newer than these
+// (a member that was down when they changed catches up, #37).
+func (s *Store) Adopt(sh Shared) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if sh.Version <= s.version {
+		return false, nil
+	}
+	prevV, prevR, prevL := s.version, s.rules, s.labels
+	s.version, s.rules, s.labels = sh.Version, slices.Clone(sh.Rules), sh.Labels
+	if s.rules == nil {
+		s.rules = []Rule{}
+	}
+	if s.labels == nil {
+		s.labels = map[string]map[string]string{}
+	}
+	if err := s.saveLocked(); err != nil {
+		s.version, s.rules, s.labels = prevV, prevR, prevL
+		return false, err
+	}
+	return true, nil
 }
 
 // Labels returns a copy of all host labels (host ID -> labels).
@@ -354,7 +423,10 @@ func (s *Store) Labels() map[string]map[string]string {
 func (s *Store) View() View {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.viewLocked()
+}
 
+func (s *Store) viewLocked() View {
 	labelsCopy := make(map[string]map[string]string, len(s.labels))
 	for h, m := range s.labels {
 		hostCopy := make(map[string]string, len(m))

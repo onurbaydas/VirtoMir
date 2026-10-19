@@ -445,3 +445,33 @@ func TestAddRuleDoesNotPigeonholeFromLabelsCount(t *testing.T) {
 		t.Errorf("expected generated rule ID")
 	}
 }
+
+// #37: a member that was down when the rules changed catches up from the others.
+func TestSharedVersionAdopt(t *testing.T) {
+	dir := t.TempDir()
+	a, _ := Open(filepath.Join(dir, "a.json"))
+	b, _ := Open(filepath.Join(dir, "b.json"))
+	if _, err := a.AddRule(Rule{Name: "apart", Kind: VMAntiAffinity, Domains: []string{"web1", "web2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetLabels("h1", map[string]string{"rack": "r1"}); err != nil {
+		t.Fatal(err)
+	}
+	sh := a.Shared()
+	if sh.Version != 2 {
+		t.Fatalf("version after two changes = %d", sh.Version)
+	}
+	if ok, err := b.Adopt(sh); !ok || err != nil {
+		t.Fatalf("adopt newer: %v %v", ok, err)
+	}
+	if ok, _ := b.Adopt(sh); ok {
+		t.Error("the same version adopted twice")
+	}
+	reopened, _ := Open(filepath.Join(dir, "b.json"))
+	if got := reopened.Shared(); got.Version != 2 || len(got.Rules) != 1 || got.Labels["h1"]["rack"] != "r1" {
+		t.Errorf("adopted state not saved: %+v", got)
+	}
+	if ok, _ := a.Adopt(Shared{Version: 1}); ok {
+		t.Error("an older version replaced newer rules")
+	}
+}

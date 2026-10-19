@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/digitalocean/go-libvirt"
 	"libvirt.org/go/libvirtxml"
 )
 
@@ -24,6 +25,7 @@ const (
 type vxlanMeta struct {
 	XMLName xml.Name `xml:"https://github.com/onurbaydas/virtomir/xmlns/vxlan/1 vxlan"`
 	VNI     uint     `xml:"vni,attr"`
+	Cluster bool     `xml:"cluster,attr,omitempty"`
 	Peer    []struct {
 		Address string `xml:"address,attr"`
 	} `xml:"peer"`
@@ -42,18 +44,30 @@ func VXLANBridge(vni uint) string { return fmt.Sprintf("vxbr%d", vni) }
 
 // vxlanNetwork fills in the bridge, MTU and metadata of a VXLAN network.
 func vxlanNetwork(x *libvirtxml.Network, spec NetworkSpec) error {
-	if spec.VNI < 1 || spec.VNI > maxVNI {
-		return invalidf("A VXLAN network identifier (VNI) is between 1 and %d.", maxVNI)
+	raw, err := vxlanMetaXML(spec.VNI, spec.Peers, spec.Cluster)
+	if err != nil {
+		return err
 	}
-	if len(spec.Peers) > 64 {
-		return invalidf("At most 64 peers.")
+	x.Bridge = &libvirtxml.NetworkBridge{Name: VXLANBridge(spec.VNI), STP: "off", Delay: "0"}
+	x.MTU = &libvirtxml.NetworkMTU{Size: VXLANMTU}
+	x.Metadata = &libvirtxml.NetworkMetadata{XML: raw}
+	return nil
+}
+
+// vxlanMetaXML validates a VXLAN network's VNI and peers and returns its <metadata> element.
+func vxlanMetaXML(vni uint, peers []string, cluster bool) (string, error) {
+	if vni < 1 || vni > maxVNI {
+		return "", invalidf("A VXLAN network identifier (VNI) is between 1 and %d.", maxVNI)
 	}
-	m := vxlanMeta{VNI: spec.VNI}
+	if len(peers) > 64 {
+		return "", invalidf("At most 64 peers.")
+	}
+	m := vxlanMeta{VNI: vni, Cluster: cluster}
 	seen := map[netip.Addr]bool{}
-	for _, p := range spec.Peers {
+	for _, p := range peers {
 		a, err := netip.ParseAddr(strings.TrimSpace(p))
 		if err != nil || a.IsUnspecified() || a.IsMulticast() || a.IsLoopback() {
-			return invalidf("%q is not a peer address; give the other hosts' IP addresses.", p)
+			return "", invalidf("%q is not a peer address; give the other hosts' IP addresses.", p)
 		}
 		a = a.Unmap()
 		if !seen[a] {
@@ -64,12 +78,44 @@ func vxlanNetwork(x *libvirtxml.Network, spec NetworkSpec) error {
 		}
 	}
 	raw, err := xml.Marshal(m)
+	return string(raw), err
+}
+
+// SetVXLANPeers replaces the peers of VXLAN network name, live and in its definition; the
+// tunnel follows within seconds (keepTunnels).
+func (c *Client) SetVXLANPeers(name string, peers []string) error {
+	l, err := c.conn()
 	if err != nil {
 		return err
 	}
-	x.Bridge = &libvirtxml.NetworkBridge{Name: VXLANBridge(spec.VNI), STP: "off", Delay: "0"}
-	x.MTU = &libvirtxml.NetworkMTU{Size: VXLANMTU}
-	x.Metadata = &libvirtxml.NetworkMetadata{XML: string(raw)}
+	n, err := l.NetworkLookupByName(name)
+	if err != nil {
+		return classify(err)
+	}
+	raw, err := l.NetworkGetXMLDesc(n, uint32(libvirt.NetworkXMLInactive))
+	if err != nil {
+		return classify(err)
+	}
+	var x libvirtxml.Network
+	if err := x.Unmarshal(raw); err != nil {
+		return err
+	}
+	m, ok := parseVXLANMeta(x.Metadata)
+	if !ok {
+		return invalidf("%s is not a VXLAN network.", name)
+	}
+	doc, err := vxlanMetaXML(m.VNI, peers, m.Cluster)
+	if err != nil {
+		return err
+	}
+	flags := libvirt.NetworkUpdateAffectConfig
+	if a, err := l.NetworkIsActive(n); err == nil && a == 1 {
+		flags |= libvirt.NetworkUpdateAffectLive
+	}
+	if err := l.NetworkSetMetadata(n, int32(libvirt.NetworkMetadataElement), libvirt.OptString{doc}, libvirt.OptString{"vxlan"}, libvirt.OptString{vxlanURI}, uint32(flags)); err != nil {
+		return classify(err)
+	}
+	c.log.Info("vxlan peers updated", "network", name, "peers", peers)
 	return nil
 }
 
