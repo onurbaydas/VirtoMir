@@ -25,7 +25,7 @@ VirtoMir is a modern web control panel for **KVM / QEMU / libvirt** that tries t
 
 It installs on an existing Linux host with KVM/libvirt as a single binary (tested on Ubuntu 26.04; testers for Ubuntu 24.04, Debian and Fedora are welcome). No dedicated distribution, no database, no agents.
 
-> 🚧 **Status: early release (0.6).** Tested on Ubuntu 26.04 on single hosts and small clusters; high availability has not been tried on real BMC hardware yet. Testers wanted for other setups and distributions (see [issue #1](https://github.com/onurbaydas/VirtoMir/issues/1)). Test it before you trust it with production.
+> 🚧 **Status: early release (0.9).** Tested on Ubuntu 26.04 on single hosts and small clusters; high availability has not been tried on real BMC hardware yet, and the VMware import is experimental. Testers wanted for other setups and distributions (see [issue #1](https://github.com/onurbaydas/VirtoMir/issues/1)). Test it before you trust it with production.
 
 ![Overview](docs/screenshots/overview.png)
 
@@ -63,6 +63,7 @@ VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw l
 - More devices from the Hardware tab: **shared folders** (virtiofs), **vGPU slices** (mediated devices, created on the Hardware page), **clipboard sharing**, video model and **up to 4 monitors**, watchdog, TPM 2.0, random number generator — hot-plugged where possible, otherwise from the next start (and it says which)
 - Expert **QEMU command line** (extra arguments and environment), clearly marked as such
 - **Import**: OVA appliances, a libvirt domain XML, or a disk image already on the host
+- **From VMware** (experimental): read the inventory of a vCenter or a standalone ESXi host and convert its machines with `virt-v2v` — not tested on real VMware hardware yet
 - **Snapshots** as a tree: take, revert, delete
 - **Backups**: live (no downtime) or offline, restore as a new machine; **automatic snapshots and backups** on a schedule with retention
 - **Off-site copies** with restic — encrypted and deduplicated, to S3 (or MinIO, Wasabi, Ceph RGW …), Backblaze B2, Azure, Google Cloud Storage, SFTP, a REST server or a disk; every scheduled backup can be copied right after it is made, with its own retention, and brought back with one click
@@ -240,6 +241,16 @@ Tags `v*` build and publish a release through GitHub Actions (`.github/workflows
 - `scripts/dev-run.ps1` builds on Windows and runs on a Hyper-V dev host created by `dev/hyperv/New-VirtoMirDevHost.ps1` (Debian 13 with nested KVM).
 - Work on the UI without any host: `cd web && npm run dev:demo` (the same pretend cluster as the [online demo](https://onurbaydas.github.io/VirtoMir/demo/)).
 - How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md). VirtoMir is developed with the help of AI coding agents; [AGENTS.md](AGENTS.md) is their entry point, and the best map of the code for people too.
+
+## How it's built, and where help is needed
+
+VirtoMir is built by one person, together with AI coding agents (their working rules are in [AGENTS.md](AGENTS.md)). That is how it grew this fast, and it is also why it needs more eyes than a typical side project. Help means the most here:
+
+- **Run it** on Debian, Fedora or an older Ubuntu and tell us what breaks
+- **Review the security-sensitive parts**: it runs as root and handles sign-in (`internal/auth`, `internal/api`); please report problems privately, see [SECURITY.md](SECURITY.md)
+- **Test the paths we cannot reach**: GPU passthrough, Ceph, real BMCs, VMware
+- **Criticise** the code or the idea — honest criticism helps too
+- **Contribute code**: start with a [good first issue](https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22), see [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Roadmap
 
