@@ -28,6 +28,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/content"
 	"github.com/onurbaydas/virtomir/internal/drs"
 	"github.com/onurbaydas/virtomir/internal/ha"
+	"github.com/onurbaydas/virtomir/internal/gpool"
 	"github.com/onurbaydas/virtomir/internal/history"
 	"github.com/onurbaydas/virtomir/internal/hostinfo"
 	"github.com/onurbaydas/virtomir/internal/hostnet"
@@ -301,6 +302,11 @@ func run(c config, log *slog.Logger) error {
 		opts.LCM = st
 	}
 	opts.Upgrader = &systemd.Upgrader{Log: log}
+	if gp, err := gpool.Open(filepath.Join(c.stateDir, "gpools.json")); err != nil {
+		log.Warn("GPU pools", "err", err)
+	} else {
+		opts.GPools = gp
+	}
 	apiServer := api.NewServer(opts)
 	go syncCluster(ctx, apiServer)
 	go apiServer.RunReportSchedules(ctx)

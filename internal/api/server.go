@@ -23,6 +23,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/content"
 	"github.com/onurbaydas/virtomir/internal/dr"
 	"github.com/onurbaydas/virtomir/internal/drs"
+	"github.com/onurbaydas/virtomir/internal/gpool"
 	"github.com/onurbaydas/virtomir/internal/ha"
 	"github.com/onurbaydas/virtomir/internal/hostinfo"
 	"github.com/onurbaydas/virtomir/internal/hostnet"
@@ -180,6 +181,8 @@ type Options struct {
 	DRStore        DRStorer
 	DROrchestrator DROrchestrator
 	DRFailover     DRFailoverRunner
+	// GPools nil: no GPU pools (ADR-0071).
+	GPools *gpool.Store
 	// LCM nil: no rolling cluster upgrades (ADR-0070).
 	LCM *lcm.Store
 	// Upgrader nil: no OS package upgrades from VirtoMir.
@@ -246,6 +249,7 @@ type Server struct {
 	drOrchestrator  DROrchestrator
 	drFailover      DRFailoverRunner
 	lcm             *lcm.Store
+	gpools          *gpool.Store
 	lcmRun          lcmState
 	upgrader        SystemUpgrader
 	// inner is the API without the sign-in guard: in-process calls that already carry an
@@ -299,7 +303,7 @@ func NewServer(o Options) *Server {
 		catalog: o.Catalog, leaseMgr: o.LeaseMgr,
 		content: o.Content, contentSync: o.ContentSync, insights: o.Insights,
 		drStore: o.DRStore, drOrchestrator: o.DROrchestrator, drFailover: o.DRFailover,
-		lcm: o.LCM, upgrader: o.Upgrader}
+		lcm: o.LCM, upgrader: o.Upgrader, gpools: o.GPools}
 	if s.contentSync != nil {
 		s.contentSync.SetPeers(s)
 	}
@@ -362,6 +366,7 @@ func (s *Server) Handler() http.Handler {
 	s.contentRoutes(mux)
 	s.drRoutes(mux)
 	s.lcmRoutes(mux)
+	s.gpoolRoutes(mux)
 	s.systemRoutes(mux)
 
 	s.inner = mux
