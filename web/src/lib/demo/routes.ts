@@ -788,6 +788,170 @@ function advanceLCM(plan: LCMPlan): LCMPlan {
   return { ...plan, steps }
 }
 
+// ---- SDN on OVN (ADR-0072) --------------------------------------------------------------------
+
+const hex16 = () => Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
+
+/** /api/v1/sdn/<parts…> in the demo: the world's VPCs, groups and load balancers. */
+function sdnDemo(method: string, parts: string[], q: URLSearchParams, body: any): Reply {
+  const [kind, id, sub, subId] = parts
+  const byVPC = <T extends { vpcId: string }>(list: T[]) => (q.get('vpc') ? list.filter((x) => x.vpcId === q.get('vpc')) : list)
+  const now = new Date().toISOString()
+  const projectOf = (vpcId: string) => w.sdnVPCs.find((v) => v.id === vpcId)?.projectId
+  switch (`${method} ${kind}${id ? '/:id' : ''}${sub ? '/' + sub : ''}${subId ? '/:sub' : ''}`) {
+    case 'GET status':
+      return json(w.sdnStatus)
+    case 'POST reconcile':
+      return json({ applied: w.sdnVPCs.length + w.sdnSubnets.length + w.sdnGroups.length + w.sdnLBs.length + w.sdnFloatingIPs.length, errors: [] })
+    case 'GET vpcs':
+      return json({ vpcs: w.sdnVPCs.filter((v) => !q.get('project') || v.projectId === q.get('project')).map(({ router: _r, gateway: _g, ...v }) => v) })
+    case 'POST vpcs': {
+      if (w.sdnVPCs.some((v) => v.id === body?.id)) return json({ error: `exists: a VPC ${body.id} exists already` }, 409)
+      const v = { defaultDeny: false, ...body, created: now, updated: now, router: { id: 'rtr-' + body.id, vpcId: body.id, name: body.name + ' router', logicalRouter: 'lr-' + body.id, routes: [] } }
+      w.sdnVPCs.push(v)
+      return json(v, 201)
+    }
+    case 'GET vpcs/:id':
+    case 'PUT vpcs/:id':
+    case 'DELETE vpcs/:id': {
+      const i = w.sdnVPCs.findIndex((v) => v.id === id)
+      if (i < 0) return json({ error: 'no VPC ' + id }, 404)
+      if (method === 'GET') return json(w.sdnVPCs[i])
+      if (method === 'DELETE') {
+        if (w.sdnSubnets.some((s) => s.vpcId === id)) return json({ error: 'in use: the VPC still has subnets' }, 409)
+        w.sdnVPCs.splice(i, 1)
+        return none()
+      }
+      w.sdnVPCs[i] = { ...w.sdnVPCs[i], ...body, id, projectId: w.sdnVPCs[i].projectId, updated: now }
+      return json(w.sdnVPCs[i])
+    }
+    case 'PUT vpcs/:id/routes': {
+      const v = w.sdnVPCs.find((x) => x.id === id)
+      if (!v) return json({ error: 'no VPC ' + id }, 404)
+      v.router = { ...v.router, routes: body?.routes ?? [] }
+      return json(v.router)
+    }
+    case 'PUT vpcs/:id/gateway': {
+      const v = w.sdnVPCs.find((x) => x.id === id)
+      if (!v) return json({ error: 'no VPC ' + id }, 404)
+      v.gateway = body?.enabled ? { ...body, vpcId: id } : undefined
+      return json({ ...body, vpcId: id })
+    }
+    case 'GET subnets':
+      return json({ subnets: byVPC(w.sdnSubnets) })
+    case 'POST subnets': {
+      if (w.sdnSubnets.some((s) => s.id === body?.id)) return json({ error: `exists: a subnet ${body.id} exists already` }, 409)
+      const base = String(body?.cidr ?? '').split('/')[0].split('.')
+      const s = { ...body, gatewayIp: body?.gatewayIp || `${base[0]}.${base[1]}.${base[2]}.${Number(base[3]) + 1}`, logicalSwitch: 'ls-' + body.id }
+      w.sdnSubnets.push(s)
+      return json(s, 201)
+    }
+    case 'PUT subnets/:id':
+    case 'DELETE subnets/:id': {
+      const i = w.sdnSubnets.findIndex((s) => s.id === id)
+      if (i < 0) return json({ error: 'no subnet ' + id }, 404)
+      if (method === 'DELETE') {
+        const p = w.sdnPorts.find((x) => x.subnetId === id)
+        if (p) return json({ error: `in use: machine ${p.vmUuid} is plugged into the subnet` }, 409)
+        w.sdnSubnets.splice(i, 1)
+        return none()
+      }
+      w.sdnSubnets[i] = { ...w.sdnSubnets[i], ...body, id, vpcId: w.sdnSubnets[i].vpcId }
+      return json(w.sdnSubnets[i])
+    }
+    case 'GET ports':
+      return json({ ports: w.sdnPorts.filter((p) => (!q.get('vm') || p.vmUuid === q.get('vm')) && (!q.get('subnet') || p.subnetId === q.get('subnet'))) })
+    case 'GET floating-ips':
+      return json({ floatingIps: byVPC(w.sdnFloatingIPs) })
+    case 'POST floating-ips': {
+      if (w.sdnFloatingIPs.some((f) => f.externalIp === body?.externalIp)) return json({ error: `exists: ${body.externalIp} is a floating IP already` }, 409)
+      const f = { ...body, id: hex16(), projectId: projectOf(body?.vpcId), created: now }
+      w.sdnFloatingIPs.push(f)
+      return json(f, 201)
+    }
+    case 'DELETE floating-ips/:id': {
+      const i = w.sdnFloatingIPs.findIndex((f) => f.id === id)
+      if (i < 0) return json({ error: 'no floating IP ' + id }, 404)
+      if (w.sdnFloatingIPs[i].internalIp) return json({ error: 'in use: unassign it first' }, 409)
+      w.sdnFloatingIPs.splice(i, 1)
+      return none()
+    }
+    case 'POST floating-ips/:id/assign':
+    case 'POST floating-ips/:id/unassign': {
+      const f = w.sdnFloatingIPs.find((x) => x.id === id)
+      if (!f) return json({ error: 'no floating IP ' + id }, 404)
+      if (sub === 'unassign') {
+        f.internalIp = f.portId = undefined
+      } else {
+        f.internalIp = body?.internalIp
+        f.portId = body?.portId || w.sdnPorts.find((p) => p.ip === body?.internalIp)?.id
+      }
+      return json(f)
+    }
+    case 'GET security-groups':
+      return json({ securityGroups: byVPC(w.sdnGroups) })
+    case 'POST security-groups': {
+      const g = {
+        defaultDeny: false, ...body, id: hex16(), projectId: projectOf(body?.vpcId), memberPorts: [], created: now, updated: now,
+        rules: body?.rules?.length ? body.rules : [{ id: hex16(), direction: 'egress', action: 'allow-related', priority: 100, protocol: 'any', description: 'machines may connect out' }],
+      }
+      w.sdnGroups.push(g)
+      return json(g, 201)
+    }
+    case 'PUT security-groups/:id':
+    case 'DELETE security-groups/:id': {
+      const i = w.sdnGroups.findIndex((g) => g.id === id)
+      if (i < 0) return json({ error: 'no security group ' + id }, 404)
+      if (method === 'DELETE') {
+        if (w.sdnGroups[i].memberPorts.length) return json({ error: 'in use: machines are in the group' }, 409)
+        w.sdnGroups.splice(i, 1)
+        return none()
+      }
+      const g = w.sdnGroups[i]
+      w.sdnGroups[i] = { ...g, name: body?.name ?? g.name, description: body?.description, defaultDeny: !!body?.defaultDeny, updated: now }
+      return json(w.sdnGroups[i])
+    }
+    case 'POST security-groups/:id/rules':
+    case 'DELETE security-groups/:id/rules/:sub': {
+      const g = w.sdnGroups.find((x) => x.id === id)
+      if (!g) return json({ error: 'no security group ' + id }, 404)
+      if (method === 'DELETE') {
+        g.rules = g.rules.filter((r) => r.id !== subId)
+        return none()
+      }
+      const r = { ...body, id: hex16() }
+      g.rules.push(r)
+      return json(r, 201)
+    }
+    case 'GET load-balancers':
+      return json({ loadBalancers: byVPC(w.sdnLBs) })
+    case 'POST load-balancers': {
+      const lb = { protocol: 'tcp', ...body, id: hex16(), projectId: projectOf(body?.vpcId), status: 'active', attachedSwitches: w.sdnSubnets.filter((s) => s.vpcId === body?.vpcId).map((s) => s.logicalSwitch ?? 'ls-' + s.id), attachedRouters: ['lr-' + body?.vpcId] }
+      w.sdnLBs.push(lb)
+      return json(lb, 201)
+    }
+    case 'PUT load-balancers/:id':
+    case 'DELETE load-balancers/:id': {
+      const i = w.sdnLBs.findIndex((x) => x.id === id)
+      if (i < 0) return json({ error: 'no load balancer ' + id }, 404)
+      if (method === 'DELETE') {
+        w.sdnLBs.splice(i, 1)
+        return none()
+      }
+      w.sdnLBs[i] = { ...w.sdnLBs[i], ...body, id, vpcId: w.sdnLBs[i].vpcId }
+      return json(w.sdnLBs[i])
+    }
+    case 'GET ipsec':
+      return json(w.sdnIPsec)
+    case 'PUT ipsec': {
+      if (body?.mode === 'psk' || body?.psk) return json({ error: 'invalid: OVN encrypts its tunnels with certificates only; give each host\'s certificate, key and the CA' }, 422)
+      Object.assign(w.sdnIPsec, { ...body, mode: 'cert', psk: undefined, status: body?.enabled ? 'active' : 'disabled', lastError: undefined })
+      return json(w.sdnIPsec)
+    }
+  }
+  return notFound()
+}
+
 export function handle(method: string, url: URL, body: any): Reply {
   let path = url.pathname
   let host = w.SELF
@@ -801,6 +965,7 @@ export function handle(method: string, url: URL, body: any): Reply {
   const q = url.searchParams
   const op = `${method} ${path}`
   const parts = path.split('/').slice(3).map(decodeURIComponent) // after /api/v1
+  if (parts[0] === 'sdn') return sdnDemo(method, parts.slice(1), q, body)
 
   switch (op) {
     // Session and account

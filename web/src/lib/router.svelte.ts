@@ -13,6 +13,7 @@ export type Route =
   | { name: 'vmware-import' }
   | { name: 'storage'; pool: string }
   | { name: 'networks' }
+  | { name: 'sdn'; tab: string }
   | { name: 'activity' }
   | { name: 'alerts'; tab: string }
   | { name: 'backups' }
@@ -39,6 +40,7 @@ function parse(path: string, hash: string): Route {
   if (path === '/machines/import/vmware' || path === '/machines/vmware-import') return { name: 'vmware-import' }
   if (path === '/storage') return { name: 'storage', pool: decodeURIComponent(hash.replace(/^#/, '')) }
   if (path === '/networks') return { name: 'networks' }
+  if (path === '/sdn') return { name: 'sdn', tab: hash.replace(/^#/, '') }
   if (path === '/activity') return { name: 'activity' }
   if (path === '/alerts') return { name: 'alerts', tab: hash.replace(/^#/, '') }
   if (path === '/backups') return { name: 'backups' }
@@ -97,7 +99,7 @@ class Router {
 
   /** Shows the same kind of page for another member (machine pages fall back to its overview). */
   switchHost(id: string | null) {
-    const keep = ['overview', 'machines', 'storage', 'networks', 'backups', 'alerts', 'activity', 'reports', 'compliance', 'projects', 'catalog', 'library'].includes(this.route.name)
+    const keep = ['overview', 'machines', 'storage', 'networks', 'sdn', 'backups', 'alerts', 'activity', 'reports', 'compliance', 'projects', 'catalog', 'library'].includes(this.route.name)
     const path = keep ? splitHost(here()).path : '/'
     history.pushState(null, '', based(withHost(id, path)))
     this.#sync()

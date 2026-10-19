@@ -37,6 +37,7 @@ import type {
   VNetwork,
   Volume,
 } from '../api'
+import type { FloatingIP, IPsecConfig, LoadBalancer, SDNPort, SDNStatus, SecurityGroup, Subnet, VPCDetail } from '../sdn'
 import type { Chassis, ClusterGPU, Firewall, GPU, GPUPool, GPUPoolView, GPUResource, HAStatus, HostInterface, PoolView, ReportMeta, ReportSchedule, Topology } from '../enterprise'
 
 export interface DemoHost {
@@ -1477,3 +1478,74 @@ export let contentItems: ContentItem[] = [
   },
 ]
 
+
+// ---- SDN on OVN (ADR-0072) ----------------------------------------------------------------------
+
+export const sdnVPCs: VPCDetail[] = [
+  {
+    id: 'vpc-prod', name: 'Production VPC', description: 'customer-facing tiers', projectId: 'prod', ipv4Cidr: '10.0.0.0/16', defaultDeny: true,
+    created: ago(30 * D), updated: ago(2 * D),
+    router: { id: 'rtr-vpc-prod', vpcId: 'vpc-prod', name: 'Production VPC router', logicalRouter: 'lr-vpc-prod', routes: [{ destinationCidr: '192.168.50.0/24', nextHopIp: '10.0.1.254' }] },
+    gateway: { vpcId: 'vpc-prod', externalNetwork: 'physnet1', gatewayIp: '203.0.113.1', externalIp: '203.0.113.10/24', enabled: true, gatewayChassis: 'hv-01' },
+  },
+  {
+    id: 'vpc-staging', name: 'Staging VPC', projectId: 'prod', ipv4Cidr: '10.10.0.0/16', defaultDeny: false, created: ago(12 * D), updated: ago(12 * D),
+    router: { id: 'rtr-vpc-staging', vpcId: 'vpc-staging', name: 'Staging VPC router', logicalRouter: 'lr-vpc-staging', routes: [] },
+  },
+]
+
+export const sdnSubnets: Subnet[] = [
+  { id: 'prod-web', vpcId: 'vpc-prod', name: 'web', cidr: '10.0.1.0/24', gatewayIp: '10.0.1.1', dhcpEnabled: true, allocationPoolStart: '10.0.1.10', allocationPoolEnd: '10.0.1.200', dnsServers: ['1.1.1.1', '9.9.9.9'], logicalSwitch: 'ls-prod-web', ovnDhcpId: '8a7b6c5d-0000-4000-8000-000000000001' },
+  { id: 'prod-db', vpcId: 'vpc-prod', name: 'database', cidr: '10.0.2.0/24', gatewayIp: '10.0.2.1', dhcpEnabled: true, logicalSwitch: 'ls-prod-db', ovnDhcpId: '8a7b6c5d-0000-4000-8000-000000000002' },
+  { id: 'staging-app', vpcId: 'vpc-staging', name: 'app', cidr: '10.10.1.0/24', gatewayIp: '10.10.1.1', dhcpEnabled: true, logicalSwitch: 'ls-staging-app' },
+]
+
+export const sdnPorts: SDNPort[] = [
+  { id: 'vm-port-4f1c2a7e-525400a10101', subnetId: 'prod-web', vmUuid: '4f1c2a7e-9b3d-4c21-8e5f-0a1b2c3d4e01', mac: '52:54:00:a1:01:01', ip: '10.0.1.11', securityGroups: ['5eb0c1a2d3e4f501'] },
+  { id: 'vm-port-4f1c2a7e-525400a10201', subnetId: 'prod-web', vmUuid: '4f1c2a7e-9b3d-4c21-8e5f-0a1b2c3d4e02', mac: '52:54:00:a1:02:01', ip: '10.0.1.12', securityGroups: ['5eb0c1a2d3e4f501'] },
+  { id: 'vm-port-4f1c2a7e-525400a10301', subnetId: 'prod-db', vmUuid: '4f1c2a7e-9b3d-4c21-8e5f-0a1b2c3d4e03', mac: '52:54:00:a1:03:01', ip: '10.0.2.21', securityGroups: ['5eb0c1a2d3e4f502'] },
+]
+
+export const sdnGroups: SecurityGroup[] = [
+  {
+    id: '5eb0c1a2d3e4f501', projectId: 'prod', vpcId: 'vpc-prod', name: 'sg-web', description: 'public web servers', defaultDeny: true,
+    memberPorts: ['vm-port-4f1c2a7e-525400a10101', 'vm-port-4f1c2a7e-525400a10201'], created: ago(30 * D), updated: ago(2 * D),
+    rules: [
+      { id: 'r1', direction: 'egress', action: 'allow-related', priority: 100, protocol: 'any', description: 'machines may connect out' },
+      { id: 'r2', direction: 'ingress', action: 'allow-related', priority: 1000, protocol: 'tcp', portMin: 80, remoteCidr: '0.0.0.0/0', description: 'HTTP' },
+      { id: 'r3', direction: 'ingress', action: 'allow-related', priority: 1000, protocol: 'tcp', portMin: 443, remoteCidr: '0.0.0.0/0', description: 'HTTPS' },
+    ],
+  },
+  {
+    id: '5eb0c1a2d3e4f502', projectId: 'prod', vpcId: 'vpc-prod', name: 'sg-db', description: 'PostgreSQL, from the web tier only', defaultDeny: true,
+    memberPorts: ['vm-port-4f1c2a7e-525400a10301'], created: ago(30 * D), updated: ago(30 * D),
+    rules: [
+      { id: 'r4', direction: 'egress', action: 'allow-related', priority: 100, protocol: 'any' },
+      { id: 'r5', direction: 'ingress', action: 'allow-related', priority: 1000, protocol: 'tcp', portMin: 5432, remoteGroupId: '5eb0c1a2d3e4f501', description: 'PostgreSQL from sg-web' },
+      { id: 'r6', direction: 'ingress', action: 'drop', priority: 900, protocol: 'icmp', remoteCidr: '0.0.0.0/0' },
+    ],
+  },
+]
+
+export const sdnFloatingIPs: FloatingIP[] = [
+  { id: 'f10a1b2c3d4e5f60', projectId: 'prod', vpcId: 'vpc-prod', externalIp: '203.0.113.21', internalIp: '10.0.1.11', portId: 'vm-port-4f1c2a7e-525400a10101', description: 'web-01', created: ago(20 * D) },
+  { id: 'f10a1b2c3d4e5f61', projectId: 'prod', vpcId: 'vpc-prod', externalIp: '203.0.113.22', created: ago(3 * D) },
+]
+
+export const sdnLBs: LoadBalancer[] = [
+  {
+    id: 'b1a2c3d4e5f60718', projectId: 'prod', vpcId: 'vpc-prod', name: 'web-front', description: 'nginx pool', vip: '10.0.1.100', port: 80, protocol: 'tcp',
+    members: ['10.0.1.11:80', '10.0.1.12:80'], attachedSwitches: ['ls-prod-web'], attachedRouters: ['lr-vpc-prod'], status: 'active',
+    healthCheck: { protocol: 'tcp', port: 80, intervalSeconds: 5, timeoutSeconds: 2, fall: 3, rise: 2 },
+  },
+]
+
+export const sdnIPsec: IPsecConfig = { enabled: false, mode: 'cert', status: 'disabled' }
+
+export const sdnStatus: SDNStatus = {
+  host: {
+    installed: true, ovsVersion: '3.5.0', ovnVersion: '25.03.0', serviceOvs: true, serviceOvnCentral: true, serviceOvnHost: true, integrationBridge: 'br-int',
+    systemId: 'hv-01', encapsulationType: 'geneve', encapsulationIp: '10.20.0.11', role: 'central', centralEndpoint: 'tcp:10.20.0.11:6642',
+  },
+  chassis: HOSTS.map((h, i) => ({ id: h.name, hostname: h.name, encapsulationIp: `10.20.0.${11 + i}`, encapsulationType: 'geneve' })),
+}

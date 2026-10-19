@@ -48,6 +48,7 @@
   import ArrowRightLeft from '@lucide/svelte/icons/arrow-right-left'
   import FolderKanban from '@lucide/svelte/icons/folder-kanban'
   import { projects } from '../projects.svelte'
+  import SDNPortsPanel from '../components/SDNPortsPanel.svelte'
   import { cluster } from '../cluster.svelte'
   import { machineHref } from '../router.svelte'
   import { errorText } from '../api'
@@ -525,6 +526,7 @@
         <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((addKind = null), (addOpen = true))}><Plus size={14} /> {t('Add other device…')}</button>
         <span class="hw-hint">{active ? 'Hot-plugged where the hardware allows; the rest from the next start.' : t('Anything else: the XML tab.')}</span>
       </div>
+      <SDNPortsPanel uuid={detail.uuid} project={detail.project ?? ''} />
       {#each grouped as g (g.key)}
         {#if !g.advanced || showAdvanced}
           <section class="group">

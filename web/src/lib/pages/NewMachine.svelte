@@ -13,6 +13,7 @@
   import BookOpen from '@lucide/svelte/icons/book-open'
   import { openDeploy } from '../deploy.svelte'
   import { api, errorText, type ContainerImage, type CreateSpec, type Pool, type VNetwork, type Volume } from '../api'
+  import { sdn, type SecurityGroup, type Subnet, type VPC } from '../sdn'
   import { track } from '../jobs'
   import { live } from '../live.svelte'
   import { formatBytes, formatKiB } from '../format'
@@ -57,7 +58,7 @@
   let ciUser = $state('admin')
   let ciPassword = $state('')
   let ciKeys = $state('')
-  let netChoice = $state('network:default') // "network:<name>" | "bridge" | "none"
+  let netChoice = $state('network:default') // "network:<name>" | "sdn:<subnet>" | "bridge" | "none"
   let bridge = $state('br0')
   let firmware = $state<'uefi' | 'bios'>('uefi')
   let secureBoot = $state(false)
@@ -154,6 +155,23 @@
     const net = netChoice.startsWith('network:') ? netChoice.slice(8) : ''
     if (net && !proj.networks.includes(net)) netChoice = projNets[0] ? `network:${projNets[0].name}` : 'none'
   })
+  // SDN subnets (ADR-0072) of the project's VPCs (all of them for a global machine).
+  let sdnVPCs = $state<VPC[]>([])
+  let sdnSubnets = $state<Subnet[]>([])
+  let sdnGroups = $state<SecurityGroup[]>([])
+  $effect(() => {
+    void Promise.all([sdn.vpcs(), sdn.subnets(), sdn.securityGroups()])
+      .then(([v, s, g]) => ([sdnVPCs, sdnSubnets, sdnGroups] = [v, s, g]))
+      .catch(() => {})
+  })
+  let projSubnets = $derived(sdnSubnets.filter((s) => !proj || sdnVPCs.find((v) => v.id === s.vpcId)?.projectId === proj.id))
+  let ovnSubnet = $derived(netChoice.startsWith('sdn:') ? sdnSubnets.find((s) => s.id === netChoice.slice(4)) : undefined)
+  let ovnGroups = $state<string[]>([])
+  let ovnIP = $state('')
+  $effect(() => {
+    if (netChoice.startsWith('sdn:') && (kind === 'container' || !projSubnets.some((s) => s.id === netChoice.slice(4)))) netChoice = 'none'
+  })
+  const vpcLabel = (id: string) => sdnVPCs.find((v) => v.id === id)?.name ?? id
   let selectedPool = $derived(pools.find((p) => p.name === pool))
   let isBlockPool = $derived(selectedPool ? ['logical', 'zfs'].includes(selectedPool.type) : false)
   let diskTooBig = $derived(!!selectedPool && withDisk && diskGiB * 2 ** 30 > selectedPool.availableBytes)
@@ -258,8 +276,11 @@
   })
 
   let network = $derived<CreateSpec['network']>(
-    netChoice.startsWith('network:') ? { network: netChoice.slice(8) } : netChoice === 'bridge' ? { bridge } : undefined,
+    netChoice.startsWith('network:') ? { network: netChoice.slice(8) }
+      : ovnSubnet ? { ovnSubnet: ovnSubnet.id, securityGroups: ovnGroups.length ? ovnGroups : undefined, ipAddress: ovnIP.trim() || undefined }
+      : netChoice === 'bridge' ? { bridge } : undefined,
   )
+  let netLabel = $derived(netChoice.startsWith('network:') ? netChoice.slice(8) : ovnSubnet ? `${vpcLabel(ovnSubnet.vpcId)} / ${ovnSubnet.name}` : netChoice === 'bridge' ? bridge : 'None')
   // The request exactly as sent (also shown as code next to the form).
   let spec = $derived<CreateSpec>(kind === 'container' ? {
     name,
@@ -612,10 +633,29 @@
           {#each projNets as n (n.name)}
             <option value="network:{n.name}">{n.name} ({n.mode === 'nat' ? 'NAT, internet through the host' : n.mode})</option>
           {/each}
+          {#if kind === 'vm'}
+            {#each projSubnets as sn (sn.id)}
+              <option value="sdn:{sn.id}">{t('SDN: {vpc} / {subnet} ({cidr})', { vpc: vpcLabel(sn.vpcId), subnet: sn.name, cidr: sn.cidr })}</option>
+            {/each}
+          {/if}
           <option value="bridge">{t('A host bridge (machine appears on your LAN)')}</option>
           <option value="none">{t('No network')}</option>
         </select>
       </label>
+      {#if ovnSubnet}
+        <label class="ui-field">
+          <span class="label">{t('Address')}</span>
+          <input class="ui-input mono" bind:value={ovnIP} placeholder={t('from DHCP')} />
+        </label>
+        {#if sdnGroups.some((g) => g.vpcId === ovnSubnet.vpcId)}
+          <fieldset class="sgs">
+            <legend class="label">{t('Security groups')}</legend>
+            {#each sdnGroups.filter((g) => g.vpcId === ovnSubnet.vpcId) as g (g.id)}
+              <label class="ui-switch"><input type="checkbox" bind:group={ovnGroups} value={g.id} /> {g.name}</label>
+            {/each}
+          </fieldset>
+        {/if}
+      {/if}
       {#if netChoice === 'bridge'}
         <label class="ui-field">
           <span class="label">{t('Bridge')}</span>
@@ -668,14 +708,14 @@
       {#if kind === 'container'}
       <dt>{t('System')}</dt><dd>{ctImages.find((i) => i.key === ctImage)?.label ?? '—'}</dd>
       <dt>{t('CPU / RAM')}</dt><dd>{t('{vcpus} vCPU · {memGiB} GiB', { vcpus: vcpus, memGiB: memGiB })}</dd>
-      <dt>{t('Network')}</dt><dd>{netChoice.startsWith('network:') ? netChoice.slice(8) : netChoice === 'bridge' ? bridge : 'None'}</dd>
+      <dt>{t('Network')}</dt><dd>{netLabel}</dd>
       {:else}
       <dt>{t('System')}</dt><dd>{OSES.find((o) => o.key === os)?.label}</dd>
       <dt>{t('Source')}</dt><dd class="mono small">{(source === 'iso' ? iso : source === 'cloud' ? baseImage : existingDisk).split('/').pop() || (source === 'iso' && withDisk ? 'Empty disk' : '—')}</dd>
       <dt>{t('CPU / RAM')}</dt><dd>{t('{vcpus} vCPU · {memGiB} GiB', { vcpus: vcpus, memGiB: memGiB })}</dd>
       <dt>{t('Disk')}</dt><dd>{source === 'disk' ? 'Existing image' : source === 'cloud' ? t('{v} GiB copy in {pool}', { v: Math.max(diskGiB, baseCapGiB), pool: pool }) : withDisk ? `${diskGiB} GiB in ${pool}` : 'None'}</dd>
       {#if source === 'cloud'}<dt>{t('Sign-in')}</dt><dd class="mono small">{ciUser}{ciPassword ? ' · password' : ''}{keys.length ? ` · ${keys.length} key${keys.length > 1 ? 's' : ''}` : ''}</dd>{/if}
-      <dt>{t('Network')}</dt><dd>{netChoice.startsWith('network:') ? netChoice.slice(8) : netChoice === 'bridge' ? bridge : 'None'}</dd>
+      <dt>{t('Network')}</dt><dd>{netLabel}</dd>
       <dt>{t('Firmware')}</dt><dd>{firmware === 'uefi' ? 'UEFI' : 'BIOS'}{secureBoot && firmware === 'uefi' ? ', Secure Boot' : ''}{tpm ? ', TPM' : ''}</dd>
       {/if}
     </dl>
@@ -715,6 +755,14 @@
 </form>
 
 <style>
+  .sgs {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+  }
   .drs-hint {
     display: flex;
     align-items: center;

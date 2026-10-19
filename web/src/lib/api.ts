@@ -580,6 +580,10 @@ export interface NICSpec {
   mac?: string
   /** VLAN tag for this adapter (Open vSwitch networks, macvtap, SR-IOV); 0/absent = untagged. */
   vlan?: number
+  /** SDN subnet (ADR-0072): the adapter becomes an OVN port of it, with these groups and address. */
+  ovnSubnet?: string
+  securityGroups?: string[]
+  ipAddress?: string
 }
 
 export interface ContainerImage {
