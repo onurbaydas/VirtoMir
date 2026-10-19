@@ -33,6 +33,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/hostnet"
 	"github.com/onurbaydas/virtomir/internal/insights"
 	"github.com/onurbaydas/virtomir/internal/jobs"
+	"github.com/onurbaydas/virtomir/internal/lcm"
 	"github.com/onurbaydas/virtomir/internal/live"
 	"github.com/onurbaydas/virtomir/internal/offsite"
 	"github.com/onurbaydas/virtomir/internal/placement"
@@ -294,11 +295,18 @@ func run(c config, log *slog.Logger) error {
 		opts.LeaseMgr = mgr
 		go mgr.Run(ctx)
 	}
+	if st, err := lcm.Open(filepath.Join(c.stateDir, "lcm.json")); err != nil {
+		log.Warn("rolling upgrades", "err", err)
+	} else {
+		opts.LCM = st
+	}
+	opts.Upgrader = &systemd.Upgrader{Log: log}
 	apiServer := api.NewServer(opts)
 	go syncCluster(ctx, apiServer)
 	go apiServer.RunReportSchedules(ctx)
 	go apiServer.RunDRS(ctx)
 	go apiServer.RunDRRPO(ctx)
+	apiServer.RunLCM(ctx)
 	go keepTunnels(ctx, client, log)
 	if opts.Updater != nil {
 		opts.Updater.InitConfig(c.stateDir)

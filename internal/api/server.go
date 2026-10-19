@@ -28,6 +28,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/hostnet"
 	"github.com/onurbaydas/virtomir/internal/insights"
 	"github.com/onurbaydas/virtomir/internal/jobs"
+	"github.com/onurbaydas/virtomir/internal/lcm"
 	"github.com/onurbaydas/virtomir/internal/offsite"
 	"github.com/onurbaydas/virtomir/internal/placement"
 	"github.com/onurbaydas/virtomir/internal/project"
@@ -179,6 +180,10 @@ type Options struct {
 	DRStore        DRStorer
 	DROrchestrator DROrchestrator
 	DRFailover     DRFailoverRunner
+	// LCM nil: no rolling cluster upgrades (ADR-0070).
+	LCM *lcm.Store
+	// Upgrader nil: no OS package upgrades from VirtoMir.
+	Upgrader SystemUpgrader
 }
 
 type Server struct {
@@ -240,6 +245,13 @@ type Server struct {
 	drStore         DRStorer
 	drOrchestrator  DROrchestrator
 	drFailover      DRFailoverRunner
+	lcm             *lcm.Store
+	lcmRun          lcmState
+	upgrader        SystemUpgrader
+	// inner is the API without the sign-in guard: in-process calls that already carry an
+	// identity (the rolling upgrade acting on this host).
+	inner  http.Handler
+	runCtx context.Context
 }
 
 func NewServer(o Options) *Server {
@@ -286,7 +298,8 @@ func NewServer(o Options) *Server {
 		drs: o.DRS, placement: o.Placement, projects: o.Projects, rateLimiter: rl, zfsRep: o.ZFSRep,
 		catalog: o.Catalog, leaseMgr: o.LeaseMgr,
 		content: o.Content, contentSync: o.ContentSync, insights: o.Insights,
-		drStore: o.DRStore, drOrchestrator: o.DROrchestrator, drFailover: o.DRFailover}
+		drStore: o.DRStore, drOrchestrator: o.DROrchestrator, drFailover: o.DRFailover,
+		lcm: o.LCM, upgrader: o.Upgrader}
 	if s.contentSync != nil {
 		s.contentSync.SetPeers(s)
 	}
@@ -348,7 +361,10 @@ func (s *Server) Handler() http.Handler {
 	s.complianceRoutes(mux)
 	s.contentRoutes(mux)
 	s.drRoutes(mux)
+	s.lcmRoutes(mux)
+	s.systemRoutes(mux)
 
+	s.inner = mux
 	spec := s.openAPI(mux.routes) // everything above, built once
 	mux.HandleFunc("GET /api/v1/openapi.json", func(w http.ResponseWriter, _ *http.Request) {
 		s.writeJSON(w, http.StatusOK, spec)

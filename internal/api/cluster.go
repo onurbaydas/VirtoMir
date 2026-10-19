@@ -10,12 +10,14 @@ import (
 	"net/http/httputil"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/cluster"
+	"github.com/onurbaydas/virtomir/internal/lcm"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
@@ -91,7 +93,21 @@ func (s *Server) getCluster(w http.ResponseWriter, r *http.Request) {
 		}(&out[i], n)
 	}
 	wg.Wait()
-	s.writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "selfId": self, "version": version, "members": out})
+	// Members on different versions (a rolling upgrade under way or left half done).
+	var versions []string
+	allUp := true
+	for _, m := range out {
+		allUp = allUp && m.Reachable
+		if m.Reachable && !slices.Contains(versions, m.Version) {
+			versions = append(versions, m.Version)
+		}
+	}
+	minVersion := ""
+	if allUp {
+		minVersion = lcm.MinVersion(versions)
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "selfId": self, "version": version, "members": out,
+		"mixedVersions": len(versions) > 1, "minVersion": minVersion})
 }
 
 // invite creates a join code pointing at this host as the admin reached it.
