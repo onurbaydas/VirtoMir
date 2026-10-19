@@ -88,6 +88,7 @@ VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw l
 - Storage pools and volumes, **ISO / cloud image upload** with progress, grow volumes
 - Virtual networks (NAT, isolated, routed, bridged) with **IPv4 and IPv6** (SLAAC, DHCPv6, NAT66), DHCP leases with machine names, **reserved addresses**
 - **Cross-Host VXLAN Overlay (SDN)**: one layer-2 network spanning several hosts, tunnelled over their existing network (UDP 4789) without switch changes; created cluster-wide, every member gets the others as peers and one host is the gateway (NAT, DHCP); VirtoMir keeps the tunnel devices in place, also after a reboot
+- **Software-defined networking on OVN** *(experimental, not yet run on a real OVN cluster)*: per-project **VPCs** with subnets, OVN-native DHCP and a distributed router, static routes, an **external gateway** with SNAT, **floating IPs**, **security groups** (stateful rules, default deny, rules between groups), **load balancers** with TCP/UDP health checks and **IPsec** for the Geneve tunnels; a machine's adapter can be put on a VPC subnet when it is created or later
 - **Asynchronous ZFS Storage Replication**: datasets and zvols replicated to another host on a schedule with incremental `zfs send -i | ssh … zfs receive`, old replication snapshots pruned on both sides; a copy of the data elsewhere without a SAN
 - **Host wiring** at a glance: physical ports, bonds, VLANs, bridges and which machines are plugged in
 - **Create bridges, bonds and VLAN interfaces on the host** — through netplan, NetworkManager or systemd-networkd, whichever the host uses; a bridge can take over the host's own address. Every change must be confirmed within two minutes, or the host undoes it by itself (so a change that cuts you off heals itself)
@@ -108,6 +109,8 @@ VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw l
 - A **CPU model every host supports**, so machines can live-migrate between different CPUs
 - **High availability**: protected machines are restarted on another host when theirs dies — with quorum (and an optional witness), and only after the dead host is certainly off: through its BMC (IPMI or Redfish), its hardware watchdog, or an admin's confirmation. Priorities, preferred hosts, a "what if this host died" preview
 - **Maintenance**: move every running machine off a host in one go
+- **Rolling cluster upgrade**: pre-checks (quorum, room to evacuate, versions), then one host at a time — machines live-migrate away, VirtoMir (and optionally the OS packages, with a reboot) is updated, the host comes back and takes its machines again; pause, resume or abort between steps
+- **GPU pools**: the cluster's GPUs grouped by how machines get them (whole card by passthrough, a vGPU type, a MIG profile); a new machine asks for "2 of l40s" and is placed on the member that has them free, within its project's GPU quota
 - **Resource pools**: nested limits on vCPUs, memory and disk space per storage pool, enforced on every create, resize and move
 
 ### Security
@@ -253,6 +256,10 @@ VirtoMir is built by one person, together with AI coding agents (their working r
 - **Contribute code**: start with a [good first issue](https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22), see [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Roadmap
+
+The larger plans are open issues labelled [`enhancement`](https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement): hyper-converged Ceph, Kubernetes clusters on VirtoMir machines, storage efficiency, SR-IOV, BGP/EVPN, IPAM and dynamic DNS, bare-metal onboarding, a Packer builder and a Kubernetes operator. Each is split into steps that can be separate pull requests.
+
+**Pace:** active development is paused for a while. Issues and pull requests stay welcome and will be reviewed, though answers may take longer than usual.
 
 Ideas and questions: [Discussions](https://github.com/onurbaydas/VirtoMir/discussions). Found a bug or tried it on your hardware? [Open an issue](https://github.com/onurbaydas/VirtoMir/issues/new/choose) or report your setup in [#1 (Testers wanted)](https://github.com/onurbaydas/VirtoMir/issues/1) — test reports from setups we cannot reach (real BMCs, Ceph, GPUs, other distributions) help the most.
 
