@@ -184,6 +184,58 @@ func TestParseSnapshot(t *testing.T) {
 	}
 }
 
+func TestSnapshotDoc(t *testing.T) {
+	parse := func(raw string) *libvirtxml.Domain {
+		var x libvirtxml.Domain
+		if err := x.Unmarshal(raw); err != nil {
+			t.Fatal(err)
+		}
+		return &x
+	}
+	qcow := parse(`<domain type='kvm'><name>web</name><devices>
+		<disk type='file' device='disk'><driver name='qemu' type='qcow2'/><source file='/p/web.qcow2'/><target dev='vda'/></disk>
+		<disk type='file' device='cdrom'><driver name='qemu' type='raw'/><source file='/p/x.iso'/><target dev='sda'/><readonly/></disk>
+		</devices></domain>`)
+	if s := snapshotDoc(qcow, "s1", "d", false); s.Disks != nil || s.Memory != nil || s.Name != "s1" || s.Description != "d" {
+		t.Errorf("all-qcow2 machine should keep libvirt's internal default, got %+v", s)
+	}
+	if s := snapshotDoc(qcow, "s2", "", true); s.Disks == nil || s.Disks.Disks[0].Snapshot != "external" {
+		t.Errorf("after an external snapshot the next one must be external too, got %+v", s.Disks)
+	}
+
+	mixed := parse(`<domain type='kvm'><name>db</name><devices>
+		<disk type='file' device='disk'><driver name='qemu' type='raw'/><source file='/p/db.img'/><target dev='vda'/></disk>
+		<disk type='block' device='disk'><driver name='qemu' type='raw'/><source dev='/dev/vg/db-data'/><target dev='vdb'/></disk>
+		<disk type='file' device='cdrom'><driver name='qemu' type='raw'/><source file='/p/x.iso'/><target dev='sda'/><readonly/></disk>
+		</devices></domain>`)
+	s := snapshotDoc(mixed, "s1", "", false)
+	if s.Memory == nil || s.Memory.Snapshot != "external" || s.Memory.File != "/p/db.s1.mem" {
+		t.Errorf("memory = %+v", s.Memory)
+	}
+	if s.Disks == nil || len(s.Disks.Disks) != 3 {
+		t.Fatalf("disks = %+v", s.Disks)
+	}
+	vda, vdb, sda := s.Disks.Disks[0], s.Disks.Disks[1], s.Disks.Disks[2]
+	if vda.Name != "vda" || vda.Snapshot != "external" || vda.Source != nil {
+		t.Errorf("file disk should use libvirt's own overlay name: %+v", vda)
+	}
+	if vdb.Snapshot != "external" || vdb.Source == nil || vdb.Source.File == nil || vdb.Source.File.File != "/p/db-vdb.s1.qcow2" ||
+		vdb.Driver == nil || vdb.Driver.Type != "qcow2" {
+		t.Errorf("block disk needs an explicit qcow2 overlay file: %+v", vdb)
+	}
+	if sda.Snapshot != "no" {
+		t.Errorf("read-only CD-ROM must not be snapshotted: %+v", sda)
+	}
+
+	block := parse(`<domain type='kvm'><name>b</name><devices>
+		<disk type='block' device='disk'><driver name='qemu' type='raw'/><source dev='/dev/zvol/tank/b'/><target dev='vda'/></disk>
+		</devices></domain>`)
+	if s := snapshotDoc(block, "s", "", false); s.Memory.File != "/var/lib/libvirt/images/b.s.mem" ||
+		s.Disks.Disks[0].Source.File.File != "/var/lib/libvirt/images/b-vda.s.qcow2" {
+		t.Errorf("no file disk: overlays go to the default image directory, got %+v / %+v", s.Memory, s.Disks.Disks[0].Source.File)
+	}
+}
+
 func TestCreateSpecValidation(t *testing.T) {
 	ok := CreateSpec{Name: "web", VCPUs: 2, MemoryMiB: 2048, DiskGiB: 20}
 	if err := ok.normalize(); err != nil {
