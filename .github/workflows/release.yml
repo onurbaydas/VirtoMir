@@ -62,6 +62,35 @@ jobs:
           path: out
           merge-multiple: true
 
+      # Updates install only a package whose .sha256 is signed with the repository key
+      # (.sha256.asc, the key of ADR-0048), so a release without signatures is not published.
+      - name: Sign the checksums
+        env:
+          SIGNING_KEY: ${{ secrets.REPO_SIGNING_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.REPO_SIGNING_PASSPHRASE }}
+        run: |
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "::error::REPO_SIGNING_KEY is not set: the checksums cannot be signed, and VirtoMir refuses to update to unsigned releases"
+            exit 1
+          fi
+          export GNUPGHOME=$(mktemp -d)
+          key=$(mktemp)
+          printf '%s\n' "$SIGNING_KEY" | tr -d '\r' >"$key"
+          if ! grep -q -- '-----BEGIN PGP PRIVATE KEY BLOCK-----' "$key"; then
+            base64 -d "$key" >"$key.dec" && mv "$key.dec" "$key" # stored base64-encoded
+          fi
+          gpg --batch --import "$key"
+          rm -f "$key"
+          id=$(gpg --batch --with-colons --list-secret-keys | awk -F: '/^fpr/ {print $10; exit}')
+          for f in out/*.sha256; do
+            if [ -n "$GPG_PASSPHRASE" ]; then
+              printf %s "$GPG_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --local-user "$id" --armor --detach-sign -o "$f.asc" "$f"
+            else
+              gpg --batch --yes --local-user "$id" --armor --detach-sign -o "$f.asc" "$f"
+            fi
+            gpg --batch --verify "$f.asc" "$f"
+          done
+
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

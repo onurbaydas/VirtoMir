@@ -1,12 +1,14 @@
 // Package update finds newer VirtoMir releases on GitHub and installs them (ADR-0036): it
 // downloads the release file that matches how this host installed VirtoMir and checks it
-// against the published SHA-256. A .deb goes to apt and an .rpm to dnf in a transient systemd
+// against the published SHA-256, whose signature by the release key (.sha256.asc) it checks
+// first. A .deb goes to apt and an .rpm to dnf in a transient systemd
 // unit, so the upgrade survives the restart of virtomird itself; any other install (tarball,
 // install.sh, a binary run from anywhere) gets the binary from the release tarball swapped in
 // place and the daemon restarted.
 package update
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -24,6 +26,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/signature"
 )
 
 // Release is a published VirtoMir release.
@@ -38,17 +42,19 @@ type Release struct {
 	Package string `json:"package,omitempty"`
 	pkgURL  string
 	shaURL  string
+	sigURL  string            // the checksum file's signature (.sha256.asc)
 	assets  map[string]string // every release file name -> download URL
 }
 
 // pick selects the release file for an install method.
 func (r *Release) pick(method string) {
 	name := assetFor(method, r)
-	r.Package, r.pkgURL, r.shaURL = "", "", ""
+	r.Package, r.pkgURL, r.shaURL, r.sigURL = "", "", "", ""
 	if u, ok := r.assets[name]; ok {
 		r.Package, r.pkgURL = name, u
 	}
 	r.shaURL = r.assets[name+".sha256"]
+	r.sigURL = r.assets[name+".sha256.asc"]
 }
 
 // AutoConfig defines automatic background update behavior (ADR-0036).
@@ -93,6 +99,8 @@ type Checker struct {
 	RunRPMInstaller func(ctx context.Context, rpmPath string) (string, error)
 	// Restart restarts the daemon after a binary update; tests replace it.
 	Restart func(exe string) (string, error)
+	// Keys sign the releases' checksums (nil: the VirtoMir release key); tests replace it.
+	Keys *signature.Keyring
 
 	mu       sync.Mutex
 	cached   Status
@@ -298,7 +306,7 @@ func parse(s string) (ver, bool) {
 	return v, true
 }
 
-// Install downloads the latest release's package into dir, checks its SHA-256 and starts
+// Install downloads the latest release's package into dir, checks its signed SHA-256 and starts
 // apt in a transient unit. It returns once apt has been started: virtomird is restarted by
 // the package's postinst a few seconds later.
 func (c *Checker) Install(ctx context.Context, dir string, report func(string)) (string, error) {
@@ -312,6 +320,8 @@ func (c *Checker) Install(ctx context.Context, dir string, report func(string)) 
 		return "", errors.New(st.Reason)
 	case st.Latest.shaURL == "":
 		return "", errors.New("the release has no .sha256 next to its package; refusing to install it unchecked")
+	case st.Latest.sigURL == "":
+		return "", errors.New("the release's checksum is not signed (no .sha256.asc); refusing to install it")
 	}
 	rel := st.Latest
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -324,6 +334,19 @@ func (c *Checker) Install(ctx context.Context, dir string, report func(string)) 
 	}
 	sumLine, _ := io.ReadAll(io.LimitReader(sumResp.Body, 4096))
 	sumResp.Body.Close()
+	sigResp, err := c.get(ctx, rel.sigURL, "application/octet-stream")
+	if err != nil {
+		return "", err
+	}
+	keys := c.Keys
+	if keys == nil {
+		keys = signature.VirtoMir()
+	}
+	err = keys.Verify(bytes.NewReader(sumLine), sigResp.Body)
+	sigResp.Body.Close()
+	if err != nil {
+		return "", fmt.Errorf("%w; nothing was installed", err)
+	}
 	want := strings.ToLower(strings.Fields(string(sumLine) + " ")[0])
 	if len(want) != 64 {
 		return "", errors.New("the published checksum file is not a SHA-256 sum")
@@ -349,7 +372,7 @@ func (c *Checker) Install(ctx context.Context, dir string, report func(string)) 
 		os.Remove(path)
 		return "", fmt.Errorf("checksum mismatch (got %s, release says %s); nothing was installed", got, want)
 	}
-	report("Checksum verified; installing")
+	report("Signature and checksum verified; installing")
 	installer := c.RunInstaller
 	switch st.Method {
 	case MethodBinary:

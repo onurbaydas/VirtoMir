@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -412,5 +413,18 @@ func TestBuildDomainControllerIndexes(t *testing.T) {
 	}
 	if !seen["pci/0"] || !seen["pci/8"] {
 		t.Errorf("controllers: %v", seen)
+	}
+}
+
+func TestRootfsSum(t *testing.T) {
+	sums, err := os.ReadFile("../signature/testdata/lxc-SHA256SUMS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := rootfsSum(sums); err != nil || got != "c261d23220dcdc5e402f319a127524a8fafdad251b20cb7218b0513e1b5e5b98" {
+		t.Errorf("rootfsSum = %q, %v", got, err)
+	}
+	if _, err := rootfsSum([]byte("abc  disk.qcow2\n")); err == nil {
+		t.Error("a list without rootfs.tar.xz was accepted")
 	}
 }

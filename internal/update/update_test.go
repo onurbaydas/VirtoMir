@@ -37,8 +37,9 @@ func TestNewer(t *testing.T) {
 }
 
 func TestCheckFindsThePackage(t *testing.T) {
+	signer := newTestSigner(t)
 	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv = httptest.NewServer(signer.wrap(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/repos/onur/vm/releases/latest" {
 			http.NotFound(w, r)
 			return
@@ -46,11 +47,13 @@ func TestCheckFindsThePackage(t *testing.T) {
 		fmt.Fprintf(w, `{"tag_name":"v0.3.0","name":"VirtoMir v0.3.0","html_url":"https://x/rel","assets":[
 			{"name":"virtomir_0.3.0_%[1]s.deb","browser_download_url":"%[2]s/deb"},
 			{"name":"virtomir_0.3.0_%[1]s.deb.sha256","browser_download_url":"%[2]s/sha"},
+				{"name":"virtomir_0.3.0_%[1]s.deb.sha256.asc","browser_download_url":"%[2]s/sig"},
 			{"name":"virtomir_v0.3.0_linux_%[1]s.tar.gz","browser_download_url":"%[2]s/tgz"}]}`, debArch(), srv.URL)
 	}))
 	defer srv.Close()
 	c := New("onur/vm", "0.2.0", "")
 	c.API = srv.URL
+	c.Keys = signer.Keys
 	c.Installed = func() (bool, string) { return true, "" }
 	c.Method = func() string { return MethodDeb }
 	st := c.Check(context.Background(), false)
@@ -67,12 +70,14 @@ func TestCheckFindsThePackage(t *testing.T) {
 }
 
 func TestInstallRefusesBadChecksum(t *testing.T) {
+	signer := newTestSigner(t)
 	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv = httptest.NewServer(signer.wrap(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/repos/o/v/releases/latest":
 			fmt.Fprintf(w, `{"tag_name":"v9.0.0","assets":[{"name":"virtomir_9.0.0_%[1]s.deb","browser_download_url":"%[2]s/deb"},
-				{"name":"virtomir_9.0.0_%[1]s.deb.sha256","browser_download_url":"%[2]s/sha"}]}`, debArch(), srv.URL)
+				{"name":"virtomir_9.0.0_%[1]s.deb.sha256","browser_download_url":"%[2]s/sha"},
+				{"name":"virtomir_9.0.0_%[1]s.deb.sha256.asc","browser_download_url":"%[2]s/sig"}]}`, debArch(), srv.URL)
 		case "/sha":
 			fmt.Fprint(w, strings.Repeat("0", 64)+"  virtomir.deb\n")
 		case "/deb":
@@ -82,6 +87,7 @@ func TestInstallRefusesBadChecksum(t *testing.T) {
 	defer srv.Close()
 	c := New("o/v", "0.2.0", "")
 	c.API = srv.URL
+	c.Keys = signer.Keys
 	c.Installed = func() (bool, string) { return true, "" }
 	c.Method = func() string { return MethodDeb }
 	_, err := c.Install(context.Background(), t.TempDir(), func(string) {})
@@ -126,18 +132,20 @@ func TestAutoUpdateConfigPersistence(t *testing.T) {
 }
 
 func TestAutoUpdateFlow(t *testing.T) {
+	signer := newTestSigner(t)
 	var srv *httptest.Server
 	// SHA256 of "sample deb package"
 	// echo -n "sample deb package" | sha256sum -> 2062402135c3c0ef201fa16db326cf6f8899eb7d94e77fc9a1e687e8346bcad8
 	const pkgBody = "sample deb package"
 	const pkgSum = "185db913d774e8b489db7e103197e9f2bf75401ecc824e1f8c9867aca5e90dc3"
 
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv = httptest.NewServer(signer.wrap(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/repos/onur/vm/releases/latest":
 			fmt.Fprintf(w, `{"tag_name":"v0.3.0","name":"VirtoMir v0.3.0","html_url":"https://x/rel","assets":[
 				{"name":"virtomir_0.3.0_%[1]s.deb","browser_download_url":"%[2]s/deb"},
-				{"name":"virtomir_0.3.0_%[1]s.deb.sha256","browser_download_url":"%[2]s/sha"}]}`, debArch(), srv.URL)
+				{"name":"virtomir_0.3.0_%[1]s.deb.sha256","browser_download_url":"%[2]s/sha"},
+				{"name":"virtomir_0.3.0_%[1]s.deb.sha256.asc","browser_download_url":"%[2]s/sig"}]}`, debArch(), srv.URL)
 		case "/sha":
 			fmt.Fprintf(w, "%s  virtomir_0.3.0_%s.deb\n", pkgSum, debArch())
 		case "/deb":
@@ -151,6 +159,7 @@ func TestAutoUpdateFlow(t *testing.T) {
 	tmp := t.TempDir()
 	c := New("onur/vm", "0.2.0", "")
 	c.API = srv.URL
+	c.Keys = signer.Keys
 	c.Installed = func() (bool, string) { return true, "" }
 	c.Method = func() string { return MethodDeb }
 	installedPath := ""
@@ -200,12 +209,14 @@ func TestAutoUpdateFlow(t *testing.T) {
 func TestAutoInstallDoesNotDeadlock(t *testing.T) {
 	pkg := "the package"
 	sum := sha256.Sum256([]byte(pkg))
+	signer := newTestSigner(t)
 	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv = httptest.NewServer(signer.wrap(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/repos/o/v/releases/latest":
 			fmt.Fprintf(w, `{"tag_name":"v9.0.0","assets":[{"name":"virtomir_9.0.0_%[1]s.deb","browser_download_url":"%[2]s/deb"},
-				{"name":"virtomir_9.0.0_%[1]s.deb.sha256","browser_download_url":"%[2]s/sha"}]}`, debArch(), srv.URL)
+				{"name":"virtomir_9.0.0_%[1]s.deb.sha256","browser_download_url":"%[2]s/sha"},
+				{"name":"virtomir_9.0.0_%[1]s.deb.sha256.asc","browser_download_url":"%[2]s/sig"}]}`, debArch(), srv.URL)
 		case "/sha":
 			fmt.Fprint(w, hex.EncodeToString(sum[:])+"  virtomir.deb\n")
 		case "/deb":
@@ -215,6 +226,7 @@ func TestAutoInstallDoesNotDeadlock(t *testing.T) {
 	defer srv.Close()
 	c := New("o/v", "0.2.0", "")
 	c.API = srv.URL
+	c.Keys = signer.Keys
 	c.Installed = func() (bool, string) { return true, "" }
 	c.Method = func() string { return MethodDeb }
 	ran := false

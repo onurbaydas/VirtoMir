@@ -95,12 +95,13 @@ func TestInstallBinaryMethod(t *testing.T) {
 	tarball := releaseTarball(t, "#!virtomird 9.0.0")
 	sum := sha256.Sum256(tarball)
 	name := fmt.Sprintf("virtomir_v9.0.0_linux_%s.tar.gz", runtime.GOARCH)
+	signer := newTestSigner(t)
 	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv = httptest.NewServer(signer.wrap(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/repos/o/v/releases/latest":
-			fmt.Fprintf(w, `{"tag_name":"v9.0.0","assets":[{"name":%q,"browser_download_url":"%s/tar"},{"name":%q,"browser_download_url":"%s/sha"}]}`,
-				name, srv.URL, name+".sha256", srv.URL)
+			fmt.Fprintf(w, `{"tag_name":"v9.0.0","assets":[{"name":%q,"browser_download_url":"%s/tar"},{"name":%q,"browser_download_url":"%s/sha"},{"name":%q,"browser_download_url":"%s/sig"}]}`,
+				name, srv.URL, name+".sha256", srv.URL, name+".sha256.asc", srv.URL)
 		case "/tar":
 			w.Write(tarball)
 		case "/sha":
@@ -111,6 +112,7 @@ func TestInstallBinaryMethod(t *testing.T) {
 
 	c := New("o/v", "0.2.0", "")
 	c.API = srv.URL
+	c.Keys = signer.Keys
 	c.Installed = func() (bool, string) { return true, "" }
 	c.Method = func() string { return MethodBinary }
 	var restarted string
@@ -144,12 +146,13 @@ func TestInstallBinaryMethod(t *testing.T) {
 func TestBinaryChecksumMismatchInstallsNothing(t *testing.T) {
 	tarball := releaseTarball(t, "#!evil")
 	name := fmt.Sprintf("virtomir_v9.0.0_linux_%s.tar.gz", runtime.GOARCH)
+	signer := newTestSigner(t)
 	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv = httptest.NewServer(signer.wrap(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/repos/o/v/releases/latest":
-			fmt.Fprintf(w, `{"tag_name":"v9.0.0","assets":[{"name":%q,"browser_download_url":"%s/tar"},{"name":%q,"browser_download_url":"%s/sha"}]}`,
-				name, srv.URL, name+".sha256", srv.URL)
+			fmt.Fprintf(w, `{"tag_name":"v9.0.0","assets":[{"name":%q,"browser_download_url":"%s/tar"},{"name":%q,"browser_download_url":"%s/sha"},{"name":%q,"browser_download_url":"%s/sig"}]}`,
+				name, srv.URL, name+".sha256", srv.URL, name+".sha256.asc", srv.URL)
 		case "/tar":
 			w.Write(tarball)
 		case "/sha":
@@ -159,6 +162,7 @@ func TestBinaryChecksumMismatchInstallsNothing(t *testing.T) {
 	defer srv.Close()
 	c := New("o/v", "0.2.0", "")
 	c.API = srv.URL
+	c.Keys = signer.Keys
 	c.Installed = func() (bool, string) { return true, "" }
 	c.Method = func() string { return MethodBinary }
 	c.Restart = func(string) (string, error) { t.Fatal("restart must not run"); return "", nil }

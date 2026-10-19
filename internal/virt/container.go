@@ -2,6 +2,7 @@ package virt
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/digitalocean/go-libvirt"
+	"github.com/onurbaydas/virtomir/internal/signature"
 	"libvirt.org/go/libvirtxml"
 )
 
@@ -96,7 +98,7 @@ func latestImage(ctx context.Context, img ContainerImage) (string, error) {
 }
 
 // fetchImage returns the cached rootfs tarball of img's newest build, downloading and
-// checking it against the build's SHA256SUMS first if needed.
+// checking it against the build's signed SHA256SUMS first if needed.
 func (c *Client) fetchImage(ctx context.Context, img ContainerImage, report func(string)) (string, error) {
 	dir, err := latestImage(ctx, img)
 	if err != nil {
@@ -146,23 +148,46 @@ func (c *Client) fetchImage(ctx context.Context, img ContainerImage, report func
 	return path, os.Rename(tmp.Name(), path)
 }
 
+// imageSum is the SHA-256 of a build's rootfs.tar.xz, from its SHA256SUMS once that is
+// proven signed by the image server's key (SHA256SUMS.asc).
 func imageSum(ctx context.Context, dir string) (string, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, imageServer+"/"+dir+"/SHA256SUMS", nil)
-	resp, err := imageHTTP.Do(req)
+	sums, err := imageFile(ctx, dir, "SHA256SUMS")
 	if err != nil {
 		return "", fmt.Errorf("image checksums: %w", err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("image checksums: %s", resp.Status)
+	sig, err := imageFile(ctx, dir, "SHA256SUMS.asc")
+	if err != nil {
+		return "", fmt.Errorf("image checksum signature: %w", err)
 	}
-	sc := bufio.NewScanner(io.LimitReader(resp.Body, 1<<20))
+	if err := signature.LXCImages().Verify(bytes.NewReader(sums), bytes.NewReader(sig)); err != nil {
+		return "", fmt.Errorf("the image's checksums are not signed by the Linux Containers image server, so it was not downloaded: %w", err)
+	}
+	return rootfsSum(sums)
+}
+
+// rootfsSum finds rootfs.tar.xz in a SHA256SUMS file.
+func rootfsSum(sums []byte) (string, error) {
+	sc := bufio.NewScanner(bytes.NewReader(sums))
 	for sc.Scan() {
 		if f := strings.Fields(sc.Text()); len(f) == 2 && f[1] == "rootfs.tar.xz" && len(f[0]) == 64 {
 			return strings.ToLower(f[0]), nil
 		}
 	}
 	return "", errors.New("the image's SHA256SUMS lists no rootfs.tar.xz")
+}
+
+// imageFile downloads a small file of an image build.
+func imageFile(ctx context.Context, dir, name string) ([]byte, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, imageServer+"/"+dir+"/"+name, nil)
+	resp, err := imageHTTP.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(resp.Status)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 }
 
 // prepareRootfs unpacks tarball into rootfs, names the system, sets root's password and
