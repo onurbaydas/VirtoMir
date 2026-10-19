@@ -596,4 +596,30 @@ describe('demo API', () => {
     expect(saveCfgRes.json.targetPool).toBe('fast-ssd')
     expect(saveCfgRes.json.autoSync).toBe(false)
   })
+
+  it('runs a rolling upgrade', () => {
+    const c = call('GET', '/api/v1/cluster').json
+    expect(c.mixedVersions).toBe(true)
+    expect(c.minVersion).toBe('0.5.9-demo')
+    expect(call('GET', '/api/v1/cluster/lcm').json.plans[0].state).toBe('succeeded')
+    expect(call('POST', '/api/v1/cluster/lcm/precheck', {}).json.checks).toHaveLength(3)
+
+    vi.useFakeTimers()
+    try {
+      const plan = call('POST', '/api/v1/cluster/lcm/start', { moveBack: true })
+      expect(plan.status).toBe(202)
+      expect(call('POST', '/api/v1/cluster/lcm/start', {}).status).toBe(409)
+      vi.advanceTimersByTime(10_000)
+      const mid = call('GET', `/api/v1/cluster/lcm/plans/${plan.json.id}`).json
+      expect(mid.state).toBe('running')
+      expect(mid.steps.length).toBeGreaterThan(2)
+      expect(call('POST', `/api/v1/cluster/lcm/plans/${plan.json.id}/pause`).json.state).toBe('paused')
+      expect(call('POST', `/api/v1/cluster/lcm/plans/${plan.json.id}/resume`).json.state).toBe('running')
+      vi.advanceTimersByTime(60_000)
+      expect(call('GET', `/api/v1/cluster/lcm/plans/${plan.json.id}`).json.state).toBe('succeeded')
+      expect(call('GET', '/api/v1/cluster').json.mixedVersions).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

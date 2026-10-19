@@ -5,6 +5,7 @@
 import type {
   Blueprint,
   CatalogRequest,
+  LCMPlan,
   ContentHostConfig,
   ContentItem,
   ContentVersion,
@@ -773,6 +774,20 @@ function history(host: w.DemoHost, q: URLSearchParams): Reply {
 
 const HOST_RE = /^\/api\/v1\/hosts\/([0-9a-f]{16})(\/.*)$/
 
+/** A running demo plan moves on by itself: one step every 3 seconds; when it is done every
+ * member runs the target version. */
+function advanceLCM(plan: LCMPlan): LCMPlan {
+  if (plan.state !== 'running') return plan
+  const steps = w.lcmSteps(plan.hostOrder, Date.parse(plan.started), 3000, Date.now())
+  const total = plan.hostOrder.length * 6
+  if (steps.length === total && steps[total - 1].state === 'done') {
+    Object.assign(plan, { state: 'succeeded', finished: steps[total - 1].at, steps })
+    for (const id of plan.hostOrder) w.hostVersions[id] = plan.targetVersion
+    return plan
+  }
+  return { ...plan, steps }
+}
+
 export function handle(method: string, url: URL, body: any): Reply {
   let path = url.pathname
   let host = w.SELF
@@ -863,8 +878,41 @@ export function handle(method: string, url: URL, body: any): Reply {
       return json({
         enabled: true,
         selfId: w.SELF.id,
-        members: w.HOSTS.map((h) => ({ id: h.id, name: h.name, address: `https://10.20.0.1${w.HOSTS.indexOf(h) + 1}:8420`, fingerprint: 'SHA256:' + h.id.repeat(2).slice(0, 43), self: h.self, reachable: true, version: '0.6.0-demo' })),
+        members: w.HOSTS.map((h) => ({ id: h.id, name: h.name, address: `https://10.20.0.1${w.HOSTS.indexOf(h) + 1}:8420`, fingerprint: 'SHA256:' + h.id.repeat(2).slice(0, 43), self: h.self, reachable: true, version: w.hostVersions[h.id] })),
+        mixedVersions: new Set(Object.values(w.hostVersions)).size > 1,
+        minVersion: Object.values(w.hostVersions).sort()[0],
       })
+    case 'GET /api/v1/cluster/lcm': {
+      const plans = w.lcmPlans.map(advanceLCM)
+      return json({ enabled: true, activePlan: plans.find((p) => p.state === 'running' || p.state === 'paused'), plans: [...plans].reverse() })
+    }
+    case 'POST /api/v1/cluster/lcm/precheck':
+      return json({
+        checks: w.HOSTS.map((h) => ({ hostId: h.id, hostName: h.name, ok: true, problems: [] })),
+      })
+    case 'POST /api/v1/cluster/lcm/start': {
+      if (w.lcmPlans.map(advanceLCM).some((p) => p.state === 'running' || p.state === 'paused')) return json({ error: 'a rolling upgrade is already running' }, 409)
+      const order = [...w.HOSTS.filter((h) => !h.self), w.SELF].map((h) => h.id)
+      const plan = {
+        id: `lcm-${String(w.lcmPlans.length + 1).padStart(4, '0')}`, started: new Date().toISOString(), state: 'running' as const, hostOrder: order,
+        targetVersion: body?.targetVersion || '0.6.0-demo', osUpdates: !!body?.osUpdates, reboot: !!body?.reboot, moveBack: !!body?.moveBack,
+        startedBy: session.user ?? 'demo', maintenance: [], steps: [],
+      }
+      w.lcmPlans.push(plan)
+      return json(advanceLCM(plan), 202)
+    }
+    case `GET /api/v1/cluster/lcm/plans/${parts[3]}`:
+    case `POST /api/v1/cluster/lcm/plans/${parts[3]}/${parts[4]}`: {
+      const plan = w.lcmPlans.find((p) => p.id === parts[3])
+      if (!plan) return json({ error: 'no such plan' }, 404)
+      if (method === 'POST') {
+        const cur = advanceLCM(plan)
+        if (cur.state !== 'running' && cur.state !== 'paused') return json({ error: 'this plan is not running on this host' }, 409)
+        if (parts[4] === 'abort') Object.assign(plan, { state: 'aborted', finished: new Date().toISOString(), steps: cur.steps })
+        else plan.state = parts[4] === 'pause' ? 'paused' : 'running'
+      }
+      return json(advanceLCM(plan))
+    }
     case 'GET /api/v1/cluster/cpu-baseline':
       return json({ model: 'EPYC-Genoa', hosts: 3 })
     case 'POST /api/v1/cluster/invite':

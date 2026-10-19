@@ -17,9 +17,11 @@
   import HaClusterPanel from '../components/HaClusterPanel.svelte'
   import ResourcePoolsPanel from '../components/ResourcePoolsPanel.svelte'
   import PlacementPanel from '../components/PlacementPanel.svelte'
+  import ClusterUpdatePanel from '../components/ClusterUpdatePanel.svelte'
+  import TriangleAlert from '@lucide/svelte/icons/triangle-alert'
   import { ent } from '../enterprise'
 
-  type Tab = 'members' | 'ha' | 'pools' | 'placement'
+  type Tab = 'members' | 'ha' | 'pools' | 'placement' | 'updates'
   let currentTab = $state<Tab>('members')
   let hostLabels = $state<Record<string, Record<string, string>>>({})
 
@@ -128,7 +130,21 @@
     <button class="c-tab" class:active={currentTab === 'placement'} onclick={() => currentTab = 'placement'}>
       {t('Placement rules')}
     </button>
+    <button class="c-tab" class:active={currentTab === 'updates'} onclick={() => currentTab = 'updates'}>
+      {t('Updates')}
+    </button>
   </div>
+
+  {#if info?.mixedVersions && currentTab !== 'updates'}
+    <div class="ui-panel card notice mixed">
+      <TriangleAlert size={18} />
+      <div>
+        <strong>{t('Cluster members run different versions ({versions})', { versions: [...new Set(cluster.members.filter((m) => m.reachable).map((m) => m.version))].join(', ') })}</strong>
+        <p>{t('Some features wait until every member runs the same version. A rolling update brings them together.')}</p>
+      </div>
+      <button class="ui-btn sm" onclick={() => (currentTab = 'updates')}>{t('Open updates')}</button>
+    </div>
+  {/if}
 
   {#if currentTab === 'ha'}
     <HaClusterPanel />
@@ -136,6 +152,8 @@
     <ResourcePoolsPanel />
   {:else if currentTab === 'placement'}
     <PlacementPanel />
+  {:else if currentTab === 'updates'}
+    <ClusterUpdatePanel />
   {:else}
     {#if cluster.clustered}
       <ClusterOverview />
@@ -310,6 +328,13 @@
   .notice {
     flex-direction: row;
     align-items: flex-start;
+  }
+  .notice.mixed {
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .notice.mixed > div {
+    flex: 1;
   }
   .notice p {
     margin: 4px 0 0;

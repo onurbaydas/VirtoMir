@@ -25,6 +25,9 @@ import type {
   HostHardware,
   HostInfo,
   Lease,
+  LCMPlan,
+  LCMStep,
+  LCMStepKind,
   Pool,
   PricingConfig,
   Project,
@@ -967,6 +970,57 @@ export const reports: ReportMeta[] = [
 
 export const reportSchedules: ReportSchedule[] = [
   { id: 'rs-1', name: 'Weekly capacity', kind: 'capacity', format: 'html', enabled: true, every: 'weekly', at: '07:00', keepDays: 90, notify: true, lastRun: ago(3 * H), nextRun: new Date(now() + 7 * D - 3 * H).toISOString() },
+]
+
+// ---- Rolling cluster upgrades (ADR-0070) -----------------------------------------------------
+
+/** The version each member runs; hv-02 is one release behind, so the cluster shows mixed. */
+export const hostVersions: Record<string, string> = Object.fromEntries(HOSTS.map((h, i) => [h.id, i === 1 ? '0.5.9-demo' : '0.6.0-demo']))
+
+const LCM_STEPS: LCMStepKind[] = ['precheck', 'enter_maintenance', 'evacuate', 'update_virtomir', 'wait_rejoin', 'exit_maintenance']
+const LCM_MSG: Partial<Record<LCMStepKind, string>> = {
+  precheck: 'all checks passed',
+  enter_maintenance: 'no new machines are placed here',
+  evacuate: '3 machines moved away',
+  update_virtomir: 'update installed',
+  wait_rejoin: 'back with 0.6.0-demo',
+  exit_maintenance: 'machines may be placed here again',
+}
+
+/** The steps of a plan that started at start, one every few seconds (`upTo` limits them). */
+export function lcmSteps(order: string[], start: number, every: number, upTo = Infinity): LCMStep[] {
+  const out: LCMStep[] = []
+  let at = start
+  for (const id of order) {
+    const h = HOSTS.find((x) => x.id === id)!
+    for (const kind of LCM_STEPS) {
+      at += every
+      if (at > upTo) {
+        out.push({ at: new Date(at - every).toISOString(), kind, host: h.name, hostId: id, message: '', state: 'running' })
+        return out
+      }
+      out.push({ at: new Date(at).toISOString(), kind, host: h.name, hostId: id, message: LCM_MSG[kind] ?? '', state: 'done' })
+    }
+  }
+  return out
+}
+
+const lcmOrder = [...HOSTS.filter((h) => !h.self), SELF].map((h) => h.id)
+export const lcmPlans: LCMPlan[] = [
+  {
+    id: 'lcm-0001',
+    started: ago(12 * D),
+    finished: ago(12 * D - 25 * 60e3),
+    state: 'succeeded',
+    hostOrder: lcmOrder,
+    targetVersion: '0.5.9-demo',
+    osUpdates: true,
+    reboot: true,
+    moveBack: true,
+    startedBy: 'onur',
+    maintenance: [],
+    steps: lcmSteps(lcmOrder, Date.parse(ago(12 * D)), 80e3),
+  },
 ]
 
 // ---- Catalog (ADR-0065) ----------------------------------------------------------------------

@@ -1241,6 +1241,70 @@ export interface ClusterInfo {
   enabled: boolean
   selfId?: string
   members: ClusterMember[]
+  /** Reachable members run different versions (a rolling upgrade is due). */
+  mixedVersions?: boolean
+  /** The oldest version, when every member answers. */
+  minVersion?: string
+}
+
+// ---- Rolling cluster upgrades (ADR-0070) -------------------------------------------------
+
+export interface HostCheck {
+  hostId: string
+  hostName: string
+  ok: boolean
+  problems: string[]
+}
+
+export type LCMStepKind =
+  | 'precheck'
+  | 'enter_maintenance'
+  | 'evacuate'
+  | 'update_virtomir'
+  | 'update_os'
+  | 'reboot'
+  | 'wait_rejoin'
+  | 'exit_maintenance'
+  | 'move_back'
+  | 'aborted'
+
+export interface LCMStep {
+  at: string
+  kind: LCMStepKind
+  host: string
+  hostId: string
+  message: string
+  state: 'running' | 'done' | 'failed' | 'skipped'
+}
+
+export type LCMPlanState = 'planned' | 'running' | 'paused' | 'succeeded' | 'failed' | 'aborted'
+
+export interface LCMPlan {
+  id: string
+  started: string
+  finished?: string
+  state: LCMPlanState
+  hostOrder: string[]
+  targetVersion: string
+  osUpdates: boolean
+  reboot: boolean
+  moveBack: boolean
+  startedBy: string
+  maintenance: string[]
+  steps: LCMStep[] | null
+}
+
+export interface LCMStatus {
+  enabled: boolean
+  activePlan?: LCMPlan
+  plans: LCMPlan[]
+}
+
+export interface LCMStart {
+  targetVersion?: string
+  osUpdates?: boolean
+  reboot?: boolean
+  moveBack?: boolean
 }
 
 export interface Invite {
@@ -1390,6 +1454,13 @@ export const api = {
   invite: () => request<Invite>('POST', '/api/v1/cluster/invite'),
   join: (code: string) => request<void>('POST', '/api/v1/cluster/join', { code }),
   removeMember: (id: string) => request<void>('DELETE', `/api/v1/cluster/members/${enc(id)}`),
+  lcmStatus: () => request<LCMStatus>('GET', '/api/v1/cluster/lcm'),
+  lcmPrecheck: (targetVersion = '') => request<{ checks: HostCheck[] }>('POST', '/api/v1/cluster/lcm/precheck', { targetVersion }),
+  lcmStart: (opts: LCMStart) => request<LCMPlan>('POST', '/api/v1/cluster/lcm/start', opts),
+  lcmPlan: (id: string) => request<LCMPlan>('GET', `/api/v1/cluster/lcm/plans/${enc(id)}`),
+  lcmPause: (id: string) => request<LCMPlan>('POST', `/api/v1/cluster/lcm/plans/${enc(id)}/pause`),
+  lcmResume: (id: string) => request<LCMPlan>('POST', `/api/v1/cluster/lcm/plans/${enc(id)}/resume`),
+  lcmAbort: (id: string) => request<LCMPlan>('POST', `/api/v1/cluster/lcm/plans/${enc(id)}/abort`),
   host: () => request<HostInfo>('GET', '/api/v1/host'),
 
   session: () => request<Session>('GET', '/api/v1/auth/session'),
