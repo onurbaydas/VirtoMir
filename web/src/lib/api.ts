@@ -111,6 +111,17 @@ export interface Device {
   bandwidth?: NICBandwidth
 }
 
+export interface GuestInfo {
+  /** An agent answers; everything else is empty when it does not. */
+  connected: boolean
+  os: string
+  kernel?: string
+  hostname?: string
+  timezone?: string
+  users: string[]
+  filesystems: { mountpoint: string; type: string; totalBytes: number; usedBytes: number }[]
+}
+
 export interface NICBandwidth {
   inMbps: number
   outMbps: number
@@ -1519,6 +1530,9 @@ export const api = {
   saveSettings: (uuid: string, s: Settings) => request<SaveResult>('PUT', `${domainPath(uuid)}/settings`, s),
   resizeDisk: (uuid: string, target: string, sizeGiB: number) =>
     request<void>('POST', `${domainPath(uuid)}/disks/${enc(target)}/resize`, { sizeGiB }),
+  guestInfo: (uuid: string) => request<GuestInfo>('GET', `${domainPath(uuid)}/guest`),
+  setGuestPassword: (uuid: string, user: string, password: string) =>
+    request<void>('POST', `${domainPath(uuid)}/guest/password`, { user, password }),
   setInterfaceBandwidth: (uuid: string, mac: string, bw: NICBandwidth) =>
     request<void>('PUT', `${domainPath(uuid)}/interfaces/${enc(mac)}/bandwidth`, bw),
   /** Moves a disk into another pool of the same host; a running machine keeps running. */

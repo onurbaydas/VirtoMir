@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/digitalocean/go-libvirt"
 	"libvirt.org/go/libvirtxml"
 )
 
@@ -233,6 +234,38 @@ func TestSnapshotDoc(t *testing.T) {
 	if s := snapshotDoc(block, "s", "", false); s.Memory.File != "/var/lib/libvirt/images/b.s.mem" ||
 		s.Disks.Disks[0].Source.File.File != "/var/lib/libvirt/images/b-vda.s.qcow2" {
 		t.Errorf("no file disk: overlays go to the default image directory, got %+v / %+v", s.Memory, s.Disks.Disks[0].Source.File)
+	}
+}
+
+func TestGuestInfo(t *testing.T) {
+	if !agentConnected(fixture(t)) {
+		t.Error("fixture has a connected agent channel")
+	}
+	if agentConnected(&libvirtxml.Domain{}) {
+		t.Error("no devices: no agent")
+	}
+	s := func(f, v string) libvirt.TypedParam {
+		return libvirt.TypedParam{Field: f, Value: *libvirt.NewTypedParamValueString(v)}
+	}
+	u := func(f string, v uint64) libvirt.TypedParam {
+		return libvirt.TypedParam{Field: f, Value: *libvirt.NewTypedParamValueUllong(v)}
+	}
+	g := parseGuestInfo([]libvirt.TypedParam{
+		s("os.name", "Debian GNU/Linux"), s("os.version", "13 (trixie)"), s("os.kernel-release", "6.12.48-amd64"),
+		s("hostname", "web1"), s("timezone.name", "UTC"),
+		{Field: "user.count", Value: *libvirt.NewTypedParamValueUint(1)}, s("user.0.name", "debian"),
+		{Field: "fs.count", Value: *libvirt.NewTypedParamValueUint(2)},
+		s("fs.0.mountpoint", "/"), s("fs.0.fstype", "ext4"), u("fs.0.total-bytes", 20<<30), u("fs.0.used-bytes", 5<<30),
+		s("fs.1.mountpoint", "/sys/fs/cgroup"), s("fs.1.fstype", "cgroup2"),
+	})
+	if !g.Connected || g.OS != "Debian GNU/Linux 13 (trixie)" || g.Hostname != "web1" || g.Kernel != "6.12.48-amd64" || g.Timezone != "UTC" {
+		t.Errorf("info = %+v", g)
+	}
+	if len(g.Users) != 1 || g.Users[0] != "debian" {
+		t.Errorf("users = %v", g.Users)
+	}
+	if len(g.Filesystems) != 1 || g.Filesystems[0] != (GuestFilesystem{"/", "ext4", 20 << 30, 5 << 30}) {
+		t.Errorf("file systems = %+v (sizeless pseudo file systems are left out)", g.Filesystems)
 	}
 }
 

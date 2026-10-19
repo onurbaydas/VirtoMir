@@ -564,6 +564,22 @@ function domainRoute(host: w.DemoHost, method: string, rest: string[], q: URLSea
       return json({ appliesOnNextBoot: m.state === 'running' })
     case op === 'GET settings':
       return json(w.settings(m))
+    case op === 'GET guest':
+      return json(
+        m.state !== 'running'
+          ? { connected: false, os: '', users: [], filesystems: [] }
+          : {
+              connected: true,
+              os: m.os === 'windows' ? 'Microsoft Windows Server 2025 Standard' : 'Ubuntu 24.04.3 LTS',
+              kernel: m.os === 'windows' ? '10.0.26100' : '6.8.0-85-generic',
+              hostname: m.name,
+              timezone: 'UTC',
+              users: [m.os === 'windows' ? 'Administrator' : 'ubuntu'],
+              filesystems: [{ mountpoint: m.os === 'windows' ? 'C:\\' : '/', type: m.os === 'windows' ? 'NTFS' : 'ext4', totalBytes: m.diskGiB * 2 ** 30, usedBytes: m.diskGiB * 0.37 * 2 ** 30 }],
+            },
+      )
+    case op === 'POST guest/password':
+      return none()
     case op === 'POST settings/preview': {
       const before = w.domainXML(m)
       const after = before

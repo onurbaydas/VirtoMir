@@ -28,6 +28,7 @@
   import ConsolePanel from '../components/ConsolePanel.svelte'
   import BackupsPanel from '../components/BackupsPanel.svelte'
   import Maximize2 from '@lucide/svelte/icons/maximize-2'
+  import GuestPanel from '../components/GuestPanel.svelte'
   import Gauge from '@lucide/svelte/icons/gauge'
   import ConfirmButton from '../components/ConfirmButton.svelte'
   import Dialog from '../components/Dialog.svelte'
@@ -509,6 +510,9 @@
         <section class="panel">
           <h2>{t('Memory')}</h2>
           <PropList props={memoryProps} />
+        </section>
+        <section class="panel">
+          <GuestPanel uuid={detail.uuid} running={active} />
         </section>
       </div>
     </div>

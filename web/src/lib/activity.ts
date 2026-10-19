@@ -28,6 +28,7 @@ const RULES: Rule[] = [
   { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/disks$/, text: 'added storage to {vm}' },
   { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/disks\/([^/]+)\/resize$/, text: 'grew disk $2 of {vm}' },
   { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/disks\/([^/]+)\/move$/, text: 'moved disk $2 of {vm} to another pool' },
+  { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/guest\/password$/, text: 'set a password inside {vm}' },
   { method: 'PUT', re: /^\/api\/v1\/domains\/([^/]+)\/interfaces\/([^/]+)\/bandwidth$/, text: 'changed the traffic limits of adapter $2 of {vm}' },
   { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/interfaces$/, text: 'added a network adapter to {vm}' },
   { method: 'POST', re: /^\/api\/v1\/domains\/([^/]+)\/devices\/detach$/, text: 'removed a device from {vm}' },
