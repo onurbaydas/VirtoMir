@@ -128,13 +128,17 @@ type SecurityGroup struct {
 
 // HealthCheckSpec is how a load balancer checks its members.
 type HealthCheckSpec struct {
-	Protocol        string `json:"protocol"` // tcp, http
+	// Protocol: OVN checks with tcp (and udp) only; it has no HTTP checks.
+	Protocol        string `json:"protocol"`
 	Port            int    `json:"port"`
 	IntervalSeconds int    `json:"intervalSeconds"`
 	TimeoutSeconds  int    `json:"timeoutSeconds"`
 	Fall            int    `json:"fall"`
 	Rise            int    `json:"rise"`
 	HTTPPath        string `json:"httpPath,omitempty"`
+	// SourceIP is an unused address of the members' subnet that OVN sends the checks from
+	// (default: the subnet's last address).
+	SourceIP string `json:"sourceIp,omitempty"`
 }
 
 // LoadBalancer spreads a virtual IP's connections over member addresses (OVN load_balancer).
@@ -156,18 +160,21 @@ type LoadBalancer struct {
 	Updated          time.Time        `json:"updated"`
 }
 
-// IPsecConfig encrypts the overlay tunnels between hosts.
+// IPsecConfig encrypts the overlay tunnels between hosts. OVN does IPsec with certificates
+// only: every host has its certificate and key, and all share the CA.
 type IPsecConfig struct {
 	Enabled bool   `json:"enabled"`
-	Mode    string `json:"mode"` // psk (cert not yet)
-	// PSK is the pre-shared key; the API never sends it back (see Redacted).
-	PSK       string `json:"psk,omitempty"`
-	SKBMark   uint   `json:"skbMark,omitempty"`
-	Status    string `json:"status"` // disabled, active, error
-	LastError string `json:"lastError,omitempty"`
+	Mode    string `json:"mode"` // cert
+	// PSK stays for compatibility with older settings; OVN refuses pre-shared keys.
+	PSK        string `json:"psk,omitempty"`
+	CertFile   string `json:"certFile,omitempty"`
+	KeyFile    string `json:"keyFile,omitempty"`
+	CACertFile string `json:"caCertFile,omitempty"`
+	Status     string `json:"status"` // disabled, active, error
+	LastError  string `json:"lastError,omitempty"`
 }
 
-// Redacted is cfg without its key, for answers.
+// Redacted is the configuration without secrets, for answers.
 func (c IPsecConfig) Redacted() IPsecConfig {
 	if c.PSK != "" {
 		c.PSK = "********"
