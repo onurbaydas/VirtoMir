@@ -60,7 +60,7 @@
     if (form.pinning.length !== n) form.pinning = Array.from({ length: n }, (_, i) => form!.pinning[i] ?? '')
   })
   let pinned = $derived(form ? form.pinning.filter((p) => p).length : 0)
-  let tuned = $derived(!!form && (pinned > 0 || !!form.emulatorPin || form.hugePages || !!form.numaMode))
+  let tuned = $derived(!!form && (pinned > 0 || !!form.emulatorPin || form.hugePages || !!form.numaMode || !!form.cpuWeight || !!form.cpuLimit))
   // One host CPU per vCPU, starting at `first` — the usual setup for latency-sensitive guests.
   let pinFrom = $state(0)
   function pinOneToOne() {
@@ -100,6 +100,7 @@
     if (bad >= 0) p.push(t('vCPU {bad}: use host CPU numbers and ranges like 2, 4-5 or 0,2.', { bad: bad }))
     if (badSet(form.emulatorPin)) p.push( t('Emulator threads: use host CPU numbers and ranges.'))
     if (form.numaMode && (!form.numaNodes || badSet(form.numaNodes))) p.push( t('Name the NUMA nodes memory may come from, e.g. 0.'))
+    if (form.cpuLimit < 0 || form.cpuLimit > 100) p.push(t('The CPU limit is between 0 and 100 %.'))
     return p
   })
   let firmwareChanged = $derived(!!form && !!view && (form.firmware !== view.firmware || form.secureBoot !== view.secureBoot))
@@ -230,6 +231,14 @@
           <input class="ui-input mono" bind:value={form.cpuModel} placeholder={t('Skylake-Client, EPYC-Rome, Westmere…')} />
         </label>
       {/if}
+      <label class="ui-field narrow">
+        <span class="label">{t('Nested virtualization')}</span>
+        <select class="ui-input" bind:value={form.nested}>
+          <option value="">{t("Host's default")}</option>
+          <option value="on">{t('On: the guest can run its own machines')}</option>
+          <option value="off">{t('Off')}</option>
+        </select>
+      </label>
       {#if cluster.clustered}
         <button class="ui-btn sm baseline" class:busy={baselineBusy} disabled={baselineBusy || !session.can('admin')} onclick={useBaseline}>
           {t('Use a model every cluster host supports')}
@@ -304,6 +313,18 @@
                 {#if form.numaMode}<input class="ui-input mono" bind:value={form.numaNodes} placeholder="0" aria-invalid={badSet(form.numaNodes) || !form.numaNodes} />{/if}
               </div>
               <span class="hint">{t('This host has {v} NUMA node{v2}.', { v: live.host?.numaNodes ?? '?', v2: live.host?.numaNodes === 1 ? '' : 's' })}</span>
+            </label>
+          </div>
+          <div class="grid2">
+            <label class="ui-field">
+              <span class="label">{t('CPU weight')}</span>
+              <input class="ui-input" type="number" min="0" max="262144" step="256" bind:value={form.cpuWeight} placeholder="1024" />
+              <span class="hint">{t('Share of CPU time against other machines when the host is busy. 1024 is normal, 2048 twice as much; 0 = default. Applied live.')}</span>
+            </label>
+            <label class="ui-field">
+              <span class="label">{t('CPU limit (%)')}</span>
+              <input class="ui-input" type="number" min="0" max="100" bind:value={form.cpuLimit} aria-invalid={form.cpuLimit < 0 || form.cpuLimit > 100} />
+              <span class="hint">{t('Each vCPU may use at most this share of one host CPU, even when the host is idle; 0 = no limit. Applied live.')}</span>
             </label>
           </div>
           <label class="ui-switch"><input type="checkbox" bind:checked={form.hugePages} /> {t('Back memory with huge pages')} <span class="hint">{t('— faster for big guests; the host must reserve them (vm.nr_hugepages), or the machine will not start')}</span></label>

@@ -557,6 +557,9 @@ export function settings(m: DemoMachine): SettingsView {
     hugePages: !!m.hugepages,
     numaMode: m.hugepages ? 'strict' : '',
     numaNodes: m.hugepages ? '0' : '',
+    cpuWeight: 0,
+    cpuLimit: 0,
+    nested: '',
     bootDevices: [
       { key: 'hd', label: 'Hard disk' },
       { key: 'cdrom', label: 'CD/DVD' },

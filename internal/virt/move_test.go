@@ -134,6 +134,54 @@ func TestTuningRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCPULimitsAndNested(t *testing.T) {
+	x := fixture(t)
+	s := settingsFromXML(x).Settings
+	s.CPUWeight, s.CPULimit, s.Nested = 2048, 50, "on"
+	if err := applySettingsFor(x, s, "vmx"); err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := x.Marshal()
+	for _, want := range []string{`<shares>2048</shares>`, `<period>100000</period>`, `<quota>50000</quota>`, `<feature policy="require" name="vmx">`} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("missing %s in\n%s", want, doc)
+		}
+	}
+	back := settingsFromXML(x).Settings
+	if back.CPUWeight != 2048 || back.CPULimit != 50 || back.Nested != "on" {
+		t.Errorf("read back weight %d limit %d nested %q", back.CPUWeight, back.CPULimit, back.Nested)
+	}
+
+	s.Nested = "off"
+	if err := applySettingsFor(x, s, "vmx"); err != nil {
+		t.Fatal(err)
+	}
+	if doc, _ = x.Marshal(); !strings.Contains(doc, `<feature policy="disable" name="vmx">`) || strings.Count(doc, `name="vmx"`) != 1 {
+		t.Errorf("nested off:\n%s", doc)
+	}
+
+	s.CPUWeight, s.CPULimit, s.Nested = 0, 0, ""
+	if err := applySettingsFor(x, s, "vmx"); err != nil {
+		t.Fatal(err)
+	}
+	if doc, _ = x.Marshal(); strings.Contains(doc, "<shares>") || strings.Contains(doc, "<quota>") || strings.Contains(doc, `name="vmx"`) {
+		t.Errorf("not cleared:\n%s", doc)
+	}
+
+	for _, bad := range []Settings{{CPULimit: 101}, {CPUWeight: 1}, {Nested: "maybe"}} {
+		b := settingsFromXML(x).Settings
+		b.CPUWeight, b.CPULimit, b.Nested = bad.CPUWeight, bad.CPULimit, bad.Nested
+		if err := applySettingsFor(x, b, "vmx"); err == nil {
+			t.Errorf("accepted weight %d limit %d nested %q", bad.CPUWeight, bad.CPULimit, bad.Nested)
+		}
+	}
+	b := settingsFromXML(x).Settings
+	b.Nested = "on"
+	if err := applySettingsFor(x, b, ""); err == nil {
+		t.Error("nested virtualization accepted on a host without VT-x/AMD-V")
+	}
+}
+
 func TestPoolXMLSAN(t *testing.T) {
 	x, err := poolXML(PoolSpec{Name: "san", Type: "iscsi", Host: "192.168.77.10", Target: "iqn.2026-10.dev.virtomir:lun"})
 	if err != nil {

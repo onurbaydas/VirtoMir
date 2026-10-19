@@ -2,6 +2,7 @@ package virt
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 
@@ -22,6 +23,9 @@ type Settings struct {
 	Sockets  int    `json:"sockets"`
 	Cores    int    `json:"cores"`
 	Threads  int    `json:"threads"`
+	// Nested: whether the guest may run virtual machines itself: "" (the host's default),
+	// "on" or "off" (the host CPU's vmx or svm feature).
+	Nested string `json:"nested"`
 
 	MemoryMiB        uint64 `json:"memoryMiB"`        // <memory>
 	CurrentMemoryMiB uint64 `json:"currentMemoryMiB"` // <currentMemory>, the balloon target
@@ -68,7 +72,71 @@ func settingsFromXML(x *libvirtxml.Domain) SettingsView {
 	}, BootDevices: bootDevices(x), HotplugMemoryMiB: d.Memory.HotplugKiB >> 10}
 	v.BootOrder = currentBootOrder(x, v.BootDevices)
 	v.Tuning = tuningFromXML(x, v.MaxVCPUs)
+	v.Nested = nestedFromXML(x)
 	return v
+}
+
+// virtFeatures are the CPU features that let a guest run virtual machines (Intel, AMD).
+var virtFeatures = []string{"vmx", "svm"}
+
+func nestedFromXML(x *libvirtxml.Domain) string {
+	if x.CPU == nil {
+		return ""
+	}
+	for _, f := range x.CPU.Features {
+		if slices.Contains(virtFeatures, f.Name) {
+			switch f.Policy {
+			case "require", "force":
+				return "on"
+			case "disable", "forbid":
+				return "off"
+			}
+		}
+	}
+	return ""
+}
+
+// applyNested sets the host's virtualization feature (flag: vmx or svm) on the guest CPU.
+func applyNested(x *libvirtxml.Domain, nested, flag string) error {
+	if nested == "" {
+		if x.CPU != nil {
+			x.CPU.Features = slices.DeleteFunc(x.CPU.Features, func(f libvirtxml.DomainCPUFeature) bool { return slices.Contains(virtFeatures, f.Name) })
+		}
+		return nil
+	}
+	if nested != "on" && nested != "off" {
+		return invalidf("Nested virtualization must be on, off or the host's default.")
+	}
+	if flag == "" {
+		return refusedf("This host's CPU has no VT-x or AMD-V, so its machines cannot run machines of their own.")
+	}
+	x.CPU = orNew(x.CPU)
+	x.CPU.Features = slices.DeleteFunc(x.CPU.Features, func(f libvirtxml.DomainCPUFeature) bool { return slices.Contains(virtFeatures, f.Name) })
+	policy := "require"
+	if nested == "off" {
+		policy = "disable"
+	}
+	x.CPU.Features = append(x.CPU.Features, libvirtxml.DomainCPUFeature{Policy: policy, Name: flag})
+	return nil
+}
+
+// hostVirtFlag is the host CPU's virtualization feature: vmx (Intel), svm (AMD) or "".
+func hostVirtFlag() string {
+	raw, err := os.ReadFile("/proc/cpuinfo")
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if name, flags, ok := strings.Cut(line, ":"); ok && strings.TrimSpace(name) == "flags" {
+			for _, f := range strings.Fields(flags) {
+				if slices.Contains(virtFeatures, f) {
+					return f
+				}
+			}
+			return ""
+		}
+	}
+	return ""
 }
 
 func bootDevices(x *libvirtxml.Domain) []BootDevice {
@@ -172,6 +240,11 @@ var cpuModes = []string{"host-passthrough", "host-model", "maximum", "custom"}
 // applySettings validates s and writes it into x. Only what changed is touched, so
 // settings the form does not know about survive untouched.
 func applySettings(x *libvirtxml.Domain, s Settings) error {
+	return applySettingsFor(x, s, hostVirtFlag())
+}
+
+// applySettingsFor is applySettings for a host whose CPU virtualization feature is virtFlag.
+func applySettingsFor(x *libvirtxml.Domain, s Settings, virtFlag string) error {
 	old := settingsFromXML(x)
 
 	if s.MaxVCPUs < 1 || s.MaxVCPUs > 512 {
@@ -243,6 +316,11 @@ func applySettings(x *libvirtxml.Domain, s Settings) error {
 		topo.Dies, topo.Clusters = 1, 1 // the form models sockets × cores × threads only
 	}
 	x.CPU.Topology = topo
+	if s.Nested != old.Nested {
+		if err := applyNested(x, s.Nested, virtFlag); err != nil {
+			return err
+		}
+	}
 
 	// Memory (written in MiB; libvirt normalizes to KiB)
 	if s.MemoryMiB != old.MemoryMiB {
@@ -439,6 +517,13 @@ func (c *Client) SaveSettings(uuid string, s Settings) (SaveResult, error) {
 			res.LiveErrors = append(res.LiveErrors, fmt.Sprintf("memory: %v", classify(err)))
 		} else {
 			res.AppliedLive = append(res.AppliedLive, "memory")
+		}
+	}
+	if s.CPUWeight != old.CPUWeight || s.CPULimit != old.CPULimit {
+		if err := l.DomainSetSchedulerParametersFlags(d, schedParams(s.Tuning), uint32(libvirt.DomainAffectLive)); err != nil {
+			res.LiveErrors = append(res.LiveErrors, fmt.Sprintf("CPU weight and limit: %v", classify(err)))
+		} else {
+			res.AppliedLive = append(res.AppliedLive, "CPU weight and limit")
 		}
 	}
 	return res, nil

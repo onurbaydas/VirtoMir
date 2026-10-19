@@ -631,6 +631,12 @@ export interface Settings {
   hugePages: boolean
   numaMode: '' | 'strict' | 'preferred' | 'interleave' | 'restrictive'
   numaNodes: string
+  /** Share of CPU time against other machines when the host is busy; 0 = default (1024). */
+  cpuWeight: number
+  /** Cap per vCPU in percent of one host CPU; 0 = none. */
+  cpuLimit: number
+  /** Whether the guest may run machines itself; '' = the host's default. */
+  nested: '' | 'on' | 'off'
 }
 
 export interface SettingsView extends Settings {
