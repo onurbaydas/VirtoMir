@@ -194,6 +194,14 @@ type NICSpec struct {
 	// VLAN tags this adapter's traffic (Open vSwitch networks, macvtap passthrough, SR-IOV);
 	// 0 = as the network says.
 	VLAN uint `json:"vlan,omitempty"`
+
+	// OVN (SDN, ADR-0072): the adapter plugs into the integration bridge (Bridge, default
+	// br-int) as the logical switch port IfaceID of subnet OVNSubnet. The API allocates the
+	// port; the MAC must be the port's.
+	OVNSubnet      string   `json:"ovnSubnet,omitempty"`
+	IfaceID        string   `json:"ifaceId,omitempty"`
+	SecurityGroups []string `json:"securityGroups,omitempty"`
+	IPAddress      string   `json:"ipAddress,omitempty"`
 }
 
 func (c *Client) AttachInterface(uuid string, spec NICSpec) error {
@@ -222,6 +230,16 @@ func (c *Client) AttachInterface(uuid string, spec NICSpec) error {
 
 func buildNIC(spec NICSpec) (libvirtxml.DomainInterface, error) {
 	nic := libvirtxml.DomainInterface{Model: &libvirtxml.DomainInterfaceModel{Type: orDefault(spec.Model, "virtio")}}
+	if spec.IfaceID != "" {
+		if spec.MAC == "" {
+			return nic, invalidf("An OVN port has a fixed MAC address; give it.")
+		}
+		nic.Source = &libvirtxml.DomainInterfaceSource{Bridge: &libvirtxml.DomainInterfaceSourceBridge{Bridge: orDefault(spec.Bridge, "br-int")}}
+		nic.VirtualPort = &libvirtxml.DomainInterfaceVirtualPort{Params: &libvirtxml.DomainInterfaceVirtualPortParams{
+			OpenVSwitch: &libvirtxml.DomainInterfaceVirtualPortParamsOpenVSwitch{InterfaceID: spec.IfaceID}}}
+		nic.MAC = &libvirtxml.DomainInterfaceMAC{Address: spec.MAC}
+		return nic, nil
+	}
 	switch {
 	case spec.Network != "" && spec.Bridge == "":
 		nic.Source = &libvirtxml.DomainInterfaceSource{Network: &libvirtxml.DomainInterfaceSourceNetwork{Network: spec.Network}}
