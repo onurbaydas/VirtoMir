@@ -28,6 +28,9 @@ func (f *fakeBackend) AdoptDomain(_ string) (string, error) {
 }
 
 func (f *fakeBackend) ListPools() ([]virt.Pool, error) {
+	if f.pools != nil {
+		return f.pools, nil
+	}
 	return []virt.Pool{
 		{
 			Name:           "default",

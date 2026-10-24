@@ -39,6 +39,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/respool"
 	"github.com/onurbaydas/virtomir/internal/schedule"
 	"github.com/onurbaydas/virtomir/internal/sdn"
+	"github.com/onurbaydas/virtomir/internal/storageeff"
 	"github.com/onurbaydas/virtomir/internal/update"
 	"github.com/onurbaydas/virtomir/internal/virt"
 	"github.com/onurbaydas/virtomir/internal/vmware"
@@ -198,6 +199,10 @@ type Options struct {
 	// cephadm, ceph, rbd and lsblk.
 	Ceph       *ceph.Store
 	CephRunner ceph.Runner
+	// StorageEff nil: no storage efficiency, tiers or NVMe/TCP (ADR-0074); EffRunner runs
+	// zfs, zpool and nvme.
+	StorageEff *storageeff.Store
+	EffRunner  storageeff.Runner
 }
 
 type Server struct {
@@ -266,6 +271,8 @@ type Server struct {
 	sdnDB           string
 	ceph            *ceph.Store
 	cephRunner      ceph.Runner
+	storageEff      *storageeff.Store
+	effRunner       storageeff.Runner
 	lcmRun          lcmState
 	upgrader        SystemUpgrader
 	// inner is the API without the sign-in guard: in-process calls that already carry an
@@ -321,12 +328,16 @@ func NewServer(o Options) *Server {
 		drStore: o.DRStore, drOrchestrator: o.DROrchestrator, drFailover: o.DRFailover,
 		lcm: o.LCM, upgrader: o.Upgrader, gpools: o.GPools,
 		sdn: o.SDN, sdnRunner: o.SDNRunner, sdnDB: o.SDNNorthbound,
-		ceph: o.Ceph, cephRunner: o.CephRunner}
+		ceph: o.Ceph, cephRunner: o.CephRunner,
+		storageEff: o.StorageEff, effRunner: o.EffRunner}
 	if s.sdnRunner == nil {
 		s.sdnRunner = sdn.Exec{}
 	}
 	if s.cephRunner == nil {
 		s.cephRunner = ceph.Exec{}
+	}
+	if s.effRunner == nil {
+		s.effRunner = storageeff.Exec{}
 	}
 	if s.contentSync != nil {
 		s.contentSync.SetPeers(s)
@@ -393,6 +404,7 @@ func (s *Server) Handler() http.Handler {
 	s.gpoolRoutes(mux)
 	s.sdnRoutes(mux)
 	s.cephRoutes(mux)
+	s.storageEffRoutes(mux)
 	s.systemRoutes(mux)
 
 	s.inner = mux
@@ -558,10 +570,10 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 	var invErr *virt.InvalidError
 	switch {
 	case errors.Is(err, virt.ErrNotFound), errors.Is(err, zfsrep.ErrNotFound), errors.Is(err, drs.ErrNotFound), errors.Is(err, placement.ErrNotFound), errors.Is(err, dr.ErrNotFound), errors.Is(err, gpool.ErrNotFound), errors.Is(err, sdn.ErrNotFound),
-		errors.Is(err, ceph.ErrNotFound):
+		errors.Is(err, ceph.ErrNotFound), errors.Is(err, storageeff.ErrNotFound):
 		status = http.StatusNotFound
 	case errors.As(err, &invErr), errors.Is(err, zfsrep.ErrInvalid), errors.Is(err, drs.ErrInvalid), errors.Is(err, placement.ErrInvalid), errors.Is(err, dr.ErrInvalid), errors.Is(err, gpool.ErrInvalid), errors.Is(err, sdn.ErrInvalid),
-		errors.Is(err, ceph.ErrInvalid), errors.Is(err, ceph.ErrDiskNotEmpty):
+		errors.Is(err, ceph.ErrInvalid), errors.Is(err, ceph.ErrDiskNotEmpty), errors.Is(err, storageeff.ErrInvalid):
 		status = http.StatusUnprocessableEntity
 	case errors.As(err, &opErr), errors.Is(err, zfsrep.ErrBusy), errors.Is(err, dr.ErrBusy), errors.Is(err, dr.ErrConflict), errors.Is(err, gpool.ErrExists), errors.Is(err, gpool.ErrBusy), errors.Is(err, sdn.ErrExists), errors.Is(err, sdn.ErrBusy),
 		errors.Is(err, ceph.ErrExists), errors.Is(err, ceph.ErrBusy):

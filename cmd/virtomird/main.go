@@ -45,6 +45,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/respool"
 	"github.com/onurbaydas/virtomir/internal/schedule"
 	"github.com/onurbaydas/virtomir/internal/sdn"
+	"github.com/onurbaydas/virtomir/internal/storageeff"
 	"github.com/onurbaydas/virtomir/internal/systemd"
 	"github.com/onurbaydas/virtomir/internal/update"
 	"github.com/onurbaydas/virtomir/internal/virt"
@@ -322,6 +323,16 @@ func run(c config, log *slog.Logger) error {
 	}
 	if cephStore != nil {
 		opts.Ceph, opts.CephRunner = cephStore, ceph.Exec{}
+	}
+	if st, err := storageeff.Open(filepath.Join(c.stateDir, "storageeff.json")); err != nil {
+		log.Warn("storage efficiency", "err", err)
+	} else {
+		opts.StorageEff, opts.EffRunner = st, storageeff.Exec{}
+		go func() { // NVMe/TCP subsystems connected through VirtoMir come back after a reboot
+			for _, err := range storageeff.Reconnect(ctx, storageeff.Exec{}, st) {
+				log.Warn("NVMe/TCP", "err", err)
+			}
+		}()
 	}
 	apiServer := api.NewServer(opts)
 	go syncCluster(ctx, apiServer)

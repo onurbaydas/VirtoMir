@@ -1,0 +1,10 @@
+{
+  "device":"nvme1",
+  "genctr":4,
+  "records":[
+    {"trtype":"tcp","adrfam":"ipv4","subtype":"current discovery subsystem","treq":"not specified","portid":1,"trsvcid":"4420","subnqn":"nqn.2014-08.org.nvmexpress.discovery","traddr":"192.168.77.50","eflags":"explicit discovery connections, duplicate discovery information","sectype":"none"},
+    {"trtype":"tcp","adrfam":"ipv4","subtype":"nvme subsystem","treq":"not specified","portid":1,"trsvcid":"4420","subnqn":"nqn.2026-01.io.spdk:cnode1","traddr":"192.168.77.50","eflags":"none","sectype":"none"},
+    {"trtype":"tcp","adrfam":"ipv4","subtype":"nvme subsystem","treq":"not specified","portid":1,"trsvcid":"4420","subnqn":"nqn.2026-01.io.spdk:cnode2","traddr":"192.168.77.50","eflags":"none","sectype":"none"},
+    {"trtype":"rdma","adrfam":"ipv4","subtype":"nvme subsystem","treq":"not specified","portid":2,"trsvcid":"4420","subnqn":"nqn.2026-01.io.spdk:cnode3","traddr":"192.168.78.50","eflags":"none","sectype":"none"}
+  ]
+}

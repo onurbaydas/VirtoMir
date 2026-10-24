@@ -78,7 +78,7 @@ func cephNodes(t *testing.T) (*testNode, *testNode, *cephRecorder, *cephRecorder
 		"ceph mon dump -f json":             cephFixture(t, "ceph_mon_dump.json"),
 		"ceph status -f json":               cephFixture(t, "ceph_status_ok.json"),
 		"ceph health detail -f json":        cephFixture(t, "ceph_health_ok.json"),
-		"ceph df -f json":                   cephFixture(t, "ceph_df.json"),
+		"ceph df detail -f json":                   cephFixture(t, "ceph_df.json"),
 		"ceph osd tree -f json":             cephFixture(t, "ceph_osd_tree.json"),
 		"ceph osd pool ls detail -f json":   cephFixture(t, "ceph_osd_pool_ls.json"),
 		"ceph orch host ls -f json":         `[{"addr":"10.0.0.11","hostname":"alpha","labels":["_admin"],"status":""},{"addr":"127.0.0.1","hostname":"beta","labels":[],"status":""}]`,

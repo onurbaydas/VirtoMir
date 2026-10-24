@@ -1,0 +1,7 @@
+{
+  "Devices":[
+    {"NameSpace":1,"DevicePath":"/dev/nvme0n1","GenericPath":"/dev/ng0n1","Firmware":"5B2QGXA7","Index":0,"ModelNumber":"Samsung SSD 980 PRO 1TB","SerialNumber":"S4EVNF0M123456","UsedBytes":412316860416,"MaximumLBA":1953525168,"PhysicalSize":1000204886016,"SectorSize":512},
+    {"NameSpace":1,"DevicePath":"/dev/nvme1n1","GenericPath":"/dev/ng1n1","Firmware":"25.01","Index":1,"ModelNumber":"SPDK bdev Controller","SerialNumber":"SPDK00000000000001  ","UsedBytes":107374182400,"MaximumLBA":209715200,"PhysicalSize":107374182400,"SectorSize":512},
+    {"NameSpace":2,"DevicePath":"/dev/nvme1n2","GenericPath":"/dev/ng1n2","Firmware":"25.01","Index":2,"ModelNumber":"SPDK bdev Controller","SerialNumber":"SPDK00000000000001  ","UsedBytes":0,"MaximumLBA":419430400,"PhysicalSize":214748364800,"SectorSize":512}
+  ]
+}

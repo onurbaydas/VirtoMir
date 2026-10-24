@@ -2,9 +2,18 @@ package api
 
 import "strings"
 
+// moreBodies and moreSchemas let a feature's file describe its request bodies and schemas
+// in the OpenAPI document (from its init); openAPI asks them all.
+var (
+	moreBodies  []func(path string) (map[string]any, bool)
+	moreSchemas []func() map[string]any
+)
+
 // OpenAPI for hyper-converged Ceph and storage policies (ADR-0073).
 
 func init() {
+	moreBodies = append(moreBodies, cephBody)
+	moreSchemas = append(moreSchemas, cephSchemas)
 	responseSchemas["GET /api/v1/ceph/status"] = schemaRef("CephStatus")
 	responseSchemas["GET /api/v1/ceph/disks"] = listOf("disks", "CephDisk")
 	responseSchemas["GET /api/v1/ceph/hosts"] = listOf("hosts", "CephHost")
@@ -12,7 +21,9 @@ func init() {
 	responseSchemas["GET /api/v1/storage/policies"] = listOf("policies", "StoragePolicy")
 }
 
-func schemaRef(name string) map[string]any { return map[string]any{"$ref": "#/components/schemas/" + name} }
+func schemaRef(name string) map[string]any {
+	return map[string]any{"$ref": "#/components/schemas/" + name}
+}
 
 // cephBody is the request body of a Ceph or storage policy write.
 func cephBody(p string) (map[string]any, bool) {
@@ -42,7 +53,9 @@ func cephSchemas() map[string]any {
 	number := map[string]any{"type": "number"}
 	boolean := map[string]any{"type": "boolean"}
 	strs := map[string]any{"type": "array", "items": str}
-	obj := func(props map[string]any) map[string]any { return map[string]any{"type": "object", "properties": props} }
+	obj := func(props map[string]any) map[string]any {
+		return map[string]any{"type": "object", "properties": props}
+	}
 	return map[string]any{
 		"CephStatus": obj(map[string]any{
 			"installed": boolean, "cephadm": boolean, "managed": boolean, "error": str,
@@ -58,7 +71,8 @@ func cephSchemas() map[string]any {
 		"RBDPoolSpec": obj(map[string]any{"name": str, "type": str, "replicaSize": integer, "ecK": integer, "ecM": integer,
 			"deviceClass": str, "pgNum": integer, "libvirtPool": map[string]any{"type": "string", "description": "a libvirt pool to create for it on every member"}}),
 		"RBDPool": obj(map[string]any{"id": integer, "name": str, "type": str, "size": integer, "minSize": integer, "ecProfile": str,
-			"dataPool": str, "storedBytes": integer, "percentUsed": number, "maxAvailBytes": integer, "libvirtPool": str}),
+			"dataPool": str, "storedBytes": integer, "percentUsed": number, "maxAvailBytes": integer, "libvirtPool": str,
+			"compressionMode": str, "compressionAlgorithm": str, "compressedBytes": integer, "compressedFromBytes": integer}),
 		"StoragePolicy": obj(map[string]any{"id": str, "name": str, "description": str, "pool": str, "default": boolean,
 			"created": str, "updated": str}),
 	}

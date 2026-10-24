@@ -111,6 +111,9 @@ func (c *Client) AttachDisk(uuid string, spec DiskSpec) (string, error) {
 		Driver: &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "raw"},
 		Target: &libvirtxml.DomainDiskTarget{Dev: target, Bus: spec.Bus},
 	}
+	if orDefault(spec.Device, "disk") == "disk" {
+		disk.Driver.Discard = "unmap" // the guest's TRIM frees the space on the host (ADR-0074)
+	}
 	if t := spec.IoTune; t != nil {
 		disk.IOTune = &libvirtxml.DomainDiskIOTune{
 			TotalBytesSec:    t.TotalBytesSec,

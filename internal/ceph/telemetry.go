@@ -43,6 +43,10 @@ type PoolCapacity struct {
 	Objects     uint64  `json:"objects"`
 	PercentUsed float64 `json:"percentUsed"`
 	MaxAvail    uint64  `json:"maxAvailBytes"`
+	// Compressed is the raw space compressed data takes, CompressedFrom what it was before
+	// (BlueStore compression, ADR-0074).
+	Compressed     uint64 `json:"compressedBytes"`
+	CompressedFrom uint64 `json:"compressedFromBytes"`
 }
 
 // CapacityReport is the raw capacity and what each pool stores.
@@ -177,6 +181,8 @@ func parseDF(raw []byte) (CapacityReport, error) {
 				Objects     uint64  `json:"objects"`
 				PercentUsed float64 `json:"percent_used"`
 				MaxAvail    uint64  `json:"max_avail"`
+				Compressed  uint64  `json:"compress_bytes_used"`
+				Under       uint64  `json:"compress_under_bytes"`
 			} `json:"stats"`
 		} `json:"pools"`
 	}
@@ -190,14 +196,14 @@ func parseDF(raw []byte) (CapacityReport, error) {
 	for _, p := range d.Pools {
 		// ceph df gives percent_used as a fraction.
 		c.Pools = append(c.Pools, PoolCapacity{ID: p.ID, Name: p.Name, StoredBytes: p.Stats.Stored, Objects: p.Stats.Objects,
-			PercentUsed: p.Stats.PercentUsed * 100, MaxAvail: p.Stats.MaxAvail})
+			PercentUsed: p.Stats.PercentUsed * 100, MaxAvail: p.Stats.MaxAvail, Compressed: p.Stats.Compressed, CompressedFrom: p.Stats.Under})
 	}
 	return c, nil
 }
 
-// Capacity reads ceph df.
+// Capacity reads ceph df detail.
 func Capacity(ctx context.Context, r Runner) (CapacityReport, error) {
-	out, err := r.Run(ctx, "ceph", "df", "-f", "json")
+	out, err := r.Run(ctx, "ceph", "df", "detail", "-f", "json")
 	if err != nil {
 		return CapacityReport{}, missing(err, "The ceph command")
 	}

@@ -545,8 +545,10 @@ func (s *Server) openAPI(routes []route) map[string]any {
 			if b, ok := sdnBody(p); ok {
 				body = b
 			}
-			if b, ok := cephBody(p); ok {
-				body = b
+			for _, bodyOf := range moreBodies {
+				if b, ok := bodyOf(p); ok {
+					body = b
+				}
 			}
 			if strings.HasPrefix(p, "/api/v1/content/items") {
 				body = map[string]any{"$ref": "#/components/schemas/ContentItem"}
@@ -622,8 +624,10 @@ func (s *Server) openAPI(routes []route) map[string]any {
 	for name, sch := range sdnSchemas() {
 		doc["components"].(map[string]any)["schemas"].(map[string]any)[name] = sch
 	}
-	for name, sch := range cephSchemas() {
-		doc["components"].(map[string]any)["schemas"].(map[string]any)[name] = sch
+	for _, schemas := range moreSchemas {
+		for name, sch := range schemas() {
+			doc["components"].(map[string]any)["schemas"].(map[string]any)[name] = sch
+		}
 	}
 	for name, sch := range catalogSchemas() { // self-service catalog (ADR-0065)
 		doc["components"].(map[string]any)["schemas"].(map[string]any)[name] = sch

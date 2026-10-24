@@ -35,6 +35,7 @@ func diskFormat(d libvirtxml.DomainDisk) string {
 type imageInfo struct {
 	Filename      string `json:"filename"`
 	Format        string `json:"format"`
+	ActualSize    uint64 `json:"actual-size"` // bytes the image takes on the host
 	Backing       string `json:"backing-filename"`
 	BackingFull   string `json:"full-backing-filename"`
 	BackingFormat string `json:"backing-filename-format"`

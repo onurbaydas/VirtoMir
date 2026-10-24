@@ -35,6 +35,7 @@ type fakeBackend struct {
 	calls        []string
 	networks     []virt.NetworkSpec
 	lastCreate   virt.CreateSpec
+	pools        []virt.Pool // nil: just "default"
 }
 
 func (f *fakeBackend) call(s string) { f.calls = append(f.calls, s) }

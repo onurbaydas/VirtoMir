@@ -148,6 +148,12 @@ type PoolDetail struct {
 	StoredBytes uint64  `json:"storedBytes"`
 	PercentUsed float64 `json:"percentUsed"`
 	MaxAvail    uint64  `json:"maxAvailBytes"`
+	// Compression of the pool that holds the data (none, passive, aggressive, force) and
+	// what it saves: CompressedFrom bytes were stored as Compressed.
+	CompressionMode      string `json:"compressionMode"`
+	CompressionAlgorithm string `json:"compressionAlgorithm,omitempty"`
+	Compressed           uint64 `json:"compressedBytes"`
+	CompressedFrom       uint64 `json:"compressedFromBytes"`
 }
 
 type rawPool struct {
@@ -158,6 +164,10 @@ type rawPool struct {
 	MinSize     int                        `json:"min_size"`
 	ECProfile   string                     `json:"erasure_code_profile"`
 	Application map[string]json.RawMessage `json:"application_metadata"`
+	Options     struct {
+		CompressionMode      string `json:"compression_mode"`
+		CompressionAlgorithm string `json:"compression_algorithm"`
+	} `json:"options"`
 }
 
 // ListRBDPools lists the pools with the rbd application; an erasure-coded pool shows as
@@ -190,18 +200,53 @@ func ListRBDPools(ctx context.Context, r Runner) ([]PoolDetail, error) {
 			continue // not RBD, or the data half of an erasure-coded pool
 		}
 		d := PoolDetail{ID: p.ID, Name: p.Name, Type: "replicated", Size: p.Size, MinSize: p.MinSize}
-		u := usage[p.Name]
+		u, opts := usage[p.Name], p.Options
 		if p.Type == 3 {
 			d.Type, d.ECProfile = "erasure", p.ECProfile
 		}
 		if data, ok := byName[p.Name+"-data"]; ok && data.Type == 3 {
 			d.Type, d.ECProfile, d.DataPool, d.Size, d.MinSize = "erasure", data.ECProfile, data.Name, data.Size, data.MinSize
-			u = usage[data.Name]
+			u, opts = usage[data.Name], data.Options
 		}
 		d.StoredBytes, d.PercentUsed, d.MaxAvail = u.StoredBytes, u.PercentUsed, u.MaxAvail
+		d.Compressed, d.CompressedFrom = u.Compressed, u.CompressedFrom
+		d.CompressionMode, d.CompressionAlgorithm = opts.CompressionMode, opts.CompressionAlgorithm
+		if d.CompressionMode == "" {
+			d.CompressionMode = "none"
+		}
 		pools = append(pools, d)
 	}
 	return pools, nil
+}
+
+var (
+	compressionModes = []string{"none", "passive", "aggressive", "force"}
+	compressionAlgos = []string{"snappy", "zstd", "lz4", "zlib"}
+)
+
+// SetCompression sets BlueStore compression on the pool that holds a pool's data (the
+// data pool of an erasure-coded one); it applies to data written from now on.
+func SetCompression(ctx context.Context, r Runner, pool, dataPool, mode, algorithm string) error {
+	if !cephPoolRE.MatchString(pool) || (dataPool != "" && !cephPoolRE.MatchString(dataPool)) {
+		return invalidf("%q is not a pool name", pool)
+	}
+	if !slices.Contains(compressionModes, mode) {
+		return invalidf("the compression mode is none, passive, aggressive or force")
+	}
+	if mode != "none" && !slices.Contains(compressionAlgos, algorithm) {
+		return invalidf("the compression algorithm is snappy, zstd, lz4 or zlib")
+	}
+	target := pool
+	if dataPool != "" {
+		target = dataPool
+	}
+	if err := run(ctx, r, "osd", "pool", "set", target, "compression_mode", mode); err != nil {
+		return missing(err, "The ceph command")
+	}
+	if mode == "none" {
+		return nil
+	}
+	return run(ctx, r, "osd", "pool", "set", target, "compression_algorithm", algorithm)
 }
 
 // DeleteRBDPool removes a pool (and its data pool), with all images in it. Ceph only

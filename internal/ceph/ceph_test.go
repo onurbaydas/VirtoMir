@@ -308,7 +308,7 @@ func TestTelemetry(t *testing.T) {
 	f := newFake()
 	f.Answers["ceph status -f json"] = fixture(t, "ceph_status_warn.json")
 	f.Answers["ceph health detail -f json"] = fixture(t, "ceph_health_warn.json")
-	f.Answers["ceph df -f json"] = fixture(t, "ceph_df.json")
+	f.Answers["ceph df detail -f json"] = fixture(t, "ceph_df.json")
 	f.Answers["ceph osd tree -f json"] = fixture(t, "ceph_osd_tree.json")
 	tel, err := Collect(context.Background(), f, time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC))
 	if err != nil {
@@ -402,7 +402,7 @@ func TestCreateErasureCodedPool(t *testing.T) {
 func TestListAndDeletePools(t *testing.T) {
 	f := newFake()
 	f.Answers["ceph osd pool ls detail -f json"] = fixture(t, "ceph_osd_pool_ls.json")
-	f.Answers["ceph df -f json"] = fixture(t, "ceph_df.json")
+	f.Answers["ceph df detail -f json"] = fixture(t, "ceph_df.json")
 	pools, err := ListRBDPools(context.Background(), f)
 	if err != nil {
 		t.Fatal(err)
@@ -478,5 +478,38 @@ func TestPolicies(t *testing.T) {
 	}
 	if ok, _ := other.Adopt(PoliciesShared{Version: 1}); ok {
 		t.Error("an older version was adopted")
+	}
+}
+
+func TestCompression(t *testing.T) {
+	f := newFake()
+	f.Answers["ceph osd pool ls detail -f json"] = fixture(t, "ceph_osd_pool_ls.json")
+	f.Answers["ceph df detail -f json"] = fixture(t, "ceph_df.json")
+	pools, err := ListRBDPools(context.Background(), f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := pools[0]; p.CompressionMode != "none" || p.Compressed != 0 {
+		t.Errorf("replicated %+v", p)
+	}
+	if p := pools[1]; p.CompressionMode != "aggressive" || p.CompressionAlgorithm != "zstd" || p.Compressed != 805306368 || p.CompressedFrom != 1342177280 {
+		t.Errorf("erasure-coded pool reports its data pool's compression: %+v", p)
+	}
+	f.Calls = nil
+	if err := SetCompression(context.Background(), f, "rbd-ec", "rbd-ec-data", "aggressive", "zstd"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(f.Calls, "\n") != "ceph osd pool set rbd-ec-data compression_mode aggressive\nceph osd pool set rbd-ec-data compression_algorithm zstd" {
+		t.Errorf("calls %v", f.Calls)
+	}
+	f.Calls = nil
+	_ = SetCompression(context.Background(), f, "rbd-replicated", "", "none", "")
+	if strings.Join(f.Calls, "\n") != "ceph osd pool set rbd-replicated compression_mode none" {
+		t.Errorf("calls %v", f.Calls)
+	}
+	for _, bad := range [][2]string{{"always", "zstd"}, {"force", "brotli"}} {
+		if err := SetCompression(context.Background(), f, "p", "", bad[0], bad[1]); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%v: %v", bad, err)
+		}
 	}
 }
