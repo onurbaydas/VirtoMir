@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/onurbaydas/virtomir/internal/auth"
+	"github.com/onurbaydas/virtomir/internal/physnet"
 	"github.com/onurbaydas/virtomir/internal/project"
 	"github.com/onurbaydas/virtomir/internal/respool"
 	"github.com/onurbaydas/virtomir/internal/virt"
@@ -74,6 +75,9 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 		// StoragePolicy picks the pool of a new disk (ADR-0073); without it and without a
 		// pool, the default policy does.
 		StoragePolicy string `json:"storagePolicy,omitempty"`
+		// IP gives the adapter a fixed address of an IP pool, set through cloud-init and
+		// registered in DNS (ADR-0075).
+		IP *IPRequest `json:"ip,omitempty"`
 	}
 	if !s.decode(w, r, &spec) {
 		return
@@ -149,17 +153,31 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 		ovnNIC, spec.Network = &nic, nil
 		startAfter, spec.Start = spec.Start, false
 	}
+	var addr physnet.Allocation
+	if spec.IP != nil {
+		var ok bool
+		if addr, ok = s.fixedAddress(w, &spec.CreateSpec, *spec.IP); !ok {
+			return
+		}
+	}
 	var res virt.CreateResult
 	if spec.GPU != nil {
 		var ok bool
 		if res, ok = s.createWithGPUs(w, r, spec.CreateSpec, *spec.GPU); !ok {
+			s.dropAddress(spec.IP, addr)
 			return
 		}
 	} else {
 		var err error
 		if res, err = s.backend.CreateDomain(spec.CreateSpec); err != nil {
+			s.dropAddress(spec.IP, addr)
 			s.writeError(w, err)
 			return
+		}
+	}
+	if spec.IP != nil {
+		if msg := s.claimAddress(r.Context(), spec.IP.Pool, addr, res.UUID); msg != "" && res.StartError == "" {
+			res.StartError = msg
 		}
 	}
 	s.recordOwner(r, res.UUID)
@@ -271,6 +289,7 @@ func (s *Server) deleteDomain(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.unplugOVN(r.Context(), uuid, "")
+	s.releaseAddresses(r.Context(), uuid)
 	// A deleted machine leaves its resource pool, and HA must not bring it back elsewhere.
 	if s.respools != nil {
 		s.respools.Forget(uuid)

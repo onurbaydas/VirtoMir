@@ -1,0 +1,17 @@
+{
+  "ipv4Unicast":{
+    "routerId":"10.0.0.11","as":65011,"vrfId":0,"vrfName":"default","tableVersion":7,"ribCount":9,"ribMemory":1656,"peerCount":2,"peerMemory":1449208,"peerGroupCount":0,"peerGroupMemory":0,
+    "peers":{
+      "10.0.0.1":{"hostname":"leaf1","remoteAs":65000,"localAs":65011,"version":4,"msgRcvd":1043,"msgSent":1045,"tableVersion":0,"outq":0,"inq":0,"peerUptime":"17:22:05","peerUptimeMsec":62525000,"peerUptimeEstablishedEpoch":1792800000,"pfxRcd":12,"pfxSnt":3,"state":"Established","peerState":"OK","connectionsEstablished":1,"connectionsDropped":0,"desc":"leaf1 eth49","idType":"ipv4"},
+      "10.0.0.2":{"remoteAs":65000,"localAs":65011,"version":4,"msgRcvd":0,"msgSent":0,"tableVersion":0,"outq":0,"inq":0,"peerUptime":"never","peerUptimeMsec":0,"pfxRcd":0,"pfxSnt":0,"state":"Active","peerState":"OK","connectionsEstablished":0,"connectionsDropped":0,"idType":"ipv4"}
+    },
+    "failedPeers":1,"displayedPeers":2,"totalPeers":2,"dynamicPeers":0,"bestPath":{"multiPathRelax":"false"}
+  },
+  "l2VpnEvpn":{
+    "routerId":"10.0.0.11","as":65011,"vrfId":0,"vrfName":"default","tableVersion":0,"ribCount":4,"ribMemory":1200,"peerCount":1,"peerMemory":724604,
+    "peers":{
+      "10.0.0.1":{"hostname":"leaf1","remoteAs":65000,"localAs":65011,"version":4,"msgRcvd":1043,"msgSent":1045,"tableVersion":0,"outq":0,"inq":0,"peerUptime":"17:22:05","peerUptimeMsec":62525000,"pfxRcd":4,"pfxSnt":2,"state":"Established","peerState":"OK","connectionsEstablished":1,"connectionsDropped":0,"desc":"leaf1 eth49","idType":"ipv4"}
+    },
+    "failedPeers":0,"displayedPeers":1,"totalPeers":1,"dynamicPeers":0
+  }
+}

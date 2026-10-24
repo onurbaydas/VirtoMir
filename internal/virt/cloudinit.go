@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"regexp"
 	"strings"
 
@@ -24,6 +25,94 @@ type CloudInit struct {
 	Packages []string `json:"packages,omitempty"`
 	// UserData replaces the generated #cloud-config entirely (power users).
 	UserData string `json:"userData,omitempty"`
+	// Network gives the adapter fixed addresses instead of DHCP (IP pools, ADR-0075).
+	Network *StaticNetwork `json:"network,omitempty"`
+}
+
+// StaticNetwork is one adapter's fixed configuration, written as network-config (version
+// 2, which cloud-init renders for netplan, NetworkManager or ifupdown).
+type StaticNetwork struct {
+	MAC         string   `json:"mac"`
+	Addresses   []string `json:"addresses"` // 10.20.0.50/24, fd00:20::50/64
+	Gateway4    string   `json:"gateway4,omitempty"`
+	Gateway6    string   `json:"gateway6,omitempty"`
+	Nameservers []string `json:"nameservers,omitempty"`
+	Search      []string `json:"search,omitempty"`
+}
+
+var (
+	macRE        = regexp.MustCompile(`^[0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){5}$`)
+	searchNameRE = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`)
+)
+
+func (n *StaticNetwork) normalize() error {
+	if !macRE.MatchString(n.MAC) {
+		return invalidf("A fixed address needs the adapter's MAC address.")
+	}
+	n.MAC = strings.ToLower(n.MAC)
+	if len(n.Addresses) == 0 {
+		return invalidf("A fixed network configuration needs an address.")
+	}
+	for _, a := range n.Addresses {
+		if _, err := netip.ParsePrefix(a); err != nil {
+			return invalidf("%q is not an address with its prefix, like 10.20.0.50/24.", a)
+		}
+	}
+	for _, g := range []string{n.Gateway4, n.Gateway6} {
+		if g != "" {
+			if _, err := netip.ParseAddr(g); err != nil {
+				return invalidf("The gateway %q is not an IP address.", g)
+			}
+		}
+	}
+	for _, d := range n.Nameservers {
+		if _, err := netip.ParseAddr(d); err != nil {
+			return invalidf("The DNS server %q is not an IP address.", d)
+		}
+	}
+	for _, s := range n.Search {
+		if !searchNameRE.MatchString(strings.TrimSuffix(s, ".")) {
+			return invalidf("%q is not a search domain.", s)
+		}
+	}
+	return nil
+}
+
+// networkConfig is the NoCloud network-config for a normalized spec ("" = DHCP as the
+// image does by default).
+func (ci *CloudInit) networkConfig() string {
+	n := ci.Network
+	if n == nil {
+		return ""
+	}
+	list := func(items []string) string {
+		qs := make([]string, len(items))
+		for i, s := range items {
+			qs[i] = q(s)
+		}
+		return "[" + strings.Join(qs, ", ") + "]"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "version: 2\nethernets:\n  nic0:\n    match:\n      macaddress: %s\n    dhcp4: false\n    dhcp6: false\n    addresses: %s\n", q(n.MAC), list(n.Addresses))
+	if n.Gateway4 != "" || n.Gateway6 != "" {
+		b.WriteString("    routes:\n")
+		if n.Gateway4 != "" {
+			fmt.Fprintf(&b, "      - to: default\n        via: %s\n", q(n.Gateway4))
+		}
+		if n.Gateway6 != "" {
+			fmt.Fprintf(&b, "      - to: \"::/0\"\n        via: %s\n", q(n.Gateway6))
+		}
+	}
+	if len(n.Nameservers) > 0 || len(n.Search) > 0 {
+		b.WriteString("    nameservers:\n")
+		if len(n.Nameservers) > 0 {
+			fmt.Fprintf(&b, "      addresses: %s\n", list(n.Nameservers))
+		}
+		if len(n.Search) > 0 {
+			fmt.Fprintf(&b, "      search: %s\n", list(n.Search))
+		}
+	}
+	return b.String()
 }
 
 var (
@@ -33,6 +122,11 @@ var (
 )
 
 func (ci *CloudInit) normalize(machine string) error {
+	if ci.Network != nil {
+		if err := ci.Network.normalize(); err != nil {
+			return err
+		}
+	}
 	if ci.UserData != "" {
 		if !strings.HasPrefix(strings.TrimSpace(ci.UserData), "#cloud-config") && !strings.HasPrefix(ci.UserData, "#!") {
 			return invalidf("Custom user-data must start with #cloud-config (or #! for a script).")
@@ -136,6 +230,11 @@ func (ci *CloudInit) seedISO() ([]byte, error) {
 	}
 	if err := w.AddFile(strings.NewReader(ci.metaData()), "meta-data"); err != nil {
 		return nil, err
+	}
+	if nc := ci.networkConfig(); nc != "" {
+		if err := w.AddFile(strings.NewReader(nc), "network-config"); err != nil {
+			return nil, err
+		}
 	}
 	var buf bytes.Buffer
 	if err := w.WriteTo(&buf, "cidata"); err != nil {

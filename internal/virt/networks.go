@@ -3,6 +3,7 @@ package virt
 import (
 	"fmt"
 	"net/netip"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -37,6 +38,8 @@ type VNetwork struct {
 	Peers []string `json:"peers,omitempty"`
 	// ClusterWide: a VXLAN overlay over the whole cluster, kept on every member (#37).
 	ClusterWide bool `json:"clusterWide,omitempty"`
+	// PF: the SR-IOV NIC whose virtual functions a hostdev network hands out (ADR-0075).
+	PF string `json:"pf,omitempty"`
 }
 
 func (c *Client) ListNetworks() ([]VNetwork, error) {
@@ -90,6 +93,9 @@ func parseNetwork(raw string) (VNetwork, error) {
 	}
 	if x.Bridge != nil {
 		v.Bridge = x.Bridge.Name
+	}
+	if x.Forward != nil && len(x.Forward.PFs) > 0 {
+		v.PF = x.Forward.PFs[0].Dev
 	}
 	if vx, ok := parseVXLANMeta(x.Metadata); ok {
 		v.Mode, v.VNI, v.Peers, v.ClusterWide = "vxlan", vx.VNI, vx.peers(), vx.Cluster
@@ -226,13 +232,13 @@ func (c *Client) machinesByMAC(l *libvirt.Libvirt) map[string]string {
 //   - nat / route / isolated: a new bridge with its own subnet (DHCP optional)
 //   - bridge: machines join an existing host bridge (e.g. br0) and the physical LAN
 type NetworkSpec struct {
-	Name   string `json:"name"`
-	Mode   string `json:"mode"`
-	Subnet string `json:"subnet,omitempty"` // e.g. 192.168.100.0/24
-	DHCP   bool   `json:"dhcp"`
+	Name      string `json:"name"`
+	Mode      string `json:"mode"`
+	Subnet    string `json:"subnet,omitempty"` // e.g. 192.168.100.0/24
+	DHCP      bool   `json:"dhcp"`
 	DHCPStart string `json:"dhcpStart,omitempty"`
 	DHCPEnd   string `json:"dhcpEnd,omitempty"`
-	Bridge string `json:"bridge,omitempty"` // host bridge, bridge mode only
+	Bridge    string `json:"bridge,omitempty"` // host bridge, bridge mode only
 	// OVS: the host bridge is an Open vSwitch bridge (bridge mode). VLAN tags every
 	// machine on this network (bridge mode with OVS); 0 = untagged.
 	OVS  bool `json:"ovs,omitempty"`
@@ -241,8 +247,8 @@ type NetworkSpec struct {
 	// host takes ::1 and sends router advertisements, so guests configure themselves
 	// (SLAAC). DHCP6 also hands out addresses ::100 – ::ffff. Either Subnet or Subnet6 (or
 	// both) is needed. In nat mode IPv6 is translated too (NAT66, libvirt ≥ 6.5).
-	Subnet6 string `json:"subnet6,omitempty"`
-	DHCP6   bool   `json:"dhcp6,omitempty"`
+	Subnet6    string `json:"subnet6,omitempty"`
+	DHCP6      bool   `json:"dhcp6,omitempty"`
 	DHCP6Start string `json:"dhcp6Start,omitempty"`
 	DHCP6End   string `json:"dhcp6End,omitempty"`
 	// VXLAN: the VNI (1 – 16777215, the same on every host) and the other hosts' IP
@@ -253,7 +259,14 @@ type NetworkSpec struct {
 	// Cluster marks an overlay over the whole cluster: members that join later get it too,
 	// and every member's peer list follows the member list.
 	Cluster bool `json:"cluster,omitempty"`
+	// PF (hostdev mode, SR-IOV): machines on the network get a free virtual function of this
+	// NIC, passed through (ADR-0075). VLAN tags their traffic. Experimental: not tested on
+	// hardware.
+	PF string `json:"pf,omitempty"`
 }
+
+// ifaceNameRE: what the kernel accepts as a network interface name.
+var ifaceNameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,14}$`)
 
 // buildNetwork turns a spec into network XML: gateway .1, DHCP .2 to the last usable address.
 func buildNetwork(spec NetworkSpec) (*libvirtxml.Network, error) {
@@ -275,6 +288,18 @@ func buildNetwork(spec NetworkSpec) (*libvirtxml.Network, error) {
 			if !spec.OVS {
 				return nil, invalidf("VLAN tags on a bridge network need an Open vSwitch bridge; on a plain Linux bridge, use a bridge on the VLAN interface (e.g. br0.10) instead.")
 			}
+			if spec.VLAN > 4094 {
+				return nil, invalidf("A VLAN ID is between 1 and 4094.")
+			}
+			x.VLAN = &libvirtxml.NetworkVLAN{Tags: []libvirtxml.NetworkVLANTag{{ID: spec.VLAN}}}
+		}
+		return x, nil
+	case "hostdev":
+		if !ifaceNameRE.MatchString(spec.PF) {
+			return nil, invalidf("Name the SR-IOV network card (physical function) whose virtual functions machines get, e.g. ens1f0.")
+		}
+		x.Forward = &libvirtxml.NetworkForward{Mode: "hostdev", Managed: "yes", PFs: []libvirtxml.NetworkForwardPF{{Dev: spec.PF}}}
+		if spec.VLAN != 0 {
 			if spec.VLAN > 4094 {
 				return nil, invalidf("A VLAN ID is between 1 and 4094.")
 			}

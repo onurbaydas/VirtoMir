@@ -122,6 +122,17 @@ func (s *CreateSpec) normalize() error {
 		if err := s.CloudInit.normalize(s.Name); err != nil {
 			return err
 		}
+		// A fixed address belongs to the adapter with its MAC.
+		if n := s.CloudInit.Network; n != nil {
+			switch {
+			case s.Network == nil:
+				return invalidf("A fixed address needs a network adapter.")
+			case s.Network.MAC == "":
+				s.Network.MAC = n.MAC
+			case !strings.EqualFold(s.Network.MAC, n.MAC):
+				return invalidf("The fixed address is for %s, but the adapter's MAC is %s.", n.MAC, s.Network.MAC)
+			}
+		}
 	}
 	return nil
 }
@@ -471,4 +482,3 @@ func (c *Client) UploadBytes(pool, name string, data []byte) (libvirt.StorageVol
 	}
 	return uploadBytes(l, pool, name, data)
 }
-

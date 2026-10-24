@@ -38,6 +38,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/lcm"
 	"github.com/onurbaydas/virtomir/internal/live"
 	"github.com/onurbaydas/virtomir/internal/offsite"
+	"github.com/onurbaydas/virtomir/internal/physnet"
 	"github.com/onurbaydas/virtomir/internal/placement"
 	"github.com/onurbaydas/virtomir/internal/project"
 	"github.com/onurbaydas/virtomir/internal/quota"
@@ -333,6 +334,11 @@ func run(c config, log *slog.Logger) error {
 				log.Warn("NVMe/TCP", "err", err)
 			}
 		}()
+	}
+	if st, err := physnet.Open(filepath.Join(c.stateDir, "physnet.json")); err != nil {
+		log.Warn("physical network", "err", err)
+	} else {
+		opts.Physnet, opts.PhysRunner, opts.SRIOV = st, physnet.Exec{}, physnet.Host
 	}
 	apiServer := api.NewServer(opts)
 	go syncCluster(ctx, apiServer)

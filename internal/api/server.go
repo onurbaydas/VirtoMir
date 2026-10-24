@@ -32,6 +32,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/lcm"
 	"github.com/onurbaydas/virtomir/internal/offsite"
+	"github.com/onurbaydas/virtomir/internal/physnet"
 	"github.com/onurbaydas/virtomir/internal/placement"
 	"github.com/onurbaydas/virtomir/internal/project"
 	"github.com/onurbaydas/virtomir/internal/quota"
@@ -203,6 +204,11 @@ type Options struct {
 	// zfs, zpool and nvme.
 	StorageEff *storageeff.Store
 	EffRunner  storageeff.Runner
+	// Physnet nil: no SR-IOV, BGP, IP pools or dynamic DNS (ADR-0075); PhysRunner runs
+	// vtysh, SRIOV reads the host's sysfs (physnet.Host when zero).
+	Physnet    *physnet.Store
+	PhysRunner physnet.Runner
+	SRIOV      physnet.SRIOV
 }
 
 type Server struct {
@@ -273,6 +279,9 @@ type Server struct {
 	cephRunner      ceph.Runner
 	storageEff      *storageeff.Store
 	effRunner       storageeff.Runner
+	physnet         *physnet.Store
+	physRunner      physnet.Runner
+	sriov           physnet.SRIOV
 	lcmRun          lcmState
 	upgrader        SystemUpgrader
 	// inner is the API without the sign-in guard: in-process calls that already carry an
@@ -329,7 +338,8 @@ func NewServer(o Options) *Server {
 		lcm: o.LCM, upgrader: o.Upgrader, gpools: o.GPools,
 		sdn: o.SDN, sdnRunner: o.SDNRunner, sdnDB: o.SDNNorthbound,
 		ceph: o.Ceph, cephRunner: o.CephRunner,
-		storageEff: o.StorageEff, effRunner: o.EffRunner}
+		storageEff: o.StorageEff, effRunner: o.EffRunner,
+		physnet: o.Physnet, physRunner: o.PhysRunner, sriov: o.SRIOV}
 	if s.sdnRunner == nil {
 		s.sdnRunner = sdn.Exec{}
 	}
@@ -338,6 +348,12 @@ func NewServer(o Options) *Server {
 	}
 	if s.effRunner == nil {
 		s.effRunner = storageeff.Exec{}
+	}
+	if s.physRunner == nil {
+		s.physRunner = physnet.Exec{}
+	}
+	if s.sriov.Root == "" {
+		s.sriov = physnet.Host
 	}
 	if s.contentSync != nil {
 		s.contentSync.SetPeers(s)
@@ -405,6 +421,7 @@ func (s *Server) Handler() http.Handler {
 	s.sdnRoutes(mux)
 	s.cephRoutes(mux)
 	s.storageEffRoutes(mux)
+	s.physnetRoutes(mux)
 	s.systemRoutes(mux)
 
 	s.inner = mux
@@ -570,13 +587,15 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 	var invErr *virt.InvalidError
 	switch {
 	case errors.Is(err, virt.ErrNotFound), errors.Is(err, zfsrep.ErrNotFound), errors.Is(err, drs.ErrNotFound), errors.Is(err, placement.ErrNotFound), errors.Is(err, dr.ErrNotFound), errors.Is(err, gpool.ErrNotFound), errors.Is(err, sdn.ErrNotFound),
-		errors.Is(err, ceph.ErrNotFound), errors.Is(err, storageeff.ErrNotFound):
+		errors.Is(err, ceph.ErrNotFound), errors.Is(err, storageeff.ErrNotFound), errors.Is(err, physnet.ErrNotFound):
 		status = http.StatusNotFound
 	case errors.As(err, &invErr), errors.Is(err, zfsrep.ErrInvalid), errors.Is(err, drs.ErrInvalid), errors.Is(err, placement.ErrInvalid), errors.Is(err, dr.ErrInvalid), errors.Is(err, gpool.ErrInvalid), errors.Is(err, sdn.ErrInvalid),
-		errors.Is(err, ceph.ErrInvalid), errors.Is(err, ceph.ErrDiskNotEmpty), errors.Is(err, storageeff.ErrInvalid):
+		errors.Is(err, ceph.ErrInvalid), errors.Is(err, ceph.ErrDiskNotEmpty), errors.Is(err, storageeff.ErrInvalid),
+		errors.Is(err, physnet.ErrInvalid):
 		status = http.StatusUnprocessableEntity
 	case errors.As(err, &opErr), errors.Is(err, zfsrep.ErrBusy), errors.Is(err, dr.ErrBusy), errors.Is(err, dr.ErrConflict), errors.Is(err, gpool.ErrExists), errors.Is(err, gpool.ErrBusy), errors.Is(err, sdn.ErrExists), errors.Is(err, sdn.ErrBusy),
-		errors.Is(err, ceph.ErrExists), errors.Is(err, ceph.ErrBusy):
+		errors.Is(err, ceph.ErrExists), errors.Is(err, ceph.ErrBusy),
+		errors.Is(err, physnet.ErrExists), errors.Is(err, physnet.ErrBusy), errors.Is(err, physnet.ErrConflict):
 		status = http.StatusConflict
 	case errors.Is(err, auth.ErrBadCredentials), errors.Is(err, auth.ErrNotAllowed):
 		status = http.StatusUnauthorized

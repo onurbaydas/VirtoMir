@@ -14,6 +14,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/cluster"
 	"github.com/onurbaydas/virtomir/internal/drs"
 	"github.com/onurbaydas/virtomir/internal/gpool"
+	"github.com/onurbaydas/virtomir/internal/physnet"
 	"github.com/onurbaydas/virtomir/internal/placement"
 	"github.com/onurbaydas/virtomir/internal/sdn"
 	"github.com/onurbaydas/virtomir/internal/storageeff"
@@ -21,7 +22,7 @@ import (
 )
 
 // Cluster-wide state that changes reach only the members online at that moment (#37):
-// DRS settings, placement rules and host labels, GPU pools, the SDN, storage policies and tiers, and the cluster-wide VXLAN overlays.
+// DRS settings, placement rules and host labels, GPU pools, the SDN, storage policies and tiers, IP pools and dynamic DNS, and the cluster-wide VXLAN overlays.
 // Every minute (SyncMembers) each member asks the others for theirs: settings with a
 // newer version are taken over, and a cluster overlay this host never had is created here,
 // with every member's peer list following the member list.
@@ -34,6 +35,7 @@ type SharedState struct {
 	SDN       *sdn.Shared             `json:"sdn,omitempty"`
 	Policies  *ceph.PoliciesShared    `json:"storagePolicies,omitempty"`
 	Tiers     *storageeff.TiersShared `json:"storageTiers,omitempty"`
+	Physnet   *physnet.Shared         `json:"physnet,omitempty"`
 	Overlays  []Overlay               `json:"overlays"`
 }
 
@@ -80,6 +82,10 @@ func (s *Server) sharedState() SharedState {
 	if s.storageEff != nil {
 		t := s.storageEff.Shared()
 		st.Tiers = &t
+	}
+	if s.physnet != nil {
+		p := s.physnet.Shared()
+		st.Physnet = &p
 	}
 	if nets, err := s.backend.ListNetworks(); err == nil {
 		for _, n := range nets {
@@ -145,6 +151,13 @@ func (s *Server) syncShared(ctx context.Context, members []cluster.Node) {
 				s.log.Info("storage tiers taken over from a member", "member", n.Name, "version", st.Tiers.Version)
 			} else if err != nil {
 				s.log.Warn("storage tiers of a member", "member", n.Name, "err", err)
+			}
+		}
+		if st.Physnet != nil && s.physnet != nil {
+			if ok, err := s.physnet.Adopt(*st.Physnet); ok {
+				s.log.Info("IP pools and DNS settings taken over from a member", "member", n.Name, "version", st.Physnet.Version)
+			} else if err != nil {
+				s.log.Warn("IP pools of a member", "member", n.Name, "err", err)
 			}
 		}
 		remote = append(remote, st.Overlays...)
