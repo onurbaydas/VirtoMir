@@ -80,6 +80,8 @@ VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw l
 - **Host hardware**: vendor, model, BIOS, temperatures, fans and power from the host's own sensors; GPUs with load, memory, temperature and power (NVIDIA, AMD)
 - **Busiest machines** right now, and "would N more machines fit?" from live numbers (with an N+1 check in a cluster)
 - **Reports**: capacity, machine inventory and backup compliance over the whole cluster — HTML (prints to PDF), CSV or JSON, on demand or on a schedule
+- **Insights**: capacity forecasts (when a host or pool runs full), right-sizing suggestions for machines that ask for more than they use, and alerts when a machine's metrics leave their usual range
+- **Compliance**: security checks of every host (sVirt confinement, SSH root login, host firewall, kernel pointer hiding, core dumps, time sync) with the FIPS mode shown, and a tamper-evident activity log that can be verified
 - **Transparent Memory Deduplication (KSM)**: monitor and control Kernel Samepage Merging (`/sys/kernel/mm/ksm`), automatically sharing identical memory pages across virtual machines and displaying live saved GiB
 - **Distributed SIEM / Syslog Forwarding**: stream audit trail and security events in real time to enterprise SIEM platforms (Splunk, Graylog, ELK) in standard **RFC 5424** format over UDP, TCP, or TLS
 
@@ -95,6 +97,7 @@ VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw l
 - **Packet capture** on any host interface (tcpdump): watch it live or download a `.pcap` for Wireshark
 - **Download images from a URL** straight into a pool, verified against a SHA-256; find **unused disk images**
 - **NFS, iSCSI and Ceph RBD storage**, and one pool on every host of a cluster in a single step
+- **Content library**: ISO images, cloud images and templates kept in versions, synced to the other hosts and deployed as new machines from there
 - **LVM and ZFS**: use an existing volume group or zpool, or build a new volume group from empty disks (a disk with data on it is refused, never overwritten)
 - **VLANs** on Open vSwitch bridges (per network or per adapter), and one network on every host in a single step
 - **Hyper-converged Ceph** *(experimental)*: bootstrap a Ceph cluster on the VirtoMir hosts with cephadm, add members and their disks as OSDs (only empty disks: anything with partitions, a file system, an LVM/ZFS/RAID label, held open by the kernel or used by a storage pool is refused), watch health, capacity, placement groups and the OSD tree, create replicated or erasure-coded RBD pools that become storage pools on every host, and set `noout` while a host is serviced; Ceph health raises alerts
@@ -121,6 +124,13 @@ VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw l
 - **Rolling cluster upgrade**: pre-checks (quorum, room to evacuate, versions), then one host at a time — machines live-migrate away, VirtoMir (and optionally the OS packages, with a reboot) is updated, the host comes back and takes its machines again; pause, resume or abort between steps
 - **GPU pools**: the cluster's GPUs grouped by how machines get them (whole card by passthrough, a vGPU type, a MIG profile); a new machine asks for "2 of l40s" and is placed on the member that has them free, within its project's GPU quota
 - **Resource pools**: nested limits on vCPUs, memory and disk space per storage pool, enforced on every create, resize and move
+- **Placement rules**: keep machines together or apart, or on hosts with a label (rack, zone) — as a must or a should; checked on create, move, DRS and HA
+- **Disaster recovery** *(experimental)*: protection groups replicated to another host, recovery plans with boot order, test failover on clones, real failover and failback
+
+### Projects & self-service
+
+- **Projects**: tenants with members and roles, limits on machines, vCPUs, memory, disk and GPUs, and the pools and networks they may use; operators of a project manage only its machines
+- **Self-service catalog**: blueprints people order machines from, with approval, leases that expire (and can be extended) and showback prices
 
 ### Security
 
@@ -132,7 +142,13 @@ VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw l
 - **API tokens** for scripts and automation, limited to their owner's role
 - HTTPS by default (self-signed certificate created on first start, or your own)
 - Session timeouts, lockout after failed sign-ins, CSRF protection, **activity log** of every change (CSV export)
-- **Updates** from the GitHub releases in the UI (Account → Updates): downloaded, checked against the published SHA-256 and installed with apt
+- **Updates** from the GitHub releases in the UI (Account → Updates): downloaded, checked against the published SHA-256 and its OpenPGP signature, and installed with apt
+
+### Automation
+
+- The whole **REST API**, described by OpenAPI, with API tokens
+- An **Ansible collection** (machines, networks, storage pools, projects, placement rules, snapshots; check mode and idempotent) in [`integrations/ansible`](integrations/ansible)
+- A **Terraform provider** (machines, networks, pools, projects, placement rules) in [`integrations/terraform-provider-virtomir`](integrations/terraform-provider-virtomir)
 
 | | |
 |---|---|
