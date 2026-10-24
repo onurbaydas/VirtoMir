@@ -191,12 +191,41 @@ func (s *Server) getIPPool(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, p)
 }
 
+// dhcpClash answers 409 and returns true when the pool's range overlaps the DHCP range of
+// its libvirt network here: libvirt would hand the same addresses to other machines.
+func (s *Server) dhcpClash(w http.ResponseWriter, p physnet.IPPool) bool {
+	if p.Network == "" {
+		return false
+	}
+	nets, err := s.backend.ListNetworks()
+	if err != nil {
+		return false
+	}
+	for _, n := range nets {
+		if n.Name != p.Network || n.DHCPStart == "" || n.DHCPEnd == "" {
+			continue
+		}
+		ds, err1 := netip.ParseAddr(n.DHCPStart)
+		de, err2 := netip.ParseAddr(n.DHCPEnd)
+		ps, err3 := netip.ParseAddr(p.RangeStart)
+		pe, err4 := netip.ParseAddr(p.RangeEnd)
+		if err1 != nil || err2 != nil || err3 != nil || err4 != nil || ds.BitLen() != ps.BitLen() {
+			continue
+		}
+		if !pe.Less(ds) && !de.Less(ps) {
+			s.writeJSON(w, http.StatusConflict, map[string]string{"error": fmt.Sprintf("the range overlaps the DHCP range %s – %s of network %s, which would hand the same addresses to other machines: shrink its DHCP range or pick addresses outside it", n.DHCPStart, n.DHCPEnd, n.Name)})
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) createIPPool(w http.ResponseWriter, r *http.Request) {
 	if s.noPhysnet(w) {
 		return
 	}
 	var p physnet.IPPool
-	if !s.decode(w, r, &p) {
+	if !s.decode(w, r, &p) || s.dhcpClash(w, p) {
 		return
 	}
 	saved, err := s.physnet.CreatePool(p)
@@ -213,7 +242,7 @@ func (s *Server) updateIPPool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var p physnet.IPPool
-	if !s.decode(w, r, &p) {
+	if !s.decode(w, r, &p) || s.dhcpClash(w, p) {
 		return
 	}
 	p.ID = r.PathValue("id")

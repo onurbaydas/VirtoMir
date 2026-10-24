@@ -43,6 +43,9 @@ func (f *fakeBackend) AttachDisk(uuid string, spec virt.DiskSpec) (string, error
 	return "vdb", f.err
 }
 func (f *fakeBackend) ListNetworks() ([]virt.VNetwork, error) {
+	if f.netList != nil {
+		return f.netList, f.err
+	}
 	return []virt.VNetwork{{Name: "default", Mode: "nat", UsedBy: []string{}}}, f.err
 }
 

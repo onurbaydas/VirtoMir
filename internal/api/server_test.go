@@ -35,7 +35,8 @@ type fakeBackend struct {
 	calls        []string
 	networks     []virt.NetworkSpec
 	lastCreate   virt.CreateSpec
-	pools        []virt.Pool // nil: just "default"
+	pools        []virt.Pool     // nil: just "default"
+	netList      []virt.VNetwork // nil: just "default"
 }
 
 func (f *fakeBackend) call(s string) { f.calls = append(f.calls, s) }
@@ -298,4 +299,3 @@ func TestServerWiringProjectsVMwarePlacementAndContent(t *testing.T) {
 		t.Errorf("GET /api/v1/content/items status = %d, want 200", recCnt.Code)
 	}
 }
-

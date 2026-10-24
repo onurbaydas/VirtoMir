@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/onurbaydas/virtomir/internal/physnet"
+	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
 // dnsAcker answers every DNS UPDATE with NOERROR and counts them.
@@ -83,6 +84,11 @@ func TestIPPoolsAcrossTheCluster(t *testing.T) {
 	}
 	if resp, _ := admin.req("POST", "/api/v1/physnet/ip-pools", strings.Replace(poolJSON, "prod-v20", "dup", 1)); resp.StatusCode != http.StatusConflict {
 		t.Errorf("overlapping pool: %d", resp.StatusCode)
+	}
+	a.backend.netList = []virt.VNetwork{{Name: "lan", Mode: "nat", DHCPStart: "10.40.0.2", DHCPEnd: "10.40.0.254"}}
+	clash := `{"id":"lan","name":"LAN","network":"lan","cidr":"10.40.0.0/24","rangeStart":"10.40.0.200","rangeEnd":"10.40.0.220"}`
+	if resp, body := admin.req("POST", "/api/v1/physnet/ip-pools", clash); resp.StatusCode != http.StatusConflict || !strings.Contains(body, "DHCP range") {
+		t.Errorf("inside the DHCP range: %d %s", resp.StatusCode, body)
 	}
 }
 
