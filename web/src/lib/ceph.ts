@@ -116,6 +116,11 @@ export interface RBDPool {
   percentUsed: number
   maxAvailBytes: number
   libvirtPool?: string
+  /** BlueStore compression of the pool holding the data (ADR-0074). */
+  compressionMode: 'none' | 'passive' | 'aggressive' | 'force'
+  compressionAlgorithm?: string
+  compressedBytes: number
+  compressedFromBytes: number
 }
 
 export interface StoragePolicy {
@@ -150,6 +155,7 @@ export function cephOn(host?: string) {
     pools: async () => (await api.get<{ pools: RBDPool[] }>(p('/api/v1/ceph/pools'))).pools,
     createPool: (spec: PoolSpec) => api.post<{ name: string; results?: HostResult[] }>(p('/api/v1/ceph/pools'), spec),
     deletePool: (name: string) => api.delete<void>(p(`/api/v1/ceph/pools/${enc(name)}`)),
+    setCompression: (name: string, mode: string, algorithm: string) => api.put<void>(p(`/api/v1/ceph/pools/${enc(name)}/compression`), { mode, algorithm }),
   }
 }
 

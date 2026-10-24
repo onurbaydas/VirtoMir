@@ -46,6 +46,9 @@
   import Disc from '@lucide/svelte/icons/disc'
   import LayoutTemplate from '@lucide/svelte/icons/layout-template'
   import ArrowRightLeft from '@lucide/svelte/icons/arrow-right-left'
+  import Shrink from '@lucide/svelte/icons/shrink'
+  import { track } from '../jobs'
+  import { eff } from '../storageeff'
   import FolderKanban from '@lucide/svelte/icons/folder-kanban'
   import { projects } from '../projects.svelte'
   import SDNPortsPanel from '../components/SDNPortsPanel.svelte'
@@ -543,6 +546,11 @@
                     {#if d.kind === 'disk' && d.target}
                       <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'resize'))}><Maximize2 size={14} /> {t('Grow…')}</button>
                       <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'diskmove'))}><ArrowRightLeft size={14} /> {t('Move…')}</button>
+                      {#if d.capacityBytes}
+                        <ConfirmButton label={t('Compact')} confirm={t('Trim its free space now')} icon={Shrink}
+                          disabled={!session.can('admin') || detail?.state !== 'shutoff'} title={detail?.state !== 'shutoff' ? t('Shut the machine down to compact its disk') : t('Give the host back the space of deleted files (virt-sparsify)')}
+                          run={async () => track(await eff.sparsify(uuid, d.target!), { success: t('{disk} compacted', { disk: d.target! }), onSuccess: () => void load() })} />
+                      {/if}
                       <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((mediaDrive = d), (dlg = 'qos'))}><Gauge size={14} /> {t('QoS Limits…')}</button>
                     {/if}
                     {#if d.kind === 'interface' && d.mac}

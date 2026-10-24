@@ -26,6 +26,10 @@
   import IsoDownloadModal from '../components/IsoDownloadModal.svelte'
   import ZfsReplicationModal from '../components/ZfsReplicationModal.svelte'
   import BookOpen from '@lucide/svelte/icons/book-open'
+  import Cable from '@lucide/svelte/icons/cable'
+  import PoolEfficiency from '../components/PoolEfficiency.svelte'
+  import NvmeDialog from '../components/NvmeDialog.svelte'
+  import { eff, type Tier } from '../storageeff'
 
   let { pool: selected }: { pool: string } = $props()
 
@@ -35,6 +39,10 @@
   let orphanedOpen = $state(false)
   let isoOpen = $state(false)
   let zfsOpen = $state(false)
+  let nvmeOpen = $state(false)
+  // Storage tiers (ADR-0074): pool → nvme/ssd/hdd, the same on every member.
+  let tiers = $state<Record<string, Tier>>({})
+  const loadTiers = () => eff.tiers().then((x) => (tiers = x)).catch(() => {})
   let volError = $state('')
 
   let current = $derived(pools?.find((p) => p.name === selected) ?? pools?.find((p) => p.name === 'default') ?? pools?.[0])
@@ -58,6 +66,7 @@
   }
   $effect(() => {
     void loadPools()
+    void loadTiers()
   })
   let currentName = $derived(current?.name)
   let currentActive = $derived(current?.active)
@@ -268,6 +277,9 @@
     <button class="ui-btn" onclick={() => (zfsOpen = true)} title={t('Automated differential block-level storage replication between nodes')}>
       <RefreshCw size={15} /> {t('ZFS Replication')}
     </button>
+    <button class="ui-btn" onclick={() => (nvmeOpen = true)} title={t('Connect NVMe/TCP storage targets')}>
+      <Cable size={15} /> {t('NVMe/TCP')}
+    </button>
     <button class="ui-btn" onclick={() => (isoOpen = true)} title={t('The host downloads an image from a URL into a pool')}>
       <Download size={15} /> {t('Download from URL')}
     </button>
@@ -299,6 +311,7 @@
       >
         <span class="p-head">
           <span class="p-name">{p.name}</span>
+          {#if tiers[p.name]}<span class="tier mono">{tiers[p.name].toUpperCase()}</span>{/if}
           <span class="state" class:on={p.active}>{p.active ? 'active' : 'stopped'}</span>
         </span>
         <span class="p-path mono">{p.path ?? p.type}</span>
@@ -345,6 +358,7 @@
           {/if}
         </div>
       </header>
+      <PoolEfficiency pool={current} tier={tiers[current.name]} ontier={loadTiers} />
       <input
         type="file"
         accept=".iso,.img,.raw"
@@ -580,6 +594,13 @@
 
 <OrphanedDisksModal open={orphanedOpen} onclose={() => (orphanedOpen = false)} />
 <ZfsReplicationModal open={zfsOpen} onclose={() => (zfsOpen = false)} />
+<NvmeDialog
+  bind:open={nvmeOpen}
+  onpool={(device) => {
+    nvmeOpen = false
+    ;[pName, pType, pNewVG, pDevices, pSource, pErr, poolDlg] = ['', 'logical', true, device, '', '', true]
+  }}
+/>
 <IsoDownloadModal
   open={isoOpen}
   poolName={current?.name ?? 'default'}
@@ -687,6 +708,14 @@
   .state {
     font-size: 11.5px;
     color: var(--text-3);
+  }
+  .tier {
+    margin-left: auto;
+    padding: 0 6px;
+    border: var(--frame) solid var(--ink);
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--text-2);
   }
   .state.on {
     color: var(--ok);

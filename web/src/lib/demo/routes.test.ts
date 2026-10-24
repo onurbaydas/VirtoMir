@@ -671,4 +671,25 @@ describe('demo API', () => {
     expect(list.filter((p: { default: boolean }) => p.default).map((p: { id: string }) => p.id)).toEqual(['fast'])
     expect(call('DELETE', '/api/v1/storage/policies/fast').status).toBe(204)
   })
+
+  it('shows storage efficiency, tiers and NVMe/TCP', () => {
+    expect(call('GET', '/api/v1/storage/tiers').json.tiers['fast-zfs']).toBe('nvme')
+    expect(call('GET', '/api/v1/storage/pools/fast-zfs/efficiency').json.zfs.compressRatio).toBe(1.48)
+    expect(call('GET', '/api/v1/storage/pools/ceph-cold/efficiency').json.ceph.compressionMode).toBe('aggressive')
+    expect(call('GET', '/api/v1/storage/pools/default/efficiency').json.kind).toBe('none')
+    expect(call('PUT', '/api/v1/storage/pools/fast-zfs/zfs', { dedup: 'on' }).status).toBe(422)
+    expect(call('PUT', '/api/v1/storage/pools/fast-zfs/zfs', { compression: 'zstd' }).json.compression).toBe('zstd')
+    expect(call('PUT', '/api/v1/storage/tiers/iso', { tier: 'hdd' }).status).toBe(204)
+    expect(call('GET', '/api/v1/storage/tiers').json.tiers.iso).toBe('hdd')
+
+    expect(call('POST', `/api/v1/domains/${DB1}/disks/vda/sparsify`).status).toBe(409)
+    expect(call('POST', `/api/v1/domains/${DB1}/disks/vda/tier`, { tier: 'hdd' }).status).toBe(202)
+
+    const found = call('POST', '/api/v1/storage/nvme/discover', { portal: '192.168.77.50' }).json.targets
+    expect(found).toHaveLength(2)
+    expect(call('POST', '/api/v1/storage/nvme/connect', found[0]).status).toBe(204)
+    const subs = call('GET', '/api/v1/storage/nvme').json.subsystems
+    expect(subs.find((s: { nqn: string }) => s.nqn === found[0].nqn).managed).toBe(true)
+    expect(call('POST', '/api/v1/storage/nvme/disconnect', { nqn: found[0].nqn }).status).toBe(204)
+  })
 })

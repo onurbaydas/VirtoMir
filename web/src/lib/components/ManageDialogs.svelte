@@ -8,6 +8,7 @@
   // The machine page's dialogs: rename, clone, delete, add disk, add adapter, change media.
   import { api, errorText, type DomainDetail, type Device, type Pool, type VNetwork } from '../api'
   import { track } from '../jobs'
+  import { TIERS, eff, type Tier } from '../storageeff'
   import { activePools, allVolumes, isISO, type PoolVolume } from '../media'
   import { formatBytes } from '../format'
   import { machineHref, router } from '../router.svelte'
@@ -88,10 +89,13 @@
       bwOut = drive?.bandwidth?.outMbps ?? 0
     }
     if (which === 'diskmove') {
-      void activePools()
-        .then((p) => {
+      moveBy = 'pool'
+      void Promise.all([activePools(), eff.tiers().catch(() => ({}) as Record<string, Tier>)])
+        .then(([p, tiers]) => {
           pools = p.filter((x) => ['dir', 'netfs', 'fs'].includes(x.type))
           diskPool = pools[0]?.name ?? ''
+          poolTiers = tiers
+          moveTier = TIERS.find((x) => pools.some((pl) => tiers[pl.name] === x)) ?? 'nvme'
         })
         .catch((e) => (error = errorText(e)))
     }
@@ -278,12 +282,17 @@
       onclose()
     })
 
+  // Storage tiers (ADR-0074): a disk can go to a tier; the host picks its pool with room.
+  let moveBy = $state<'pool' | 'tier'>('pool')
+  let moveTier = $state<Tier>('nvme')
+  let poolTiers = $state<Record<string, Tier>>({})
+  let tiersHere = $derived(TIERS.filter((x) => pools.some((p) => poolTiers[p.name] === x)))
   const moveDisk = () =>
     run(async () => {
       if (!drive?.target) return
-      const job = await api.moveDisk(detail.uuid, drive.target, diskPool)
+      const job = moveBy === 'tier' ? await eff.moveToTier(detail.uuid, drive.target, moveTier) : await api.moveDisk(detail.uuid, drive.target, diskPool)
       onclose()
-      track(job, { success: t('{title} moved to {pool}', { title: drive.title, pool: diskPool }), onSuccess: () => onchange() })
+      track(job, { success: t('{title} moved to {pool}', { title: drive.title, pool: moveBy === 'tier' ? moveTier.toUpperCase() : diskPool }), onSuccess: () => onchange() })
     })
 
   let currentGiB = $derived(drive?.capacityBytes ? drive.capacityBytes / 2 ** 30 : 0)
@@ -638,10 +647,23 @@
 
 <Dialog open={which === 'diskmove'} title={t('Move {v}', { v: drive?.title ?? 'disk' })} subtitle={drive?.summary} {onclose}>
   <form id="diskmove" class="form" onsubmit={(e) => (e.preventDefault(), moveDisk())}>
-    <label class="ui-field">
+    {#if tiersHere.length}
+      <div class="row">
+        <label class="ui-switch"><input type="radio" bind:group={moveBy} value="pool" /> {t('To a pool')}</label>
+        <label class="ui-switch"><input type="radio" bind:group={moveBy} value="tier" /> {t('To a storage tier')}</label>
+      </div>
+    {/if}
+    {#if moveBy === 'tier'}
+      <label class="ui-field">
+        <span class="label">{t('Storage tier')}</span>
+        <select class="ui-input" bind:value={moveTier}>{#each tiersHere as x (x)}<option value={x}>{x.toUpperCase()}</option>{/each}</select>
+        <span class="hint">{t('The pool of that tier with the most free space takes it.')}</span>
+      </label>
+    {/if}
+    <label class="ui-field" hidden={moveBy === 'tier'}>
       <span class="label">{t('Storage pool')}</span>
       <select class="ui-input" bind:value={diskPool}>
-        {#each pools as p (p.name)}<option value={p.name}>{p.name} ({formatBytes(p.availableBytes)} {t('free')})</option>{/each}
+        {#each pools as p (p.name)}<option value={p.name}>{p.name}{poolTiers[p.name] ? ' · ' + poolTiers[p.name].toUpperCase() : ''} ({formatBytes(p.availableBytes)} {t('free')})</option>{/each}
       </select>
       <span class="hint">{active ? t('The machine keeps running: the disk is copied while it is in use, then it switches over.') : t('The disk is copied into the pool as a qcow2 image.')} {t('The old image is deleted afterwards. Machines with snapshots must delete them first.')}</span>
     </label>

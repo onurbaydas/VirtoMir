@@ -66,6 +66,7 @@ export const untranslated = new Set<string>([
   "name@ldap",
   "name@sso",
   "NAT",
+  "NVMe/TCP",
   "ops@example.com, me@example.com",
   "ou=people,dc=example,dc=com",
   "Ping",

@@ -39,6 +39,7 @@ import type {
 } from '../api'
 import type { FloatingIP, IPsecConfig, LoadBalancer, SDNPort, SDNStatus, SecurityGroup, Subnet, VPCDetail } from '../sdn'
 import type { CephHost, ClusterConfig, DiskInfo, RBDPool, StoragePolicy, Telemetry } from '../ceph'
+import type { NVMeSubsystem, NVMeTarget, Tier, ZFSEfficiency } from '../storageeff'
 import type { Chassis, ClusterGPU, Firewall, GPU, GPUPool, GPUPoolView, GPUResource, HAStatus, HostInterface, PoolView, ReportMeta, ReportSchedule, Topology } from '../enterprise'
 
 export interface DemoHost {
@@ -1570,8 +1571,10 @@ export const cephOSDs = HOSTS.flatMap((h, i) => [
 ])
 
 export const cephPools: RBDPool[] = [
-  { id: 2, name: 'rbd-replicated', type: 'replicated', size: 3, minSize: 2, storedBytes: 1.42 * TB, percentUsed: 27.4, maxAvailBytes: 3.76 * TB, libvirtPool: 'ceph-vms' },
-  { id: 3, name: 'rbd-cold-ec', type: 'erasure', size: 3, minSize: 3, ecProfile: 'ec-rbd-cold-ec', dataPool: 'rbd-cold-ec-data', storedBytes: 0.61 * TB, percentUsed: 8.1, maxAvailBytes: 7.52 * TB, libvirtPool: 'ceph-cold' },
+  { id: 2, name: 'rbd-replicated', type: 'replicated', size: 3, minSize: 2, storedBytes: 1.42 * TB, percentUsed: 27.4, maxAvailBytes: 3.76 * TB, libvirtPool: 'ceph-vms',
+    compressionMode: 'none', compressedBytes: 0, compressedFromBytes: 0 },
+  { id: 3, name: 'rbd-cold-ec', type: 'erasure', size: 3, minSize: 3, ecProfile: 'ec-rbd-cold-ec', dataPool: 'rbd-cold-ec-data', storedBytes: 0.61 * TB, percentUsed: 8.1, maxAvailBytes: 7.52 * TB, libvirtPool: 'ceph-cold',
+    compressionMode: 'aggressive', compressionAlgorithm: 'zstd', compressedBytes: 0.21 * TB, compressedFromBytes: 0.38 * TB },
 ]
 
 export const storagePolicies: StoragePolicy[] = [
@@ -1614,3 +1617,21 @@ export function cephTelemetry(): Telemetry {
     collected: new Date().toISOString(),
   }
 }
+
+// ---- Storage efficiency (ADR-0074) ----------------------------------------------------------
+
+export const storageTiers: Record<string, Tier> = { 'fast-zfs': 'nvme', default: 'ssd', 'nas-nfs': 'hdd', 'ceph-vms': 'ssd', 'ceph-cold': 'hdd' }
+
+export const zfsEfficiency: Record<string, ZFSEfficiency> = {
+  'fast-zfs': { dataset: 'fast/vms', compression: 'lz4', compressRatio: 1.48, dedup: 'off', dedupRatio: 1, usedBytes: 1.66e12, logicalUsedBytes: 2.46e12, savedBytes: 0.8e12 },
+}
+
+export const nvmeSubsystems: NVMeSubsystem[] = [
+  { nqn: 'nqn.2014.08.org.nvmexpress:144d144dS4EVNF0M123456 Samsung SSD 990 PRO 2TB', transport: 'pcie', address: '0000:01:00.0', state: 'live', managed: false,
+    namespaces: [{ device: '/dev/nvme0n1', nsid: 1, sizeBytes: 2e12, model: 'Samsung SSD 990 PRO 2TB', serial: 'S7DNNJ0W123456' }] },
+]
+
+export const nvmeTargets: NVMeTarget[] = [
+  { portal: '192.168.77.50', port: 4420, nqn: 'nqn.2026-01.io.spdk:cnode1' },
+  { portal: '192.168.77.50', port: 4420, nqn: 'nqn.2026-01.io.spdk:cnode2' },
+]

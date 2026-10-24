@@ -355,7 +355,7 @@
       {#if admin}<button class="ui-btn primary" onclick={() => (poolForm = { name: '', type: 'replicated', replicaSize: 3, ecK: 4, ecM: 2, deviceClass: '', register: true, libvirtPool: '' })}><Plus size={14} /> {t('New pool')}</button>{/if}
     </div>
     <table class="t">
-      <thead><tr><th>{t('Pool')}</th><th>{t('Protection')}</th><th>{t('Stored')}</th><th>{t('Used')}</th><th>{t('libvirt pool')}</th><th></th></tr></thead>
+      <thead><tr><th>{t('Pool')}</th><th>{t('Protection')}</th><th>{t('Stored')}</th><th>{t('Used')}</th><th>{t('Compression')}</th><th>{t('libvirt pool')}</th><th></th></tr></thead>
       <tbody>
         {#each rbdPools as p (p.name)}
           <tr>
@@ -363,16 +363,33 @@
             <td>{protection(p)}</td>
             <td class="mono">{formatBytes(p.storedBytes)}</td>
             <td class="mono">{p.percentUsed.toFixed(1)} % <span class="muted small">{t('{free} left', { free: formatBytes(p.maxAvailBytes) })}</span></td>
+            <td>
+              {#if admin}
+                <select class="ui-input sm comp" value={p.compressionMode} aria-label={t('Compression')}
+                  onchange={(e) => act(() => c.setCompression(p.name, e.currentTarget.value, p.compressionAlgorithm || 'zstd'), t('Compression of {name}: {mode}', { name: p.name, mode: e.currentTarget.value }))}>
+                  {#each ['none', 'passive', 'aggressive', 'force'] as m (m)}<option value={m}>{m}</option>{/each}
+                </select>
+              {:else}<span class="mono">{p.compressionMode}</span>{/if}
+              {#if p.compressedFromBytes > 0}<span class="muted small">{t('saves {v}', { v: formatBytes(p.compressedFromBytes - p.compressedBytes) })}</span>{/if}
+            </td>
             <td>{#if p.libvirtPool}<span class="tag">{p.libvirtPool}</span>{:else}<span class="muted">—</span>{/if}</td>
             <td class="right-cell">{#if admin && !p.libvirtPool}<ConfirmButton label={t('Delete')} icon={Trash} confirm={t('Delete {name} and all its images', { name: p.name })} run={() => act(() => c.deletePool(p.name), t('Pool deleted'))} />{/if}</td>
           </tr>
         {:else}
-          <tr><td colspan="6" class="muted">{t('No RBD pools yet.')}</td></tr>
+          <tr><td colspan="7" class="muted">{t('No RBD pools yet.')}</td></tr>
         {/each}
       </tbody>
     </table>
   {/if}
 </div>
+
+<style>
+  .comp {
+    height: 28px;
+    width: auto;
+    padding: 0 6px;
+  }
+</style>
 
 <Dialog open={!!boot} title={t('Bootstrap a Ceph cluster')} subtitle={t('The first monitor and manager run on this host.')} width={520} onclose={() => (boot = null)}>
   {#if boot}

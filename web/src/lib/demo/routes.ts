@@ -695,6 +695,14 @@ function domainRoute(host: w.DemoHost, method: string, rest: string[], q: URLSea
       return none()
     case method === 'POST' && rest[1] === 'disks' && rest[3] === 'move':
       return json(job('disk-move', `Move ${rest[2]} to ${body?.pool ?? 'another pool'}`, 3000))
+    case method === 'POST' && rest[1] === 'disks' && rest[3] === 'tier': {
+      const pool = Object.entries(w.storageTiers).find(([p, tier]) => tier === body?.tier && w.pools.some((x) => x.name === p && ['dir', 'netfs'].includes(x.type)))?.[0]
+      if (!pool) return json({ error: `no active file pool of tier ${body?.tier} on this host has room for the disk (label pools with a tier on the Storage page)` }, 409)
+      return json(job('disk-move', `Move ${rest[2]} to ${pool}`, 3000, () => pool), 202)
+    }
+    case method === 'POST' && rest[1] === 'disks' && rest[3] === 'sparsify':
+      if (m.state !== 'shutoff') return json({ error: `${m.name} is ${m.state}: shut it down first. A disk is only compacted while nothing writes to it.` }, 409)
+      return json(job('disk-sparsify', `Compact ${rest[2]}`, 4000, () => String(Math.round(m.diskGiB * 0.21 * 2 ** 30))), 202)
   }
   return method === 'GET' ? notFound() : json({})
 }
@@ -1003,10 +1011,18 @@ function cephDemo(method: string, parts: string[], host: w.DemoHost, body: any):
       const k = body?.ecK ?? 4
       const m = body?.ecM ?? 2
       w.cephPools.push({ id: 10 + w.cephPools.length, name: body.name, type: ec ? 'erasure' : 'replicated', size: ec ? k + m : body?.replicaSize ?? 3, minSize: ec ? k + 1 : 2,
-        dataPool: ec ? body.name + '-data' : undefined, storedBytes: 0, percentUsed: 0, maxAvailBytes: 3.7e12, libvirtPool: body?.libvirtPool || undefined })
+        dataPool: ec ? body.name + '-data' : undefined, storedBytes: 0, percentUsed: 0, maxAvailBytes: 3.7e12, libvirtPool: body?.libvirtPool || undefined,
+        compressionMode: 'none', compressedBytes: 0, compressedFromBytes: 0 })
       if (body?.libvirtPool) w.pools.push({ name: body.libvirtPool, uuid: crypto.randomUUID(), type: 'rbd', source: body.name, active: true, autostart: true, capacityBytes: 3.7e12, allocationBytes: 0, availableBytes: 3.7e12, volumes: 0 })
       return json({ name: body.name, results: body?.libvirtPool ? w.HOSTS.map((h) => ({ host: h.name, ok: true })) : undefined }, 201)
     }
+  }
+  if (method === 'PUT' && parts[0] === 'pools' && parts[2] === 'compression') {
+    const p = w.cephPools.find((x) => x.name === parts[1])
+    if (!p) return json({ error: 'no RBD pool ' + parts[1] }, 404)
+    if (!['none', 'passive', 'aggressive', 'force'].includes(body?.mode)) return json({ error: 'invalid: the compression mode is none, passive, aggressive or force' }, 422)
+    Object.assign(p, { compressionMode: body.mode, compressionAlgorithm: body.mode === 'none' ? undefined : body.algorithm || 'zstd' })
+    return none()
   }
   if (method === 'DELETE' && parts[0] === 'pools') {
     const i = w.cephPools.findIndex((p) => p.name === parts[1])
@@ -1016,6 +1032,51 @@ function cephDemo(method: string, parts: string[], host: w.DemoHost, body: any):
     return none()
   }
   return notFound()
+}
+
+/** Storage efficiency, tiers and NVMe/TCP in the demo (ADR-0074). */
+function storageEffDemo(method: string, parts: string[], body: any): Reply | undefined {
+  const op = `${method} ${parts.join('/')}`
+  if (op === 'GET storage/tiers') return json({ tiers: w.storageTiers })
+  if (method === 'PUT' && parts[1] === 'tiers' && parts[2]) {
+    if (body?.tier && !['nvme', 'ssd', 'hdd'].includes(body.tier)) return json({ error: 'invalid: the tier is nvme, ssd or hdd' }, 422)
+    if (body?.tier) w.storageTiers[parts[2]] = body.tier
+    else delete w.storageTiers[parts[2]]
+    return none()
+  }
+  if (parts[1] === 'pools' && parts[3] === 'efficiency' && method === 'GET') {
+    const p = w.pools.find((x) => x.name === parts[2])
+    if (!p) return json({ error: 'no storage pool ' + parts[2] }, 404)
+    if (p.type === 'zfs') return json({ pool: p.name, kind: 'zfs', zfs: w.zfsEfficiency[p.name] })
+    if (p.type === 'rbd') return json({ pool: p.name, kind: 'ceph', ceph: w.cephPools.find((c) => c.name === p.source) })
+    return json({ pool: p.name, kind: 'none' })
+  }
+  if (parts[1] === 'pools' && parts[3] === 'zfs' && method === 'PUT') {
+    const z = w.zfsEfficiency[parts[2]]
+    if (!z) return json({ error: parts[2] + ' is not a ZFS pool' }, 422)
+    if ((body?.dedup === 'on' || body?.dedup === 'verify') && z.dedup === 'off' && !body?.acknowledgeDedupRam)
+      return json({ error: 'invalid: ZFS deduplication keeps a table of every block in RAM. Confirm it to turn dedup on.' }, 422)
+    Object.assign(z, { compression: body?.compression || z.compression, dedup: body?.dedup || z.dedup })
+    return json(z)
+  }
+  if (op === 'GET storage/nvme') return json({ subsystems: w.nvmeSubsystems })
+  if (op === 'POST storage/nvme/discover') {
+    if (!/^\d+\.\d+\.\d+\.\d+$/.test(body?.portal ?? '')) return json({ error: `invalid: the portal "${body?.portal}" is not an IP address` }, 422)
+    return json({ targets: w.nvmeTargets.map((x) => ({ ...x, portal: body.portal })) })
+  }
+  if (op === 'POST storage/nvme/connect') {
+    if (w.nvmeSubsystems.some((s) => s.nqn === body?.nqn)) return none()
+    const i = w.nvmeSubsystems.length
+    w.nvmeSubsystems.push({ nqn: body.nqn, transport: 'tcp', address: `traddr=${body.portal},trsvcid=${body.port ?? 4420}`, state: 'live', managed: true,
+      namespaces: [{ device: `/dev/nvme${i}n1`, nsid: 1, sizeBytes: 1.92e12, model: 'SPDK bdev Controller', serial: `SPDK0000000000000${i}` }] })
+    return none()
+  }
+  if (op === 'POST storage/nvme/disconnect') {
+    const i = w.nvmeSubsystems.findIndex((s) => s.nqn === body?.nqn)
+    if (i >= 0) w.nvmeSubsystems.splice(i, 1)
+    return none()
+  }
+  return undefined
 }
 
 /** /api/v1/storage/policies[/<id>] in the demo. */
@@ -1061,6 +1122,10 @@ export function handle(method: string, url: URL, body: any): Reply {
   if (parts[0] === 'sdn') return sdnDemo(method, parts.slice(1), q, body)
   if (parts[0] === 'ceph') return cephDemo(method, parts.slice(1), host, body)
   if (parts[0] === 'storage' && parts[1] === 'policies') return policyDemo(method, parts[2], body)
+  if (parts[0] === 'storage') {
+    const r = storageEffDemo(method, parts, body)
+    if (r) return r
+  }
 
   switch (op) {
     // Session and account
