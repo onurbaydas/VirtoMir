@@ -40,6 +40,7 @@ import type {
 import type { FloatingIP, IPsecConfig, LoadBalancer, SDNPort, SDNStatus, SecurityGroup, Subnet, VPCDetail } from '../sdn'
 import type { CephHost, ClusterConfig, DiskInfo, RBDPool, StoragePolicy, Telemetry } from '../ceph'
 import type { NVMeSubsystem, NVMeTarget, Tier, ZFSEfficiency } from '../storageeff'
+import type { BGPView, DNSConfig, IPPool, SRIOVDevice } from '../physnet'
 import type { Chassis, ClusterGPU, Firewall, GPU, GPUPool, GPUPoolView, GPUResource, HAStatus, HostInterface, PoolView, ReportMeta, ReportSchedule, Topology } from '../enterprise'
 
 export interface DemoHost {
@@ -1634,4 +1635,41 @@ export const nvmeSubsystems: NVMeSubsystem[] = [
 export const nvmeTargets: NVMeTarget[] = [
   { portal: '192.168.77.50', port: 4420, nqn: 'nqn.2026-01.io.spdk:cnode1' },
   { portal: '192.168.77.50', port: 4420, nqn: 'nqn.2026-01.io.spdk:cnode2' },
+]
+
+// ---- Physical network (ADR-0075) ------------------------------------------------------------
+
+export const ipPools: IPPool[] = [
+  {
+    id: 'prod-v20', name: 'Production VLAN 20', network: 'default', cidr: '10.20.0.0/24', gateway: '10.20.0.1', rangeStart: '10.20.0.100', rangeEnd: '10.20.0.199',
+    dnsServers: ['10.20.0.53'], domain: 'prod.example', reserved: ['10.20.0.150'], created: ago(20 * D), updated: ago(3 * D),
+    allocations: [
+      { ip: '10.20.0.100', mac: '52:54:00:3a:10:01', vmUuid: '4f1c2a7e-9b3d-4c21-8e5f-0a1b2c3d4e03', vmName: 'db-01', hostname: 'db-01', host: 'hv-01', created: ago(19 * D) },
+      { ip: '10.20.0.101', mac: '52:54:00:3a:10:02', vmUuid: '4f1c2a7e-9b3d-4c21-8e5f-0a1b2c3d4e01', vmName: 'web-01', hostname: 'web-01', host: 'hv-02', created: ago(12 * D) },
+      { ip: '10.20.0.120', vmName: 'haproxy VIP', host: 'hv-01', created: ago(9 * D) },
+    ],
+  },
+  { id: 'lab-v30', name: 'Lab VLAN 30', network: 'default', cidr: '10.30.0.0/24', gateway: '10.30.0.1', rangeStart: '10.30.0.50', rangeEnd: '10.30.0.99', allocations: [], created: ago(5 * D), updated: ago(5 * D) },
+]
+
+export const dnsConfig: DNSConfig = { enabled: true, server: '10.20.0.53:53', zone: 'prod.example.', reverseZones: ['20.10.in-addr.arpa.'], keyName: 'virtomir.', algorithm: 'hmac-sha256', ttl: 300 }
+
+export const bgpView: BGPView = {
+  config: {
+    enabled: true, localAs: 65011, routerId: '10.0.0.11', evpn: true, appliedAs: 65011, announce: ['10.20.0.0/24'],
+    neighbors: [{ address: '10.0.0.1', remoteAs: 65000, description: 'leaf1 eth49', bfd: true }, { address: '10.0.0.2', remoteAs: 65000, description: 'leaf2 eth49', bfd: true }],
+  },
+  frr: { installed: true, version: '10.2.1', bgpd: true },
+  sessions: [
+    { address: '10.0.0.1', remoteAs: 65000, description: 'leaf1 eth49', state: 'Established', uptime: '6d02h11m', prefixesReceived: 14, prefixesSent: 3, families: ['ipv4Unicast', 'l2VpnEvpn'] },
+    { address: '10.0.0.2', remoteAs: 65000, description: 'leaf2 eth49', state: 'Established', uptime: '6d02h10m', prefixesReceived: 14, prefixesSent: 3, families: ['ipv4Unicast', 'l2VpnEvpn'] },
+  ],
+}
+
+export const sriovDevices: SRIOVDevice[] = [
+  {
+    interface: 'ens1f0', pci: '0000:41:00.0', driver: 'mlx5_core', totalVfs: 16, currentVfs: 4, persistent: true,
+    vfs: [0, 1, 2, 3].map((i) => ({ index: i, pci: `0000:41:00.${i + 2}`, netdev: i < 2 ? undefined : `ens1f0v${i}`, mac: i < 2 ? undefined : `52:54:00:5f:00:0${i}` })),
+  },
+  { interface: 'ens1f1', pci: '0000:41:00.1', driver: 'mlx5_core', totalVfs: 16, currentVfs: 0, persistent: false, vfs: [] },
 ]

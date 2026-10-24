@@ -14,6 +14,7 @@
   import { openDeploy } from '../deploy.svelte'
   import { api, errorText, type ContainerImage, type CreateSpec, type Pool, type VNetwork, type Volume } from '../api'
   import { policies, type StoragePolicy } from '../ceph'
+  import { physnet, type IPPool } from '../physnet'
   import { sdn, type SecurityGroup, type Subnet, type VPC } from '../sdn'
   import { track } from '../jobs'
   import { live } from '../live.svelte'
@@ -111,6 +112,7 @@
         const candidatePools = pools.filter((p) => ['dir', 'netfs', 'fs', 'logical', 'zfs', 'rbd'].includes(p.type))
         if (!candidatePools.some((x) => x.name === pool) && candidatePools[0]) pool = candidatePools[0].name
         storagePolicies = (await policies.list().catch(() => [])).filter((x) => candidatePools.some((p) => p.name === x.pool))
+        ipPools = await physnet.pools().catch(() => [])
         const def = storagePolicies.find((x) => x.default)
         if (def) policy = def.id
         if (!networks.some((x) => x.name === 'default')) netChoice = networks[0] ? `network:${networks[0].name}` : 'none'
@@ -145,6 +147,15 @@
   let filePools = $derived(pools.filter((p) => ['dir', 'netfs', 'fs'].includes(p.type) && (!proj || proj.storagePools.includes(p.name))))
   // Disk pools for empty root disks: includes native LVM, ZFS and Ceph RBD block pools
   let diskPools = $derived(pools.filter((p) => ['dir', 'netfs', 'fs', 'logical', 'zfs', 'rbd'].includes(p.type) && (!proj || proj.storagePools.includes(p.name))))
+  // IP pools (ADR-0075): a cloud-image machine can get a fixed address and a DNS name.
+  let ipPools = $state<IPPool[]>([])
+  let ipPool = $state('')
+  let fixedIP = $state('')
+  let netName = $derived(netChoice.startsWith('network:') ? netChoice.slice(8) : '')
+  let poolsHere = $derived(ipPools.filter((p) => !p.network || p.network === netName))
+  $effect(() => {
+    if (ipPool && !poolsHere.some((p) => p.id === ipPool)) ipPool = ''
+  })
   // Storage policies (ADR-0073) name a pool by intent; picking one picks its pool for a new
   // empty disk (cloud images keep their file pool picker).
   let storagePolicies = $state<StoragePolicy[]>([])
@@ -332,6 +343,7 @@
     start,
     project: project || undefined,
     gpu: kind === 'vm' && withGPU && gpuPool ? { pool: gpuPool, count: Math.max(1, gpuCount || 1) } : undefined,
+    ip: source === 'cloud' && netName && ipPool ? { pool: ipPool, ip: fixedIP.trim() || undefined } : undefined,
   })
 
   async function create(e: SubmitEvent) {
@@ -682,6 +694,24 @@
           <span class="label">{t('Bridge')}</span>
           <input class="ui-input mono" bind:value={bridge} placeholder="br0" />
         </label>
+      {/if}
+      {#if source === 'cloud' && netName && poolsHere.length}
+        <div class="two">
+          <label class="ui-field">
+            <span class="label">{t('Address')}</span>
+            <select class="ui-input" bind:value={ipPool}>
+              <option value="">{t('from DHCP')}</option>
+              {#each poolsHere as p (p.id)}<option value={p.id}>{t('fixed, from {pool} ({cidr})', { pool: p.name, cidr: p.cidr })}</option>{/each}
+            </select>
+          </label>
+          {#if ipPool}
+            <label class="ui-field">
+              <span class="label">{t('Which one')}</span>
+              <input class="ui-input mono" bind:value={fixedIP} placeholder={t('the first free one')} />
+            </label>
+          {/if}
+        </div>
+        {#if ipPool}<span class="hint">{t('cloud-init sets the address; the machine’s name goes into DNS when dynamic DNS is on.')}</span>{/if}
       {/if}
     </section>
 

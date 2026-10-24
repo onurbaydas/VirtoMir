@@ -15,6 +15,7 @@ export type Route =
   | { name: 'networks' }
   | { name: 'sdn'; tab: string }
   | { name: 'ceph'; tab: string }
+  | { name: 'physnet'; tab: string }
   | { name: 'activity' }
   | { name: 'alerts'; tab: string }
   | { name: 'backups' }
@@ -43,6 +44,7 @@ function parse(path: string, hash: string): Route {
   if (path === '/networks') return { name: 'networks' }
   if (path === '/sdn') return { name: 'sdn', tab: hash.replace(/^#/, '') }
   if (path === '/ceph') return { name: 'ceph', tab: hash.replace(/^#/, '') }
+  if (path === '/physnet') return { name: 'physnet', tab: hash.replace(/^#/, '') }
   if (path === '/activity') return { name: 'activity' }
   if (path === '/alerts') return { name: 'alerts', tab: hash.replace(/^#/, '') }
   if (path === '/backups') return { name: 'backups' }
@@ -101,7 +103,7 @@ class Router {
 
   /** Shows the same kind of page for another member (machine pages fall back to its overview). */
   switchHost(id: string | null) {
-    const keep = ['overview', 'machines', 'storage', 'networks', 'sdn', 'ceph', 'backups', 'alerts', 'activity', 'reports', 'compliance', 'projects', 'catalog', 'library'].includes(this.route.name)
+    const keep = ['overview', 'machines', 'storage', 'networks', 'sdn', 'ceph', 'physnet', 'backups', 'alerts', 'activity', 'reports', 'compliance', 'projects', 'catalog', 'library'].includes(this.route.name)
     const path = keep ? splitHost(here()).path : '/'
     history.pushState(null, '', based(withHost(id, path)))
     this.#sync()

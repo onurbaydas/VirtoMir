@@ -620,6 +620,10 @@ export interface CreateSpec {
   /** Containers: a ContainerImage key and root's password. */
   image?: string
   rootPassword?: string
+  /** A storage policy picks the pool of a new disk (ADR-0073). */
+  storagePolicy?: string
+  /** A fixed address of an IP pool, set through cloud-init and registered in DNS (ADR-0075). */
+  ip?: { pool: string; ip?: string }
 }
 
 /** POST /api/v1/domains/{uuid}/deploy: a new machine from a template. */
@@ -751,11 +755,15 @@ export interface VNetwork {
   vni?: number
   /** VXLAN: the other hosts' addresses. */
   peers?: string[]
+  /** hostdev (SR-IOV): the NIC whose virtual functions machines get. */
+  pf?: string
 }
 
 export interface NetworkSpec {
   name: string
-  mode: 'nat' | 'route' | 'isolated' | 'bridge' | 'vxlan'
+  mode: 'nat' | 'route' | 'isolated' | 'bridge' | 'vxlan' | 'hostdev'
+  /** hostdev (SR-IOV, ADR-0075): the NIC whose virtual functions machines get. */
+  pf?: string
   subnet?: string
   dhcp: boolean
   bridge?: string

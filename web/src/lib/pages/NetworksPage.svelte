@@ -73,6 +73,7 @@
     isolated: { label: t('Isolated'), hint: t('Machines only talk to each other and to the host.') },
     bridge: { label: t('Bridged'), hint: t('Machines join the physical LAN through a host bridge, like real computers.') },
     vxlan: { label: t('VXLAN overlay'), hint: t('One layer-2 network spanning several hosts, tunnelled over their existing network (UDP 4789).') },
+    hostdev: { label: t('SR-IOV'), hint: t('Each machine gets its own virtual function of an SR-IOV network card, passed through (Physical network page).') },
   }
 
   const modeLabel = (m: string) => MODE[m]?.label ?? m

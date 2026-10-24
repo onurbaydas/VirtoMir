@@ -1034,6 +1034,80 @@ function cephDemo(method: string, parts: string[], host: w.DemoHost, body: any):
   return notFound()
 }
 
+/** /api/v1/physnet/<parts…> in the demo (ADR-0075). */
+function physnetDemo(method: string, parts: string[], body: any): Reply {
+  const op = `${method} ${parts.join('/')}`
+  const now = new Date().toISOString()
+  switch (op) {
+    case 'GET sriov':
+      return json({ devices: w.sriovDevices })
+    case 'GET bgp':
+      return json({ ...w.bgpView, config: { ...w.bgpView.config, neighbors: w.bgpView.config.neighbors.map((n) => ({ ...n, password: n.password ? '********' : undefined })) } })
+    case 'PUT bgp':
+      if (body?.enabled && (!body.localAs || !/^\d+\.\d+\.\d+\.\d+$/.test(body.routerId ?? ''))) return json({ error: 'invalid: the router ID is an IPv4 address (usually this host’s)' }, 422)
+      w.bgpView.config = { ...body, appliedAs: body?.enabled ? body.localAs : 0 }
+      return none()
+    case 'GET ip-pools':
+      return json({ pools: w.ipPools })
+    case 'POST ip-pools':
+      if (w.ipPools.some((p) => p.id === body?.id)) return json({ error: `exists: an IP pool ${body.id} exists already` }, 409)
+      w.ipPools.push({ ...body, allocations: [], created: now, updated: now })
+      return json(w.ipPools[w.ipPools.length - 1], 201)
+    case 'GET dns':
+      return json({ config: w.dnsConfig, hasSecret: true })
+    case 'PUT dns':
+      Object.assign(w.dnsConfig, { ...body, secret: undefined })
+      return none()
+    case 'POST dns/test':
+      return json({ ok: true, message: `added and removed virtomir-test-3f9a1c.${w.dnsConfig.zone}` })
+  }
+  if (method === 'PUT' && parts[0] === 'sriov') {
+    const d = w.sriovDevices.find((x) => x.interface === parts[1])
+    if (!d) return json({ error: `not found: ${parts[1]} does not support SR-IOV` }, 404)
+    if (body?.vfs < 0 || body?.vfs > d.totalVfs) return json({ error: `invalid: ${d.interface} supports 0 to ${d.totalVfs} virtual functions` }, 422)
+    d.currentVfs = body.vfs
+    d.persistent = !!body.persistent && body.vfs > 0
+    d.vfs = Array.from({ length: body.vfs }, (_, i) => ({ index: i, pci: `${d.pci.slice(0, -1)}${i + 2}`, netdev: `${d.interface}v${i}` }))
+    return none()
+  }
+  if (parts[0] === 'ip-pools' && parts[1]) {
+    const p = w.ipPools.find((x) => x.id === parts[1])
+    if (!p) return json({ error: `not found: no IP pool ${parts[1]}` }, 404)
+    if (method === 'GET' && parts.length === 2) return json(p)
+    if (method === 'PUT' && parts.length === 2) {
+      Object.assign(p, { ...body, id: p.id, allocations: p.allocations, updated: now })
+      return json(p)
+    }
+    if (method === 'DELETE' && parts.length === 2) {
+      if (p.allocations.length) return json({ error: `in use: ${p.allocations.length} machines hold addresses of ${p.name}` }, 409)
+      w.ipPools.splice(w.ipPools.indexOf(p), 1)
+      return none()
+    }
+    if (method === 'POST' && parts[2] === 'check') {
+      const held = p.allocations.find((a) => a.ip === body?.ip)
+      return json({ free: !held && !p.reserved?.includes(body?.ip), reason: held ? `${body.ip} is held by ${held.vmName}` : '' })
+    }
+    if (method === 'POST' && parts[2] === 'allocations') {
+      const last = Number(p.rangeEnd.split('.')[3])
+      const base = p.rangeStart.split('.').slice(0, 3).join('.')
+      let ip: string | undefined = body?.ip
+      for (let i = Number(p.rangeStart.split('.')[3]); !ip && i <= last; i++) {
+        const c = `${base}.${i}`
+        if (c !== p.gateway && !p.reserved?.includes(c) && !p.allocations.some((a) => a.ip === c)) ip = c
+      }
+      if (!ip || p.allocations.some((a) => a.ip === ip)) return json({ error: `conflict: ${ip ?? 'no address'} is not free` }, 409)
+      const a = { ip, vmName: body?.name, host: w.SELF.name, created: now }
+      p.allocations.push(a)
+      return json(a, 201)
+    }
+    if (method === 'DELETE' && parts[2] === 'allocations') {
+      p.allocations = p.allocations.filter((a) => a.ip !== parts[3])
+      return none()
+    }
+  }
+  return notFound()
+}
+
 /** Storage efficiency, tiers and NVMe/TCP in the demo (ADR-0074). */
 function storageEffDemo(method: string, parts: string[], body: any): Reply | undefined {
   const op = `${method} ${parts.join('/')}`
@@ -1121,6 +1195,7 @@ export function handle(method: string, url: URL, body: any): Reply {
   const parts = path.split('/').slice(3).map(decodeURIComponent) // after /api/v1
   if (parts[0] === 'sdn') return sdnDemo(method, parts.slice(1), q, body)
   if (parts[0] === 'ceph') return cephDemo(method, parts.slice(1), host, body)
+  if (parts[0] === 'physnet') return physnetDemo(method, parts.slice(1), body)
   if (parts[0] === 'storage' && parts[1] === 'policies') return policyDemo(method, parts[2], body)
   if (parts[0] === 'storage') {
     const r = storageEffDemo(method, parts, body)
