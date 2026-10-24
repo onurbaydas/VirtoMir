@@ -97,6 +97,15 @@ VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw l
 - **NFS, iSCSI and Ceph RBD storage**, and one pool on every host of a cluster in a single step
 - **LVM and ZFS**: use an existing volume group or zpool, or build a new volume group from empty disks (a disk with data on it is refused, never overwritten)
 - **VLANs** on Open vSwitch bridges (per network or per adapter), and one network on every host in a single step
+- **Hyper-converged Ceph** *(experimental)*: bootstrap a Ceph cluster on the VirtoMir hosts with cephadm, add members and their disks as OSDs (only empty disks: anything with partitions, a file system, an LVM/ZFS/RAID label, held open by the kernel or used by a storage pool is refused), watch health, capacity, placement groups and the OSD tree, create replicated or erasure-coded RBD pools that become storage pools on every host, and set `noout` while a host is serviced; Ceph health raises alerts
+- **Storage policies**: name the pool new disks go to by intent ("fast", "cold"), with a cluster-wide default
+- **Storage efficiency**: what ZFS and Ceph compression and deduplication save, and their settings (dedup only after confirming its memory cost); compact a stopped machine's disk image (virt-sparsify); new disks pass the guest's TRIM to the host
+- **Storage tiers**: label pools NVMe, SSD or HDD and move a disk to a tier, live
+- **NVMe over TCP** *(experimental)*: discover and connect storage targets (reconnected after a reboot) and turn their namespaces into pools
+- **IP pools**: fixed addresses for machines made from cloud images (set through cloud-init), the same pools on every host so addresses never collide, reservations for anything else
+- **Dynamic DNS**: machines with a pool address get A/AAAA and PTR records (RFC 2136 updates signed with TSIG — BIND, Knot, PowerDNS, Windows DNS), removed when the machine is deleted
+- **BGP and EVPN through FRR** *(experimental)*: announce a host's networks to your routers, and its VXLAN overlays with EVPN; VirtoMir writes only its own section of FRR's configuration and shows the sessions
+- **SR-IOV** *(experimental)*: set the virtual functions of a network card (kept across reboots) and make a network of it, where every machine gets its own virtual function
 
 ### Several hosts
 
@@ -257,7 +266,7 @@ VirtoMir is built by one person, together with AI coding agents (their working r
 
 ## Roadmap
 
-The larger plans are open issues labelled [`enhancement`](https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement): hyper-converged Ceph, Kubernetes clusters on VirtoMir machines, storage efficiency, SR-IOV, BGP/EVPN, IPAM and dynamic DNS, bare-metal onboarding, a Packer builder and a Kubernetes operator. Each is split into steps that can be separate pull requests.
+The larger plans are open issues labelled [`enhancement`](https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement): Kubernetes clusters on VirtoMir machines, bare-metal onboarding, a Packer builder and a Kubernetes operator, and what is left of BGP/EVPN and IPAM. Each is split into steps that can be separate pull requests. Hyper-converged Ceph, storage efficiency, SR-IOV, IP pools and dynamic DNS are in, but still need testing on real hardware — reports in [#1](https://github.com/onurbaydas/VirtoMir/issues/1) help the most.
 
 **Pace:** active development is paused for a while. Issues and pull requests stay welcome and will be reviewed, though answers may take longer than usual.
 
