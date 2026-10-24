@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"sync"
 	"time"
@@ -33,6 +34,7 @@ func (s *Server) cephRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/ceph/pools", s.cephPools)
 	mux.HandleFunc("POST /api/v1/ceph/pools", s.cephCreatePool)
 	mux.HandleFunc("DELETE /api/v1/ceph/pools/{name}", s.cephDeletePool)
+	mux.HandleFunc("POST /api/v1/ceph/pools/{name}/libvirt", s.cephRegisterPool)
 	mux.HandleFunc("GET /api/v1/storage/policies", s.listPolicies)
 	mux.HandleFunc("POST /api/v1/storage/policies", s.createPolicy)
 	mux.HandleFunc("PUT /api/v1/storage/policies/{id}", s.updatePolicy)
@@ -167,7 +169,40 @@ func (s *Server) cephDisks(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
+	ceph.MarkUsed(disks, s.diskUser())
 	s.writeJSON(w, http.StatusOK, map[string]any{"disks": disks})
+}
+
+// diskUser says which libvirt pool here has a disk as its volume (an iSCSI or SCSI LUN):
+// such a disk carries no signature but is not free. Found in the live test (#48).
+func (s *Server) diskUser() func(path string) string {
+	owner := map[string]string{} // real device → pool
+	if pools, err := s.backend.ListPools(); err == nil {
+		for _, p := range pools {
+			if !p.Active || !slices.Contains([]string{"iscsi", "iscsi-direct", "scsi", "mpath", "disk"}, p.Type) {
+				continue
+			}
+			vols, err := s.backend.ListVolumes(p.Name)
+			if err != nil {
+				continue
+			}
+			for _, v := range vols {
+				if real, err := filepath.EvalSymlinks(v.Path); err == nil {
+					owner[real] = p.Name
+				}
+			}
+		}
+	}
+	return func(path string) string {
+		real, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			real = path
+		}
+		if p := owner[real]; p != "" {
+			return "is a volume of storage pool " + p
+		}
+		return ""
+	}
 }
 
 // peerCephDisk is a member asking this host about one of its disks before it becomes an OSD.
@@ -182,7 +217,9 @@ func (s *Server) peerCephDisk(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, info)
+	disks := []ceph.DiskInfo{info}
+	ceph.MarkUsed(disks, s.diskUser())
+	s.writeJSON(w, http.StatusOK, disks[0])
 }
 
 // CephHostView is a Ceph host with the cluster member it is, if any.
@@ -356,7 +393,11 @@ func (s *Server) cephAddOSD(w http.ResponseWriter, r *http.Request) {
 	var info ceph.DiskInfo
 	var err error
 	if body.Hostname == s.hostName {
-		info, err = ceph.InspectDisk(ctx, s.cephRunner, body.Disk)
+		if info, err = ceph.InspectDisk(ctx, s.cephRunner, body.Disk); err == nil {
+			disks := []ceph.DiskInfo{info}
+			ceph.MarkUsed(disks, s.diskUser())
+			info = disks[0]
+		}
 	} else if n, ok := s.memberNamed(body.Hostname); ok {
 		err = s.peer(n).Call(ctx, http.MethodGet, "/api/v1/cluster/peer/ceph/disk?path="+url.QueryEscape(body.Disk), nil, &info)
 	} else {
@@ -489,19 +530,55 @@ func (s *Server) cephCreatePool(w http.ResponseWriter, r *http.Request) {
 	}
 	ans := map[string]any{"name": spec.Name}
 	if body.LibvirtPool != "" {
-		lv := ceph.LibvirtPool(cfg, spec.Name, body.LibvirtPool)
-		if s.cluster != nil && s.cluster.Clustered() {
-			ans["results"] = s.everyHost(r, time.Minute, func() error { return s.backend.CreatePool(lv) }, "/api/v1/storage/pools", lv)
-		} else {
-			err := s.backend.CreatePool(lv)
-			res := HostResult{Host: s.hostName, OK: err == nil}
-			if err != nil {
-				res.Error = err.Error()
-			}
-			ans["results"] = []HostResult{res}
-		}
+		ans["results"] = s.registerRBDPool(r, cfg, spec.Name, body.LibvirtPool)
 	}
 	s.writeJSON(w, http.StatusCreated, ans)
+}
+
+// registerRBDPool creates the libvirt pool for a Ceph pool on every member (here alone
+// when not clustered); each host reports its own result.
+func (s *Server) registerRBDPool(r *http.Request, cfg ceph.ClusterConfig, cephPool, libvirtPool string) []HostResult {
+	lv := ceph.LibvirtPool(cfg, cephPool, libvirtPool)
+	if s.cluster != nil && s.cluster.Clustered() {
+		return s.everyHost(r, time.Minute, func() error { return s.backend.CreatePool(lv) }, "/api/v1/storage/pools", lv)
+	}
+	err := s.backend.CreatePool(lv)
+	res := HostResult{Host: s.hostName, OK: err == nil}
+	if err != nil {
+		res.Error = err.Error()
+	}
+	return []HostResult{res}
+}
+
+// cephRegisterPool makes an existing RBD pool a libvirt pool on the members, for hosts
+// where that failed (a missing storage driver) or that joined later.
+func (s *Server) cephRegisterPool(w http.ResponseWriter, r *http.Request) {
+	cfg, ok := s.cephManaged(w)
+	if !ok {
+		return
+	}
+	var body struct {
+		LibvirtPool string `json:"libvirtPool"`
+	}
+	if !s.decode(w, r, &body) {
+		return
+	}
+	if body.LibvirtPool == "" {
+		s.writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "name the libvirt pool"})
+		return
+	}
+	ctx, cancel := cephCtx(r, 20*time.Second)
+	defer cancel()
+	pools, err := ceph.ListRBDPools(ctx, s.cephRunner)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if !slices.ContainsFunc(pools, func(p ceph.PoolDetail) bool { return p.Name == r.PathValue("name") }) {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "no RBD pool " + r.PathValue("name")})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"results": s.registerRBDPool(r, cfg, r.PathValue("name"), body.LibvirtPool)})
 }
 
 func (s *Server) cephDeletePool(w http.ResponseWriter, r *http.Request) {

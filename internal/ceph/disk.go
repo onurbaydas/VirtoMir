@@ -3,10 +3,13 @@ package ceph
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // blockDevRE: a whole disk by a stable path; nothing outside /dev (as internal/virt).
@@ -122,9 +125,33 @@ func diskInfo(d lsblkDev) DiskInfo {
 	if pt := str(d.PTType); pt != "" && len(info.Partitions) == 0 {
 		reasons = append(reasons, "has a "+pt+" partition table")
 	}
+	if len(reasons) == 0 && Busy(info.Path) {
+		reasons = append(reasons, "is in use by the system (held open: mounted, LVM, RAID, ZFS or an iSCSI target)")
+	}
 	info.Empty = len(reasons) == 0
 	info.RefusalReason = strings.Join(reasons, "; ")
 	return info
+}
+
+// Busy reports whether the kernel holds a disk exclusively, which catches what leaves no
+// signature on it (an iSCSI target's backing disk, a device-mapper user). Tests replace it.
+var Busy = func(path string) bool {
+	f, err := os.OpenFile(path, os.O_RDONLY|os.O_EXCL, 0)
+	if err != nil {
+		return errors.Is(err, syscall.EBUSY)
+	}
+	_ = f.Close()
+	return false
+}
+
+// MarkUsed refuses the disks that are something else's (a libvirt pool's volume, a
+// machine's disk); used says by what ("" = nothing).
+func MarkUsed(disks []DiskInfo, used func(path string) string) {
+	for i := range disks {
+		if by := used(disks[i].Path); by != "" && disks[i].Empty {
+			disks[i].Empty, disks[i].RefusalReason = false, by
+		}
+	}
 }
 
 // signature names what a file system type in lsblk means.

@@ -67,9 +67,10 @@ const lsblkPrefix = "lsblk -J -b -o NAME,PATH,SIZE,ROTA,TYPE,MOUNTPOINT,FSTYPE,P
 
 func cephNodes(t *testing.T) (*testNode, *testNode, *cephRecorder, *cephRecorder) {
 	t.Helper()
-	old := cephLookPath
+	old, oldBusy := cephLookPath, ceph.Busy
 	cephLookPath = func(string) bool { return true }
-	t.Cleanup(func() { cephLookPath = old })
+	ceph.Busy = func(string) bool { return false } // the disks are fakes; a CI runner has a real, mounted /dev/sdb
+	t.Cleanup(func() { cephLookPath, ceph.Busy = old, oldBusy })
 	a, b := newTestNode(t, "alpha", nil), newTestNode(t, "beta", nil)
 	recA := &cephRecorder{answers: map[string]string{
 		"ceph fsid":                         "4b3d7b8a-9e12-4c28-86d3-0fa4b2e8179c\n",
@@ -78,7 +79,7 @@ func cephNodes(t *testing.T) (*testNode, *testNode, *cephRecorder, *cephRecorder
 		"ceph mon dump -f json":             cephFixture(t, "ceph_mon_dump.json"),
 		"ceph status -f json":               cephFixture(t, "ceph_status_ok.json"),
 		"ceph health detail -f json":        cephFixture(t, "ceph_health_ok.json"),
-		"ceph df detail -f json":                   cephFixture(t, "ceph_df.json"),
+		"ceph df detail -f json":            cephFixture(t, "ceph_df.json"),
 		"ceph osd tree -f json":             cephFixture(t, "ceph_osd_tree.json"),
 		"ceph osd pool ls detail -f json":   cephFixture(t, "ceph_osd_pool_ls.json"),
 		"ceph orch host ls -f json":         `[{"addr":"10.0.0.11","hostname":"alpha","labels":["_admin"],"status":""},{"addr":"127.0.0.1","hostname":"beta","labels":[],"status":""}]`,
@@ -221,6 +222,10 @@ func TestCephPoolOnEveryHost(t *testing.T) {
 	_, body = admin.req("GET", "/api/v1/ceph/pools", "")
 	if !strings.Contains(body, `"name":"rbd-ec","type":"erasure"`) {
 		t.Errorf("pools %s", body)
+	}
+	if resp, body := admin.req("POST", "/api/v1/ceph/pools/rbd-ec/libvirt", `{"libvirtPool":"ceph-cold"}`); resp.StatusCode != http.StatusOK ||
+		!strings.Contains(strings.Join(b.backend.calls, "\n"), "pool ceph-cold rbd rbd-ec virtomir") {
+		t.Errorf("register later: %d %s %v", resp.StatusCode, body, b.backend.calls)
 	}
 	if resp, _ := admin.req("DELETE", "/api/v1/ceph/pools/rbd-replicated", ""); resp.StatusCode != http.StatusNoContent ||
 		!recA.called("ceph osd pool rm rbd-replicated rbd-replicated --yes-i-really-really-mean-it") {

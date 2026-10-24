@@ -81,6 +81,11 @@ func newFake() *FakeRunner {
 	return &FakeRunner{Answers: map[string]string{}, Errors: map[string]error{}}
 }
 
+func TestMain(m *testing.M) {
+	Busy = func(path string) bool { return path == "/dev/held" } // the test host's disks do not exist
+	os.Exit(m.Run())
+}
+
 func TestInspectDisk(t *testing.T) {
 	f := newFake()
 	lsblkOf(t, f, "/dev/sda", "/dev/sdb", "/dev/sdc", "/dev/nvme0n1", "/dev/sdd")
@@ -511,5 +516,22 @@ func TestCompression(t *testing.T) {
 		if err := SetCompression(context.Background(), f, "p", "", bad[0], bad[1]); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%v: %v", bad, err)
 		}
+	}
+}
+
+func TestHeldAndUsedDisks(t *testing.T) {
+	d := diskInfo(lsblkDev{Name: "held", Path: "/dev/held", Type: "disk", Size: 1 << 30})
+	if d.Empty || !strings.Contains(d.RefusalReason, "held open") {
+		t.Errorf("held disk %+v", d)
+	}
+	disks := []DiskInfo{{Path: "/dev/sdb", Empty: true}, {Path: "/dev/sdc", Empty: true}, {Path: "/dev/sda", RefusalReason: "mounted at /"}}
+	MarkUsed(disks, func(p string) string {
+		if p == "/dev/sdb" || p == "/dev/sda" {
+			return "is a volume of storage pool san"
+		}
+		return ""
+	})
+	if disks[0].Empty || disks[0].RefusalReason != "is a volume of storage pool san" || !disks[1].Empty || disks[2].RefusalReason != "mounted at /" {
+		t.Errorf("%+v", disks)
 	}
 }

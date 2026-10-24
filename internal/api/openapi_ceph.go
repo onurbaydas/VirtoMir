@@ -33,6 +33,8 @@ func cephBody(p string) (map[string]any, bool) {
 		return schemaRef("CephBootstrap"), true
 	case p == "/api/v1/ceph/pools":
 		return schemaRef("RBDPoolSpec"), true
+	case strings.HasPrefix(p, "/api/v1/ceph/pools/") && strings.HasSuffix(p, "/libvirt"):
+		return map[string]any{"type": "object", "properties": map[string]any{"libvirtPool": str}}, true
 	case p == "/api/v1/ceph/hosts":
 		return map[string]any{"type": "object", "properties": map[string]any{"member": str}}, true
 	case p == "/api/v1/ceph/osds":

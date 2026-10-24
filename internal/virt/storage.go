@@ -243,15 +243,19 @@ func cephSecret(l *libvirt.Libvirt, pool, key string) (string, error) {
 		return "", invalidf("The Ceph key is the base64 string from 'ceph auth get-key client.<user>'.")
 	}
 	usage := "virtomir/" + pool
-	s := libvirtxml.Secret{Ephemeral: "no", Private: "yes", Description: "Ceph key for VirtoMir pool " + pool,
-		Usage: &libvirtxml.SecretUsage{Type: "ceph", Name: usage}}
-	doc, err := s.Marshal()
+	// A secret from an earlier attempt (the pool itself was refused) is reused: libvirt
+	// refuses a second secret for the same usage.
+	sec, err := l.SecretLookupByUsage(int32(libvirt.SecretUsageTypeCeph), usage)
 	if err != nil {
-		return "", err
-	}
-	sec, err := l.SecretDefineXML(doc, 0)
-	if err != nil {
-		return "", classify(err)
+		s := libvirtxml.Secret{Ephemeral: "no", Private: "yes", Description: "Ceph key for VirtoMir pool " + pool,
+			Usage: &libvirtxml.SecretUsage{Type: "ceph", Name: usage}}
+		doc, err := s.Marshal()
+		if err != nil {
+			return "", err
+		}
+		if sec, err = l.SecretDefineXML(doc, 0); err != nil {
+			return "", classify(err)
+		}
 	}
 	if err := l.SecretSetValue(sec, raw, 0); err != nil {
 		return "", classify(err)
