@@ -23,6 +23,7 @@
   import ContentLibraryPage from './lib/pages/ContentLibraryPage.svelte'
   import NetworksPage from './lib/pages/NetworksPage.svelte'
   import SDNPage from './lib/pages/SDNPage.svelte'
+  import CephPage from './lib/pages/CephPage.svelte'
   import ProjectsPage from './lib/pages/ProjectsPage.svelte'
   import CatalogPage from './lib/pages/CatalogPage.svelte'
   import NotFound from './lib/pages/NotFound.svelte'
@@ -146,6 +147,8 @@
           <NetworksPage />
         {:else if route.name === 'sdn'}
           <SDNPage tab={route.tab} />
+        {:else if route.name === 'ceph'}
+          <CephPage tab={route.tab} />
         {:else if route.name === 'backups'}
           <BackupsPage />
         {:else if route.name === 'alerts'}

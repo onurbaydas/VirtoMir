@@ -346,7 +346,7 @@ export interface ApiToken {
 }
 
 export type Severity = 'warning' | 'critical'
-export type AlertKind = 'host.cpu' | 'host.mem' | 'vm.cpu' | 'vm.crashed' | 'vm.down' | 'pool.free' | 'libvirt.down' | 'vm.anomaly'
+export type AlertKind = 'host.cpu' | 'host.mem' | 'vm.cpu' | 'vm.crashed' | 'vm.down' | 'pool.free' | 'libvirt.down' | 'vm.anomaly' | 'ceph.health'
 
 export interface Alert {
   id: string
@@ -710,6 +710,8 @@ export interface Pool {
   uuid: string
   type: string
   path?: string
+  /** The Ceph pool (rbd), volume group (logical) or zpool (zfs) it is made of. */
+  source?: string
   active: boolean
   autostart: boolean
   capacityBytes: number

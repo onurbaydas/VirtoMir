@@ -38,6 +38,7 @@ import type {
   Volume,
 } from '../api'
 import type { FloatingIP, IPsecConfig, LoadBalancer, SDNPort, SDNStatus, SecurityGroup, Subnet, VPCDetail } from '../sdn'
+import type { CephHost, ClusterConfig, DiskInfo, RBDPool, StoragePolicy, Telemetry } from '../ceph'
 import type { Chassis, ClusterGPU, Firewall, GPU, GPUPool, GPUPoolView, GPUResource, HAStatus, HostInterface, PoolView, ReportMeta, ReportSchedule, Topology } from '../enterprise'
 
 export interface DemoHost {
@@ -670,6 +671,8 @@ export const pools: Pool[] = [
   { name: 'iso', uuid: '1e0c1c9a-3d43-4c6b-9f2a-000000000002', type: 'dir', path: '/srv/iso', active: true, autostart: true, capacityBytes: 0.5e12, allocationBytes: 0.06e12, availableBytes: 0.44e12, volumes: 5 },
   { name: 'nas-nfs', uuid: '1e0c1c9a-3d43-4c6b-9f2a-000000000003', type: 'netfs', path: '/mnt/nas-vms', active: true, autostart: true, capacityBytes: 16e12, allocationBytes: 11.2e12, availableBytes: 4.8e12, volumes: 9 },
   { name: 'fast-zfs', uuid: '1e0c1c9a-3d43-4c6b-9f2a-000000000004', type: 'zfs', active: true, autostart: true, capacityBytes: 1.8e12, allocationBytes: 1.66e12, availableBytes: 0.14e12, volumes: 4 },
+  { name: 'ceph-vms', uuid: '1e0c1c9a-3d43-4c6b-9f2a-000000000005', type: 'rbd', source: 'rbd-replicated', active: true, autostart: true, capacityBytes: 5.18e12, allocationBytes: 1.42e12, availableBytes: 3.76e12, volumes: 7 },
+  { name: 'ceph-cold', uuid: '1e0c1c9a-3d43-4c6b-9f2a-000000000006', type: 'rbd', source: 'rbd-cold-ec', active: true, autostart: true, capacityBytes: 8.13e12, allocationBytes: 0.61e12, availableBytes: 7.52e12, volumes: 2 },
 ]
 
 export function volumes(pool: string): Volume[] {
@@ -1548,4 +1551,66 @@ export const sdnStatus: SDNStatus = {
     systemId: 'hv-01', encapsulationType: 'geneve', encapsulationIp: '10.20.0.11', role: 'central', centralEndpoint: 'tcp:10.20.0.11:6642',
   },
   chassis: HOSTS.map((h, i) => ({ id: h.name, hostname: h.name, encapsulationIp: `10.20.0.${11 + i}`, encapsulationType: 'geneve' })),
+}
+
+// ---- Ceph (ADR-0073) ------------------------------------------------------------------------
+
+const TB = 1e12
+export const cephConfig: ClusterConfig = {
+  fsid: '4b3d7b8a-9e12-4c28-86d3-0fa4b2e8179c', bootstrapHost: 'hv-01', monEndpoints: ['10.0.0.11:6789', '10.0.0.12:6789', '10.0.0.13:6789'],
+  clientUser: 'virtomir', sshPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGRlbW8 ceph-4b3d7b8a', maintenanceHosts: [], noout: false,
+  created: ago(41 * D), updated: ago(2 * D),
+}
+
+export const cephHosts: CephHost[] = HOSTS.map((h, i) => ({ hostname: h.name, ip: `10.0.0.${11 + i}`, labels: i === 0 ? ['_admin'] : [], status: 'online', memberId: h.id }))
+
+export const cephOSDs = HOSTS.flatMap((h, i) => [
+  { id: i * 2, name: `osd.${i * 2}`, host: h.name, deviceClass: 'nvme', weight: 1.74658, up: true },
+  { id: i * 2 + 1, name: `osd.${i * 2 + 1}`, host: h.name, deviceClass: 'ssd', weight: 3.49309, up: true },
+])
+
+export const cephPools: RBDPool[] = [
+  { id: 2, name: 'rbd-replicated', type: 'replicated', size: 3, minSize: 2, storedBytes: 1.42 * TB, percentUsed: 27.4, maxAvailBytes: 3.76 * TB, libvirtPool: 'ceph-vms' },
+  { id: 3, name: 'rbd-cold-ec', type: 'erasure', size: 3, minSize: 3, ecProfile: 'ec-rbd-cold-ec', dataPool: 'rbd-cold-ec-data', storedBytes: 0.61 * TB, percentUsed: 8.1, maxAvailBytes: 7.52 * TB, libvirtPool: 'ceph-cold' },
+]
+
+export const storagePolicies: StoragePolicy[] = [
+  { id: 'replica-3', name: 'Replicated (3 copies)', description: 'Default for production machines', pool: 'ceph-vms', default: true, created: ago(40 * D), updated: ago(40 * D) },
+  { id: 'cold-ec', name: 'Cold (erasure coded 2+1)', description: 'Archives and backups of backups', pool: 'ceph-cold', default: false, created: ago(30 * D), updated: ago(30 * D) },
+  { id: 'local-fast', name: 'Local NVMe (no copies)', description: 'Scratch and CI: lost with the host', pool: 'fast-zfs', default: false, created: ago(12 * D), updated: ago(12 * D) },
+]
+
+export const cephSpareDisks: Record<string, DiskInfo[]> = Object.fromEntries(HOSTS.map((h, i) => [h.id, [
+  { path: '/dev/nvme0n1', name: 'nvme0n1', sizeBytes: 1.92e12, rotational: false, deviceType: 'nvme', fsType: 'ceph_bluestore', empty: false, refusalReason: 'is already a Ceph OSD' },
+  { path: '/dev/sda', name: 'sda', sizeBytes: 480e9, rotational: false, deviceType: 'ssd', partitions: ['sda1', 'sda2'], mountPoint: '/', empty: false, refusalReason: 'mounted at /; has partitions sda1, sda2' },
+  ...(i === 1 ? [{ path: '/dev/sdc', name: 'sdc', sizeBytes: 3.84e12, rotational: false, deviceType: 'ssd' as const, empty: true }] : []),
+  ...(i === 2 ? [{ path: '/dev/sdd', name: 'sdd', sizeBytes: 8e12, rotational: true, deviceType: 'hdd' as const, fsType: 'LVM2_member', empty: false, refusalReason: 'is an LVM physical volume' }] : []),
+]]))
+
+/** The demo cluster's telemetry, from the hosts and OSDs above. */
+export function cephTelemetry(): Telemetry {
+  const inMaint = new Set(cephConfig.maintenanceHosts ?? [])
+  const osds = cephOSDs.map((o) => ({ ...o, up: o.up && !inMaint.has(o.host) }))
+  const down = osds.filter((o) => !o.up).length
+  const total = 15.7 * TB
+  const used = 4.12 * TB
+  const checks: Telemetry['health']['checks'] = []
+  if (cephConfig.noout) checks.push({ name: 'OSDMAP_FLAGS', severity: 'HEALTH_WARN', summary: 'noout flag(s) set' })
+  if (down) {
+    checks.push({ name: 'OSD_DOWN', severity: 'HEALTH_WARN', summary: `${down} osds down`, detail: osds.filter((o) => !o.up).map((o) => `${o.name} (root=default,host=${o.host}) is down`) })
+    checks.push({ name: 'PG_DEGRADED', severity: 'HEALTH_WARN', summary: 'Degraded data redundancy: 41820/125460 objects degraded (33.333%), 96 pgs degraded' })
+  }
+  return {
+    fsid: cephConfig.fsid,
+    health: { status: checks.length ? 'HEALTH_WARN' : 'HEALTH_OK', checks },
+    daemons: { mons: 3, quorum: HOSTS.filter((h) => !inMaint.has(h.name)).map((h) => h.name), mgrUp: true, osds: osds.length, osdsUp: osds.length - down, osdsIn: osds.length, noout: cephConfig.noout },
+    capacity: { totalBytes: total, usedBytes: used, availBytes: total - used, percentUsed: (used / total) * 100, pools: [] },
+    osdTree: [
+      { id: -1, name: 'default', type: 'root', in: false, weight: 0, children: HOSTS.map((_, i) => -2 - i) },
+      ...HOSTS.map((h, i) => ({ id: -2 - i, name: h.name, type: 'host', in: false, weight: 5.24, children: [i * 2, i * 2 + 1] })),
+      ...osds.map((o) => ({ id: o.id, name: o.name, type: 'osd', status: o.up ? ('up' as const) : ('down' as const), in: true, weight: o.weight, deviceClass: o.deviceClass })),
+    ],
+    pgs: { total: 288, states: down ? { 'active+clean': 192, 'active+undersized+degraded': 96 } : { 'active+clean': 288 } },
+    collected: new Date().toISOString(),
+  }
 }

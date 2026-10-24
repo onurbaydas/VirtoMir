@@ -13,6 +13,7 @@
   import BookOpen from '@lucide/svelte/icons/book-open'
   import { openDeploy } from '../deploy.svelte'
   import { api, errorText, type ContainerImage, type CreateSpec, type Pool, type VNetwork, type Volume } from '../api'
+  import { policies, type StoragePolicy } from '../ceph'
   import { sdn, type SecurityGroup, type Subnet, type VPC } from '../sdn'
   import { track } from '../jobs'
   import { live } from '../live.svelte'
@@ -107,8 +108,11 @@
       try {
         const [p, n] = await Promise.all([api.pools(), api.networks()])
         pools = p.filter((x) => x.active)
-        const candidatePools = pools.filter((p) => ['dir', 'netfs', 'fs', 'logical', 'zfs'].includes(p.type))
+        const candidatePools = pools.filter((p) => ['dir', 'netfs', 'fs', 'logical', 'zfs', 'rbd'].includes(p.type))
         if (!candidatePools.some((x) => x.name === pool) && candidatePools[0]) pool = candidatePools[0].name
+        storagePolicies = (await policies.list().catch(() => [])).filter((x) => candidatePools.some((p) => p.name === x.pool))
+        const def = storagePolicies.find((x) => x.default)
+        if (def) policy = def.id
         if (!networks.some((x) => x.name === 'default')) netChoice = networks[0] ? `network:${networks[0].name}` : 'none'
         const lists = await Promise.all(pools.map(async (p) => ({ p: p.name, v: await api.volumes(p.name).catch(() => []) })))
         isos = lists.flatMap(({ p, v }) => v.filter((x) => x.format === 'iso').map((vol) => ({ pool: p, vol })))
@@ -139,8 +143,16 @@
   let templates = $derived((live.snapshot?.domains ?? []).filter((d) => d.template).sort((a, b) => a.name.localeCompare(b.name)))
   // File pools for cloud images and seeds:
   let filePools = $derived(pools.filter((p) => ['dir', 'netfs', 'fs'].includes(p.type) && (!proj || proj.storagePools.includes(p.name))))
-  // Disk pools for empty root disks: includes native LVM and ZFS block pools
-  let diskPools = $derived(pools.filter((p) => ['dir', 'netfs', 'fs', 'logical', 'zfs'].includes(p.type) && (!proj || proj.storagePools.includes(p.name))))
+  // Disk pools for empty root disks: includes native LVM, ZFS and Ceph RBD block pools
+  let diskPools = $derived(pools.filter((p) => ['dir', 'netfs', 'fs', 'logical', 'zfs', 'rbd'].includes(p.type) && (!proj || proj.storagePools.includes(p.name))))
+  // Storage policies (ADR-0073) name a pool by intent; picking one picks its pool for a new
+  // empty disk (cloud images keep their file pool picker).
+  let storagePolicies = $state<StoragePolicy[]>([])
+  let policy = $state('')
+  $effect(() => {
+    const p = storagePolicies.find((x) => x.id === policy)
+    if (p && source === 'iso') pool = p.pool
+  })
   // Networks the project allows ("" while no project is chosen: every network).
   let projNets = $derived(proj ? networks.filter((n) => proj.networks.includes(n.name)) : networks)
 
@@ -173,7 +185,7 @@
   })
   const vpcLabel = (id: string) => sdnVPCs.find((v) => v.id === id)?.name ?? id
   let selectedPool = $derived(pools.find((p) => p.name === pool))
-  let isBlockPool = $derived(selectedPool ? ['logical', 'zfs'].includes(selectedPool.type) : false)
+  let isBlockPool = $derived(selectedPool ? ['logical', 'zfs', 'rbd'].includes(selectedPool.type) : false)
   let diskTooBig = $derived(!!selectedPool && withDisk && diskGiB * 2 ** 30 > selectedPool.availableBytes)
   let nameValid = $derived(/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(name))
   let nameTaken = $derived((live.snapshot?.domains ?? []).some((d) => d.name === name))
@@ -600,11 +612,20 @@
               {provisioning === 'thin' ? t('Thin provisioned: it only uses what the guest writes.{v}', { v: diskTooBig ? ' Larger than the free space in the pool.' : '' }) : t('Thick provisioned: preallocated blocks on storage.')}
             </span>
           </label>
+          {#if storagePolicies.length}
+            <label class="ui-field">
+              <span class="label">{t('Storage policy')}</span>
+              <select class="ui-input" bind:value={policy}>
+                <option value="">{t('— choose the pool myself —')}</option>
+                {#each storagePolicies as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+              </select>
+            </label>
+          {/if}
           <label class="ui-field">
             <span class="label">{t('Storage pool')}</span>
-            <select class="ui-input" bind:value={pool}>
+            <select class="ui-input" bind:value={pool} disabled={!!policy}>
               {#each diskPools as p (p.name)}
-                <option value={p.name}>{p.name}{p.type === 'logical' ? ' (LVM)' : p.type === 'zfs' ? ' (ZFS)' : ''} — {formatBytes(p.availableBytes)} free</option>
+                <option value={p.name}>{p.name}{p.type === 'logical' ? ' (LVM)' : p.type === 'zfs' ? ' (ZFS)' : p.type === 'rbd' ? ' (Ceph)' : ''} — {formatBytes(p.availableBytes)} free</option>
               {/each}
             </select>
             {#if isBlockPool}

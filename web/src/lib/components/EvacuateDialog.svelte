@@ -10,8 +10,27 @@
   import { live } from '../live.svelte'
   import { formatKiB } from '../format'
   import { toasts } from '../toast.svelte'
+  import { cephOn } from '../ceph'
 
   let { open = $bindable(false) }: { open?: boolean } = $props()
+
+  // Ceph (ADR-0073): when this host stores Ceph data, its daemons can go into maintenance
+  // (with noout) once the machines are gone, so Ceph does not rebalance while it is down.
+  let cephManager = $state<string | undefined | null>(null) // null: this host is no Ceph host
+  let cephToo = $state(true)
+  async function findCeph() {
+    cephManager = null
+    try {
+      let st = await cephOn().status()
+      let mgr: string | undefined
+      if (!st.managed && st.managedBy) st = await cephOn((mgr = st.managedBy.id)).status()
+      if (!st.managed) return
+      const hosts = await cephOn(mgr).hosts()
+      if (hosts.some((h) => h.hostname === cluster.current?.name && h.status !== 'maintenance')) cephManager = mgr
+    } catch {
+      /* no Ceph here */
+    }
+  }
 
   interface Step {
     uuid: string
@@ -100,7 +119,10 @@
   }
 
   $effect(() => {
-    if (open) void plan()
+    if (open) {
+      void plan()
+      void findCeph()
+    }
   })
 
   async function wait(job: Job): Promise<Job> {
@@ -126,8 +148,16 @@
         st.message = errorText(e)
       }
     }
-    running = false
     const failed = steps.filter((s) => s.state === 'failed' || s.state === 'skipped').length
+    if (!failed && cephManager !== null && cephToo) {
+      try {
+        await cephOn(cephManager).maintenance('enter', cluster.current?.name ?? '')
+        toasts.push({ kind: 'info', title: t('Ceph on this host is in maintenance'), detail: t('noout stays set until the host leaves maintenance on the Ceph page.') })
+      } catch (e) {
+        toasts.push({ kind: 'error', title: t('Ceph maintenance not started'), detail: errorText(e) })
+      }
+    }
+    running = false
     toasts.push({ kind: failed ? 'warn' : 'info', title: failed ? t('{failed} machine(s) still on this host', { failed: failed }) : t('Host is empty'), detail: failed ? undefined : t('It can be shut down for maintenance.') })
   }
 </script>
@@ -154,6 +184,9 @@
       </tbody>
     </table>
   {/if}
+  {#if cephManager !== null}
+    <label class="ui-switch ceph"><input type="checkbox" bind:checked={cephToo} disabled={running} /> {t('Then stop this host’s Ceph daemons with noout set (no rebalancing while it is down)')}</label>
+  {/if}
   {#snippet footer()}
     <button class="ui-btn ghost" disabled={running} onclick={() => (open = false)}>{t('Close')}</button>
     <button class="ui-btn primary" disabled={running || planning || !steps.some((s) => s.state === 'planned')} onclick={run}>{running ? t('Moving…') : t('Start moving')}</button>
@@ -169,5 +202,6 @@
   .st.failed, .bad { color: var(--danger); }
   .st.moving { color: var(--warn); }
   .muted { color: var(--text-2); }
+  .ceph { margin-top: 12px; }
   .small { font-size: 11px; font-weight: 400; text-transform: none; }
 </style>

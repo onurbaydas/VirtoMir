@@ -6,6 +6,7 @@
   import Moon from '@lucide/svelte/icons/moon'
   import MonitorCog from '@lucide/svelte/icons/monitor-cog'
   import HardDrive from '@lucide/svelte/icons/hard-drive'
+  import Database from '@lucide/svelte/icons/database'
   import Network from '@lucide/svelte/icons/network'
   import Waypoints from '@lucide/svelte/icons/waypoints'
   import Plus from '@lucide/svelte/icons/plus'
@@ -45,6 +46,7 @@
     { name: 'overview', href: '/', label: t('Overview'), icon: LayoutDashboard, role: 'viewer' },
     { name: 'machines', href: '/machines', label: t('Machines'), icon: Boxes, role: 'viewer' },
     { name: 'storage', href: '/storage', label: t('Storage'), icon: HardDrive, role: 'viewer' },
+    { name: 'ceph', href: '/ceph', label: t('Ceph'), icon: Database, role: 'viewer' },
     { name: 'library', href: '/library', label: t('Content Library'), icon: BookOpen, role: 'viewer' },
     { name: 'networks', href: '/networks', label: t('Networks'), icon: Network, role: 'viewer' },
     { name: 'sdn', href: '/sdn', label: t('SDN'), icon: Waypoints, role: 'viewer' },

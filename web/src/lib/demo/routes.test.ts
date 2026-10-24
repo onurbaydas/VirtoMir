@@ -639,4 +639,36 @@ describe('demo API', () => {
     expect(call('DELETE', '/api/v1/gpu/pools/h100').status).toBe(204)
     expect(call('GET', '/api/v1/gpu/pools/h100').status).toBe(404)
   })
+
+  it('runs a Ceph cluster from hv-01 with storage policies', () => {
+    const st = call('GET', '/api/v1/ceph/status').json
+    expect(st.managed).toBe(true)
+    expect(st.telemetry.health.status).toBe('HEALTH_OK')
+    expect(st.telemetry.daemons.osds).toBe(6)
+    expect(call('GET', '/api/v1/hosts/b2c3d4e5f6071829/ceph/status').json.managedBy.name).toBe('hv-01')
+    expect(call('GET', '/api/v1/hosts/b2c3d4e5f6071829/ceph/pools').status).toBe(409)
+    expect(call('GET', '/api/v1/ceph/pools').json.pools).toHaveLength(2)
+
+    const full = call('POST', '/api/v1/ceph/osds', { hostname: 'hv-03', disk: '/dev/sdd' })
+    expect(full.status).toBe(422)
+    expect(full.json.error).toContain('wipefs')
+    expect(call('POST', '/api/v1/ceph/osds', { hostname: 'hv-02', disk: '/dev/sdc' }).status).toBe(202)
+
+    expect(call('POST', '/api/v1/ceph/maintenance/enter', { hostname: 'hv-02' }).status).toBe(204)
+    const warn = call('GET', '/api/v1/ceph/status').json.telemetry
+    expect(warn.health.status).toBe('HEALTH_WARN')
+    expect(warn.daemons.noout).toBe(true)
+    expect(call('POST', '/api/v1/ceph/maintenance/exit', { hostname: 'hv-02' }).status).toBe(204)
+    expect(call('GET', '/api/v1/ceph/status').json.telemetry.health.status).toBe('HEALTH_OK')
+
+    expect(call('POST', '/api/v1/ceph/pools', { name: 'rbd-fast', type: 'replicated', replicaSize: 3, libvirtPool: 'ceph-fast' }).status).toBe(201)
+    expect(call('GET', '/api/v1/storage/pools').json.pools.some((p: { name: string }) => p.name === 'ceph-fast')).toBe(true)
+    expect(call('DELETE', '/api/v1/ceph/pools/rbd-fast').status).toBe(409)
+
+    expect(call('GET', '/api/v1/storage/policies').json.policies).toHaveLength(3)
+    expect(call('POST', '/api/v1/storage/policies', { id: 'fast', name: 'Fast', pool: 'ceph-fast', default: true }).status).toBe(201)
+    const list = call('GET', '/api/v1/storage/policies').json.policies
+    expect(list.filter((p: { default: boolean }) => p.default).map((p: { id: string }) => p.id)).toEqual(['fast'])
+    expect(call('DELETE', '/api/v1/storage/policies/fast').status).toBe(204)
+  })
 })

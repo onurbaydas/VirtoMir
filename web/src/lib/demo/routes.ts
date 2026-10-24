@@ -952,6 +952,99 @@ function sdnDemo(method: string, parts: string[], q: URLSearchParams, body: any)
   return notFound()
 }
 
+/** /api/v1/ceph/<parts…> in the demo: a healthy three-host cluster managed from hv-01. */
+function cephDemo(method: string, parts: string[], host: w.DemoHost, body: any): Reply {
+  const op = `${method} ${parts.join('/')}`
+  if (op === 'GET status') {
+    if (host.id !== w.SELF.id) return json({ installed: true, cephadm: true, managed: false, managedBy: { id: w.SELF.id, name: w.SELF.name, fsid: w.cephConfig.fsid } })
+    return json({ installed: true, cephadm: true, managed: true, config: w.cephConfig, telemetry: w.cephTelemetry() })
+  }
+  if (op === 'GET disks') return json({ disks: w.cephSpareDisks[host.id] ?? [] })
+  if (host.id !== w.SELF.id) return json({ error: 'this host manages no Ceph cluster: bootstrap one, or open the member that manages it' }, 409)
+  switch (op) {
+    case 'GET hosts':
+      return json({ hosts: w.cephHosts })
+    case 'GET pools':
+      return json({ pools: w.cephPools })
+    case 'POST bootstrap':
+    case 'POST adopt':
+      return json({ error: 'exists: this host manages a Ceph cluster already' }, 409)
+    case 'POST hosts':
+      return json({ error: 'every member is a Ceph host already' }, 422)
+    case 'POST osds': {
+      const h = w.HOSTS.find((x) => x.name === body?.hostname)
+      const d = h && w.cephSpareDisks[h.id]?.find((x) => x.path === body?.disk)
+      if (!h || !d) return json({ error: 'not found: no such disk' }, 404)
+      if (!d.empty) return json({ error: `disk not empty: disk ${d.path} on ${h.name} is not empty (${d.refusalReason}), so it was left untouched. Wipe it yourself if you are sure (wipefs -a)` }, 422)
+      return json(job('ceph-add-osd', `Add OSD ${h.name}:${d.path}`, 2500, () => {
+        Object.assign(d, { empty: false, fsType: 'ceph_bluestore', refusalReason: 'is already a Ceph OSD' })
+        const id = w.cephOSDs.length
+        w.cephOSDs.push({ id, name: `osd.${id}`, host: h.name, deviceClass: d.deviceType, weight: d.sizeBytes / 1.1e12, up: true })
+        return `${h.name}:${d.path}`
+      }), 202)
+    }
+    case 'PUT noout':
+      w.cephConfig.noout = !!body?.enabled
+      return none()
+    case 'POST maintenance/enter':
+    case 'POST maintenance/exit': {
+      const h = w.cephHosts.find((x) => x.hostname === body?.hostname)
+      if (!h) return json({ error: `not found: ${body?.hostname} is no Ceph host` }, 404)
+      const enter = parts[1] === 'enter'
+      h.status = enter ? 'maintenance' : 'online'
+      const list = (w.cephConfig.maintenanceHosts ?? []).filter((x) => x !== h.hostname)
+      w.cephConfig.maintenanceHosts = enter ? [...list, h.hostname] : list
+      w.cephConfig.noout = enter || list.length > 0
+      return none()
+    }
+    case 'POST pools': {
+      if (w.cephPools.some((p) => p.name === body?.name)) return json({ error: `pool '${body.name}' already exists` }, 502)
+      const ec = body?.type === 'erasure'
+      const k = body?.ecK ?? 4
+      const m = body?.ecM ?? 2
+      w.cephPools.push({ id: 10 + w.cephPools.length, name: body.name, type: ec ? 'erasure' : 'replicated', size: ec ? k + m : body?.replicaSize ?? 3, minSize: ec ? k + 1 : 2,
+        dataPool: ec ? body.name + '-data' : undefined, storedBytes: 0, percentUsed: 0, maxAvailBytes: 3.7e12, libvirtPool: body?.libvirtPool || undefined })
+      if (body?.libvirtPool) w.pools.push({ name: body.libvirtPool, uuid: crypto.randomUUID(), type: 'rbd', source: body.name, active: true, autostart: true, capacityBytes: 3.7e12, allocationBytes: 0, availableBytes: 3.7e12, volumes: 0 })
+      return json({ name: body.name, results: body?.libvirtPool ? w.HOSTS.map((h) => ({ host: h.name, ok: true })) : undefined }, 201)
+    }
+  }
+  if (method === 'DELETE' && parts[0] === 'pools') {
+    const i = w.cephPools.findIndex((p) => p.name === parts[1])
+    if (i < 0) return json({ error: 'no RBD pool ' + parts[1] }, 404)
+    if (w.cephPools[i].libvirtPool) return json({ error: `libvirt pool ${w.cephPools[i].libvirtPool} still uses it: delete that pool on every host first (its disks go with the Ceph pool)` }, 409)
+    w.cephPools.splice(i, 1)
+    return none()
+  }
+  return notFound()
+}
+
+/** /api/v1/storage/policies[/<id>] in the demo. */
+function policyDemo(method: string, id: string | undefined, body: any): Reply {
+  const now = new Date().toISOString()
+  const i = w.storagePolicies.findIndex((p) => p.id === id)
+  const onlyDefault = (keep: string) => w.storagePolicies.forEach((p) => p.id !== keep && (p.default = false))
+  if (!id && method === 'GET') return json({ policies: [...w.storagePolicies].sort((a, b) => a.name.localeCompare(b.name, 'en')) })
+  if (!id && method === 'POST') {
+    if (!/^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$/.test(body?.id ?? '')) return json({ error: 'invalid: the policy ID is 2 to 40 lower-case letters, digits and dashes' }, 422)
+    if (i >= 0 || w.storagePolicies.some((p) => p.id === body.id)) return json({ error: `exists: a policy ${body.id} exists already` }, 409)
+    const p = { ...body, created: now, updated: now }
+    if (p.default) onlyDefault(p.id)
+    w.storagePolicies.push(p)
+    return json(p, 201)
+  }
+  if (i < 0) return json({ error: `not found: no policy ${id}` }, 404)
+  if (method === 'PUT') {
+    w.storagePolicies[i] = { ...w.storagePolicies[i], ...body, id, updated: now }
+    if (w.storagePolicies[i].default) onlyDefault(id!)
+    return json(w.storagePolicies[i])
+  }
+  if (method === 'DELETE') {
+    w.storagePolicies.splice(i, 1)
+    return none()
+  }
+  return notFound()
+}
+
 export function handle(method: string, url: URL, body: any): Reply {
   let path = url.pathname
   let host = w.SELF
@@ -966,6 +1059,8 @@ export function handle(method: string, url: URL, body: any): Reply {
   const op = `${method} ${path}`
   const parts = path.split('/').slice(3).map(decodeURIComponent) // after /api/v1
   if (parts[0] === 'sdn') return sdnDemo(method, parts.slice(1), q, body)
+  if (parts[0] === 'ceph') return cephDemo(method, parts.slice(1), host, body)
+  if (parts[0] === 'storage' && parts[1] === 'policies') return policyDemo(method, parts[2], body)
 
   switch (op) {
     // Session and account

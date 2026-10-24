@@ -121,6 +121,7 @@
     'pool.free': { label: t('Pool free space below'), unit: '%', target: 'pool' },
     'libvirt.down': { label: t('libvirt unreachable') },
     'vm.anomaly': { label: t('Machine behaves unusually (CPU, disk or network far from its usual)'), target: 'vm' },
+    'ceph.health': { label: t('Ceph cluster not healthy (critical on HEALTH_ERR)') },
   }
   const machines = $derived(live.snapshot?.domains ?? [])
   let pools = $state<string[]>([])
