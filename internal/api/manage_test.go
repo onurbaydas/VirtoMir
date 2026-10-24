@@ -35,6 +35,7 @@ func (f *fakeBackend) Clone(_ context.Context, uuid, name string, report func(st
 }
 func (f *fakeBackend) CreateDomain(spec virt.CreateSpec) (virt.CreateResult, error) {
 	f.call("create " + spec.Name)
+	f.lastCreate = spec
 	return virt.CreateResult{UUID: "u-new"}, f.err
 }
 func (f *fakeBackend) AttachDisk(uuid string, spec virt.DiskSpec) (string, error) {

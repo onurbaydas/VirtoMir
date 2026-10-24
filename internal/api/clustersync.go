@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/ceph"
 	"github.com/onurbaydas/virtomir/internal/cluster"
 	"github.com/onurbaydas/virtomir/internal/drs"
 	"github.com/onurbaydas/virtomir/internal/gpool"
@@ -19,18 +20,19 @@ import (
 )
 
 // Cluster-wide state that changes reach only the members online at that moment (#37):
-// DRS settings, placement rules and host labels, GPU pools, the SDN, and the cluster-wide VXLAN overlays.
+// DRS settings, placement rules and host labels, GPU pools, the SDN, storage policies, and the cluster-wide VXLAN overlays.
 // Every minute (SyncMembers) each member asks the others for theirs: settings with a
 // newer version are taken over, and a cluster overlay this host never had is created here,
 // with every member's peer list following the member list.
 
 // SharedState is what /api/v1/cluster/peer/shared answers.
 type SharedState struct {
-	DRS       *drs.Config       `json:"drs,omitempty"`
-	Placement *placement.Shared `json:"placement,omitempty"`
-	GPUPools  *gpool.Shared     `json:"gpuPools,omitempty"`
-	SDN       *sdn.Shared       `json:"sdn,omitempty"`
-	Overlays  []Overlay         `json:"overlays"`
+	DRS       *drs.Config          `json:"drs,omitempty"`
+	Placement *placement.Shared    `json:"placement,omitempty"`
+	GPUPools  *gpool.Shared        `json:"gpuPools,omitempty"`
+	SDN       *sdn.Shared          `json:"sdn,omitempty"`
+	Policies  *ceph.PoliciesShared `json:"storagePolicies,omitempty"`
+	Overlays  []Overlay            `json:"overlays"`
 }
 
 // Overlay is a cluster-wide VXLAN network.
@@ -68,6 +70,10 @@ func (s *Server) sharedState() SharedState {
 	if s.sdn != nil {
 		n := s.sdn.Shared()
 		st.SDN = &n
+	}
+	if s.ceph != nil {
+		p := s.ceph.Shared()
+		st.Policies = &p
 	}
 	if nets, err := s.backend.ListNetworks(); err == nil {
 		for _, n := range nets {
@@ -119,6 +125,13 @@ func (s *Server) syncShared(ctx context.Context, members []cluster.Node) {
 				s.log.Info("SDN state taken over from a member", "member", n.Name, "version", st.SDN.Version)
 			} else if err != nil {
 				s.log.Warn("SDN state of a member", "member", n.Name, "err", err)
+			}
+		}
+		if st.Policies != nil && s.ceph != nil {
+			if ok, err := s.ceph.Adopt(*st.Policies); ok {
+				s.log.Info("storage policies taken over from a member", "member", n.Name, "version", st.Policies.Version)
+			} else if err != nil {
+				s.log.Warn("storage policies of a member", "member", n.Name, "err", err)
 			}
 		}
 		remote = append(remote, st.Overlays...)

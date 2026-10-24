@@ -34,6 +34,7 @@ type fakeBackend struct {
 	lastInactive bool
 	calls        []string
 	networks     []virt.NetworkSpec
+	lastCreate   virt.CreateSpec
 }
 
 func (f *fakeBackend) call(s string) { f.calls = append(f.calls, s) }

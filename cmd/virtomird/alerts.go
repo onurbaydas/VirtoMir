@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/onurbaydas/virtomir/internal/alerts"
+	"github.com/onurbaydas/virtomir/internal/ceph"
 	"github.com/onurbaydas/virtomir/internal/insights"
 	"github.com/onurbaydas/virtomir/internal/live"
 	"github.com/onurbaydas/virtomir/internal/virt"
@@ -19,11 +20,31 @@ const anomalyRecent = 15 * time.Minute
 // watchAlerts feeds every live snapshot into the alert engine. Pool usage comes from a
 // slower loop (once a minute) and metric anomalies from one every 5 minutes, so neither
 // ever delays the 1 s sampler.
-func watchAlerts(ctx context.Context, hub *live.Hub, eng *alerts.Engine, client *virt.Client, ins *insights.Engine) {
+func watchAlerts(ctx context.Context, hub *live.Hub, eng *alerts.Engine, client *virt.Client, ins *insights.Engine, cephStore *ceph.Store) {
 	var mu sync.Mutex
 	var pools []alerts.Pool
 	fresh := false
 	anomalies := map[string]string{} // machine UUID → what is unusual right now
+	var cephHealth *alerts.Ceph      // new reading of the Ceph cluster this host manages
+
+	if cephStore != nil {
+		go func() {
+			t := time.NewTicker(time.Minute)
+			defer t.Stop()
+			for {
+				if h := readCephHealth(ctx, cephStore); h != nil {
+					mu.Lock()
+					cephHealth = h
+					mu.Unlock()
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+			}
+		}()
+	}
 
 	go func() {
 		t := time.NewTicker(5 * time.Minute)
@@ -93,9 +114,28 @@ func watchAlerts(ctx context.Context, hub *live.Hub, eng *alerts.Engine, client 
 		if fresh {
 			o.Pools, o.PoolsFresh, fresh = pools, true, false
 		}
+		o.Ceph, cephHealth = cephHealth, nil
 		mu.Unlock()
 		eng.Observe(o)
 	})
+}
+
+// readCephHealth reads the health of the Ceph cluster this host manages; nil when it
+// manages none. A cluster that does not answer counts as HEALTH_ERR.
+func readCephHealth(ctx context.Context, store *ceph.Store) *alerts.Ceph {
+	if _, ok := store.Config(); !ok {
+		return nil
+	}
+	c, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	h, err := ceph.Health(c, ceph.Exec{})
+	switch {
+	case ctx.Err() != nil:
+		return nil
+	case err != nil:
+		return &alerts.Ceph{Status: "HEALTH_ERR", Message: "Ceph does not answer: " + err.Error()}
+	}
+	return &alerts.Ceph{Status: h.Status, Message: h.Summary()}
 }
 
 // recentAnomaly describes the strongest anomaly of the last anomalyRecent, or "".

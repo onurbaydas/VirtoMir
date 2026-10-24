@@ -39,9 +39,10 @@ const (
 	PoolFree    Kind = "pool.free"    // free space of a pool below Threshold %
 	LibvirtDown Kind = "libvirt.down" // virtomird cannot reach libvirt
 	VMAnomaly   Kind = "vm.anomaly"   // a machine's metric far from its usual (robust z-score, ADR-0066)
+	CephHealth  Kind = "ceph.health"  // the Ceph cluster is not HEALTH_OK (critical on HEALTH_ERR, ADR-0073)
 )
 
-var kinds = []Kind{HostCPU, HostMem, VMCPU, VMCrashed, VMDown, PoolFree, LibvirtDown, VMAnomaly}
+var kinds = []Kind{HostCPU, HostMem, VMCPU, VMCrashed, VMDown, PoolFree, LibvirtDown, VMAnomaly, CephHealth}
 
 type Rule struct {
 	ID        string   `json:"id"`
@@ -87,6 +88,7 @@ func DefaultRules() []Rule {
 		{ID: "libvirt-down", Kind: LibvirtDown, Enabled: true, ForSec: 60, Severity: Critical},
 		{ID: "vm-cpu", Kind: VMCPU, Enabled: false, Threshold: 95, ForSec: 600, Severity: Warning},
 		{ID: "vm-anomaly", Kind: VMAnomaly, Enabled: false, Severity: Warning},
+		{ID: "ceph-health", Kind: CephHealth, Enabled: true, ForSec: 60, Severity: Warning},
 	}
 }
 
@@ -118,6 +120,15 @@ type Observation struct {
 	Machines   []Machine
 	Pools      []Pool // may be nil when not refreshed this round
 	PoolsFresh bool
+	// Ceph is the health of the Ceph cluster this host manages; nil = not read this round
+	// (the last reading stays), or no cluster.
+	Ceph *Ceph
+}
+
+// Ceph is Ceph's verdict (HEALTH_OK, HEALTH_WARN, HEALTH_ERR) and why.
+type Ceph struct {
+	Status  string
+	Message string
 }
 
 type Machine struct {
@@ -372,6 +383,7 @@ type condition struct {
 	subjectID string
 	message   string
 	value     float64
+	severity  Severity // "" = the rule's
 }
 
 // Observe evaluates every enabled rule. Call once per sample.
@@ -379,6 +391,9 @@ func (e *Engine) Observe(o Observation) {
 	e.mu.Lock()
 	if !o.PoolsFresh {
 		o.Pools, o.PoolsFresh = e.lastObs.Pools, e.lastObs.PoolsFresh
+	}
+	if o.Ceph == nil {
+		o.Ceph = e.lastObs.Ceph
 	}
 	e.lastObs = o
 	var events []Event
@@ -398,8 +413,12 @@ func (e *Engine) Observe(o Observation) {
 			if _, active := e.active[c.key]; active || o.Time.Sub(since) < time.Duration(r.ForSec)*time.Second {
 				continue
 			}
+			sev := r.Severity
+			if c.severity != "" {
+				sev = c.severity
+			}
 			a := Alert{
-				ID: newID(), RuleID: r.ID, Kind: r.Kind, Severity: r.Severity,
+				ID: newID(), RuleID: r.ID, Kind: r.Kind, Severity: sev,
 				Subject: c.subject, SubjectID: c.subjectID, Message: c.message, Value: c.value, Started: o.Time.UTC(),
 			}
 			e.alerts = append(e.alerts, a)
@@ -504,6 +523,19 @@ func evaluate(r Rule, o Observation) []condition {
 				out = append(out, condition{key: key(p.Name), subject: "Pool " + p.Name, subjectID: p.Name, value: p.FreePct,
 					message: fmt.Sprintf("Pool %s has %.0f %% free (%s left; threshold %.0f %%)", p.Name, p.FreePct, gib(p.FreeBytes), r.Threshold)})
 			}
+		}
+	case CephHealth:
+		if o.Ceph != nil && o.Ceph.Status != "" && o.Ceph.Status != "HEALTH_OK" {
+			// HEALTH_ERR is its own (critical) alert, so a warning that gets worse notifies again.
+			c := condition{key: key("ceph"), subject: "Ceph cluster", subjectID: "ceph",
+				message: "Ceph health is " + o.Ceph.Status}
+			if o.Ceph.Message != "" {
+				c.message += ": " + o.Ceph.Message
+			}
+			if o.Ceph.Status == "HEALTH_ERR" {
+				c.key, c.severity = key("ceph-err"), Critical
+			}
+			out = append(out, c)
 		}
 	}
 	return out

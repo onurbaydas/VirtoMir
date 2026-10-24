@@ -22,6 +22,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/api"
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/catalog"
+	"github.com/onurbaydas/virtomir/internal/ceph"
 	"github.com/onurbaydas/virtomir/internal/cluster"
 	"github.com/onurbaydas/virtomir/internal/compliance"
 	"github.com/onurbaydas/virtomir/internal/confighist"
@@ -172,7 +173,11 @@ func run(c config, log *slog.Logger) error {
 	if err != nil {
 		log.Warn("alerts", "err", err)
 	}
-	watchAlerts(ctx, hub, alertEngine, client, insightsEngine)
+	cephStore, err := ceph.Open(filepath.Join(c.stateDir, "ceph.json"))
+	if err != nil {
+		log.Warn("Ceph", "err", err)
+	}
+	watchAlerts(ctx, hub, alertEngine, client, insightsEngine, cephStore)
 
 	jobManager := jobs.New(ctx)
 	hostName := c.name
@@ -314,6 +319,9 @@ func run(c config, log *slog.Logger) error {
 		log.Warn("SDN", "err", err)
 	} else {
 		opts.SDN, opts.SDNRunner, opts.SDNNorthbound = st, sdn.Exec{}, c.ovnNorthbound
+	}
+	if cephStore != nil {
+		opts.Ceph, opts.CephRunner = cephStore, ceph.Exec{}
 	}
 	apiServer := api.NewServer(opts)
 	go syncCluster(ctx, apiServer)

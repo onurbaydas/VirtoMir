@@ -71,9 +71,20 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 		Project string `json:"project,omitempty"`
 		// GPU asks for GPUs of a GPU pool (ADR-0071).
 		GPU *GPURequest `json:"gpu,omitempty"`
+		// StoragePolicy picks the pool of a new disk (ADR-0073); without it and without a
+		// pool, the default policy does.
+		StoragePolicy string `json:"storagePolicy,omitempty"`
 	}
 	if !s.decode(w, r, &spec) {
 		return
+	}
+	if spec.DiskPath == "" && spec.Pool == "" {
+		pool, err := s.policyPool(spec.StoragePolicy)
+		if err != nil {
+			s.writeError(w, err)
+			return
+		}
+		spec.Pool = pool
 	}
 	var newDisk uint64
 	if spec.DiskPath == "" {

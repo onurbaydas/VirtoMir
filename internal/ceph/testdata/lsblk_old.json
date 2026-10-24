@@ -1,0 +1,1 @@
+{"blockdevices":[{"name":"vdb","path":"/dev/vdb","size":"21474836480","rota":"1","type":"disk","mountpoint":null,"fstype":"zfs_member","pttype":null}]}

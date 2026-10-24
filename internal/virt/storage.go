@@ -21,6 +21,7 @@ type Pool struct {
 	UUID            string `json:"uuid"`
 	Type            string `json:"type"` // dir, logical, netfs, iscsi, …
 	Path            string `json:"path,omitempty"`
+	Source          string `json:"source,omitempty"` // the Ceph pool (rbd), volume group (logical) or zpool (zfs)
 	Active          bool   `json:"active"`
 	Autostart       bool   `json:"autostart"`
 	CapacityBytes   uint64 `json:"capacityBytes"`
@@ -80,6 +81,9 @@ func poolInfo(l *libvirt.Libvirt, p libvirt.StoragePool) (Pool, error) {
 			info.Type = x.Type
 			if x.Target != nil {
 				info.Path = x.Target.Path
+			}
+			if x.Source != nil && x.Source.Name != "" {
+				info.Source = x.Source.Name
 			}
 		}
 	}
@@ -640,4 +644,3 @@ func (c *Client) CreateVolumeFile(pool, name string, bytes uint64, format string
 	}
 	return createVolume(l, pool, name, bytes, format, provisioning...)
 }
-

@@ -310,3 +310,24 @@ func TestTestChannelUsesStoredURL(t *testing.T) {
 		t.Errorf("the test went to the masked URL, not the stored one (hits=%d)", hits)
 	}
 }
+
+func TestCephHealth(t *testing.T) {
+	e, s := newEngine(t) // ceph-health: not HEALTH_OK for 60 s
+	at := func(d time.Duration, status, msg string) Observation {
+		return Observation{Time: t0.Add(d), Connected: true, Ceph: &Ceph{Status: status, Message: msg}}
+	}
+	e.Observe(at(0, "HEALTH_WARN", "1 osds down"))
+	e.Observe(Observation{Time: t0.Add(61 * time.Second), Connected: true}) // not read this round: still WARN
+	if len(s.events) != 1 || s.events[0].Alert.Severity != Warning || s.events[0].Alert.Message != "Ceph health is HEALTH_WARN: 1 osds down" {
+		t.Fatalf("events %+v", s.events)
+	}
+	e.Observe(at(2*time.Minute, "HEALTH_ERR", "64 pgs inactive"))
+	e.Observe(at(3*time.Minute+time.Second, "HEALTH_ERR", "64 pgs inactive"))
+	if len(s.events) != 3 || s.events[1].Type != ResolvedEvent || s.events[2].Alert.Severity != Critical {
+		t.Fatalf("escalation %+v", s.events)
+	}
+	e.Observe(at(4*time.Minute, "HEALTH_OK", ""))
+	if len(s.events) != 4 || s.events[3].Type != ResolvedEvent {
+		t.Errorf("resolution %+v", s.events)
+	}
+}
