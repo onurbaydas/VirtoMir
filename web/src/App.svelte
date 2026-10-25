@@ -26,6 +26,7 @@
   import CephPage from './lib/pages/CephPage.svelte'
   import PhysnetPage from './lib/pages/PhysnetPage.svelte'
   import K8sPage from './lib/pages/K8sPage.svelte'
+  import BaremetalPage from './lib/pages/BaremetalPage.svelte'
   import ProjectsPage from './lib/pages/ProjectsPage.svelte'
   import CatalogPage from './lib/pages/CatalogPage.svelte'
   import NotFound from './lib/pages/NotFound.svelte'
@@ -155,6 +156,8 @@
           <PhysnetPage tab={route.tab} />
         {:else if route.name === 'k8s'}
           <K8sPage />
+        {:else if route.name === 'baremetal'}
+          <BaremetalPage />
         {:else if route.name === 'backups'}
           <BackupsPage />
         {:else if route.name === 'alerts'}

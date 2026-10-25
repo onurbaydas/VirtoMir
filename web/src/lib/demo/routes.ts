@@ -24,6 +24,7 @@ import type {
 } from '../api'
 import type { PlacementRule, PlacementViolation } from '../enterprise'
 import type { K8sCluster, K8sNode } from '../k8s'
+import type { BMHost } from '../baremetal'
 import * as w from './world'
 
 export interface Reply {
@@ -1168,6 +1169,55 @@ function k8sDemo(method: string, parts: string[], body: any): Reply {
   return notFound()
 }
 
+/** /api/v1/baremetal/<parts…> in the demo (ADR-0077): installs do not really happen. */
+function baremetalDemo(method: string, parts: string[], body: any): Reply {
+  const now = () => new Date().toISOString()
+  const pub = (h: BMHost) => ({ ...h, bmc: { ...h.bmc, password: undefined } })
+  if (parts.length === 0 && method === 'GET') {
+    return json({ enabled: true, settings: w.netboot, hosts: w.bmHosts.map(pub), status: { installerReady: true, listening: w.netboot.enabled, error: '', ipmitool: true } })
+  }
+  if (parts[0] === 'settings' && method === 'PUT') {
+    if (body?.enabled && !/^\d+\.\d+\.\d+\.\d+$/.test(body.address ?? '')) return json({ error: "invalid: give this host's IPv4 address on the boot network" }, 422)
+    Object.assign(w.netboot, body)
+    return none()
+  }
+  if (parts[0] === 'installer' && method === 'POST') return none()
+  if (parts[0] !== 'hosts') return notFound()
+  if (parts.length === 1 && method === 'POST') {
+    if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(body?.name ?? '')) return json({ error: 'invalid: a host name is up to 63 lower-case letters, digits and dashes' }, 422)
+    if (w.bmHosts.some((h) => h.name === body.name || h.mac === body.mac?.toLowerCase())) return json({ error: `exists: ${body.name} is registered already` }, 409)
+    const h: BMHost = { id: crypto.randomUUID().replace(/-/g, '').slice(0, 16), name: body.name, mac: body.mac.toLowerCase(), bmc: body.bmc ?? { driver: '' }, disk: body.disk, static: body.static,
+      sshKeys: body.sshKeys, state: 'registered', created: now(), updated: now(), events: [{ at: now(), message: 'registered' }] }
+    w.bmHosts.push(h)
+    return json(pub(h), 201)
+  }
+  const h = w.bmHosts.find((x) => x.id === parts[1])
+  if (!h) return json({ error: 'not found: no such host' }, 404)
+  const log = (message: string) => h.events.push({ at: now(), message })
+  switch (`${method} ${parts.slice(2).join('/')}`) {
+    case 'PUT ':
+      Object.assign(h, { ...body, bmc: { ...body.bmc, password: undefined }, password: undefined, updated: now() })
+      return json(pub(h))
+    case 'DELETE ':
+      w.bmHosts.splice(w.bmHosts.indexOf(h), 1)
+      return none()
+    case 'POST install':
+      if (h.state === 'joined') return json({ error: `busy: ${h.name} is a member already; remove it from the cluster before installing it again` }, 409)
+      h.state = 'installing'
+      log('installation started by demo; its disk will be erased')
+      log(h.bmc.driver ? `pxe via ${h.bmc.driver}: power is on` : 'no BMC: boot it from the network yourself')
+      return json(pub(h), 202)
+    case 'POST cancel':
+      h.state = 'registered'
+      log('installation cancelled by demo')
+      return json(pub(h))
+    case 'POST power':
+      if (!h.bmc.driver) return json({ error: `${h.name} has no BMC` }, 409)
+      return json({ power: body?.action === 'off' ? 'off' : 'on', message: `${body?.action} via ${h.bmc.driver}: power is ${body?.action === 'off' ? 'off' : 'on'}` })
+  }
+  return notFound()
+}
+
 /** Storage efficiency, tiers and NVMe/TCP in the demo (ADR-0074). */
 function storageEffDemo(method: string, parts: string[], body: any): Reply | undefined {
   const op = `${method} ${parts.join('/')}`
@@ -1257,6 +1307,7 @@ export function handle(method: string, url: URL, body: any): Reply {
   if (parts[0] === 'ceph') return cephDemo(method, parts.slice(1), host, body)
   if (parts[0] === 'physnet') return physnetDemo(method, parts.slice(1), body)
   if (parts[0] === 'k8s') return k8sDemo(method, parts.slice(1), body)
+  if (parts[0] === 'baremetal') return baremetalDemo(method, parts.slice(1), body)
   if (parts[0] === 'storage' && parts[1] === 'policies') return policyDemo(method, parts[2], body)
   if (parts[0] === 'storage') {
     const r = storageEffDemo(method, parts, body)

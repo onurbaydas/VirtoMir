@@ -722,4 +722,17 @@ describe('demo API', () => {
     expect(call('DELETE', `/api/v1/k8s/clusters/${c.id}`).status).toBe(202)
     expect(call('GET', `/api/v1/k8s/clusters/${c.id}`).status).toBe(404)
   })
+
+
+  it('registers and installs bare-metal hosts', () => {
+    const v = call('GET', '/api/v1/baremetal').json
+    expect(v.hosts.map((h: { state: string }) => h.state)).toEqual(['joined', 'registered'])
+    expect(call('POST', '/api/v1/baremetal/hosts', { name: 'Bad Name', mac: '52:54:00:00:00:01' }).status).toBe(422)
+    const h = call('POST', '/api/v1/baremetal/hosts', { name: 'hv-06', mac: '52:54:00:00:00:06', bmc: { driver: '' }, password: 'long-enough' }).json
+    expect(call('POST', `/api/v1/baremetal/hosts/${h.id}/install`).json.state).toBe('installing')
+    expect(call('POST', `/api/v1/baremetal/hosts/${h.id}/power`, { action: 'status' }).status).toBe(409)
+    expect(call('POST', `/api/v1/baremetal/hosts/${h.id}/cancel`).json.state).toBe('registered')
+    expect(call('POST', `/api/v1/baremetal/hosts/${v.hosts[0].id}/install`).status).toBe(409)
+    expect(call('DELETE', `/api/v1/baremetal/hosts/${h.id}`).status).toBe(204)
+  })
 })

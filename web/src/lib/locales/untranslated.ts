@@ -124,4 +124,6 @@ export const untranslated = new Set<string>([
   "Kubernetes · VirtoMir",
   "kubeconfig",
   "Pod CIDR",
+  "Bare metal",
+  "Bare metal · VirtoMir",
 ])

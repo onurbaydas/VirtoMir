@@ -42,6 +42,7 @@ import type { CephHost, ClusterConfig, DiskInfo, RBDPool, StoragePolicy, Telemet
 import type { NVMeSubsystem, NVMeTarget, Tier, ZFSEfficiency } from '../storageeff'
 import type { BGPView, DNSConfig, IPPool, SRIOVDevice } from '../physnet'
 import type { K8sCluster, K8sNode } from '../k8s'
+import type { BMHost, NetbootSettings } from '../baremetal'
 import type { Chassis, ClusterGPU, Firewall, GPU, GPUPool, GPUPoolView, GPUResource, HAStatus, HostInterface, PoolView, ReportMeta, ReportSchedule, Topology } from '../enterprise'
 
 export interface DemoHost {
@@ -1706,5 +1707,30 @@ export const k8sClusters: K8sCluster[] = [
       { at: ago(9 * D - 11 * 60_000), message: 'done' },
     ],
     createdBy: 'onur', created: ago(9 * D), updated: ago(2 * D),
+  },
+]
+
+// ---- Bare metal (ADR-0077) --------------------------------------------------------------------
+
+export const netboot: NetbootSettings = {
+  enabled: true, address: '10.0.0.11', port: 8424, mode: 'external', mirror: 'deb.debian.org', repo: 'https://onurbaydas.github.io/VirtoMir/apt stable main',
+}
+
+export const bmHosts: BMHost[] = [
+  {
+    id: 'b1a2c3d4e5f60001', name: 'hv-04', mac: '3c:ec:ef:12:34:56', bmc: { driver: 'redfish', endpoint: '10.0.0.104', username: 'root', insecureTls: true },
+    static: { address: '10.0.0.14/24', gateway: '10.0.0.1', dns: ['10.0.0.53'] }, state: 'joined', created: ago(6 * D), updated: ago(6 * D - 40 * 60_000),
+    events: [
+      { at: ago(6 * D), message: 'registered' },
+      { at: ago(6 * D - 60_000), message: 'installation started by onur; its disk will be erased' },
+      { at: ago(6 * D - 2 * 60_000), message: 'pxe via redfish: power is on' },
+      { at: ago(6 * D - 4 * 60_000), message: 'booted from the network (10.0.0.114); the installer starts' },
+      { at: ago(6 * D - 22 * 60_000), message: 'installed; it restarts from its disk and joins the cluster' },
+      { at: ago(6 * D - 40 * 60_000), message: 'joined the cluster' },
+    ],
+  },
+  {
+    id: 'b1a2c3d4e5f60002', name: 'hv-05', mac: '3c:ec:ef:12:34:78', bmc: { driver: 'ipmi', endpoint: '10.0.0.105', username: 'ADMIN' }, disk: '/dev/nvme0n1',
+    state: 'registered', created: ago(D), updated: ago(D), events: [{ at: ago(D), message: 'registered' }],
   },
 ]
