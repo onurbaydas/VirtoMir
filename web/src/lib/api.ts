@@ -1446,6 +1446,8 @@ export const api = {
   streamURL: () => scoped('/api/v1/stream'),
 
   get: <T = any>(path: string) => request<T>('GET', path),
+  /** A text answer, e.g. a file to save. */
+  getText: async (path: string, accept = 'text/plain') => (await send('GET', path, { accept })).text(),
   post: <T = any>(path: string, body?: any) => request<T>('POST', path, body),
   put: <T = any>(path: string, body?: any) => request<T>('PUT', path, body),
   delete: <T = any>(path: string) => request<T>('DELETE', path),

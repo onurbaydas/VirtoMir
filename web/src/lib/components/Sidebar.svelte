@@ -10,6 +10,7 @@
   import Network from '@lucide/svelte/icons/network'
   import Waypoints from '@lucide/svelte/icons/waypoints'
   import RouterIcon from '@lucide/svelte/icons/router'
+  import Ship from '@lucide/svelte/icons/ship-wheel'
   import Plus from '@lucide/svelte/icons/plus'
   import LogOut from '@lucide/svelte/icons/log-out'
   import UserRound from '@lucide/svelte/icons/user-round'
@@ -52,6 +53,7 @@
     { name: 'networks', href: '/networks', label: t('Networks'), icon: Network, role: 'viewer' },
     { name: 'sdn', href: '/sdn', label: t('SDN'), icon: Waypoints, role: 'viewer' },
     { name: 'physnet', href: '/physnet', label: t('Physical network'), icon: RouterIcon, role: 'viewer' },
+    { name: 'k8s', href: '/kubernetes', label: t('Kubernetes'), icon: Ship, role: 'viewer' },
     { name: 'hardware', href: '/hardware', label: t('Hardware'), icon: CircuitBoard, role: 'viewer' },
     { name: 'backups', href: '/backups', label: t('Backups'), icon: Archive, role: 'viewer' },
     { name: 'alerts', href: '/alerts', label: t('Alerts'), icon: Bell, role: 'viewer' },

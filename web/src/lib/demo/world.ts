@@ -41,6 +41,7 @@ import type { FloatingIP, IPsecConfig, LoadBalancer, SDNPort, SDNStatus, Securit
 import type { CephHost, ClusterConfig, DiskInfo, RBDPool, StoragePolicy, Telemetry } from '../ceph'
 import type { NVMeSubsystem, NVMeTarget, Tier, ZFSEfficiency } from '../storageeff'
 import type { BGPView, DNSConfig, IPPool, SRIOVDevice } from '../physnet'
+import type { K8sCluster, K8sNode } from '../k8s'
 import type { Chassis, ClusterGPU, Firewall, GPU, GPUPool, GPUPoolView, GPUResource, HAStatus, HostInterface, PoolView, ReportMeta, ReportSchedule, Topology } from '../enterprise'
 
 export interface DemoHost {
@@ -1672,4 +1673,38 @@ export const sriovDevices: SRIOVDevice[] = [
     vfs: [0, 1, 2, 3].map((i) => ({ index: i, pci: `0000:41:00.${i + 2}`, netdev: i < 2 ? undefined : `ens1f0v${i}`, mac: i < 2 ? undefined : `52:54:00:5f:00:0${i}` })),
   },
   { interface: 'ens1f1', pci: '0000:41:00.1', driver: 'mlx5_core', totalVfs: 16, currentVfs: 0, persistent: false, vfs: [] },
+]
+
+// ---- Kubernetes (ADR-0076) --------------------------------------------------------------------
+
+const k8sNode = (name: string, role: K8sNode['role'], host: number, ip: string, n: number): K8sNode => ({
+  name, role, hostId: HOSTS[host % HOSTS.length].id, uuid: `7a0c1d2e-0000-4f3a-8b9c-${String(n).padStart(12, '0')}`, ip, state: 'ready', version: 'v1.36.5',
+})
+
+export const k8sClusters: K8sCluster[] = [
+  {
+    id: 'c0ffee0123456789',
+    spec: {
+      name: 'prod', version: '1.36', controlPlanes: 3, workers: 3, project: 'prod',
+      controlPlane: { vcpus: 2, memoryMiB: 4096, diskGiB: 30 }, worker: { vcpus: 4, memoryMiB: 8192, diskGiB: 60 },
+      image: '/var/lib/libvirt/images/debian-13-genericcloud-amd64.qcow2', network: 'default', ipPool: 'prod-v20', cni: 'calico',
+      podCidr: '10.244.0.0/16', serviceCidr: '10.96.0.0/12', hosts: HOSTS.map((h) => h.id),
+    },
+    state: 'ready', version: '1.36', endpoint: 'https://10.20.0.130:6443', reservedVip: '10.20.0.130', ruleId: 'k8s-prod-cp',
+    nodes: [
+      k8sNode('prod-cp-1', 'control-plane', 0, '10.20.0.131', 1),
+      k8sNode('prod-cp-2', 'control-plane', 1, '10.20.0.132', 2),
+      k8sNode('prod-cp-3', 'control-plane', 2, '10.20.0.133', 3),
+      k8sNode('prod-worker-1', 'worker', 0, '10.20.0.134', 4),
+      k8sNode('prod-worker-2', 'worker', 1, '10.20.0.135', 5),
+      k8sNode('prod-worker-3', 'worker', 2, '10.20.0.136', 6),
+    ],
+    events: [
+      { at: ago(9 * D), message: 'creating the cluster' },
+      { at: ago(9 * D), message: 'API address 10.20.0.130 reserved from the IP pool' },
+      { at: ago(9 * D - 4 * 60_000), message: 'prod-cp-1 joined the cluster (10.20.0.131)' },
+      { at: ago(9 * D - 11 * 60_000), message: 'done' },
+    ],
+    createdBy: 'onur', created: ago(9 * D), updated: ago(2 * D),
+  },
 ]

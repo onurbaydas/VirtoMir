@@ -709,4 +709,17 @@ describe('demo API', () => {
     expect(call('GET', '/api/v1/physnet/sriov').json.devices[1].vfs).toHaveLength(8)
     expect(call('PUT', '/api/v1/physnet/sriov/ens1f1', { vfs: 99 }).status).toBe(422)
   })
+
+
+  it('runs Kubernetes clusters', () => {
+    expect(call('GET', '/api/v1/k8s/clusters').json.clusters[0].nodes).toHaveLength(6)
+    expect(call('POST', '/api/v1/k8s/clusters', { name: 'Bad!' }).status).toBe(422)
+    const c = call('POST', '/api/v1/k8s/clusters', { name: 'dev', controlPlanes: 1, workers: 2, version: '1.35' }).json
+    expect(c.nodes.map((n: { name: string }) => n.name)).toEqual(['dev-cp-1', 'dev-worker-1', 'dev-worker-2'])
+    expect(call('POST', `/api/v1/k8s/clusters/${c.id}/scale`, { workers: 1 }).json.nodes).toHaveLength(2)
+    expect(call('POST', `/api/v1/k8s/clusters/${c.id}/upgrade`).json.version).toBe('1.36')
+    expect(call('GET', `/api/v1/k8s/clusters/${c.id}/kubeconfig`).status).toBe(200)
+    expect(call('DELETE', `/api/v1/k8s/clusters/${c.id}`).status).toBe(202)
+    expect(call('GET', `/api/v1/k8s/clusters/${c.id}`).status).toBe(404)
+  })
 })

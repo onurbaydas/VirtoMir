@@ -23,6 +23,7 @@ import type {
   VMwareWave,
 } from '../api'
 import type { PlacementRule, PlacementViolation } from '../enterprise'
+import type { K8sCluster, K8sNode } from '../k8s'
 import * as w from './world'
 
 export interface Reply {
@@ -1108,6 +1109,65 @@ function physnetDemo(method: string, parts: string[], body: any): Reply {
   return notFound()
 }
 
+/** /api/v1/k8s/<parts…> in the demo (ADR-0076): operations finish at once. */
+function k8sDemo(method: string, parts: string[], body: any): Reply {
+  const versions = ['1.34', '1.35', '1.36', '1.37']
+  const list = w.k8sClusters
+  const now = () => new Date().toISOString()
+  const node = (i: number, role: K8sNode['role'], name: string, version: string): K8sNode => ({
+    name, role, hostId: w.HOSTS[i % w.HOSTS.length].id, uuid: crypto.randomUUID(), ip: `10.20.0.${140 + i}`, state: 'ready', version: `v${version}.0`,
+  })
+  if (parts[0] !== 'clusters') return notFound()
+  if (parts.length === 1 && method === 'GET') return json({ enabled: true, clusters: list, versions, defaultVersion: '1.36', cnis: ['flannel', 'calico'] })
+  if (parts.length === 1 && method === 'POST') {
+    if (!/^[a-z][a-z0-9-]{1,28}[a-z0-9]$/.test(body?.name ?? '')) return json({ error: 'invalid: a cluster name is 3 to 30 lower-case letters, digits and dashes, starting with a letter' }, 422)
+    if (list.some((c) => c.spec.name === body.name)) return json({ error: `exists: a cluster is already named ${body.name}` }, 409)
+    const version = body.version || '1.36'
+    const cps = Number(body.controlPlanes) || 1
+    const nodes = [
+      ...Array.from({ length: cps }, (_, i) => node(i, 'control-plane', `${body.name}-cp-${i + 1}`, version)),
+      ...Array.from({ length: Number(body.workers) || 0 }, (_, i) => node(cps + i, 'worker', `${body.name}-worker-${i + 1}`, version)),
+    ]
+    const c: K8sCluster = {
+      id: crypto.randomUUID().replace(/-/g, '').slice(0, 16), spec: { ...body, version }, state: 'ready', version, endpoint: `https://${nodes[0].ip}:6443`, nodes,
+      events: [{ at: now(), message: 'creating the cluster' }, { at: now(), message: 'done' }], createdBy: 'demo', created: now(), updated: now(),
+    }
+    list.push(c)
+    return json(c, 202)
+  }
+  const c = list.find((x) => x.id === parts[1])
+  if (!c) return json({ error: 'no such Kubernetes cluster on this host' }, 404)
+  switch (`${method} ${parts.slice(2).join('/')}`) {
+    case 'GET ':
+      return json(c)
+    case 'DELETE ':
+      list.splice(list.indexOf(c), 1)
+      return { status: 202 }
+    case 'POST scale': {
+      const want = Number(body?.workers)
+      if (!(want >= 0 && want <= 50)) return json({ error: 'invalid: a cluster has 0 to 50 workers' }, 422)
+      const cps = c.nodes.filter((x) => x.role === 'control-plane')
+      const workers = c.nodes.filter((x) => x.role === 'worker').slice(0, want)
+      for (let i = workers.length; i < want; i++) workers.push(node(cps.length + i, 'worker', `${c.spec.name}-worker-${i + 1}`, c.version))
+      c.nodes = [...cps, ...workers]
+      c.spec.workers = want
+      c.events.push({ at: now(), message: `scaled to ${want} workers` })
+      return json(c, 202)
+    }
+    case 'POST upgrade': {
+      const next = versions[versions.indexOf(c.version) + 1]
+      if (!next) return json({ error: `invalid: Kubernetes ${c.version} is the newest version VirtoMir offers` }, 422)
+      c.version = c.spec.version = next
+      c.nodes.forEach((x) => (x.version = `v${next}.0`))
+      c.events.push({ at: now(), message: `upgraded to ${next}` })
+      return json(c, 202)
+    }
+    case 'GET kubeconfig':
+      return { status: 200, type: 'application/yaml', body: `apiVersion: v1\nkind: Config\n# demo: a real host signs a client certificate here\nclusters:\n- name: ${c.spec.name}\n  cluster:\n    server: ${c.endpoint}\n` }
+  }
+  return notFound()
+}
+
 /** Storage efficiency, tiers and NVMe/TCP in the demo (ADR-0074). */
 function storageEffDemo(method: string, parts: string[], body: any): Reply | undefined {
   const op = `${method} ${parts.join('/')}`
@@ -1196,6 +1256,7 @@ export function handle(method: string, url: URL, body: any): Reply {
   if (parts[0] === 'sdn') return sdnDemo(method, parts.slice(1), q, body)
   if (parts[0] === 'ceph') return cephDemo(method, parts.slice(1), host, body)
   if (parts[0] === 'physnet') return physnetDemo(method, parts.slice(1), body)
+  if (parts[0] === 'k8s') return k8sDemo(method, parts.slice(1), body)
   if (parts[0] === 'storage' && parts[1] === 'policies') return policyDemo(method, parts[2], body)
   if (parts[0] === 'storage') {
     const r = storageEffDemo(method, parts, body)

@@ -120,4 +120,8 @@ export const untranslated = new Set<string>([
   "XML",
   "ZFS",
   "zfs list",
+  "Kubernetes",
+  "Kubernetes · VirtoMir",
+  "kubeconfig",
+  "Pod CIDR",
 ])
