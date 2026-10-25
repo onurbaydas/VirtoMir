@@ -18,7 +18,7 @@ import (
 // callHost runs an API request on cluster member hostID as id: in-process for this host,
 // over the peer protocol for the others.
 func (s *Server) callHost(ctx context.Context, id auth.Identity, hostID, method, path string, in, out any) error {
-	if hostID == s.cluster.SelfID() {
+	if s.cluster == nil || hostID == s.cluster.SelfID() {
 		var body io.Reader = http.NoBody
 		if in != nil {
 			raw, err := json.Marshal(in)

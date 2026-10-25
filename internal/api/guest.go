@@ -1,7 +1,10 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
@@ -52,4 +55,38 @@ func (s *Server) setGuestPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.done(w, http.StatusNoContent, nil)
+}
+
+// GuestExecer runs a program inside a running machine through its guest agent.
+type GuestExecer interface {
+	GuestExec(ctx context.Context, uuid string, argv []string) (virt.GuestExecResult, error)
+}
+
+// guestExec is for admins only (the default for writes): it runs anything as root inside the
+// machine. It waits at most 25 seconds, under the 30 seconds of a call between members;
+// longer work is started detached (systemd-run) and followed with further calls.
+func (s *Server) guestExec(w http.ResponseWriter, r *http.Request) {
+	g, ok := s.backend.(GuestExecer)
+	if !ok {
+		s.writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "running programs in machines is not available"})
+		return
+	}
+	var body struct {
+		Argv []string `json:"argv"`
+	}
+	if !s.decode(w, r, &body) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
+	res, err := g.GuestExec(ctx, r.PathValue("uuid"), body.Argv)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "the program did not end within 25 seconds; it keeps running inside the machine"})
+			return
+		}
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, res)
 }

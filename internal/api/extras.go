@@ -27,6 +27,7 @@ func (s *Server) extraRoutes(mux *routeMux) {
 	mux.HandleFunc("PUT /api/v1/domains/{uuid}/interfaces/{mac}/bandwidth", s.setInterfaceBandwidth)
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/guest", s.getGuestInfo)
 	mux.HandleFunc("POST /api/v1/domains/{uuid}/guest/password", s.setGuestPassword)
+	mux.HandleFunc("POST /api/v1/domains/{uuid}/guest/exec", s.guestExec)
 	mux.HandleFunc("POST /api/v1/storage/pools/{pool}/volumes/{vol}/resize", s.resizeVolume)
 	mux.HandleFunc("POST /api/v1/networks/{name}/dhcp-hosts", s.addDHCPHost)
 	mux.HandleFunc("DELETE /api/v1/networks/{name}/dhcp-hosts/{mac}", s.deleteDHCPHost)

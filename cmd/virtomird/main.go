@@ -35,6 +35,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/hostnet"
 	"github.com/onurbaydas/virtomir/internal/insights"
 	"github.com/onurbaydas/virtomir/internal/jobs"
+	"github.com/onurbaydas/virtomir/internal/k8s"
 	"github.com/onurbaydas/virtomir/internal/lcm"
 	"github.com/onurbaydas/virtomir/internal/live"
 	"github.com/onurbaydas/virtomir/internal/offsite"
@@ -340,12 +341,18 @@ func run(c config, log *slog.Logger) error {
 	} else {
 		opts.Physnet, opts.PhysRunner, opts.SRIOV = st, physnet.Exec{}, physnet.Host
 	}
+	if st, err := k8s.Open(filepath.Join(c.stateDir, "k8s.json")); err != nil {
+		log.Warn("Kubernetes clusters", "err", err)
+	} else {
+		opts.K8s = st
+	}
 	apiServer := api.NewServer(opts)
 	go syncCluster(ctx, apiServer)
 	go apiServer.RunReportSchedules(ctx)
 	go apiServer.RunDRS(ctx)
 	go apiServer.RunDRRPO(ctx)
 	apiServer.RunLCM(ctx)
+	apiServer.RunK8s(ctx)
 	go keepTunnels(ctx, client, log)
 	if opts.Updater != nil {
 		opts.Updater.InitConfig(c.stateDir)
