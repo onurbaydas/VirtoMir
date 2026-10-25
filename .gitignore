@@ -38,3 +38,6 @@ coverage/
 *.log
 # Windows daemon binary (build artifact)
 virtomird.exe
+
+# --- graphify: local code knowledge graph (rebuilt by 'graphify update .') ---
+graphify-out/

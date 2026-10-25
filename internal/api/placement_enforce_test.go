@@ -320,7 +320,7 @@ func TestDRSPlacement_SolverAwareAndCompat(t *testing.T) {
 	// alpha (self): load = 40% CPU + 40% Mem = 80%
 	snapAlpha := live.Snapshot{
 		Host: live.HostLive{
-			CPUPercent: 40,
+			CPUPercent:  40,
 			MemTotalKiB: 10240,
 			MemUsedKiB:  4096,
 		},
@@ -333,7 +333,7 @@ func TestDRSPlacement_SolverAwareAndCompat(t *testing.T) {
 	// Holds vm-collocate (target for should affinity)
 	snapBeta := live.Snapshot{
 		Host: live.HostLive{
-			CPUPercent: 35,
+			CPUPercent:  35,
 			MemTotalKiB: 10240,
 			MemUsedKiB:  3584,
 		},
@@ -348,7 +348,7 @@ func TestDRSPlacement_SolverAwareAndCompat(t *testing.T) {
 	// Holds no conflicting or preferred VMs
 	snapGamma := live.Snapshot{
 		Host: live.HostLive{
-			CPUPercent: 15,
+			CPUPercent:  15,
 			MemTotalKiB: 10240,
 			MemUsedKiB:  1536,
 		},
@@ -361,7 +361,7 @@ func TestDRSPlacement_SolverAwareAndCompat(t *testing.T) {
 	// Holds vm-enemy (must anti-affinity collision for vm-target)
 	snapDelta := live.Snapshot{
 		Host: live.HostLive{
-			CPUPercent: 5,
+			CPUPercent:  5,
 			MemTotalKiB: 10240,
 			MemUsedKiB:  512,
 		},
