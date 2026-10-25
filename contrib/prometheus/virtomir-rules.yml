@@ -1,0 +1,91 @@
+# Alerting rules for a Prometheus that scrapes VirtoMir's /api/v1/metrics endpoint.
+# How to point Prometheus at VirtoMir (API token as bearer token) is documented in
+# contrib/README.md.
+#
+# Validate this file with:
+#   promtool check rules contrib/prometheus/virtomir-rules.yml
+#
+# All VirtoMir metrics are gauges sampled once a second: rates are already per-second
+# and percentages are 0-100, so the rules below need no rate() and no rescaling.
+
+groups:
+  - name: virtomir
+    rules:
+      # The scrape itself fails: VirtoMir is unreachable or the token was revoked.
+      - alert: VirtomirScrapeFailing
+        expr: up{job=~"virtomir.*"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus cannot scrape VirtoMir at {{ $labels.instance }}."
+          description: >-
+            The scrape target {{ $labels.instance }} has been failing for 5 minutes.
+            Either virtomird is down, or the API token used as the bearer token in the
+            scrape config has been revoked or expired. Check the daemon
+            (systemctl status virtomird) and the token under Account in the VirtoMir UI.
+
+      # VirtoMir is up but lost its libvirt connection, so machine metrics stop.
+      - alert: VirtomirLibvirtDisconnected
+        expr: virtomir_libvirt_connected == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "VirtoMir {{ $labels.instance }} has no libvirt connection."
+          description: >-
+            virtomird is running and answers scrapes, but it has been unable to reach
+            libvirtd for 5 minutes, so no machine metrics are being collected.
+            Check libvirtd on the VirtoMir host (systemctl status libvirtd).
+
+      - alert: VirtomirHostCPUHigh
+        expr: virtomir_host_cpu_percent > 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host CPU of VirtoMir {{ $labels.instance }} at {{ $value }}% for 10 minutes."
+          description: >-
+            Total host CPU usage across all CPUs has stayed above 90% (all CPUs = 100)
+            for 10 minutes. Guests are competing for CPU; check the top machines on the
+            VirtoMir overview dashboard and consider pinning or vCPU limits.
+
+      - alert: VirtomirHostMemoryHigh
+        expr: 100 * virtomir_host_memory_used_bytes / virtomir_host_memory_total_bytes > 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host memory of VirtoMir {{ $labels.instance }} at {{ $value }}% for 10 minutes."
+          description: >-
+            More than 90% of the host's memory has been in use for 10 minutes, which
+            risks guest balloon pressure and host OOM kills. Check machine RSS on the
+            overview dashboard and lower or balance guest memory.
+
+      # Pools above 90% used (allocation vs capacity).
+      - alert: VirtomirPoolFillingUp
+        expr: 100 * virtomir_pool_allocation_bytes / virtomir_pool_capacity_bytes > 90
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Storage pool {{ $labels.pool }} at {{ $value }}% of capacity."
+          description: >-
+            Pool {{ $labels.pool }} ({{ $labels.type }}) has been more than 90% full for
+            15 minutes. Thin-provisioned images may fail to grow and new machines cannot
+            be created. Extend the pool or remove unused volumes.
+
+      # A machine set to autostart is not running — the same condition VirtoMir's own
+      # vm.down alert watches. Machines without autostart are expected to be off, so
+      # they do not fire this rule.
+      - alert: VirtomirMachineDown
+        expr: virtomir_domain_running == 0 and on(uuid, name) virtomir_domain_autostart == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Machine {{ $labels.name }} should be running but is not."
+          description: >-
+            Machine {{ $labels.name }} is set to start with the host but has not been
+            running for 5 minutes. It may have crashed during or after boot; check its
+            state and the activity log in the VirtoMir UI.
