@@ -21,6 +21,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/alerts"
 	"github.com/onurbaydas/virtomir/internal/api"
 	"github.com/onurbaydas/virtomir/internal/auth"
+	"github.com/onurbaydas/virtomir/internal/baremetal"
 	"github.com/onurbaydas/virtomir/internal/catalog"
 	"github.com/onurbaydas/virtomir/internal/ceph"
 	"github.com/onurbaydas/virtomir/internal/cluster"
@@ -101,6 +102,13 @@ func main() {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
+	if flag.Arg(0) == "join" {
+		if err := runJoin(c, flag.Arg(1), log); err != nil {
+			log.Error("join", "err", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(c, log); err != nil {
 		log.Error("fatal", "err", err)
 		os.Exit(1)
@@ -341,6 +349,11 @@ func run(c config, log *slog.Logger) error {
 	} else {
 		opts.Physnet, opts.PhysRunner, opts.SRIOV = st, physnet.Exec{}, physnet.Host
 	}
+	if st, err := baremetal.Open(filepath.Join(c.stateDir, "baremetal.json")); err != nil {
+		log.Warn("bare-metal onboarding", "err", err)
+	} else {
+		opts.Baremetal = st
+	}
 	if st, err := k8s.Open(filepath.Join(c.stateDir, "k8s.json")); err != nil {
 		log.Warn("Kubernetes clusters", "err", err)
 	} else {
@@ -353,6 +366,7 @@ func run(c config, log *slog.Logger) error {
 	go apiServer.RunDRRPO(ctx)
 	apiServer.RunLCM(ctx)
 	apiServer.RunK8s(ctx)
+	apiServer.RunBaremetal(ctx)
 	go keepTunnels(ctx, client, log)
 	if opts.Updater != nil {
 		opts.Updater.InitConfig(c.stateDir)

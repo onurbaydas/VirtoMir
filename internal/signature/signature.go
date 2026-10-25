@@ -34,6 +34,9 @@ type Keyring struct {
 // VirtoMir is the key VirtoMir's releases and package repositories are signed with.
 func VirtoMir() *Keyring { return mustKeyring("VirtoMir release", virtomirKey) }
 
+// VirtoMirArmored is that key as armored text, for apt on hosts VirtoMir installs.
+func VirtoMirArmored() []byte { return virtomirKey }
+
 // LXCImages is the key of the Linux Containers image server (images.linuxcontainers.org).
 func LXCImages() *Keyring { return mustKeyring("Linux Containers image", lxcKey) }
 

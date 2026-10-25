@@ -16,6 +16,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/activity"
 	"github.com/onurbaydas/virtomir/internal/alerts"
 	"github.com/onurbaydas/virtomir/internal/auth"
+	"github.com/onurbaydas/virtomir/internal/baremetal"
 	"github.com/onurbaydas/virtomir/internal/catalog"
 	"github.com/onurbaydas/virtomir/internal/ceph"
 	"github.com/onurbaydas/virtomir/internal/cluster"
@@ -212,6 +213,10 @@ type Options struct {
 	SRIOV      physnet.SRIOV
 	// K8s nil: no Kubernetes clusters (ADR-0076).
 	K8s *k8s.Store
+	// Baremetal nil: no bare-metal onboarding (ADR-0077); BMRunner runs systemd-run and
+	// systemctl for proxy DHCP.
+	Baremetal *baremetal.Store
+	BMRunner  baremetal.Runner
 }
 
 type Server struct {
@@ -287,6 +292,10 @@ type Server struct {
 	sriov           physnet.SRIOV
 	k8s             *k8s.Store
 	k8sOrch         *k8s.Orchestrator
+	baremetal       *baremetal.Store
+	bmRunner        baremetal.Runner
+	fencer          *ha.Fencer
+	netboot         netboot
 	lcmRun          lcmState
 	upgrader        SystemUpgrader
 	// inner is the API without the sign-in guard: in-process calls that already carry an
@@ -344,7 +353,11 @@ func NewServer(o Options) *Server {
 		sdn: o.SDN, sdnRunner: o.SDNRunner, sdnDB: o.SDNNorthbound,
 		ceph: o.Ceph, cephRunner: o.CephRunner,
 		storageEff: o.StorageEff, effRunner: o.EffRunner,
-		physnet: o.Physnet, physRunner: o.PhysRunner, sriov: o.SRIOV, k8s: o.K8s}
+		physnet: o.Physnet, physRunner: o.PhysRunner, sriov: o.SRIOV, k8s: o.K8s,
+		baremetal: o.Baremetal, bmRunner: o.BMRunner, fencer: ha.NewFencer()}
+	if s.bmRunner == nil {
+		s.bmRunner = baremetal.Exec{}
+	}
 	if s.k8s != nil {
 		s.k8sOrch = k8s.New(s.k8s, s.k8sDriverFor, s.log)
 	}
@@ -431,6 +444,7 @@ func (s *Server) Handler() http.Handler {
 	s.storageEffRoutes(mux)
 	s.physnetRoutes(mux)
 	s.k8sRoutes(mux)
+	s.baremetalRoutes(mux)
 	s.systemRoutes(mux)
 
 	s.inner = mux
@@ -596,16 +610,16 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 	var invErr *virt.InvalidError
 	switch {
 	case errors.Is(err, virt.ErrNotFound), errors.Is(err, zfsrep.ErrNotFound), errors.Is(err, drs.ErrNotFound), errors.Is(err, placement.ErrNotFound), errors.Is(err, dr.ErrNotFound), errors.Is(err, gpool.ErrNotFound), errors.Is(err, sdn.ErrNotFound),
-		errors.Is(err, ceph.ErrNotFound), errors.Is(err, storageeff.ErrNotFound), errors.Is(err, physnet.ErrNotFound), errors.Is(err, k8s.ErrNotFound):
+		errors.Is(err, ceph.ErrNotFound), errors.Is(err, storageeff.ErrNotFound), errors.Is(err, physnet.ErrNotFound), errors.Is(err, k8s.ErrNotFound), errors.Is(err, baremetal.ErrNotFound):
 		status = http.StatusNotFound
 	case errors.As(err, &invErr), errors.Is(err, zfsrep.ErrInvalid), errors.Is(err, drs.ErrInvalid), errors.Is(err, placement.ErrInvalid), errors.Is(err, dr.ErrInvalid), errors.Is(err, gpool.ErrInvalid), errors.Is(err, sdn.ErrInvalid),
 		errors.Is(err, ceph.ErrInvalid), errors.Is(err, ceph.ErrDiskNotEmpty), errors.Is(err, storageeff.ErrInvalid),
-		errors.Is(err, physnet.ErrInvalid), errors.Is(err, k8s.ErrInvalid):
+		errors.Is(err, physnet.ErrInvalid), errors.Is(err, k8s.ErrInvalid), errors.Is(err, baremetal.ErrInvalid):
 		status = http.StatusUnprocessableEntity
 	case errors.As(err, &opErr), errors.Is(err, zfsrep.ErrBusy), errors.Is(err, dr.ErrBusy), errors.Is(err, dr.ErrConflict), errors.Is(err, gpool.ErrExists), errors.Is(err, gpool.ErrBusy), errors.Is(err, sdn.ErrExists), errors.Is(err, sdn.ErrBusy),
 		errors.Is(err, ceph.ErrExists), errors.Is(err, ceph.ErrBusy),
 		errors.Is(err, physnet.ErrExists), errors.Is(err, physnet.ErrBusy), errors.Is(err, physnet.ErrConflict),
-		errors.Is(err, k8s.ErrExists), errors.Is(err, k8s.ErrBusy):
+		errors.Is(err, k8s.ErrExists), errors.Is(err, k8s.ErrBusy), errors.Is(err, baremetal.ErrExists), errors.Is(err, baremetal.ErrBusy):
 		status = http.StatusConflict
 	case errors.Is(err, auth.ErrBadCredentials), errors.Is(err, auth.ErrNotAllowed):
 		status = http.StatusUnauthorized

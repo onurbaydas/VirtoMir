@@ -26,6 +26,7 @@ type mockBMC struct {
 	systems, system string
 	resets          []string
 	reads           int
+	bootOverride    string
 }
 
 func (b *mockBMC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -62,9 +63,19 @@ func (b *mockBMC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case b.stuck:
 		case body.ResetType == "ForceOff":
 			b.power = "Off"
-		case body.ResetType == "ForceRestart":
+		case body.ResetType == "ForceRestart", body.ResetType == "On":
 			b.power = "On"
 		}
+		w.WriteHeader(http.StatusNoContent)
+	case r.URL.Path == "/redfish/v1/Systems/1" && r.Method == http.MethodPatch:
+		var body struct {
+			Boot struct{ BootSourceOverrideTarget, BootSourceOverrideEnabled string }
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		b.bootOverride = body.Boot.BootSourceOverrideTarget + "/" + body.Boot.BootSourceOverrideEnabled
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.WriteHeader(http.StatusNotFound)
@@ -195,9 +206,11 @@ func (f *fakeIPMI) run(_ context.Context, _ []string, name string, args ...strin
 	case "chassis power off":
 		f.power = "off"
 		return []byte("Chassis Power Control: Down/Off\n"), nil
-	case "chassis power cycle":
+	case "chassis power cycle", "chassis power reset", "chassis power on":
 		f.power = "on"
-		return []byte("Chassis Power Control: Cycle\n"), nil
+		return []byte("Chassis Power Control: Up/On\n"), nil
+	case "chassis bootdev pxe":
+		return []byte("Set Boot Device to pxe\n"), nil
 	case "chassis power status":
 		if f.out != "" {
 			return []byte(f.out), nil
@@ -255,5 +268,29 @@ func TestIPMIFailures(t *testing.T) {
 func TestUnknownFenceDriver(t *testing.T) {
 	if _, err := NewFencer().Fence(t.Context(), FenceAgent{Driver: "ilo-ssh"}, FenceOff); err == nil || !strings.Contains(err.Error(), "unknown fence driver") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+func TestBootFromNetwork(t *testing.T) {
+	bmc := &mockBMC{power: "Off"}
+	srv := httptest.NewTLSServer(bmc)
+	defer srv.Close()
+	f := fastFencer()
+	if res, err := f.Fence(t.Context(), redfishAgent(srv.URL), FencePXE); err != nil || res.Power != "on" {
+		t.Fatalf("redfish pxe = %+v, %v", res, err)
+	}
+	if bmc.bootOverride != "Pxe/Once" || !slices.Equal(bmc.resets, []string{"On"}) {
+		t.Errorf("override %q, resets %v", bmc.bootOverride, bmc.resets)
+	}
+	if _, err := f.Fence(t.Context(), redfishAgent(srv.URL), FencePXE); err != nil || bmc.resets[1] != "ForceRestart" {
+		t.Errorf("redfish pxe while on: %v %v", err, bmc.resets)
+	}
+
+	ip := &fakeIPMI{power: "on"}
+	fi := &Fencer{Poll: time.Millisecond, Run: ip.run}
+	a := FenceAgent{Driver: "ipmi", Endpoint: "10.0.0.102", Username: "admin", Password: "pw"}
+	if res, err := fi.Fence(t.Context(), a, FencePXE); err != nil || res.Power != "on" ||
+		!slices.Equal(ip.calls, []string{"chassis bootdev pxe", "chassis power status", "chassis power reset"}) {
+		t.Errorf("ipmi pxe = %+v, %v, calls %v", res, err, ip.calls)
 	}
 }

@@ -23,6 +23,9 @@ const (
 	FenceOff    FenceAction = "off"    // hard power off (what failover needs)
 	FenceReboot FenceAction = "reboot" // power cycle
 	FenceStatus FenceAction = "status" // only ask: is it on?
+	// FencePXE boots from the network once: on if it is off, reset if it is on (bare-metal
+	// onboarding, ADR-0077).
+	FencePXE FenceAction = "pxe"
 )
 
 // FenceResult is the outcome of one fence call.
@@ -140,6 +143,22 @@ func (f *Fencer) ipmi(ctx context.Context, a FenceAgent, action FenceAction) (st
 			return "", err
 		}
 		return status()
+	case FencePXE:
+		if _, err := run("chassis", "bootdev", "pxe"); err != nil {
+			return "", err
+		}
+		power, err := status()
+		if err != nil {
+			return "", err
+		}
+		cmd := "reset"
+		if power == "off" {
+			cmd = "on"
+		}
+		if _, err := run("chassis", "power", cmd); err != nil {
+			return "", err
+		}
+		return "on", nil
 	}
 	if _, err := run("chassis", "power", "off"); err != nil {
 		return "", err
@@ -246,6 +265,23 @@ func (f *Fencer) redfish(ctx context.Context, a FenceAgent, action FenceAction) 
 			return "", err
 		}
 		return status()
+	case FencePXE:
+		boot := map[string]any{"Boot": map[string]string{"BootSourceOverrideTarget": "Pxe", "BootSourceOverrideEnabled": "Once"}}
+		if err := call(http.MethodPatch, sys, boot, nil); err != nil {
+			return "", err
+		}
+		power, err := status()
+		if err != nil {
+			return "", err
+		}
+		reset := "ForceRestart"
+		if power == "off" {
+			reset = "On"
+		}
+		if err := call(http.MethodPost, sys+"/Actions/ComputerSystem.Reset", map[string]string{"ResetType": reset}, nil); err != nil {
+			return "", err
+		}
+		return "on", nil
 	}
 	if err := call(http.MethodPost, sys+"/Actions/ComputerSystem.Reset", map[string]string{"ResetType": "ForceOff"}, nil); err != nil {
 		return "", err
