@@ -55,7 +55,6 @@ func FormatUUID(u libvirt.UUID) string {
 	return formatUUID(u)
 }
 
-
 // int8sToString converts a NUL-terminated C char array.
 func int8sToString(b []int8) string {
 	out := make([]byte, 0, len(b))

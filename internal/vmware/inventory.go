@@ -39,7 +39,7 @@ type ESXHost struct {
 
 // VMDisk is one virtual disk of a VM.
 type VMDisk struct {
-	Datastore      string `json:"datastore"`
+	Datastore     string `json:"datastore"`
 	CapacityBytes uint64 `json:"capacityBytes"`
 }
 
@@ -51,14 +51,14 @@ type VMNIC struct {
 
 // VM is a VMware machine seen by the migration UI.
 type VM struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Datacenter string `json:"datacenter"`
-	Host       string `json:"host"`
-	PowerState string `json:"powerState"`
-	VCPUs      int    `json:"vcpus"`
-	MemoryMiB  uint64 `json:"memoryMiB"`
-	GuestOS    string `json:"guestOs"`
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Datacenter string   `json:"datacenter"`
+	Host       string   `json:"host"`
+	PowerState string   `json:"powerState"`
+	VCPUs      int      `json:"vcpus"`
+	MemoryMiB  uint64   `json:"memoryMiB"`
+	GuestOS    string   `json:"guestOs"`
 	Disks      []VMDisk `json:"disks"`
 	NICs       []VMNIC  `json:"nics"`
 }

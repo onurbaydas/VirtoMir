@@ -322,4 +322,3 @@ func TestRenderJSON_GeneratedAt(t *testing.T) {
 		t.Errorf("EvaluatedAt = %v, want %v", roundtripped[0].EvaluatedAt, ts)
 	}
 }
-

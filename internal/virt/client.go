@@ -80,7 +80,6 @@ func (c *Client) NameTaken(name string) (bool, error) {
 	return c.nameTaken(l, name), nil
 }
 
-
 func (c *Client) Close() error {
 	c.closeLXC()
 	c.mu.Lock()

@@ -114,14 +114,14 @@ func TestBuildNetwork(t *testing.T) {
 		t.Errorf("isolated without dhcp = %+v", iso)
 	}
 	customRange, err := buildNetwork(NetworkSpec{
-		Name:      "custom-dhcp",
-		Mode:      "nat",
-		Subnet:    "192.168.50.0/24",
-		DHCP:      true,
-		DHCPStart: "192.168.50.100",
-		DHCPEnd:   "192.168.50.200",
-		Subnet6:   "fd12:3456:789a::/64",
-		DHCP6:     true,
+		Name:       "custom-dhcp",
+		Mode:       "nat",
+		Subnet:     "192.168.50.0/24",
+		DHCP:       true,
+		DHCPStart:  "192.168.50.100",
+		DHCPEnd:    "192.168.50.200",
+		Subnet6:    "fd12:3456:789a::/64",
+		DHCP6:      true,
 		DHCP6Start: "fd12:3456:789a::50",
 		DHCP6End:   "fd12:3456:789a::150",
 	})

@@ -77,8 +77,8 @@ func TestInvalidURLsRefused(t *testing.T) {
 	s, _ := open(t)
 	set(t, s, Connection{URL: "https://vcenter.example.com", Username: "root", Password: "p"})
 	for _, url := range []string{
-		"",                     // empty (also via Validate)
-		"vcenter.example.com",  // no scheme
+		"",                    // empty (also via Validate)
+		"vcenter.example.com", // no scheme
 		"http://vcenter.example.com",
 		"https://root:pw@vcenter.example.com",
 		"https://vcenter.example.com/sdk",
@@ -181,4 +181,3 @@ func TestOpenCorruptedJSON(t *testing.T) {
 		t.Fatalf("expected nil Store on error, got %+v", store)
 	}
 }
-

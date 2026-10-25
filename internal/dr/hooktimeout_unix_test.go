@@ -40,4 +40,3 @@ func TestKillProcessGroupSafeWhenReaped(t *testing.T) {
 	killProcessGroup(-1)
 	killProcessGroup(99999999)
 }
-

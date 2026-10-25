@@ -63,4 +63,3 @@ func checkName(what, name string) error {
 func CheckName(what, name string) error {
 	return checkName(what, name)
 }
-

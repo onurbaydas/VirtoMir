@@ -50,7 +50,7 @@ func fixture(t *testing.T, name string) string {
 
 func TestInspectZFS(t *testing.T) {
 	f := &fakeRunner{answers: map[string]string{
-		"zfs get": "compression\tlz4\ncompressratio\t1.48x\ndedup\toff\nused\t107374182400\nlogicalused\t158913789952\n",
+		"zfs get":                          "compression\tlz4\ncompressratio\t1.48x\ndedup\toff\nused\t107374182400\nlogicalused\t158913789952\n",
 		"zpool list -H -o dedupratio tank": "1.00x\n",
 	}}
 	e, err := InspectZFS(context.Background(), f, "tank/vms")

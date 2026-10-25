@@ -142,8 +142,8 @@ func TestListInventory(t *testing.T) {
 		byName[vm.Name] = vm
 	}
 	states := map[string]string{
-		"DC0_H0_VM0":    "on",       // the model autostarts every VM
-		"DC0_H0_VM1":    "off",      // powered off above
+		"DC0_H0_VM0":     "on",        // the model autostarts every VM
+		"DC0_H0_VM1":     "off",       // powered off above
 		"DC0_C0_RP0_VM0": "suspended", // suspended above
 	}
 	for name, want := range states {
