@@ -75,17 +75,17 @@ groups:
             15 minutes. Thin-provisioned images may fail to grow and new machines cannot
             be created. Extend the pool or remove unused volumes.
 
-      # A machine that is not running. This fires for intentionally stopped machines
-      # too: VirtoMir's own alerts (the machine down rule in the UI) can tell the two
-      # apart; treat this one as a hint to check, not proof of a crash.
+      # A machine set to autostart is not running — the same condition VirtoMir's own
+      # vm.down alert watches. Machines without autostart are expected to be off, so
+      # they do not fire this rule.
       - alert: VirtomirMachineDown
-        expr: virtomir_domain_running == 0
+        expr: virtomir_domain_running == 0 and on(uuid, name) virtomir_domain_autostart == 1
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Machine {{ $labels.name }} is not running."
+          summary: "Machine {{ $labels.name }} should be running but is not."
           description: >-
-            Machine {{ $labels.name }} has not been in the running state for 5 minutes.
-            It may have crashed or been stopped on purpose; check its state and the
-            activity log in the VirtoMir UI before acting.
+            Machine {{ $labels.name }} is set to start with the host but has not been
+            running for 5 minutes. It may have crashed during or after boot; check its
+            state and the activity log in the VirtoMir UI.

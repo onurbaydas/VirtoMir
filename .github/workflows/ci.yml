@@ -49,6 +49,17 @@ jobs:
       - name: Shell scripts
         run: shellcheck -s sh scripts/install.sh scripts/build-release.sh scripts/build-repos.sh dev/try/provision.sh dev/try/try.sh
 
+      - name: Prometheus alert rules
+        run: |
+          curl -sL https://github.com/prometheus/prometheus/releases/download/v3.15.1/prometheus-3.15.1.linux-amd64.tar.gz \
+            | tar -xz --strip-components=1 prometheus-3.15.1.linux-amd64/promtool
+          ./promtool check rules contrib/prometheus/virtomir-rules.yml
+
+      - name: Grafana dashboards
+        run: |
+          python3 -m json.tool contrib/grafana/virtomir-overview.json > /dev/null
+          python3 -m json.tool contrib/grafana/virtomir-machine.json > /dev/null
+
       - name: Terraform provider
         working-directory: integrations/terraform-provider-virtomir
         run: |
