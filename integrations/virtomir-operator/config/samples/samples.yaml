@@ -1,0 +1,36 @@
+apiVersion: virtomir.io/v1alpha1
+kind: VirtoMirProject
+metadata:
+  name: team-a
+spec:
+  displayName: Team A
+  storagePools: [images]
+  networks: [default]
+  limits: {machines: 10, vcpus: 20, memoryMiB: 40960}
+  members:
+    - {kind: group, name: team-a, role: operator}
+---
+apiVersion: virtomir.io/v1alpha1
+kind: VirtoMirMachine
+metadata:
+  name: web-1
+spec:
+  baseImage: /var/lib/libvirt/images/debian-13-genericcloud-amd64.qcow2
+  storagePool: images
+  vcpus: 2
+  memoryMiB: 2048
+  diskGiB: 20
+  project: team-a
+  cloudInit:
+    user: ops
+    sshKeys: ["ssh-ed25519 AAAA… ops@example"]
+---
+apiVersion: virtomir.io/v1alpha1
+kind: VirtoMirMachine
+metadata:
+  name: web-2
+spec:
+  template: debian-13-base   # a template, e.g. made with the Packer plugin
+  linked: true
+  powerState: Running
+  deletionPolicy: Delete

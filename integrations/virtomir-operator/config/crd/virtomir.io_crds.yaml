@@ -1,0 +1,140 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: virtomirmachines.virtomir.io
+spec:
+  group: virtomir.io
+  names:
+    kind: VirtoMirMachine
+    listKind: VirtoMirMachineList
+    plural: virtomirmachines
+    singular: virtomirmachine
+    shortNames: [vmm]
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - {name: State, type: string, jsonPath: '.status.state'}
+        - {name: Address, type: string, jsonPath: '.status.addresses[0]'}
+        - {name: UUID, type: string, jsonPath: '.status.uuid', priority: 1}
+        - {name: Age, type: date, jsonPath: '.metadata.creationTimestamp'}
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                name: {type: string, description: "Name in VirtoMir (default: the object's name)."}
+                host: {type: string, description: "Cluster member to create it on."}
+                template: {type: string, description: "Template to deploy from (name or UUID)."}
+                linked: {type: boolean, description: "Deploy a linked clone of the template."}
+                baseImage: {type: string, description: "Cloud image path on the host (instead of a template)."}
+                vcpus: {type: integer, minimum: 1}
+                memoryMiB: {type: integer, minimum: 64}
+                diskGiB: {type: integer, minimum: 1}
+                storagePool: {type: string}
+                network: {type: string}
+                project: {type: string}
+                cloudInit:
+                  type: object
+                  properties:
+                    user: {type: string}
+                    sshKeys: {type: array, items: {type: string}}
+                powerState: {type: string, enum: [Running, Stopped]}
+                deletionPolicy: {type: string, enum: [Delete, Retain]}
+            status:
+              type: object
+              properties:
+                uuid: {type: string}
+                host: {type: string}
+                job: {type: string}
+                state: {type: string}
+                addresses: {type: array, items: {type: string}}
+                message: {type: string}
+                observedGeneration: {type: integer, format: int64}
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: [type, status, lastTransitionTime, reason, message]
+                    properties:
+                      type: {type: string}
+                      status: {type: string}
+                      observedGeneration: {type: integer, format: int64}
+                      lastTransitionTime: {type: string, format: date-time}
+                      reason: {type: string}
+                      message: {type: string}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: virtomirprojects.virtomir.io
+spec:
+  group: virtomir.io
+  names:
+    kind: VirtoMirProject
+    listKind: VirtoMirProjectList
+    plural: virtomirprojects
+    singular: virtomirproject
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - {name: ID, type: string, jsonPath: '.status.id'}
+        - {name: Ready, type: string, jsonPath: ".status.conditions[?(@.type==\"Ready\")].status"}
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                id: {type: string, description: "Project ID in VirtoMir (default: the object's name)."}
+                displayName: {type: string}
+                description: {type: string}
+                storagePools: {type: array, items: {type: string}}
+                networks: {type: array, items: {type: string}}
+                limits:
+                  type: object
+                  properties:
+                    machines: {type: integer, minimum: 0}
+                    vcpus: {type: integer, minimum: 0}
+                    memoryMiB: {type: integer, minimum: 0}
+                    diskGiB: {type: integer, minimum: 0}
+                members:
+                  type: array
+                  items:
+                    type: object
+                    required: [kind, name, role]
+                    properties:
+                      kind: {type: string, enum: [user, group]}
+                      name: {type: string}
+                      role: {type: string, enum: [viewer, operator, admin]}
+                deletionPolicy: {type: string, enum: [Delete, Retain]}
+            status:
+              type: object
+              properties:
+                id: {type: string}
+                message: {type: string}
+                observedGeneration: {type: integer, format: int64}
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: [type, status, lastTransitionTime, reason, message]
+                    properties:
+                      type: {type: string}
+                      status: {type: string}
+                      observedGeneration: {type: integer, format: int64}
+                      lastTransitionTime: {type: string, format: date-time}
+                      reason: {type: string}
+                      message: {type: string}
