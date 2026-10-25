@@ -88,7 +88,7 @@ func (p *virtomirProvider) Resources(context.Context) []func() resource.Resource
 }
 
 func (p *virtomirProvider) DataSources(context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{newHostData}
+	return []func() datasource.DataSource{newHostData, newMachineData, newNetworkData, newPoolData, newProjectData}
 }
 
 // clientFrom is the shared Configure of resources and data sources.
