@@ -1,0 +1,16 @@
+# A StorageClass per VirtoMir storage pool. With nodes on several members the pool must be
+# shared (NFS, Ceph RBD, iSCSI): a volume can only be attached where its pool is.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: virtomir
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: csi.virtomir.io
+parameters:
+  pool: default     # the VirtoMir storage pool
+  # host: hv2       # the member whose pool it is (default: the host the URL names)
+  # format: raw     # raw for LVM, iSCSI and Ceph pools (default qcow2)
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: false

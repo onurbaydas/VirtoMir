@@ -3,6 +3,7 @@ package virt
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -76,7 +77,13 @@ type DiskSpec struct {
 	SizeGiB uint64      `json:"sizeGiB,omitempty"`
 	Format  string      `json:"format,omitempty"` // qcow2 (default) or raw, for new volumes
 	IoTune  *DiskIoTune `json:"iotune,omitempty"`
+	// Serial is what the guest sees as the disk's serial number: Linux names it
+	// /dev/disk/by-id/virtio-<serial> (the Kubernetes CSI driver finds its volumes so).
+	Serial string `json:"serial,omitempty"`
 }
+
+// serialRE is what QEMU passes to a virtio disk unchanged (20 characters at most).
+var serialRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,20}$`)
 
 // AttachDisk adds a disk or CD/DVD drive, creating a new volume if requested.
 // It returns the device name in the guest (e.g. "vdb").
@@ -91,6 +98,9 @@ func (c *Client) AttachDisk(uuid string, spec DiskSpec) (string, error) {
 	prefix, ok := busPrefix[spec.Bus]
 	if !ok {
 		return "", invalidf("Unsupported bus %q.", spec.Bus)
+	}
+	if spec.Serial != "" && !serialRE.MatchString(spec.Serial) {
+		return "", invalidf("A disk serial is 1 to 20 letters, digits, '_' or '-'.")
 	}
 	l, d, err := c.lookup(uuid)
 	if err != nil {
@@ -110,6 +120,7 @@ func (c *Client) AttachDisk(uuid string, spec DiskSpec) (string, error) {
 		Device: spec.Device,
 		Driver: &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "raw"},
 		Target: &libvirtxml.DomainDiskTarget{Dev: target, Bus: spec.Bus},
+		Serial: spec.Serial,
 	}
 	if orDefault(spec.Device, "disk") == "disk" {
 		disk.Driver.Discard = "unmap" // the guest's TRIM frees the space on the host (ADR-0074)

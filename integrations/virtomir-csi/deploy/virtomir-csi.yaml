@@ -1,0 +1,154 @@
+# VirtoMir CSI driver: volumes of VirtoMir storage pools as virtio disks of the nodes.
+# Before applying, create the secret with the VirtoMir URL and an admin API token:
+#   kubectl -n virtomir-csi create secret generic virtomir \
+#     --from-literal=url=https://hv1:8420 --from-literal=token=vmt_... [--from-literal=insecure=true]
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: virtomir-csi
+---
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: csi.virtomir.io
+spec:
+  attachRequired: true
+  podInfoOnMount: false
+  volumeLifecycleModes: [Persistent]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: virtomir-csi-controller
+  namespace: virtomir-csi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: virtomir-csi-controller
+rules:
+  - apiGroups: [""]
+    resources: [persistentvolumes]
+    verbs: [get, list, watch, create, delete, patch]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, watch, update]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims/status]
+    verbs: [patch]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [list, watch, create, update, patch]
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses, csinodes]
+    verbs: [get, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [volumeattachments]
+    verbs: [get, list, watch, patch]
+  - apiGroups: [storage.k8s.io]
+    resources: [volumeattachments/status]
+    verbs: [patch]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, watch, list, delete, update, create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: virtomir-csi-controller
+subjects:
+  - kind: ServiceAccount
+    name: virtomir-csi-controller
+    namespace: virtomir-csi
+roleRef:
+  kind: ClusterRole
+  name: virtomir-csi-controller
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: virtomir-csi-controller
+  namespace: virtomir-csi
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: virtomir-csi-controller}
+  template:
+    metadata:
+      labels: {app: virtomir-csi-controller}
+    spec:
+      serviceAccountName: virtomir-csi-controller
+      tolerations:
+        - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
+      containers:
+        - name: csi-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v6.3.0
+          args: [--csi-address=/csi/csi.sock, --leader-election, --default-fstype=ext4]
+          volumeMounts: [{name: socket, mountPath: /csi}]
+        - name: csi-attacher
+          image: registry.k8s.io/sig-storage/csi-attacher:v4.13.0
+          args: [--csi-address=/csi/csi.sock, --leader-election]
+          volumeMounts: [{name: socket, mountPath: /csi}]
+        - name: driver
+          image: ghcr.io/onurbaydas/virtomir-csi:latest
+          args: [-controller, -endpoint=unix:///csi/csi.sock, -token-file=/etc/virtomir/token]
+          env:
+            - name: VIRTOMIR_URL
+              valueFrom: {secretKeyRef: {name: virtomir, key: url}}
+            - name: VIRTOMIR_INSECURE
+              valueFrom: {secretKeyRef: {name: virtomir, key: insecure, optional: true}}
+          volumeMounts:
+            - {name: socket, mountPath: /csi}
+            - {name: token, mountPath: /etc/virtomir, readOnly: true}
+      volumes:
+        - {name: socket, emptyDir: {}}
+        - name: token
+          secret:
+            secretName: virtomir
+            items: [{key: token, path: token}]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: virtomir-csi-node
+  namespace: virtomir-csi
+spec:
+  selector:
+    matchLabels: {app: virtomir-csi-node}
+  template:
+    metadata:
+      labels: {app: virtomir-csi-node}
+    spec:
+      tolerations:
+        - {operator: Exists}
+      containers:
+        - name: node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.18.0
+          args: [--csi-address=/csi/csi.sock, --kubelet-registration-path=/var/lib/kubelet/plugins/csi.virtomir.io/csi.sock]
+          volumeMounts:
+            - {name: plugin, mountPath: /csi}
+            - {name: registration, mountPath: /registration}
+        - name: driver
+          image: ghcr.io/onurbaydas/virtomir-csi:latest
+          args: [-node, -endpoint=unix:///csi/csi.sock]
+          securityContext: {privileged: true}
+          volumeMounts:
+            - {name: plugin, mountPath: /csi}
+            - {name: kubelet, mountPath: /var/lib/kubelet, mountPropagation: Bidirectional}
+            - {name: dev, mountPath: /dev}
+            - {name: dmi, mountPath: /sys/class/dmi/id, readOnly: true}
+      volumes:
+        - name: plugin
+          hostPath: {path: /var/lib/kubelet/plugins/csi.virtomir.io, type: DirectoryOrCreate}
+        - name: registration
+          hostPath: {path: /var/lib/kubelet/plugins_registry, type: Directory}
+        - name: kubelet
+          hostPath: {path: /var/lib/kubelet, type: Directory}
+        - name: dev
+          hostPath: {path: /dev, type: Directory}
+        - name: dmi
+          hostPath: {path: /sys/class/dmi/id, type: Directory}

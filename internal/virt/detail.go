@@ -99,6 +99,7 @@ type Device struct {
 
 	// Identify the device for actions: a disk's guest device name, an adapter's MAC.
 	Target string      `json:"target,omitempty"`
+	Serial string      `json:"serial,omitempty"` // a disk's serial number, if set
 	MAC    string      `json:"mac,omitempty"`
 	IoTune *DiskIoTune `json:"iotune,omitempty"`
 	// Bandwidth: an adapter's traffic limits, if any.
@@ -424,7 +425,7 @@ func diskDevice(v libvirtxml.DomainDisk) Device {
 	if v.Target != nil {
 		target, bus = v.Target.Dev, v.Target.Bus
 	}
-	dev.Target = target
+	dev.Target, dev.Serial = target, v.Serial
 	switch kind {
 	case "cdrom":
 		dev.Title = "CD/DVD drive"
