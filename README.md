@@ -282,7 +282,14 @@ VirtoMir is built by one person, together with AI coding agents (their working r
 
 ## Roadmap
 
-The larger plans are open issues labelled [`enhancement`](https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement): Kubernetes clusters on VirtoMir machines, bare-metal onboarding, a Packer builder and a Kubernetes operator, and what is left of BGP/EVPN and IPAM. Each is split into steps that can be separate pull requests. Hyper-converged Ceph, storage efficiency, SR-IOV, IP pools and dynamic DNS are in, but still need testing on real hardware — reports in [#1](https://github.com/onurbaydas/VirtoMir/issues/1) help the most.
+The feature set is complete for now; the focus is on hardening what exists. These arrived last and need the most real-world testing:
+
+- **Kubernetes clusters** on VirtoMir machines (kubeadm through cloud-init, one or three control planes behind kube-vip, flannel or calico, scaling, minor upgrades node by node) and a **CSI driver** for VirtoMir storage pools ([integrations/virtomir-csi](integrations/virtomir-csi)).
+- **Bare-metal onboarding**: new hosts installed over the network (iPXE, Debian 13 preseed, VirtoMir from the apt repository) that join the cluster on their first boot; BMCs boot them through Redfish or IPMI. Needs the next release, which brings `virtomird join`.
+- A **Packer builder** ([integrations/packer-plugin-virtomir](integrations/packer-plugin-virtomir)), a **Kubernetes operator** ([integrations/virtomir-operator](integrations/virtomir-operator)) and Terraform data sources.
+- Hyper-converged Ceph, storage efficiency, SR-IOV, IP pools and dynamic DNS.
+
+Tested on nested KVM, not yet on real hardware. Reports in [#1](https://github.com/onurbaydas/VirtoMir/issues/1) help the most. What is left of BGP/EVPN and IPAM stays in the open [`enhancement`](https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement) issues.
 
 **Pace:** active development is paused for a while. Issues and pull requests stay welcome and will be reviewed, though answers may take longer than usual.
 
