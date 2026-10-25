@@ -25,7 +25,7 @@ VirtoMir is a modern web control panel for **KVM / QEMU / libvirt** that tries t
 
 It installs on an existing Linux host with KVM/libvirt as a single binary (tested on Ubuntu 26.04; testers for Ubuntu 24.04, Debian and Fedora are welcome). No dedicated distribution, no database, no agents.
 
-> 🚧 **Status: early release (0.9).** Tested on Ubuntu 26.04 on single hosts and small clusters; high availability has not been tried on real BMC hardware yet, and the VMware import is experimental. Testers wanted for other setups and distributions (see [issue #1](https://github.com/onurbaydas/VirtoMir/issues/1)). Test it before you trust it with production.
+> 🚧 **Status: 1.0.** Tested on Ubuntu 26.04 on single hosts and small clusters; high availability has not been tried on real BMC hardware yet, and the VMware import is experimental. Testers wanted for other setups and distributions (see [issue #1](https://github.com/onurbaydas/VirtoMir/issues/1)). Test it before you trust it with production.
 
 ![Overview](docs/screenshots/overview.png)
 
@@ -199,7 +199,7 @@ The repository is built by `scripts/build-repos.sh` in the release workflow (`In
 ### Debian / Ubuntu package
 
 ```sh
-sudo apt install ./virtomir_0.9.0_amd64.deb   # or _arm64.deb; pulls libvirt and QEMU if missing
+sudo apt install ./virtomir_1.0.0_amd64.deb   # or _arm64.deb; pulls libvirt and QEMU if missing
 ```
 
 It starts `virtomird` right away on port 8420 (self-signed HTTPS); the first admin to sign in is walked through what the host still needs (storage, a network, a backup location, a first image). Sign in with a Linux account in the `libvirt` group (admins), `virtomir-operator` or `virtomir-viewer`. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Later versions install from the UI (Account → Updates). Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
@@ -207,7 +207,7 @@ It starts `virtomird` right away on port 8420 (self-signed HTTPS); the first adm
 ### Fedora / RHEL package (experimental)
 
 ```sh
-sudo dnf install ./virtomir-0.9.0-1.x86_64.rpm   # or .aarch64.rpm; Fedora 40+ / RHEL 10
+sudo dnf install ./virtomir-1.0.0-1.x86_64.rpm   # or .aarch64.rpm; Fedora 40+ / RHEL 10
 ```
 
 Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf`, not from the UI. Built with `scripts/build-rpm.sh <version>`.
@@ -221,8 +221,8 @@ Requirements: a Linux host with **libvirt + QEMU/KVM** running and **systemd**.
 sudo apt install qemu-system-x86 libvirt-daemon-system ovmf swtpm
 
 # Download a release, unpack it and run the installer
-tar xzf virtomir_v0.9.0_linux_amd64.tar.gz
-sudo ./virtomir_v0.9.0_linux_amd64/install.sh
+tar xzf virtomir_v1.0.0_linux_amd64.tar.gz
+sudo ./virtomir_v1.0.0_linux_amd64/install.sh
 ```
 
 The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pam.d/virtomir`) and a systemd unit, starts it and prints the address — usually `https://<host>:8420/`. Your browser asks you to accept the self-signed certificate once.
@@ -285,7 +285,7 @@ VirtoMir is built by one person, together with AI coding agents (their working r
 The feature set is complete for now; the focus is on hardening what exists. These arrived last and need the most real-world testing:
 
 - **Kubernetes clusters** on VirtoMir machines (kubeadm through cloud-init, one or three control planes behind kube-vip, flannel or calico, scaling, minor upgrades node by node) and a **CSI driver** for VirtoMir storage pools ([integrations/virtomir-csi](integrations/virtomir-csi)).
-- **Bare-metal onboarding**: new hosts installed over the network (iPXE, Debian 13 preseed, VirtoMir from the apt repository) that join the cluster on their first boot; BMCs boot them through Redfish or IPMI. Needs the next release, which brings `virtomird join`.
+- **Bare-metal onboarding**: new hosts installed over the network (iPXE, Debian 13 preseed, VirtoMir from the apt repository) that join the cluster on their first boot; BMCs boot them through Redfish or IPMI.
 - A **Packer builder** ([integrations/packer-plugin-virtomir](integrations/packer-plugin-virtomir)), a **Kubernetes operator** ([integrations/virtomir-operator](integrations/virtomir-operator)) and Terraform data sources.
 - Hyper-converged Ceph, storage efficiency, SR-IOV, IP pools and dynamic DNS.
 
