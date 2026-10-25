@@ -21,8 +21,9 @@ function initial(): Lang {
   } catch {
     /* storage blocked: follow the browser */
   }
-  // Only in a browser: Node (tests) also has a navigator, with the machine's locale.
-  return typeof window !== 'undefined' && navigator.language?.toLowerCase().startsWith('tr') ? 'tr' : 'en'
+  // Only in a browser: Node (tests) also has a navigator, with the machine's locale, and some
+  // tests stub window for the router, so look for a document.
+  return typeof document !== 'undefined' && navigator.language?.toLowerCase().startsWith('tr') ? 'tr' : 'en'
 }
 
 export const lang: Lang = initial()

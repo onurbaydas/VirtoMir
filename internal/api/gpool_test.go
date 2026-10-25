@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -17,6 +18,9 @@ import (
 // gpuReader is a host with one card at addr named name (nvidia-smi answers for it).
 func gpuReader(t *testing.T, addr, name string) *hostinfo.Reader {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("sysfs has colons and symlinks")
+	}
 	root := t.TempDir()
 	dev := filepath.Join(root, "sys/bus/pci/devices", addr)
 	for f, v := range map[string]string{"class": "0x030200", "vendor": "0x10de", "device": "0x26b9"} {

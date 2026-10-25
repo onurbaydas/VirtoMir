@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -52,7 +53,7 @@ func TestStoreCRUD(t *testing.T) {
 	if got, ok := r.Get("l40s"); !ok || got.Description != "render nodes" || len(r.List()) != 1 || r.Shared().Version != 4 {
 		t.Errorf("reloaded %+v, %d pools, version %d", got, len(r.List()), r.Shared().Version)
 	}
-	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o600 {
+	if fi, _ := os.Stat(path); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Errorf("mode %v", fi.Mode())
 	}
 
