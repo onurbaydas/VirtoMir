@@ -120,14 +120,18 @@
           <div class="acts">
             <ConfirmButton
               label={t('Revert')}
-              confirm={t('Lose changes since then?')}
+              confirm={t('Go back? A safety snapshot is taken first')}
               icon={RotateCcw}
               disabled={!session.can('operator')}
-              title={session.why('operator')}
+              title={session.why('operator') || t('The current state is kept as a safety snapshot first, so you can come back to it.')}
               failure={t('Could not revert to {name}', { name: s.name })}
               run={async () => {
-                await api.revertSnapshot(uuid, s.name)
-                toasts.push({ kind: 'info', title: t('Reverted to {name}', { name: s.name }) })
+                const r = await api.revertSnapshot(uuid, s.name)
+                toasts.push({
+                  kind: r.safetySnapshot ? 'info' : 'warn',
+                  title: t('Reverted to {name}', { name: s.name }),
+                  detail: r.safetySnapshot ? t('The state before is kept as {safety}.', { safety: r.safetySnapshot }) : r.safetyNote,
+                })
                 await load()
                 onchange()
               }}

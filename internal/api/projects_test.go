@@ -75,7 +75,7 @@ func TestProjectCreate(t *testing.T) {
 	op, out, boss := signIn(t, h, "op"), signIn(t, h, "view"), signIn(t, h, "onur")
 
 	// A project operator creates within the limits: allowed, the machine joins the project.
-	rec := do(h, "POST", "/api/v1/domains", `{"name":"web2","vcpus":2,"memoryMiB":2048,"pool":"pool1","diskGiB":10,"network":{"network":"net1"},"project":"dev"}`, op)
+	rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"web2","vcpus":2,"memoryMiB":2048,"pool":"pool1","diskGiB":10,"network":{"network":"net1"},"project":"dev"}`, op)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create in project: %d %s", rec.Code, rec.Body)
 	}
@@ -84,40 +84,40 @@ func TestProjectCreate(t *testing.T) {
 	}
 
 	// Membership: an operator outside the project may not create in it.
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"x","vcpus":1,"memoryMiB":512,"project":"dev"}`, out); rec.Code != http.StatusForbidden ||
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"x","vcpus":1,"memoryMiB":512,"project":"dev"}`, out); rec.Code != http.StatusForbidden ||
 		!strings.Contains(rec.Body.String(), "not an operator in project dev") {
 		t.Errorf("non-member: %d %s", rec.Code, rec.Body)
 	}
 	// A global admin may.
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"adm","vcpus":1,"memoryMiB":512,"project":"dev"}`, boss); rec.Code != http.StatusCreated {
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"adm","vcpus":1,"memoryMiB":512,"project":"dev"}`, boss); rec.Code != http.StatusCreated {
 		t.Errorf("admin create: %d %s", rec.Code, rec.Body)
 	}
 
 	// Allowed lists: the pool and the network must be on them.
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"p","vcpus":1,"memoryMiB":512,"pool":"pool2","diskGiB":1,"project":"dev"}`, op); rec.Code != http.StatusConflict ||
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"p","vcpus":1,"memoryMiB":512,"pool":"pool2","diskGiB":1,"project":"dev"}`, op); rec.Code != http.StatusConflict ||
 		!strings.Contains(rec.Body.String(), "storage pool pool2 is not allowed in project dev") {
 		t.Errorf("pool not allowed: %d %s", rec.Code, rec.Body)
 	}
 	// A new disk without a pool lands in the "default" pool: it must be allowed too.
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"d","vcpus":1,"memoryMiB":512,"diskGiB":1,"project":"dev"}`, op); rec.Code != http.StatusConflict ||
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"d","vcpus":1,"memoryMiB":512,"diskGiB":1,"project":"dev"}`, op); rec.Code != http.StatusConflict ||
 		!strings.Contains(rec.Body.String(), "storage pool default is not allowed in project dev") {
 		t.Errorf("default pool not allowed: %d %s", rec.Code, rec.Body)
 	}
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"n","vcpus":1,"memoryMiB":512,"network":{"network":"net2"},"project":"dev"}`, op); rec.Code != http.StatusConflict ||
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"n","vcpus":1,"memoryMiB":512,"network":{"network":"net2"},"project":"dev"}`, op); rec.Code != http.StatusConflict ||
 		!strings.Contains(rec.Body.String(), "network net2 is not allowed in project dev") {
 		t.Errorf("network not allowed: %d %s", rec.Code, rec.Body)
 	}
 	// Limits: the existing machine uses 2 of 4 vCPUs, so 3 more do not fit.
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"big","vcpus":3,"memoryMiB":512,"project":"dev"}`, op); rec.Code != http.StatusConflict ||
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"big","vcpus":3,"memoryMiB":512,"project":"dev"}`, op); rec.Code != http.StatusConflict ||
 		!strings.Contains(rec.Body.String(), "project") {
 		t.Errorf("over the project's limits: %d %s", rec.Code, rec.Body)
 	}
 	// Unknown project.
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"g","vcpus":1,"memoryMiB":512,"project":"nope"}`, op); rec.Code != http.StatusNotFound {
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"g","vcpus":1,"memoryMiB":512,"project":"nope"}`, op); rec.Code != http.StatusNotFound {
 		t.Errorf("unknown project: %d %s", rec.Code, rec.Body)
 	}
 	// Without a project the machine is global: no project checks, nothing recorded.
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"glob","vcpus":1,"memoryMiB":512,"pool":"anywhere","network":{"network":"wherever"}}`, op); rec.Code != http.StatusCreated {
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"glob","vcpus":1,"memoryMiB":512,"pool":"anywhere","network":{"network":"wherever"}}`, op); rec.Code != http.StatusCreated {
 		t.Errorf("global machine: %d %s", rec.Code, rec.Body)
 	}
 }

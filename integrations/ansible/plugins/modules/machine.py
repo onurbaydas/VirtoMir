@@ -107,7 +107,7 @@ def create(c, p):
         spec['cloudInit'] = ci
     if p.get('network') or p.get('bridge'):
         spec['network'] = dict((k, v) for k, v in (('network', p.get('network')), ('bridge', p.get('bridge'))) if v)
-    res = c.call('POST', '/api/v1/domains', spec)
+    res = c.call('POST', '/api/v1/domains?wait=true', spec)
     if res.get('startError'):
         raise APIError(500, 'created, but it did not start: %s' % res['startError'])
     return res['uuid']

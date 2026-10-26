@@ -189,14 +189,56 @@ func TestCloneRunsAsJob(t *testing.T) {
 	}
 }
 
+// checkingBackend refuses every create up front, as the real backend does for a name taken.
+type checkingBackend struct{ *fakeBackend }
+
+func (checkingBackend) CheckCreate(virt.CreateSpec) error {
+	return &virt.OperationError{Message: "A machine named web already exists."}
+}
+
+func TestCreateRunsAsJob(t *testing.T) {
+	b := &fakeBackend{}
+	h := NewServer(Options{Backend: b, Live: &fakeLive{}, Jobs: jobs.New(context.Background()), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Handler()
+	rec := do(h, "POST", "/api/v1/domains", `{"name":"web","vcpus":2}`, nil)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+	var j jobs.Job
+	_ = json.Unmarshal(rec.Body.Bytes(), &j)
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		_ = json.Unmarshal(do(h, "GET", "/api/v1/jobs/"+j.ID, "", nil).Body.Bytes(), &j)
+		if j.State != jobs.Running {
+			break
+		}
+	}
+	if j.State != jobs.Succeeded || j.Result != "u-new" {
+		t.Errorf("job = %+v", j)
+	}
+	rec = do(h, "POST", "/api/v1/domains?wait=true", `{"name":"web2","vcpus":2}`, nil)
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"uuid":"u-new"`) {
+		t.Errorf("wait=true: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestCreateChecksBeforeTheJob(t *testing.T) {
+	b := &fakeBackend{}
+	h := NewServer(Options{Backend: checkingBackend{b}, Live: &fakeLive{}, Jobs: jobs.New(context.Background()), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Handler()
+	if rec := do(h, "POST", "/api/v1/domains", `{"name":"web","vcpus":2}`, nil); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "already exists") {
+		t.Errorf("create: %d %s", rec.Code, rec.Body)
+	}
+	if len(b.calls) != 0 {
+		t.Errorf("the create ran anyway: %v", b.calls)
+	}
+}
+
 func TestBadJSONIs400(t *testing.T) {
 	h := newTestServer(&fakeBackend{}, &fakeLive{}).Handler()
 	for _, body := range []string{"{", `{"name":"x","bogus":1}`} {
-		if rec := do(h, "POST", "/api/v1/domains", body, nil); rec.Code != http.StatusBadRequest {
+		if rec := do(h, "POST", "/api/v1/domains?wait=true", body, nil); rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: status %d", body, rec.Code)
 		}
 	}
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"web","vcpus":2}`, nil); rec.Code != http.StatusCreated {
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"web","vcpus":2}`, nil); rec.Code != http.StatusCreated {
 		t.Errorf("create: %d %s", rec.Code, rec.Body)
 	}
 }

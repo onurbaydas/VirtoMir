@@ -200,7 +200,7 @@ func (c *Client) CreateDomain(ctx context.Context, s CreateSpec) (string, error)
 		UUID       string `json:"uuid"`
 		StartError string `json:"startError"`
 	}
-	if err := c.Do(ctx, http.MethodPost, "/api/v1/domains", s, &res); err != nil {
+	if err := c.Do(ctx, http.MethodPost, "/api/v1/domains?wait=true", s, &res); err != nil {
 		return "", err
 	}
 	if res.StartError != "" {

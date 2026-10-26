@@ -6,7 +6,7 @@
   import Undo2 from '@lucide/svelte/icons/undo-2'
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert'
   import Split from '@lucide/svelte/icons/split'
-  import { api, errorText } from '../api'
+  import { api, changedElsewhere, errorText } from '../api'
   import { toasts } from '../toast.svelte'
 
   interface Props {
@@ -25,14 +25,24 @@
   let ta = $state<HTMLTextAreaElement>()
   let gutter = $state<HTMLDivElement>()
 
-  $effect(() => {
+  // The version the text was loaded at: saving is refused if the machine changed since.
+  let version = $state('')
+  let stale = $state(false)
+  function loadXML() {
     void api
-      .domainXML(uuid, true)
-      .then((x) => {
-        original = x
-        text = x
+      .nextBootXML(uuid)
+      .then((r) => {
+        original = r.xml
+        text = r.xml
+        version = r.version
+        saveErr = ''
+        stale = false
       })
       .catch((e) => (loadErr = errorText(e)))
+  }
+  $effect(() => {
+    void uuid
+    loadXML()
   })
 
   let dirty = $derived(original !== null && text !== original)
@@ -81,7 +91,7 @@
     saving = true
     saveErr = ''
     try {
-      const res = await api.saveXML(uuid, text)
+      const res = await api.saveXML(uuid, text, version)
       toasts.push({
         kind: 'info',
         title: t('Configuration saved'),
@@ -90,6 +100,7 @@
       onclose(true)
     } catch (e) {
       saveErr = errorText(e)
+      stale = changedElsewhere(e)
     } finally {
       saving = false
     }
@@ -172,7 +183,9 @@
       <Save size={14} /> {saving ? 'Saving…' : 'Save'}
     </button>
   </footer>
-  {#if saveErr}<div class="err" role="alert"><b>{t('libvirt refused the change:')}</b> {saveErr}</div>{/if}
+  {#if saveErr && stale}
+    <div class="err" role="alert">{saveErr} <button class="ui-btn sm" onclick={() => (confirm(t('Load the current XML? Your edits are lost; copy them first if you need them.')) ? loadXML() : null)}>{t('Reload')}</button></div>
+  {:else if saveErr}<div class="err" role="alert"><b>{t('libvirt refused the change:')}</b> {saveErr}</div>{/if}
 </div>
 
 <style>

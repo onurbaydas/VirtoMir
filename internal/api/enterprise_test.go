@@ -93,11 +93,11 @@ func TestResourcePoolLimitsAreEnforced(t *testing.T) {
 		t.Errorf("over-limit assignment: %d %s", rec.Code, rec.Body)
 	}
 	// A new machine in the pool: 2 vCPUs fit, but its 20 GiB disk does not (40 + 20 > 50).
-	rec = do(h, "POST", "/api/v1/domains?respool=team-a", `{"name":"x","vcpus":2,"memoryMiB":1024,"pool":"default","diskGiB":20}`, nil)
+	rec = do(h, "POST", "/api/v1/domains?respool=team-a&wait=true", `{"name":"x","vcpus":2,"memoryMiB":1024,"pool":"default","diskGiB":20}`, nil)
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "storage pool default") {
 		t.Errorf("disk over limit: %d %s", rec.Code, rec.Body)
 	}
-	rec = do(h, "POST", "/api/v1/domains?respool=team-a", `{"name":"x","vcpus":2,"memoryMiB":1024,"pool":"default","diskGiB":5}`, nil)
+	rec = do(h, "POST", "/api/v1/domains?respool=team-a&wait=true", `{"name":"x","vcpus":2,"memoryMiB":1024,"pool":"default","diskGiB":5}`, nil)
 	if rec.Code != http.StatusCreated || len(b.created) != 1 {
 		t.Fatalf("create within limits: %d %s", rec.Code, rec.Body)
 	}

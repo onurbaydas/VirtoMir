@@ -104,7 +104,7 @@ func TestMachineGetsAFixedAddressAndName(t *testing.T) {
 	}
 	create := `{"name":"web-01","vcpus":1,"memoryMiB":1024,"pool":"default","diskGiB":10,"baseImage":"/img/debian.qcow2","network":{"network":"default"},` +
 		`"cloudInit":{"user":"ops","password":"pw"},"ip":{"pool":"prod-v20"}}`
-	resp, body := admin.req("POST", "/api/v1/domains", create)
+	resp, body := admin.req("POST", "/api/v1/domains?wait=true", create)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create %d %s", resp.StatusCode, body)
 	}
@@ -130,7 +130,7 @@ func TestMachineGetsAFixedAddressAndName(t *testing.T) {
 		t.Errorf("DNS updates after delete: %d", n)
 	}
 	noCI := `{"name":"db","vcpus":1,"memoryMiB":1024,"diskGiB":10,"network":{"network":"default"},"ip":{"pool":"prod-v20"}}`
-	if resp, body := admin.req("POST", "/api/v1/domains", noCI); resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, "cloud-init") {
+	if resp, body := admin.req("POST", "/api/v1/domains?wait=true", noCI); resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, "cloud-init") {
 		t.Errorf("without cloud-init: %d %s", resp.StatusCode, body)
 	}
 	_, body = admin.req("GET", "/api/v1/physnet/dns", "")

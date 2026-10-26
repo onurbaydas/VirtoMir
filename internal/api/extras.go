@@ -40,7 +40,15 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, v)
+	// The version the form sends back in If-Match (version.go); best effort.
+	ver, _ := s.definitionVersion(r.PathValue("uuid"))
+	if ver != "" {
+		w.Header().Set("ETag", `"`+ver+`"`)
+	}
+	s.writeJSON(w, http.StatusOK, struct {
+		virt.SettingsView
+		Version string `json:"version,omitempty"`
+	}{v, ver})
 }
 
 // previewSettings returns the definition before and after the form's change.
@@ -60,6 +68,9 @@ func (s *Server) previewSettings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 	var set virt.Settings
 	if !s.decode(w, r, &set) {
+		return
+	}
+	if !s.checkVersion(w, r, r.PathValue("uuid")) {
 		return
 	}
 	var vcpus int
