@@ -200,6 +200,10 @@ case "$LISTEN" in 127.* | localhost:*) HOST=127.0.0.1 ;; esac
 echo
 say "VirtoMir is running: https://${HOST:-$(hostname)}:$PORT/"
 echo "    Sign in as root or an administrator (groups sudo, wheel or libvirt)."
+case "$LISTEN" in
+127.* | localhost:*) ;;
+*) echo "    It listens on every network interface. Local access only: run this installer again with --listen 127.0.0.1:8420, or limit port $PORT in the firewall." ;;
+esac
 echo "    The certificate is self-signed: your browser will ask you to confirm it once."
 echo "    Replace it with -tls files -tls-cert … -tls-key … in $UNIT if you have a real one."
 

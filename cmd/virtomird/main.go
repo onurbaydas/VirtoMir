@@ -449,6 +449,7 @@ func run(c config, log *slog.Logger) error {
 		Addr:              c.listen,
 		Handler:           apiServer.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second, // keep-alive connections nobody uses; no WriteTimeout (SSE, websockets, downloads)
 		TLSConfig:         tlsConf,
 	}
 
@@ -598,7 +599,7 @@ func setupAuth(c config, pj *project.Store, log *slog.Logger) (*auth.Manager, er
 		// LDAP and OpenID Connect, configured by admins in the UI (ADR-0023).
 		ext, err := auth.OpenExternal(filepath.Join(c.stateDir, "signin.json"))
 		if err != nil {
-			return nil, err
+			return nil, refuseSecurityFile("sign-in settings", err)
 		}
 		if pj != nil {
 			ext.SetRoleFallback(api.ExternalRoleFallback(pj))
@@ -606,12 +607,20 @@ func setupAuth(c config, pj *project.Store, log *slog.Logger) (*auth.Manager, er
 		m.SetExternal(ext)
 		tf, err := auth.OpenTwoFactor(filepath.Join(c.stateDir, "twofactor.json"))
 		if err != nil {
-			return nil, err
+			return nil, refuseSecurityFile("two-factor settings", err)
 		}
 		m.SetTwoFactor(tf)
 		return m, nil
 	}
 	return nil, fmt.Errorf("unknown -auth %q (pam or none)", c.authMode)
+}
+
+// refuseSecurityFile explains why virtomird will not start with an unreadable sign-in or 2FA
+// file: carrying on would silently reset those settings (e.g. open the door to a plain
+// password sign-in again). The admin fixes the file or moves it away on purpose.
+func refuseSecurityFile(what string, err error) error {
+	return fmt.Errorf("refusing to start: the %s file cannot be read (%w). It is not reset automatically, because that would silently change who can sign in and how. "+
+		"Fix the JSON in that file, or move it away to reset those settings, then run: systemctl restart virtomird", what, err)
 }
 
 func setupTLS(c config, fipsEnforce bool, log *slog.Logger) (*tls.Config, error) {
@@ -717,11 +726,18 @@ func watchConfig(ctx context.Context, client *virt.Client, ch *confighist.Store,
 			}
 		}
 	}()
+	last := "" // the error last logged at Warn; repeats go to Debug
 	for ctx.Err() == nil {
 		events, err := client.ConfigEvents(ctx)
 		if err != nil {
-			log.Debug("configuration events unavailable, retrying", "err", err)
+			if err.Error() != last {
+				log.Warn("configuration events unavailable, retrying", "err", err)
+			} else {
+				log.Debug("configuration events unavailable, retrying", "err", err)
+			}
+			last = err.Error()
 		} else {
+			last = ""
 			ch.Sweep() // catch up on what happened before or between subscriptions
 			for ev := range events {
 				if ev.Stopped {

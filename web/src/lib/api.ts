@@ -1573,7 +1573,7 @@ export const api = {
   testChannel: (ch: AlertChannel) => request<void>('POST', '/api/v1/alerts/test', ch),
 
   backups: async (domain?: string, host?: string) =>
-    request<{ backups: BackupInfo[]; dir: string; freeBytes?: number; totalBytes?: number; oldDirs?: string[] }>('GET', at(host, `/api/v1/backups${domain ? `?domain=${enc(domain)}` : ''}`)),
+    request<{ backups: BackupInfo[]; dir: string; freeBytes?: number; totalBytes?: number; oldDirs?: string[]; onSystemDisk?: boolean }>('GET', at(host, `/api/v1/backups${domain ? `?domain=${enc(domain)}` : ''}`)),
   backupNow: (uuid: string, incremental = false) => request<Job>('POST', `${domainPath(uuid)}/backup`, { incremental }),
   deleteBackup: (id: string, host?: string) => request<void>('DELETE', at(host, `/api/v1/backups?id=${enc(id)}`)),
   restoreBackup: (id: string, name: string, pool: string, host?: string, force?: boolean) =>

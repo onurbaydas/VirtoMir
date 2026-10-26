@@ -77,6 +77,7 @@ type Store struct {
 	byAPI map[string]apiChange
 	// Machines that stopped since their last live version: the next one is a new start.
 	restarted map[string]bool
+	lastErr   string // the last capture failure logged at Warn (see logFailure)
 }
 
 type apiChange struct {
@@ -336,10 +337,10 @@ func (s *Store) Sweep() {
 	}
 	for _, u := range uuids {
 		if err := s.CaptureVia(u, "", ViaScan); err != nil {
-			s.log.Debug("config history", "domain", u, "err", err)
+			s.logFailure("config history", u, err)
 		}
 		if err := s.CaptureLive(u, ViaScan); err != nil && !errors.Is(err, errNotRunning) {
-			s.log.Debug("config history (live)", "domain", u, "err", err)
+			s.logFailure("config history (live)", u, err)
 		}
 	}
 }
@@ -349,14 +350,28 @@ func (s *Store) Sweep() {
 func (s *Store) Changed(uuid string, persistent, live bool) {
 	if persistent {
 		if err := s.CaptureVia(uuid, "", ViaEvent); err != nil {
-			s.log.Debug("config history", "domain", uuid, "err", err)
+			s.logFailure("config history", uuid, err)
 		}
 	}
 	if live {
 		if err := s.CaptureLive(uuid, ViaEvent); err != nil && !errors.Is(err, errNotRunning) {
-			s.log.Debug("config history (live)", "domain", uuid, "err", err)
+			s.logFailure("config history (live)", uuid, err)
 		}
 	}
+}
+
+// logFailure reports a failed capture at Warn the first time an error shows up and at
+// Debug while the same one repeats, so a lasting problem is visible without flooding the log.
+func (s *Store) logFailure(what, uuid string, err error) {
+	s.mu.Lock()
+	repeat := s.lastErr == err.Error()
+	s.lastErr = err.Error()
+	s.mu.Unlock()
+	if repeat {
+		s.log.Debug(what, "domain", uuid, "err", err)
+		return
+	}
+	s.log.Warn(what, "domain", uuid, "err", err)
 }
 
 // Forget drops the cached live state of a machine that stopped: its next start is a new

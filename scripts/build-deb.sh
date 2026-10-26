@@ -147,6 +147,8 @@ if [ "$1" = configure ]; then
 	addr=$(hostname -I 2>/dev/null | cut -d' ' -f1)
 	echo "VirtoMir: open https://${addr:-<this-host>}:8420/ (self-signed certificate) and sign in"
 	echo "          as root or an administrator (sudo or libvirt group)."
+	echo "          It listens on every network interface. Local access only: set"
+	echo "          -listen 127.0.0.1:8420 in /etc/default/virtomird, or limit port 8420 in the firewall."
 fi
 exit 0
 EOF

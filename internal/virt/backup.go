@@ -652,7 +652,7 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 	}
 
 	prepareClone(&x, name)
-	var written []string            // files this restore created
+	var written []string             // files this restore created
 	var volumes []libvirt.StorageVol // block volumes this restore created
 	var finished []func()
 	defer func() {

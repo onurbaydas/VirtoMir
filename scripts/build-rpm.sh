@@ -100,6 +100,8 @@ if [ \$1 -eq 1 ]; then
   systemctl enable --now virtomird.service >/dev/null 2>&1 || :
 fi
 echo "VirtoMir: open https://<this-host>:8420/ and sign in as root or an administrator (groups wheel or libvirt)."
+echo "          It listens on every network interface. Local access only: set"
+echo "          -listen 127.0.0.1:8420 in /etc/sysconfig/virtomird, or limit port 8420 in the firewall."
 
 %preun
 if [ \$1 -eq 0 ]; then systemctl disable --now virtomird.service >/dev/null 2>&1 || :; fi

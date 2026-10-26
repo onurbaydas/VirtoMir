@@ -158,3 +158,55 @@ func TestBackupScheduleAndErrors(t *testing.T) {
 		t.Error("relative backup dir accepted")
 	}
 }
+
+func TestOverdueSchedulesRunOneAtATime(t *testing.T) {
+	r := &fakeRunner{snapshots: map[string][]string{}}
+	s, _ := Open("", "/b", r, syncStart, nil)
+	now := time.Date(2026, 10, 13, 10, 0, 0, 0, time.Local)
+	s.now = func() time.Time { return now }
+	for _, u := range []string{"a", "b", "c"} {
+		if _, err := s.Put(Schedule{Kind: Snapshots, Domain: u, Enabled: true, Every: "hours", Hours: 1, Keep: 5}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.tick(context.Background()) // arms all three
+	count := func() int { return len(r.snapshots["a"]) + len(r.snapshots["b"]) + len(r.snapshots["c"]) }
+
+	// virtomird was down for hours: all three are overdue.
+	now = now.Add(5 * time.Hour)
+	s.tick(context.Background())
+	if count() != 1 {
+		t.Fatalf("first catch-up tick ran %d, want 1", count())
+	}
+	now = now.Add(30 * time.Second)
+	s.tick(context.Background())
+	if count() != 1 {
+		t.Fatalf("ran again inside the gap: %d", count())
+	}
+	now = now.Add(31 * time.Second)
+	s.tick(context.Background())
+	if count() != 2 {
+		t.Fatalf("after the gap ran %d, want 2", count())
+	}
+	now = now.Add(time.Minute)
+	s.tick(context.Background())
+	if count() != 3 {
+		t.Fatalf("after two gaps ran %d, want 3", count())
+	}
+}
+
+func TestOnTimeSchedulesStillRunTogether(t *testing.T) {
+	r := &fakeRunner{snapshots: map[string][]string{}}
+	s, _ := Open("", "/b", r, syncStart, nil)
+	now := time.Date(2026, 10, 13, 10, 0, 0, 0, time.Local)
+	s.now = func() time.Time { return now }
+	for _, u := range []string{"a", "b"} {
+		_, _ = s.Put(Schedule{Kind: Snapshots, Domain: u, Enabled: true, Every: "hours", Hours: 1, Keep: 5})
+	}
+	s.tick(context.Background())
+	now = now.Add(time.Hour) // 11:00 slot reached on time
+	s.tick(context.Background())
+	if len(r.snapshots["a"]) != 1 || len(r.snapshots["b"]) != 1 {
+		t.Errorf("on-time schedules were held back: %v", r.snapshots)
+	}
+}

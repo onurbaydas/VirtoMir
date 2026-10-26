@@ -99,6 +99,8 @@ type Scheduler struct {
 	schedules []Schedule
 	running   map[string]bool
 
+	lastOverdue time.Time // when the last overdue (missed) schedule was started
+
 	// OnResult, if set, hears how every run ended (err nil = success), e.g. to raise and
 	// resolve an alert. It is called without the scheduler's lock held.
 	OnResult func(sc Schedule, err error)
@@ -355,6 +357,11 @@ func (s *Scheduler) DeleteForDomain(uuid string) int {
 	return 0
 }
 
+const (
+	overdueAfter = 2 * time.Minute // later than this past its slot, a run counts as missed
+	overdueGap   = time.Minute     // minimum gap between two catch-up runs
+)
+
 // Run checks for due schedules every 30 seconds until ctx ends.
 func (s *Scheduler) Run(ctx context.Context) {
 	t := time.NewTicker(30 * time.Second)
@@ -386,7 +393,17 @@ func (s *Scheduler) tick(ctx context.Context) {
 			sc.LastResult = "waiting for the first run"
 			continue
 		}
-		if !sc.Next(*sc.LastRun).After(now) {
+		next := sc.Next(*sc.LastRun)
+		if !next.After(now) {
+			if now.Sub(next) > overdueAfter {
+				// Missed while virtomird was down: catch up one at a time, so a host with
+				// many overdue schedules does not get all their I/O at once. The rest
+				// stay due and are picked up by later ticks.
+				if now.Sub(s.lastOverdue) < overdueGap {
+					continue
+				}
+				s.lastOverdue = now
+			}
 			s.running[sc.ID] = true
 			due = append(due, *sc)
 		}

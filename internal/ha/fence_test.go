@@ -168,8 +168,11 @@ func TestRedfishAcceptedButStaysOn(t *testing.T) {
 	if err == nil || res.Power == "off" || !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), `"on"`) {
 		t.Fatalf("a server that stayed on: %+v, %v", res, err)
 	}
-	if bmc.reads < 2 {
-		t.Errorf("power polled %d times, want it to keep checking", bmc.reads)
+	bmc.mu.Lock() // the BMC may still be answering a poll the deadline cut short
+	reads := bmc.reads
+	bmc.mu.Unlock()
+	if reads < 2 {
+		t.Errorf("power polled %d times, want it to keep checking", reads)
 	}
 }
 

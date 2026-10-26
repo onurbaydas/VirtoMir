@@ -45,3 +45,7 @@ func (c *Client) backupRoom(l *libvirt.Libvirt, d libvirt.Domain, dir BackupDir,
 func BackupSpace(dir BackupDir) (free, total uint64, ok bool) {
 	return diskSpace(string(dir))
 }
+
+// OnSystemDisk reports whether backups land on the same file system as "/" (Linux only):
+// they would not survive that disk failing.
+func OnSystemDisk(dir BackupDir) bool { return onSystemDisk(string(dir)) }

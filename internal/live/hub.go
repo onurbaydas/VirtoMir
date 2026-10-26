@@ -68,6 +68,7 @@ type Hub struct {
 	refresh  chan struct{}
 
 	// Sampling state, only touched by the Run goroutine.
+	statsErr   string // the bulk-stats failure last logged at Warn
 	prevHost   virt.HostStats
 	prevHostOK bool
 	prevDom    map[string]cpuSample
@@ -149,11 +150,18 @@ func (h *Hub) Subscribe() ([][]byte, <-chan []byte, func()) {
 }
 
 func (h *Hub) watchEvents(ctx context.Context) {
+	last := "" // the error last logged at Warn; repeats go to Debug
 	for ctx.Err() == nil {
 		events, err := h.src.LifecycleEvents(ctx)
 		if err != nil {
-			h.log.Debug("lifecycle events unavailable, retrying", "err", err)
+			if err.Error() != last {
+				h.log.Warn("lifecycle events unavailable, retrying", "err", err)
+			} else {
+				h.log.Debug("lifecycle events unavailable, retrying", "err", err)
+			}
+			last = err.Error()
 		} else {
+			last = ""
 			for range events {
 				h.Refresh()
 			}
@@ -178,8 +186,12 @@ func (h *Hub) sample(now time.Time) {
 			// Extras: a failing bulk-stats call must not take the basic view down.
 			if stats, serr := h.src.DomainStats(); serr == nil {
 				h.applyStats(snap.Domains, stats, now)
+				h.statsErr = ""
 			} else {
-				h.log.Debug("domain stats unavailable", "err", serr)
+				if serr.Error() != h.statsErr {
+					h.log.Warn("domain stats unavailable", "err", serr)
+				}
+				h.statsErr = serr.Error()
 				clear(h.prevStats)
 			}
 		}

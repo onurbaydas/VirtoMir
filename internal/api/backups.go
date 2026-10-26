@@ -61,6 +61,7 @@ func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) {
 	if free, total, ok := virt.BackupSpace(dir); ok {
 		out["freeBytes"], out["totalBytes"] = free, total
 	}
+	out["onSystemDisk"] = virt.OnSystemDisk(dir)
 	if old := s.schedules.Settings().OldBackupDirs; len(old) > 0 {
 		out["oldDirs"] = old
 	}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/onurbaydas/virtomir/internal/atomicfile"
+	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
 // First-run setup (ADR-0045): right after installing, an admin is walked through what a
@@ -129,13 +130,17 @@ func (s *Server) getSetup(w http.ResponseWriter, _ *http.Request) {
 	if s.schedules != nil {
 		dir := s.schedules.Settings().BackupDir
 		out.BackupDir = dir
-		c := SetupCheck{ID: "backups", Title: "Backup location", Detail: "Backups go to " + dir + ". Another disk or an NFS mount is better than the system disk."}
+		advice := ""
+		if virt.OnSystemDisk(virt.BackupDir(dir)) {
+			advice = " This is the system disk: backups there do not survive that disk failing. Another disk or an NFS mount is safer."
+		}
+		c := SetupCheck{ID: "backups", Title: "Backup location", Detail: "Backups go to " + dir + "." + advice}
 		// Only looks: the folder is created by the first backup, never by opening this page.
 		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
 			c.OK = true
 		} else if errors.Is(err, fs.ErrNotExist) {
 			c.OK = true
-			c.Detail = "Backups go to " + dir + " (created with the first backup). Another disk or an NFS mount is better than the system disk."
+			c.Detail = "Backups go to " + dir + " (created with the first backup)." + advice
 		} else if err == nil {
 			c.Detail = dir + " is not a folder: choose another backup location."
 		} else {

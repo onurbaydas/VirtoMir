@@ -596,4 +596,3 @@ func (c *Client) UpdatePlacementRule(ctx context.Context, id string, r Placement
 func (c *Client) DeletePlacementRule(ctx context.Context, id string) error {
 	return c.Do(ctx, http.MethodDelete, "/api/v1/placement/rules/"+url.PathEscape(id), nil, nil)
 }
-

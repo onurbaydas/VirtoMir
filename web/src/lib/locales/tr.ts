@@ -491,6 +491,7 @@ export const tr: Record<string, string> = {
   "Backups": "Yedekler",
   "Backups · VirtoMir": "Yedekler · VirtoMir",
   "Backups & Schedules": "Yedekler ve Zamanlamalar",
+  "Backups are on the system disk: they do not survive that disk failing. Another disk or an NFS mount is safer.": "Yedekler sistem diskinde: o disk bozulursa yedekler de gider. Başka bir disk ya da NFS bağlantısı daha güvenli.",
   "Backups in earlier locations stay listed: {dirs}": "Önceki konumlardaki yedekler listede kalır: {dirs}",
   "balance": "denge",
   "Balance Score": "Denge Skoru",
