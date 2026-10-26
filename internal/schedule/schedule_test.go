@@ -18,6 +18,13 @@ type fakeRunner struct {
 	backups   int
 	pruned    int
 	fail      error
+	gone      map[string]bool // machines deleted behind the scheduler's back
+}
+
+func (f *fakeRunner) MachineExists(uuid string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return !f.gone[uuid], nil
 }
 
 func (f *fakeRunner) Snapshot(uuid, name, _ string) error {

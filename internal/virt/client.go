@@ -36,6 +36,10 @@ type Client struct {
 	// state directory, the backup location); no storage pool may be created in them.
 	ProtectedDirs func() []string
 
+	// OldBackupDirs, when set, returns the earlier backup locations; backups made there are
+	// still listed, pruned, verified and restored (backup_dirs.go).
+	OldBackupDirs func() []string
+
 	metas metaCache
 
 	leases leaseSet // long operations per machine (lease.go)

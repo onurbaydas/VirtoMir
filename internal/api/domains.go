@@ -290,6 +290,12 @@ func (s *Server) deleteDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	s.unplugOVN(r.Context(), uuid, "")
 	s.releaseAddresses(r.Context(), uuid)
+	// Its automatic snapshots and backups go with it (its backups stay until deleted).
+	if s.schedules != nil {
+		if n := s.schedules.DeleteForDomain(uuid); n > 0 {
+			s.log.Info("schedules of deleted machine removed", "machine", uuid, "count", n)
+		}
+	}
 	// A deleted machine leaves its resource pool, and HA must not bring it back elsewhere.
 	if s.respools != nil {
 		s.respools.Forget(uuid)

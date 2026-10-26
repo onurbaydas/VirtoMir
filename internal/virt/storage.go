@@ -41,6 +41,8 @@ type Volume struct {
 	AllocationBytes uint64   `json:"allocationBytes"`
 	Backing         string   `json:"backing,omitempty"`
 	UsedBy          []string `json:"usedBy"`
+	// Writing: a running operation (restore, upload, download, clone) is writing it now.
+	Writing bool `json:"writing,omitempty"`
 }
 
 func (c *Client) ListPools() ([]Pool, error) {
@@ -121,6 +123,7 @@ func (c *Client) ListVolumes(pool string) ([]Volume, error) {
 			continue
 		}
 		vol.UsedBy = users[vol.Path]
+		vol.Writing = inFlight.has(vol.Path)
 		if vol.UsedBy == nil {
 			vol.UsedBy = []string{}
 		}
@@ -331,6 +334,9 @@ func (c *Client) DeleteVolume(pool, name string) error {
 	if err != nil {
 		return classify(err)
 	}
+	if inFlight.has(path) {
+		return refusedf("%s is being written by a running job (a restore, upload, download or clone). Wait until it has finished.", name)
+	}
 	if err := c.checkVolumeUnused(l, v, name, path); err != nil {
 		return err
 	}
@@ -430,10 +436,11 @@ func (c *Client) UploadVolume(ctx context.Context, pool, name string, size int64
 	if magic, _ := br.Peek(4); bytes.Equal(magic, qcow2Magic) {
 		format = "qcow2"
 	}
-	vol, _, err := createVolume(l, pool, name, uint64(size), format)
+	vol, volPath, err := createVolume(l, pool, name, uint64(size), format)
 	if err != nil {
 		return Volume{}, err
 	}
+	defer inFlight.add(volPath)()
 	if err := l.StorageVolUpload(vol, &ctxReader{ctx: ctx, r: io.LimitReader(br, size)}, 0, uint64(size), 0); err != nil {
 		dropVolume(c.log, l, vol)
 		if ctx.Err() != nil {

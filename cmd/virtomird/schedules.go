@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/api"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/offsite"
 	"github.com/onurbaydas/virtomir/internal/schedule"
@@ -65,8 +66,22 @@ func (r scheduleRunner) PruneBackups(dir, uuid string, keep func([]time.Time) []
 	return r.c.PruneBackups(virt.BackupDir(dir), uuid, keep)
 }
 
+func (r scheduleRunner) MachineExists(uuid string) (bool, error) {
+	doms, err := r.c.ListDomains()
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(doms, func(d virt.Domain) bool { return strings.EqualFold(d.UUID, uuid) }), nil
+}
+
 func jobStarter(m *jobs.Manager) schedule.Starter {
 	return func(kind, title string, fn func(context.Context, func(string)) (string, error)) {
 		m.Start(kind, title, fn)
 	}
 }
+
+// The API finds these through type assertions; keep *virt.Client satisfying them.
+var (
+	_ api.Backupper = (*virt.Client)(nil)
+	_ api.Flattener = (*virt.Client)(nil)
+)

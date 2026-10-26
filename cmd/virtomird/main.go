@@ -213,6 +213,7 @@ func run(c config, log *slog.Logger) error {
 		}
 	}
 	client.ProtectedDirs = func() []string { return []string{c.stateDir, scheduler.Settings().BackupDir} }
+	client.OldBackupDirs = func() []string { return scheduler.Settings().OldBackupDirs }
 	// No backup job survives a restart: folders a crash left half-written go (unless another
 	// host sharing the location wrote to them within the hour).
 	if _, err := client.SweepPartialBackups(virt.BackupDir(scheduler.Settings().BackupDir), time.Hour); err != nil {

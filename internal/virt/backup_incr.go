@@ -176,7 +176,8 @@ func rebaseOnParent(ctx context.Context, dest string, disks []BackupDisk, parent
 // (dir itself for a full backup) and a cleanup to call afterwards.
 func (c *Client) FlatCopy(ctx context.Context, dir BackupDir, id string, report func(string)) (string, func(), error) {
 	noop := func() {}
-	p, err := backupPath(dir, id)
+	// A backup in an earlier location is read from there (dir is where it lives).
+	dir, p, err := c.locateBackup(dir, id)
 	if err != nil {
 		return "", noop, err
 	}
