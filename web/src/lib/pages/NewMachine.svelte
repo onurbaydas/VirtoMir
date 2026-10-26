@@ -18,6 +18,7 @@
   import { physnet, type IPPool } from '../physnet'
   import { sdn, type SecurityGroup, type Subnet, type VPC } from '../sdn'
   import { track } from '../jobs'
+  import { NAME_RE, cloudInitProblem, createBlocker } from '../newmachine'
   import { live } from '../live.svelte'
   import { formatBytes, formatKiB } from '../format'
   import { machineHref, router } from '../router.svelte'
@@ -200,20 +201,11 @@
   let selectedPool = $derived(pools.find((p) => p.name === pool))
   let isBlockPool = $derived(selectedPool ? ['logical', 'zfs', 'rbd'].includes(selectedPool.type) : false)
   let diskTooBig = $derived(!!selectedPool && withDisk && diskGiB * 2 ** 30 > selectedPool.availableBytes)
-  let nameValid = $derived(/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(name))
+  let nameValid = $derived(NAME_RE.test(name))
   let nameTaken = $derived((live.snapshot?.domains ?? []).some((d) => d.name === name))
   let baseCapGiB = $derived(Math.ceil((images.find((i) => i.vol.path === baseImage)?.vol.capacityBytes ?? 0) / 2 ** 30))
   let keys = $derived(ciKeys.split('\n').map((k) => k.trim()).filter(Boolean))
-  let ciProblem = $derived(
-    source !== 'cloud'
-      ? ''
-      : !/^[a-z_][a-z0-9_-]{0,31}$/.test(ciUser)
-        ? t('User name: lowercase letters, digits, "_" or "-".')
-        : !ciPassword && keys.length === 0
-          ? t('Set a password or an SSH key to be able to sign in.')
-          : '',
-  )
-  let bootable = $derived(source === 'iso' ? withDisk || !!iso : source === 'cloud' ? !!baseImage : !!existingDisk)
+  let ciProblem = $derived(cloudInitProblem({ source, ciUser, ciPassword, ciKeys: keys }))
   // DRS (partially or fully automated) suggests the member the machine fits best.
   let placement = $state<DRSPlacement | null>(null)
   $effect(() => {
@@ -286,29 +278,12 @@
 
   // The first thing that keeps "Create" disabled, in plain words next to the button.
   let blocker = $derived(
-    !name.trim()
-      ? t('Give the machine a name.')
-      : !nameValid
-        ? t('The name may only use letters, digits, ".", "_", "+" and "-".')
-        : nameTaken
-          ? t('A machine with this name already exists.')
-          : vcpus < 1 || !(memGiB > 0)
-            ? t('Give it at least one vCPU and some memory.')
-            : kind === 'container'
-              ? !ctAvailable
-                ? t('System containers are not available on this host.')
-                : !rootPasswordOK
-                  ? t('Set a root password of at least 8 characters.')
-                  : ''
-              : !bootable
-                ? source === 'iso'
-                  ? t('Add a disk or installation media.')
-                  : source === 'cloud'
-                    ? t('Choose a cloud image.')
-                    : t('Choose the disk image to boot.')
-                : ciProblem
-                  ? ciProblem
-                  : '',
+    createBlocker({
+      kind, name, vcpus, memGiB, source, withDisk, iso, baseImage, existingDisk, ciUser, ciPassword, rootPassword,
+      takenNames: (live.snapshot?.domains ?? []).map((d) => d.name),
+      ciKeys: keys,
+      containersAvailable: ctAvailable,
+    }),
   )
   let canCreate = $derived(!blocker)
   // Not blocking, but worth saying: an empty disk with nothing to install from, and more
