@@ -14,12 +14,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"syscall"
 	"time"
 
 	"github.com/onurbaydas/virtomir/internal/activity"
 	"github.com/onurbaydas/virtomir/internal/alerts"
 	"github.com/onurbaydas/virtomir/internal/api"
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/baremetal"
 	"github.com/onurbaydas/virtomir/internal/catalog"
@@ -101,6 +103,7 @@ func main() {
 		level = slog.LevelDebug
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	slog.SetDefault(log) // helpers without a logger of their own log the same way
 
 	if flag.Arg(0) == "join" {
 		if err := runJoin(c, flag.Arg(1), log); err != nil {
@@ -150,9 +153,7 @@ func run(c config, log *slog.Logger) error {
 	defer client.Close()
 
 	tokens, err := auth.OpenTokens(filepath.Join(c.stateDir, "tokens.json"))
-	if err != nil {
-		log.Warn("API tokens", "err", err)
-	}
+	logStoreErr(log, "API tokens", err)
 	acts, err := activity.Open(filepath.Join(c.stateDir, "activity.jsonl"))
 	if err != nil {
 		log.Warn("activity log", "err", err)
@@ -166,31 +167,28 @@ func run(c config, log *slog.Logger) error {
 	}
 
 	hist, err := history.Open(filepath.Join(c.stateDir, "history.gob"))
-	if err != nil {
-		log.Warn("metric history", "err", err)
-	}
+	logStoreErr(log, "metric history", err)
 	defer func() {
 		if err := hist.Save(); err != nil {
 			log.Warn("save metric history", "err", err)
 		}
 	}()
-	go saveHistory(ctx, hist, log)
+	safeGo(ctx, log, "save metric history", func(ctx context.Context) { saveHistory(ctx, hist, log) })
 
 	insightsEngine := insights.New(hist)
-	go recordPools(ctx, client, hist)
+	safeGo(ctx, log, "record pools", func(ctx context.Context) { recordPools(ctx, client, hist) })
 	hub := live.NewHub(client, time.Second, log)
 	hub.SetRecorder(hist)
 	alertEngine, err := alerts.Open(filepath.Join(c.stateDir, "alerts.json"), log)
-	if err != nil {
-		log.Warn("alerts", "err", err)
-	}
+	logStoreErr(log, "alerts", err)
 	cephStore, err := ceph.Open(filepath.Join(c.stateDir, "ceph.json"))
 	if err != nil {
 		log.Warn("Ceph", "err", err)
 	}
-	watchAlerts(ctx, hub, alertEngine, client, insightsEngine, cephStore)
+	watchAlerts(ctx, log, hub, alertEngine, client, insightsEngine, cephStore)
 
 	jobManager := jobs.New(ctx)
+	jobManager.Log = log
 	hostName := c.name
 	if hostName == "" {
 		hostName, _ = os.Hostname()
@@ -201,12 +199,28 @@ func run(c config, log *slog.Logger) error {
 	}
 	scheduler, err := schedule.Open(filepath.Join(c.stateDir, "schedules.json"), filepath.Join(c.stateDir, "backups"),
 		scheduleRunner{client, offsiteStore}, jobStarter(jobManager), log)
-	if err != nil {
-		log.Warn("schedules", "err", err)
+	logStoreErr(log, "schedules", err)
+	if alertEngine != nil {
+		scheduler.OnResult = func(sc schedule.Schedule, err error) {
+			if sc.Kind != schedule.Backups {
+				return
+			}
+			name := sc.Domain
+			if d, derr := client.DomainDetail(sc.Domain); derr == nil {
+				name = d.Name
+			}
+			alertEngine.ScheduledBackup(sc.Domain, name, err)
+		}
 	}
-	go scheduler.Run(ctx)
+	client.ProtectedDirs = func() []string { return []string{c.stateDir, scheduler.Settings().BackupDir} }
+	// No backup job survives a restart: folders a crash left half-written go (unless another
+	// host sharing the location wrote to them within the hour).
+	if _, err := client.SweepPartialBackups(virt.BackupDir(scheduler.Settings().BackupDir), time.Hour); err != nil {
+		log.Warn("remove unfinished backups", "err", err)
+	}
+	safeGo(ctx, log, "scheduler", scheduler.Run)
 	hubDone := make(chan struct{})
-	go func() { hub.Run(ctx); close(hubDone) }()
+	go func() { runSafe(ctx, log, "live hub", hub.Run); close(hubDone) }()
 	defer func() { <-hubDone }()
 
 	fipsInfo := compliance.GetFIPSInfo("/", fipsEnforce)
@@ -224,11 +238,12 @@ func run(c config, log *slog.Logger) error {
 		log.Warn("configuration history", "err", err)
 	} else {
 		opts.ConfigHistory = ch
-		go sweepConfig(ctx, ch)
+		safeGo(ctx, log, "configuration history", func(ctx context.Context) { sweepConfig(ctx, ch) })
 	}
-	if q, err := quota.Open(filepath.Join(c.stateDir, "quotas.json")); err != nil {
+	if q, err := quota.Open(filepath.Join(c.stateDir, "quotas.json")); q == nil {
 		log.Warn("quotas", "err", err)
 	} else {
+		logStoreErr(log, "quotas", err)
 		opts.Quotas = q
 	}
 	haStore, err := ha.Open(filepath.Join(c.stateDir, "ha.json"))
@@ -255,6 +270,7 @@ func run(c config, log *slog.Logger) error {
 		opts.VMwareConverter = c
 	}
 	opts.Updater = update.New(c.updateRepo, version, os.Getenv("VIRTOMIR_GITHUB_TOKEN"))
+	opts.Updater.Busy = func() bool { return jobManager.Running() > 0 } // a restart would kill them
 	opts.StateDir = c.stateDir
 	if repStore, err := reports.Open(filepath.Join(c.stateDir, "reports")); err != nil {
 		log.Warn("reports store", "err", err)
@@ -273,7 +289,7 @@ func run(c config, log *slog.Logger) error {
 		log.Warn("zfs replication", "err", err)
 	} else {
 		opts.ZFSRep = zr
-		go zr.Run(ctx)
+		safeGo(ctx, log, "zfs replication", zr.Run)
 	}
 	if c.drExperimental {
 		wireDR(&opts, client, c.stateDir, log)
@@ -290,7 +306,7 @@ func run(c config, log *slog.Logger) error {
 		opts.Content = contentStore
 		syncManager := content.NewSyncManager(contentStore, jobManager, client, opts.Cluster, nil, log)
 		opts.ContentSync = syncManager
-		go syncManager.Start(ctx)
+		safeGo(ctx, log, "content sync", syncManager.Start)
 	}
 	if plStore, err := placement.Open(filepath.Join(c.stateDir, "placement.json")); err != nil {
 		log.Warn("placement store", "err", err)
@@ -313,7 +329,7 @@ func run(c config, log *slog.Logger) error {
 		}
 		mgr := catalog.NewLeaseManager(catStore, leaseCtrl{client}, notifier, log, leaseOpts...)
 		opts.LeaseMgr = mgr
-		go mgr.Run(ctx)
+		safeGo(ctx, log, "catalog leases", mgr.Run)
 	}
 	if st, err := lcm.Open(filepath.Join(c.stateDir, "lcm.json")); err != nil {
 		log.Warn("rolling upgrades", "err", err)
@@ -360,14 +376,14 @@ func run(c config, log *slog.Logger) error {
 		opts.K8s = st
 	}
 	apiServer := api.NewServer(opts)
-	go syncCluster(ctx, apiServer)
-	go apiServer.RunReportSchedules(ctx)
-	go apiServer.RunDRS(ctx)
-	go apiServer.RunDRRPO(ctx)
+	safeGo(ctx, log, "cluster sync", func(ctx context.Context) { syncCluster(ctx, apiServer) })
+	safeGo(ctx, log, "report schedules", apiServer.RunReportSchedules)
+	safeGo(ctx, log, "DRS", apiServer.RunDRS)
+	safeGo(ctx, log, "DR RPO", apiServer.RunDRRPO)
 	apiServer.RunLCM(ctx)
 	apiServer.RunK8s(ctx)
 	apiServer.RunBaremetal(ctx)
-	go keepTunnels(ctx, client, log)
+	safeGo(ctx, log, "tunnels", func(ctx context.Context) { keepTunnels(ctx, client, log) })
 	if opts.Updater != nil {
 		opts.Updater.InitConfig(c.stateDir)
 		go opts.Updater.StartAutoUpdater(ctx, c.stateDir, func(action, details string) {
@@ -419,7 +435,7 @@ func run(c config, log *slog.Logger) error {
 		}
 		apiServer.SetHA(mgr)
 		haDone := make(chan struct{})
-		go func() { mgr.Run(ctx); close(haDone) }()
+		go func() { runSafe(ctx, log, "high availability", mgr.Run); close(haDone) }()
 		defer func() { <-haDone }() // disarms the watchdog before exiting
 	}
 
@@ -468,6 +484,57 @@ func run(c config, log *slog.Logger) error {
 		}
 		return nil
 	}
+}
+
+// restartBackoff is the first pause before runSafe restarts a loop that panicked.
+var restartBackoff = 5 * time.Second
+
+// safeGo runs a background loop in its own goroutine under runSafe.
+func safeGo(ctx context.Context, log *slog.Logger, name string, run func(context.Context)) {
+	go runSafe(ctx, log, name, run)
+}
+
+// runSafe calls run(ctx). If it panics, the panic and its stack are logged and run starts
+// again after a short pause (a background loop must not take the daemon and every running
+// machine operation down with it). It returns when run returns normally or ctx ends.
+func runSafe(ctx context.Context, log *slog.Logger, name string, run func(context.Context)) {
+	backoff := restartBackoff
+	for {
+		panicked := func() (panicked bool) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Error("background task panicked; restarting it", "task", name, "panic", r, "stack", string(debug.Stack()))
+					panicked = true
+				}
+			}()
+			run(ctx)
+			return false
+		}()
+		if !panicked || ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		backoff = min(2*backoff, 5*time.Minute)
+	}
+}
+
+// logStoreErr reports a problem opening a state file. An unreadable file has been moved
+// aside (the store starts empty), which an admin must know about: that is an error.
+func logStoreErr(log *slog.Logger, what string, err error) {
+	if err == nil {
+		return
+	}
+	var ce *atomicfile.CorruptError
+	if errors.As(err, &ce) {
+		log.Error(what+": state file unreadable, moved aside and started empty",
+			"file", ce.Path, "backup", ce.Backup, "err", ce.Err)
+		return
+	}
+	log.Warn(what, "err", err)
 }
 
 // recordPools adds every active pool's used bytes to the history every 10 minutes, the

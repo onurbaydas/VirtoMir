@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -126,16 +127,10 @@ func (c *Checker) installBinary(tarPath string, rel *Release, report func(string
 	if err != nil {
 		return "", err
 	}
-	tmp := exe + ".new"
-	if err := extractBinary(tarPath, tmp); err != nil {
-		os.Remove(tmp)
+	if err := swapBinary(tarPath, exe); err != nil {
 		return "", err
 	}
-	if err := os.Rename(tmp, exe); err != nil {
-		os.Remove(tmp)
-		return "", fmt.Errorf("replace %s: %w", exe, err)
-	}
-	report("New binary in place; restarting VirtoMir")
+	report("New binary in place (the previous one is kept as " + filepath.Base(exe) + ".old); restarting VirtoMir")
 	restart := c.Restart
 	if restart == nil {
 		restart = defaultRestart
@@ -145,6 +140,56 @@ func (c *Checker) installBinary(tarPath string, rel *Release, report func(string
 		return "", fmt.Errorf("the new binary is in place but the restart failed (restart virtomird yourself): %w", err)
 	}
 	return fmt.Sprintf("Installed %s at %s; %s — reload the page in a few seconds", rel.Version, exe, how), nil
+}
+
+// swapBinary puts the virtomird from the tarball at exe, keeping the previous binary as
+// <exe>.old (to go back by hand if the new one does not start).
+func swapBinary(tarPath, exe string) error {
+	tmp := exe + ".new"
+	if err := extractBinary(tarPath, tmp); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	old := exe + ".old"
+	if err := os.Remove(old); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		os.Remove(tmp)
+		return fmt.Errorf("remove %s: %w", old, err)
+	}
+	// A hard link keeps the running binary's file under the .old name; copy where links
+	// are not possible.
+	if err := os.Link(exe, old); err != nil {
+		if err := copyFile(exe, old); err != nil {
+			os.Remove(tmp)
+			return fmt.Errorf("keep the previous binary as %s: %w", old, err)
+		}
+	}
+	if err := os.Rename(tmp, exe); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("replace %s: %w", exe, err)
+	}
+	return nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	st, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, st.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(dst)
+		return err
+	}
+	return out.Close()
 }
 
 // extractBinary copies the virtomird executable out of a release tarball into dst.

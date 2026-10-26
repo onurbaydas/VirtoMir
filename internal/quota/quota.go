@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // Rule limits the machines owned by one user (Kind "user") or by each member of a group
@@ -51,7 +53,10 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	if err := json.Unmarshal(b, &s.r); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		// Keep the unreadable file and start with no rules: nobody gets a quota until an
+		// admin sets them again (fails closed for operators).
+		s.r = []Rule{}
+		return s, atomicfile.Quarantine(path, err)
 	}
 	return s, nil
 }
@@ -88,11 +93,7 @@ func (s *Store) Set(rules []Rule) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, s.path); err != nil {
+	if err := atomicfile.Write(s.path, b, 0o600); err != nil {
 		return err
 	}
 	s.mu.Lock()

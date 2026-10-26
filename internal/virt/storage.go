@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	pathpkg "path"
 	"regexp"
 	"slices"
 	"strings"
@@ -109,7 +110,10 @@ func (c *Client) ListVolumes(pool string) ([]Volume, error) {
 	if err != nil {
 		return nil, classify(err)
 	}
-	users := c.diskUsers(l)
+	users, err := c.diskUsers(l)
+	if err != nil { // still list the volumes; "used by" may be incomplete
+		c.log.Warn("list volumes: which machines use them is incomplete", "pool", pool, "err", err)
+	}
 	out := make([]Volume, 0, len(vols))
 	for _, v := range vols {
 		vol, err := volumeInfo(l, v)
@@ -327,14 +331,84 @@ func (c *Client) DeleteVolume(pool, name string) error {
 	if err != nil {
 		return classify(err)
 	}
-	if users := c.diskUsers(l)[path]; len(users) > 0 {
-		return refusedf("%s is used by %s. Remove it from the machine first.", name, strings.Join(users, ", "))
+	if err := c.checkVolumeUnused(l, v, name, path); err != nil {
+		return err
 	}
 	if err := l.StorageVolDelete(v, libvirt.StorageVolDeleteNormal); err != nil {
 		return classify(err)
 	}
 	c.log.Info("volume deleted", "pool", pool, "volume", name)
 	return nil
+}
+
+// checkVolumeUnused refuses (fails closed) unless no machine uses the volume at path and no
+// other volume of its pool has it as backing image. name is how the user knows it.
+func (c *Client) checkVolumeUnused(l *libvirt.Libvirt, v libvirt.StorageVol, name, path string) error {
+	all, err := c.diskUsers(l)
+	if err != nil {
+		return refusedf("Could not check which machines use %s, so it was kept: %v", name, err)
+	}
+	if users := all[path]; len(users) > 0 {
+		return refusedf("%s is used by %s. Remove it from the machine first.", name, strings.Join(users, ", "))
+	}
+	backers, err := c.volumeBackers(l, v, path)
+	if err != nil {
+		return refusedf("Could not check whether other images are based on %s, so it was kept: %v", name, err)
+	}
+	if len(backers) > 0 {
+		return refusedf("%s is the base image of %s. Delete those first.", name, strings.Join(backers, ", "))
+	}
+	return nil
+}
+
+// volumeBackers names the other volumes in v's pool whose backing image is path (qcow2
+// overlays, linked clones). Any volume that cannot be read makes it an error.
+func (c *Client) volumeBackers(l *libvirt.Libvirt, v libvirt.StorageVol, path string) ([]string, error) {
+	p, err := l.StoragePoolLookupByVolume(v)
+	if err != nil {
+		return nil, classify(err)
+	}
+	vols, _, err := l.StoragePoolListAllVolumes(p, 1, 0)
+	if err != nil {
+		return nil, classify(err)
+	}
+	descs := map[string]string{}
+	for _, o := range vols {
+		if o.Name == v.Name {
+			continue
+		}
+		raw, err := l.StorageVolGetXMLDesc(o, 0)
+		if err != nil {
+			return nil, fmt.Errorf("read volume %s: %w", o.Name, classify(err))
+		}
+		descs[o.Name] = raw
+	}
+	return backedBy(path, descs)
+}
+
+// backedBy returns (sorted) the names of the volumes, given as name -> volume XML, whose
+// backing store is target. A relative backing path is relative to the volume's directory.
+func backedBy(target string, descs map[string]string) ([]string, error) {
+	target = pathpkg.Clean(target)
+	var out []string
+	for name, raw := range descs {
+		var x libvirtxml.StorageVolume
+		if err := x.Unmarshal(raw); err != nil {
+			return nil, fmt.Errorf("parse the XML of volume %s: %w", name, err)
+		}
+		if x.BackingStore == nil || x.BackingStore.Path == "" {
+			continue
+		}
+		b := x.BackingStore.Path
+		if !pathpkg.IsAbs(b) && x.Target != nil && x.Target.Path != "" {
+			b = pathpkg.Join(pathpkg.Dir(x.Target.Path), b)
+		}
+		if pathpkg.Clean(b) == target {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
 }
 
 // UploadVolume streams size bytes from r into a new volume. QCOW2 images (cloud images)
@@ -361,7 +435,7 @@ func (c *Client) UploadVolume(ctx context.Context, pool, name string, size int64
 		return Volume{}, err
 	}
 	if err := l.StorageVolUpload(vol, &ctxReader{ctx: ctx, r: io.LimitReader(br, size)}, 0, uint64(size), 0); err != nil {
-		_ = l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal)
+		dropVolume(c.log, l, vol)
 		if ctx.Err() != nil {
 			return Volume{}, ctx.Err()
 		}
@@ -466,13 +540,52 @@ var iqnRE = regexp.MustCompile(`^(iqn\.[0-9]{4}-[0-9]{2}\.[a-z0-9.-]+(:[^\s]+)?|
 
 var nfsHostRE = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$|^[[0-9a-fA-F:]+]$`)
 
-// poolXML builds the libvirt definition for a pool spec.
-func poolXML(spec PoolSpec) (libvirtxml.StoragePool, error) {
+// systemDirs may not be a pool directory themselves; the ones in systemTrees not even
+// below them: a pool lists (and lets users delete) the files in its directory.
+var (
+	systemDirs  = []string{"/", "/etc", "/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/libx32", "/boot", "/dev", "/proc", "/sys", "/run", "/root", "/home", "/var", "/var/lib"}
+	systemTrees = []string{"/etc", "/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/libx32", "/boot", "/dev", "/proc", "/sys", "/run"}
+)
+
+// checkPoolPath validates the directory of a dir or netfs pool and returns it cleaned.
+// protected are directories VirtoMir keeps its own files in (state, backups): neither they
+// nor anything below them can become a pool.
+func checkPoolPath(p string, protected []string) (string, error) {
+	if !strings.HasPrefix(p, "/") || strings.Contains(p, "..") {
+		return "", invalidf("The path must be absolute, e.g. /srv/vm-images.")
+	}
+	p = pathpkg.Clean(p)
+	if slices.Contains(systemDirs, p) {
+		return "", invalidf("%s is a system directory; use a directory of its own for machine disks, e.g. /srv/vm-images.", p)
+	}
+	for _, t := range systemTrees {
+		if strings.HasPrefix(p, t+"/") {
+			return "", invalidf("%s is inside the system directory %s; use a directory of its own for machine disks, e.g. /srv/vm-images.", p, t)
+		}
+	}
+	for _, d := range protected {
+		if d == "" || !strings.HasPrefix(d, "/") {
+			continue
+		}
+		d = pathpkg.Clean(d)
+		if p == d || strings.HasPrefix(p, strings.TrimSuffix(d, "/")+"/") {
+			return "", invalidf("%s holds VirtoMir's own files (%s); pick another directory for the pool.", p, d)
+		}
+	}
+	return p, nil
+}
+
+// poolXML builds the libvirt definition for a pool spec. protected: see checkPoolPath.
+func poolXML(spec PoolSpec, protected ...string) (libvirtxml.StoragePool, error) {
 	if err := checkName("Pool", spec.Name); err != nil {
 		return libvirtxml.StoragePool{}, err
 	}
-	if (spec.Type == "" || spec.Type == "dir" || spec.Type == "netfs") && (!strings.HasPrefix(spec.Path, "/") || strings.Contains(spec.Path, "..")) {
-		return libvirtxml.StoragePool{}, invalidf("The path must be absolute, e.g. /srv/vm-images.")
+	if spec.Type == "" || spec.Type == "dir" || spec.Type == "netfs" {
+		clean, err := checkPoolPath(spec.Path, protected)
+		if err != nil {
+			return libvirtxml.StoragePool{}, err
+		}
+		spec.Path = clean
 	}
 	x := libvirtxml.StoragePool{Type: "dir", Name: spec.Name, Target: &libvirtxml.StoragePoolTarget{Path: spec.Path}}
 	switch spec.Type {
@@ -562,7 +675,11 @@ func poolXML(spec PoolSpec) (libvirtxml.StoragePool, error) {
 // CreatePool defines, builds (creates the directory, mount point or volume group), starts
 // (mounts) and autostarts a pool.
 func (c *Client) CreatePool(spec PoolSpec) error {
-	x, err := poolXML(spec)
+	var protected []string
+	if c.ProtectedDirs != nil {
+		protected = c.ProtectedDirs()
+	}
+	x, err := poolXML(spec, protected...)
 	if err != nil {
 		return err
 	}

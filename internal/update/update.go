@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -27,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 	"github.com/onurbaydas/virtomir/internal/signature"
 )
 
@@ -91,6 +93,13 @@ type Checker struct {
 	Token   string // optional, for private repositories
 	API     string // https://api.github.com (tests replace it)
 	HTTP    *http.Client
+	// Download fetches the release package: no total timeout (a large package on a slow
+	// link takes longer than an API call), only connect/header limits and a stall check.
+	// nil: HTTP.
+	Download *http.Client
+	// Busy reports whether work is running that a restart would kill (background jobs).
+	// The auto-updater waits for it to clear before installing; nil: never busy.
+	Busy func() bool
 	// Installed reports whether this host can update itself; tests replace it.
 	Installed func() (bool, string)
 	// Method reports how VirtoMir was installed (MethodDeb, MethodRPM, MethodBinary); tests replace it.
@@ -129,6 +138,7 @@ func New(repo, current, token string) *Checker {
 		Token:           token,
 		API:             "https://api.github.com",
 		HTTP:            &http.Client{Timeout: 30 * time.Second},
+		Download:        downloadClient(),
 		Installed:       canInstall,
 		Method:          detectMethod,
 		RunInstaller:    defaultRunInstaller,
@@ -181,7 +191,38 @@ func (c *Checker) Check(ctx context.Context, force bool) Status {
 	return st
 }
 
+// downloadClient has no total timeout; connecting, TLS and waiting for the headers are
+// limited, and Install aborts a body that stalls (stallTimeout).
+func downloadClient() *http.Client {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.DialContext = (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext
+	t.TLSHandshakeTimeout = 30 * time.Second
+	t.ResponseHeaderTimeout = time.Minute
+	return &http.Client{Transport: t}
+}
+
+// stallTimeout: a download that receives nothing for this long is given up.
+var stallTimeout = 2 * time.Minute
+
+// stallReader cancels the download when no bytes arrive for stallTimeout.
+type stallReader struct {
+	r     io.Reader
+	timer *time.Timer
+}
+
+func (s *stallReader) Read(p []byte) (int, error) {
+	n, err := s.r.Read(p)
+	if n > 0 {
+		s.timer.Reset(stallTimeout)
+	}
+	return n, err
+}
+
 func (c *Checker) get(ctx context.Context, url, accept string) (*http.Response, error) {
+	return c.getWith(ctx, c.HTTP, url, accept)
+}
+
+func (c *Checker) getWith(ctx context.Context, client *http.Client, url, accept string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -191,7 +232,7 @@ func (c *Checker) get(ctx context.Context, url, accept string) (*http.Response, 
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
-	resp, err := c.HTTP.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("cannot reach GitHub: %w", err)
 	}
@@ -310,6 +351,12 @@ func parse(s string) (ver, bool) {
 // apt in a transient unit. It returns once apt has been started: virtomird is restarted by
 // the package's postinst a few seconds later.
 func (c *Checker) Install(ctx context.Context, dir string, report func(string)) (string, error) {
+	return c.install(ctx, dir, report, nil)
+}
+
+// install is Install; beforeSwap, if set, runs after the download is verified and right
+// before anything is replaced or restarted, and stops the install with its error.
+func (c *Checker) install(ctx context.Context, dir string, report func(string), beforeSwap func() error) (string, error) {
 	st := c.Check(ctx, true)
 	switch {
 	case st.Error != "":
@@ -351,7 +398,15 @@ func (c *Checker) Install(ctx context.Context, dir string, report func(string)) 
 	if len(want) != 64 {
 		return "", errors.New("the published checksum file is not a SHA-256 sum")
 	}
-	resp, err := c.get(ctx, rel.pkgURL, "application/octet-stream")
+	dl := c.Download
+	if dl == nil {
+		dl = c.HTTP
+	}
+	dlCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stall := time.AfterFunc(stallTimeout, cancel)
+	defer stall.Stop()
+	resp, err := c.getWith(dlCtx, dl, rel.pkgURL, "application/octet-stream")
 	if err != nil {
 		return "", err
 	}
@@ -362,7 +417,8 @@ func (c *Checker) Install(ctx context.Context, dir string, report func(string)) 
 		return "", err
 	}
 	h := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(f, h), io.LimitReader(resp.Body, 512<<20)); err != nil {
+	body := &stallReader{r: io.LimitReader(resp.Body, 512<<20), timer: stall}
+	if _, err := io.Copy(io.MultiWriter(f, h), body); err != nil {
 		f.Close()
 		os.Remove(path)
 		return "", fmt.Errorf("download: %w", err)
@@ -371,6 +427,12 @@ func (c *Checker) Install(ctx context.Context, dir string, report func(string)) 
 	if got := hex.EncodeToString(h.Sum(nil)); got != want {
 		os.Remove(path)
 		return "", fmt.Errorf("checksum mismatch (got %s, release says %s); nothing was installed", got, want)
+	}
+	if beforeSwap != nil {
+		if err := beforeSwap(); err != nil {
+			os.Remove(path)
+			return "", err
+		}
 	}
 	report("Signature and checksum verified; installing")
 	installer := c.RunInstaller
@@ -438,20 +500,29 @@ func (c *Checker) SetAutoConfig(cfg AutoConfig) error {
 	dir := c.stateDir
 	c.cfgMu.Unlock()
 
+	var err error
 	if dir != "" {
-		upDir := filepath.Join(dir, "updates")
-		_ = os.MkdirAll(upDir, 0o700)
-		data, err := json.MarshalIndent(cur, "", "  ")
-		if err == nil {
-			_ = os.WriteFile(filepath.Join(upDir, "config.json"), data, 0o600)
-		}
+		err = saveAutoConfig(dir, cur)
 	}
 
 	select {
 	case c.wakeCh <- struct{}{}:
 	default:
 	}
-	return nil
+	return err
+}
+
+// saveAutoConfig writes <stateDir>/updates/config.json atomically.
+func saveAutoConfig(stateDir string, cfg AutoConfig) error {
+	upDir := filepath.Join(stateDir, "updates")
+	if err := os.MkdirAll(upDir, 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return atomicfile.Write(filepath.Join(upDir, "config.json"), data, 0o600)
 }
 
 // autoPass is one background check, and an install when AutoInstall allows it. It holds
@@ -467,21 +538,34 @@ func (c *Checker) autoPass(ctx context.Context, cfg AutoConfig, stateDir string,
 		result = fmt.Sprintf("Up to date (%s)", c.Current)
 	case !cfg.AutoInstall || !st.Installable:
 		result = fmt.Sprintf("New release %s available", st.Latest.Version)
+	case !c.waitIdle(ctx):
+		result = fmt.Sprintf("New release %s available; installing it waits until no background jobs run", st.Latest.Version)
+		if log != nil {
+			log.Info("auto-update: jobs are running, installing at a later check", "version", st.Latest.Version)
+		}
 	default:
 		if log != nil {
 			log.Info("auto-update: installing the new release", "version", st.Latest.Version, "current", c.Current)
 		}
-		msg, err := c.Install(ctx, filepath.Join(stateDir, "updates"), func(step string) {
+		msg, err := c.install(ctx, filepath.Join(stateDir, "updates"), func(step string) {
 			if log != nil {
 				log.Info("auto-update", "status", step)
 			}
+		}, func() error {
+			if c.Busy != nil && c.Busy() {
+				return errBusy
+			}
+			return nil
 		})
-		if err != nil {
+		switch {
+		case errors.Is(err, errBusy):
+			result = fmt.Sprintf("New release %s available; installing it waits until no background jobs run", st.Latest.Version)
+		case err != nil:
 			result, lastErr = fmt.Sprintf("Auto-install failed: %v", err), err.Error()
 			if onActivity != nil {
 				onActivity("update.auto_failed", fmt.Sprintf("Failed to auto-install %s: %v", st.Latest.Version, err))
 			}
-		} else {
+		default:
 			result, installed = fmt.Sprintf("Auto-installed %s: %s", st.Latest.Version, msg), true
 			if onActivity != nil {
 				onActivity("update.auto_success", fmt.Sprintf("Installed %s automatically", st.Latest.Version))
@@ -498,11 +582,37 @@ func (c *Checker) autoPass(ctx context.Context, cfg AutoConfig, stateDir string,
 	cur := c.autoCfg
 	c.cfgMu.Unlock()
 
-	upDir := filepath.Join(stateDir, "updates")
-	_ = os.MkdirAll(upDir, 0o700)
-	if data, err := json.MarshalIndent(cur, "", "  "); err == nil {
-		_ = os.WriteFile(filepath.Join(upDir, "config.json"), data, 0o600)
+	if err := saveAutoConfig(stateDir, cur); err != nil && log != nil {
+		log.Warn("auto-update: save settings", "err", err)
 	}
+}
+
+var errBusy = errors.New("background jobs are running")
+
+// busyPoll and busyWait: how often and how long the auto-updater waits for running jobs
+// to finish before it postpones an install to the next check.
+var (
+	busyPoll = 30 * time.Second
+	busyWait = 30 * time.Minute
+)
+
+// waitIdle waits until Busy reports false (true) or busyWait passes or ctx ends (false).
+func (c *Checker) waitIdle(ctx context.Context) bool {
+	if c.Busy == nil {
+		return true
+	}
+	deadline := time.Now().Add(busyWait)
+	for c.Busy() {
+		if time.Now().After(deadline) {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(busyPoll):
+		}
+	}
+	return true
 }
 
 // StartAutoUpdater runs the periodic GitHub update poller in the background.

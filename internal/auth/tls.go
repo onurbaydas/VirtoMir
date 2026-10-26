@@ -15,6 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // SelfSignedCert loads dir/cert.pem + dir/key.pem, creating them on first use. Browsers
@@ -34,10 +36,10 @@ func SelfSignedCert(dir string) (tls.Certificate, error) {
 	if err != nil {
 		return tls.Certificate{}, err
 	}
-	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+	if err := atomicfile.Write(keyPath, keyPEM, 0o600); err != nil {
 		return tls.Certificate{}, err
 	}
-	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
+	if err := atomicfile.Write(certPath, certPEM, 0o644); err != nil {
 		return tls.Certificate{}, err
 	}
 	return tls.X509KeyPair(certPEM, keyPEM)

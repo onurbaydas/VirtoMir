@@ -3,6 +3,7 @@ package virt
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/digitalocean/go-libvirt"
@@ -332,7 +333,7 @@ func (c *Client) CreateDomain(spec CreateSpec) (CreateResult, error) {
 	var created []libvirt.StorageVol
 	rollback := func() {
 		for _, v := range created {
-			_ = l.StorageVolDelete(v, libvirt.StorageVolDeleteNormal)
+			dropVolume(c.log, l, v)
 		}
 	}
 	switch {
@@ -440,13 +441,13 @@ func copyVolumeInto(l *libvirt.Libvirt, src, pool, name, format string, minBytes
 	}
 	if minBytes > srcCap {
 		if err := l.StorageVolResize(vol, minBytes, 0); err != nil {
-			_ = l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal)
+			dropVolume(slog.Default(), l, vol)
 			return libvirt.StorageVol{}, "", classify(err)
 		}
 	}
 	path, err := l.StorageVolGetPath(vol)
 	if err != nil {
-		_ = l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal)
+		dropVolume(slog.Default(), l, vol)
 		return libvirt.StorageVol{}, "", classify(err)
 	}
 	return vol, path, nil
@@ -459,7 +460,7 @@ func uploadBytes(l *libvirt.Libvirt, pool, name string, data []byte) (libvirt.St
 		return libvirt.StorageVol{}, "", err
 	}
 	if err := l.StorageVolUpload(vol, bytes.NewReader(data), 0, uint64(len(data)), 0); err != nil {
-		_ = l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal)
+		dropVolume(slog.Default(), l, vol)
 		return libvirt.StorageVol{}, "", classify(err)
 	}
 	return vol, path, nil

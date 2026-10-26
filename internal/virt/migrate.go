@@ -252,12 +252,12 @@ func (c *Client) RemoveImage(path string) error {
 	if err != nil {
 		return err
 	}
-	if users := c.diskUsers(l)[path]; len(users) > 0 {
-		return refusedf("%s is still used by %s", path, joinNames(users))
-	}
 	vol, err := l.StorageVolLookupByPath(path)
 	if err != nil {
 		return classify(err)
+	}
+	if err := c.checkVolumeUnused(l, vol, path, path); err != nil {
+		return err
 	}
 	return classify(l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal))
 }

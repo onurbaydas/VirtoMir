@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // Keep is how many versions are kept per machine; older ones are dropped.
@@ -103,11 +105,11 @@ func (s *Store) save(uuid, doc, user, source string) error {
 		return err
 	}
 	id := strconv.FormatInt(s.now().UnixNano(), 10)
-	if err := os.WriteFile(filepath.Join(dir, id+".xml"), []byte(doc), 0o640); err != nil {
+	if err := atomicfile.Write(filepath.Join(dir, id+".xml"), []byte(doc), 0o640); err != nil {
 		return err
 	}
 	meta, _ := json.Marshal(Version{ID: id, Time: s.now().UTC(), User: user, Source: source, Size: len(doc)})
-	if err := os.WriteFile(filepath.Join(dir, id+".json"), meta, 0o640); err != nil {
+	if err := atomicfile.Write(filepath.Join(dir, id+".json"), meta, 0o640); err != nil {
 		return err
 	}
 	s.last[uuid] = doc

@@ -6,6 +6,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
+	"log/slog"
+	"runtime/debug"
 	"slices"
 	"sync"
 	"time"
@@ -36,7 +39,10 @@ const Keep = 50
 type Func func(ctx context.Context, report func(msg string)) (result string, err error)
 
 type Manager struct {
-	ctx  context.Context
+	ctx context.Context
+	// Log receives the stack of a job that panicked (nil: slog.Default()).
+	Log *slog.Logger
+
 	mu   sync.Mutex
 	jobs []*Job // oldest first
 }
@@ -54,11 +60,7 @@ func (m *Manager) Start(kind, title string, fn Func) Job {
 	m.mu.Unlock()
 
 	go func() {
-		res, err := fn(m.ctx, func(msg string) {
-			m.mu.Lock()
-			j.Message = msg
-			m.mu.Unlock()
-		})
+		res, err := m.run(j, fn)
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		now := time.Now().UTC()
@@ -70,6 +72,39 @@ func (m *Manager) Start(kind, title string, fn Func) Job {
 		j.State, j.Message, j.Result = Succeeded, "", res
 	}()
 	return snap
+}
+
+// run calls fn; a panic in it fails the job (and is logged with its stack) instead of
+// taking the whole daemon down.
+func (m *Manager) run(j *Job, fn Func) (res string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log := m.Log
+			if log == nil {
+				log = slog.Default()
+			}
+			log.Error("job panicked", "job", j.ID, "kind", j.Kind, "title", j.Title, "panic", r, "stack", string(debug.Stack()))
+			res, err = "", fmt.Errorf("internal error: %v", r)
+		}
+	}()
+	return fn(m.ctx, func(msg string) {
+		m.mu.Lock()
+		j.Message = msg
+		m.mu.Unlock()
+	})
+}
+
+// Running counts the jobs that have not finished yet.
+func (m *Manager) Running() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, j := range m.jobs {
+		if j.State == Running {
+			n++
+		}
+	}
+	return n
 }
 
 func (m *Manager) Get(id string) (Job, bool) {

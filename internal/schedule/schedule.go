@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 type Kind string
@@ -88,6 +90,10 @@ type Scheduler struct {
 	settings  Settings
 	schedules []Schedule
 	running   map[string]bool
+
+	// OnResult, if set, hears how every run ended (err nil = success), e.g. to raise and
+	// resolve an alert. It is called without the scheduler's lock held.
+	OnResult func(sc Schedule, err error)
 }
 
 // Open loads path. defaultBackupDir is used until an admin picks another location
@@ -110,7 +116,8 @@ func Open(path, defaultBackupDir string, runner Runner, start Starter, log *slog
 		Schedules []Schedule `json:"schedules"`
 	}
 	if err := json.Unmarshal(b, &file); err != nil {
-		return s, fmt.Errorf("schedules file %s: %w", path, err)
+		// Keep the unreadable file: the next save would otherwise replace it with an empty list.
+		return s, atomicfile.Quarantine(path, err)
 	}
 	if file.Settings.BackupDir != "" {
 		s.settings = file.Settings
@@ -135,10 +142,7 @@ func (s *Scheduler) saveLocked() {
 	b, _ := json.MarshalIndent(file, "", "  ")
 	err := os.MkdirAll(filepath.Dir(s.path), 0o750)
 	if err == nil {
-		tmp := s.path + ".tmp"
-		if err = os.WriteFile(tmp, b, 0o600); err == nil {
-			err = os.Rename(tmp, s.path)
-		}
+		err = atomicfile.Write(s.path, b, 0o600)
 	}
 	if err != nil && s.log != nil {
 		s.log.Warn("save schedules", "err", err)
@@ -328,7 +332,14 @@ func (s *Scheduler) tick(ctx context.Context) {
 func (s *Scheduler) launch(_ context.Context, sc Schedule, dir string) {
 	title := map[Kind]string{Snapshots: "Automatic snapshot", Backups: "Automatic backup"}[sc.Kind]
 	s.start(string(sc.Kind), title, func(ctx context.Context, report func(string)) (string, error) {
+		finished := false
+		defer func() {
+			if !finished { // execute panicked: the schedule must not stay "running" for ever
+				s.finish(sc.ID, "", errors.New("internal error (see the virtomird log)"))
+			}
+		}()
 		result, err := s.execute(ctx, sc, dir, report)
+		finished = true
 		s.finish(sc.ID, result, err)
 		return result, err
 	})
@@ -363,12 +374,12 @@ func (s *Scheduler) execute(ctx context.Context, sc Schedule, dir string, report
 		}
 		names, err := s.runner.ListAutoSnapshots(sc.Domain)
 		if err != nil {
-			return name, nil
+			return s.retentionFailed(sc, fmt.Sprintf("took %s", name), err), nil
 		}
 		removed := 0
 		for _, old := range s.expired(sc.Policy(), names) {
 			if err := s.runner.DeleteSnapshot(sc.Domain, old); err != nil {
-				break
+				return s.retentionFailed(sc, fmt.Sprintf("took %s, removed %d old", name, removed), fmt.Errorf("delete %s: %w", old, err)), nil
 			}
 			removed++
 		}
@@ -377,10 +388,22 @@ func (s *Scheduler) execute(ctx context.Context, sc Schedule, dir string, report
 		if err := s.runner.Backup(ctx, dir, sc.Domain, sc.FullEvery, report); err != nil {
 			return "", err
 		}
-		n, _ := s.runner.PruneBackups(dir, sc.Domain, sc.Policy().Keep)
+		n, err := s.runner.PruneBackups(dir, sc.Domain, sc.Policy().Keep)
+		if err != nil {
+			return s.retentionFailed(sc, fmt.Sprintf("backed up, removed %d old", n), err), nil
+		}
 		return fmt.Sprintf("backed up, removed %d old", n), nil
 	}
 	return "", fmt.Errorf("unknown kind %s", sc.Kind)
+}
+
+// retentionFailed is the result of a run whose snapshot or backup was made but whose
+// clean-up of old ones failed: the run succeeded, the result says what was not removed.
+func (s *Scheduler) retentionFailed(sc Schedule, done string, err error) string {
+	if s.log != nil {
+		s.log.Warn("schedule retention failed", "schedule", sc.ID, "kind", sc.Kind, "domain", sc.Domain, "err", err)
+	}
+	return done + "; removing old ones failed: " + err.Error()
 }
 
 // expired is the automatic snapshots (oldest first) the policy no longer keeps. A name that
@@ -404,10 +427,10 @@ func (s *Scheduler) expired(p Policy, names []string) []string {
 
 func (s *Scheduler) finish(id, result string, err error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	delete(s.running, id)
 	i := slices.IndexFunc(s.schedules, func(x Schedule) bool { return x.ID == id })
 	if i < 0 {
+		s.mu.Unlock()
 		return
 	}
 	now := s.now()
@@ -417,6 +440,11 @@ func (s *Scheduler) finish(id, result string, err error) {
 		sc.LastError, sc.LastResult = err.Error(), ""
 	}
 	s.saveLocked()
+	done, hook := *sc, s.OnResult
+	s.mu.Unlock()
+	if hook != nil {
+		hook(done, err)
+	}
 }
 
 func newID() string {

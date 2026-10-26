@@ -191,7 +191,7 @@ func (c *Client) AttachDisk(uuid string, spec DiskSpec) (string, error) {
 	}
 	if err := l.DomainAttachDeviceFlags(d, doc, flags); err != nil {
 		if created != nil {
-			_ = l.StorageVolDelete(*created, libvirt.StorageVolDeleteNormal)
+			dropVolume(c.log, l, *created)
 		}
 		return "", classify(err)
 	}

@@ -81,6 +81,9 @@ func (c *Client) DomainAction(uuid string, action Action) error {
 		if err := c.guardTemplate(l, d, "start"); err != nil {
 			return err
 		}
+		if err := c.leases.mustStayOff(formatUUID(d.UUID)); err != nil {
+			return err
+		}
 		err = l.DomainCreate(d)
 	case ActionShutdown, ActionReboot:
 		switch {

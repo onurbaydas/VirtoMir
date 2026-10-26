@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/go-ldap/ldap/v3" // MIT
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // External sign-in (ADR-0023): LDAP (user name + password, checked after the local
@@ -162,11 +164,7 @@ func (e *External) saveLocked() error {
 	if err := os.MkdirAll(filepath.Dir(e.path), 0o750); err != nil {
 		return err
 	}
-	tmp := e.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, e.path)
+	return atomicfile.Write(e.path, b, 0o600)
 }
 
 // Config returns the configuration; with redact, secrets are replaced by a placeholder.

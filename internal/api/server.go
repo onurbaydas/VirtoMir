@@ -608,6 +608,7 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 	status := http.StatusBadGateway
 	var opErr *virt.OperationError
 	var invErr *virt.InvalidError
+	var busyErr *virt.BusyError
 	switch {
 	case errors.Is(err, virt.ErrNotFound), errors.Is(err, zfsrep.ErrNotFound), errors.Is(err, drs.ErrNotFound), errors.Is(err, placement.ErrNotFound), errors.Is(err, dr.ErrNotFound), errors.Is(err, gpool.ErrNotFound), errors.Is(err, sdn.ErrNotFound),
 		errors.Is(err, ceph.ErrNotFound), errors.Is(err, storageeff.ErrNotFound), errors.Is(err, physnet.ErrNotFound), errors.Is(err, k8s.ErrNotFound), errors.Is(err, baremetal.ErrNotFound):
@@ -616,7 +617,7 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 		errors.Is(err, ceph.ErrInvalid), errors.Is(err, ceph.ErrDiskNotEmpty), errors.Is(err, storageeff.ErrInvalid),
 		errors.Is(err, physnet.ErrInvalid), errors.Is(err, k8s.ErrInvalid), errors.Is(err, baremetal.ErrInvalid):
 		status = http.StatusUnprocessableEntity
-	case errors.As(err, &opErr), errors.Is(err, zfsrep.ErrBusy), errors.Is(err, dr.ErrBusy), errors.Is(err, dr.ErrConflict), errors.Is(err, gpool.ErrExists), errors.Is(err, gpool.ErrBusy), errors.Is(err, sdn.ErrExists), errors.Is(err, sdn.ErrBusy),
+	case errors.As(err, &opErr), errors.As(err, &busyErr), errors.Is(err, zfsrep.ErrBusy), errors.Is(err, dr.ErrBusy), errors.Is(err, dr.ErrConflict), errors.Is(err, gpool.ErrExists), errors.Is(err, gpool.ErrBusy), errors.Is(err, sdn.ErrExists), errors.Is(err, sdn.ErrBusy),
 		errors.Is(err, ceph.ErrExists), errors.Is(err, ceph.ErrBusy),
 		errors.Is(err, physnet.ErrExists), errors.Is(err, physnet.ErrBusy), errors.Is(err, physnet.ErrConflict),
 		errors.Is(err, k8s.ErrExists), errors.Is(err, k8s.ErrBusy), errors.Is(err, baremetal.ErrExists), errors.Is(err, baremetal.ErrBusy):

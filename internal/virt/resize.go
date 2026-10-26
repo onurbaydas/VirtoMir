@@ -85,7 +85,11 @@ func (c *Client) ResizeVolume(pool, name string, sizeGiB uint64) error {
 	if err != nil {
 		return classify(err)
 	}
-	if users := c.diskUsers(l)[path]; len(users) > 0 {
+	all, err := c.diskUsers(l)
+	if err != nil {
+		return refusedf("Could not check which machines use %s: %v", name, err)
+	}
+	if users := all[path]; len(users) > 0 {
 		return refusedf("%s is used by %s: resize it from the machine's Hardware tab.", name, strings.Join(users, ", "))
 	}
 	_, capacity, _, err := l.StorageVolGetInfo(v)
