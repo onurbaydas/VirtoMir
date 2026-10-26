@@ -1245,8 +1245,36 @@ export interface ConfigVersion {
   time: string
   /** Who changed it through VirtoMir; empty for changes made outside (virsh, other tools). */
   user?: string
-  source: 'virtomir' | 'outside' | 'first seen'
+  source: 'virtomir' | 'outside' | 'first seen' | 'started'
+  /** How the change was noticed: from a libvirt event, the slow periodic check, or made here. Absent in old versions. */
+  via?: 'api' | 'event' | 'scan'
+  /** The running configuration, not the saved definition: it cannot be restored. */
+  live?: boolean
   size: number
+}
+
+/** One way the running machine differs from its saved definition. */
+export interface LiveChange {
+  kind: 'added' | 'removed' | 'changed'
+  what: string
+  live?: string
+  saved?: string
+}
+
+/** A definition file that was edited directly but that libvirt has not loaded. */
+export interface ConfigDrift {
+  fileChanged: boolean
+  file: string
+  modified: string
+}
+
+export interface ConfigHistory {
+  /** Saved definitions, newest first. */
+  versions: ConfigVersion[]
+  /** Running configurations of the machine, newest first. */
+  live?: ConfigVersion[]
+  liveChanges?: LiveChange[]
+  drift?: ConfigDrift
 }
 
 export interface ClusterMember {
@@ -1596,8 +1624,10 @@ export const api = {
   setMachineProject: (uuid: string, project: string) => request<void>('PUT', `${domainPath(uuid)}/project`, { project }),
   attachHostdev: (uuid: string, spec: { type: 'pci' | 'usb'; address?: string; vendorId?: string; productId?: string }) =>
     request<{ liveError: string }>('POST', `${domainPath(uuid)}/hostdevs`, spec),
-  configVersions: async (uuid: string) =>
-    (await request<{ versions: ConfigVersion[] }>('GET', `${domainPath(uuid)}/config-history`)).versions,
+  configHistory: (uuid: string) => request<ConfigHistory>('GET', `${domainPath(uuid)}/config-history`),
+  /** Defines the machine from its hand-edited definition file (admin). */
+  loadDefinitionFile: (uuid: string) =>
+    request<{ appliesOnNextBoot: boolean }>('POST', `${domainPath(uuid)}/config-history/load-file`),
   configVersion: async (uuid: string, id: string) =>
     (await request<{ xml: string }>('GET', `${domainPath(uuid)}/config-history/${enc(id)}`)).xml,
   revertConfig: (uuid: string, id: string) =>

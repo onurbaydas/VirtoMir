@@ -13,6 +13,7 @@ func (s *Server) configHistoryRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/config-history", s.listConfigVersions)
 	mux.HandleFunc("GET /api/v1/domains/{uuid}/config-history/{id}", s.getConfigVersion)
 	mux.HandleFunc("POST /api/v1/domains/{uuid}/config-history/{id}/revert", s.revertConfigVersion)
+	mux.HandleFunc("POST /api/v1/domains/{uuid}/config-history/load-file", s.loadDefinitionFile)
 }
 
 func (s *Server) noConfigHistory(w http.ResponseWriter) bool {
@@ -27,12 +28,50 @@ func (s *Server) listConfigVersions(w http.ResponseWriter, r *http.Request) {
 	if s.noConfigHistory(w) {
 		return
 	}
-	vs, err := s.confighist.List(r.PathValue("uuid"))
+	uuid := r.PathValue("uuid")
+	vs, err := s.confighist.List(uuid)
 	if err != nil {
 		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
-	s.writeJSON(w, http.StatusOK, map[string]any{"versions": vs})
+	out := map[string]any{"versions": vs}
+	// Running configuration: its versions, and how it differs from the definition now
+	// (devices hot-plugged or removed live are gone at the next shutdown).
+	if live, err := s.confighist.ListLive(uuid); err == nil {
+		out["live"] = live
+	}
+	if changes, err := s.confighist.LiveDiff(uuid); err == nil && len(changes) > 0 {
+		out["liveChanges"] = changes
+	}
+	if s.configDrift != nil {
+		if d, ok := s.configDrift.Drift(uuid); ok {
+			out["drift"] = d
+		}
+	}
+	s.writeJSON(w, http.StatusOK, out)
+}
+
+// loadDefinitionFile defines a machine from its definition file after it was edited by
+// hand (what "virsh define <file>" does), so libvirt uses it without a restart.
+func (s *Server) loadDefinitionFile(w http.ResponseWriter, r *http.Request) {
+	if s.configDrift == nil {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "definition files are not watched on this host"})
+		return
+	}
+	uuid := r.PathValue("uuid")
+	_, doc, err := s.configDrift.EditedFile(uuid)
+	if err != nil {
+		s.writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	res, err := s.backend.DefineXML(uuid, doc)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.configDrift.Recheck(uuid)
+	s.configDrift.Check() // so the next history response no longer warns
+	s.done(w, http.StatusOK, res)
 }
 
 func (s *Server) getConfigVersion(w http.ResponseWriter, r *http.Request) {
@@ -54,6 +93,10 @@ func (s *Server) revertConfigVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uuid := r.PathValue("uuid")
+	if confighist.IsLiveID(r.PathValue("id")) {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "a running configuration cannot be restored as the definition; restore one of the saved definitions"})
+		return
+	}
 	doc, err := s.confighist.Get(uuid, r.PathValue("id"))
 	if errors.Is(err, confighist.ErrNoVersion) {
 		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})

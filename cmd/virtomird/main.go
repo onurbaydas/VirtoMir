@@ -239,7 +239,10 @@ func run(c config, log *slog.Logger) error {
 		log.Warn("configuration history", "err", err)
 	} else {
 		opts.ConfigHistory = ch
-		safeGo(ctx, log, "configuration history", func(ctx context.Context) { sweepConfig(ctx, ch) })
+		safeGo(ctx, log, "configuration history", func(ctx context.Context) { watchConfig(ctx, client, ch, log) })
+		drift := confighist.NewDriftWatcher(confighist.DefaultXMLDir, client, log)
+		opts.ConfigDrift = drift
+		safeGo(ctx, log, "definition files", drift.Run)
 	}
 	if q, err := quota.Open(filepath.Join(c.stateDir, "quotas.json")); q == nil {
 		log.Warn("quotas", "err", err)
@@ -694,16 +697,41 @@ func (a leaseAlerts) Notice(domain, title, message string) {
 	a.e.Notice(title+" ("+domain+")", message)
 }
 
-// sweepConfig notices definition changes made outside VirtoMir (virsh, other tools).
-func sweepConfig(ctx context.Context, ch *confighist.Store) {
-	t := time.NewTicker(20 * time.Second)
-	defer t.Stop()
-	for {
-		ch.Sweep()
+// watchConfig keeps the configuration history (ADR-0021) current from libvirt's events, a
+// moment after each change. Events are lost while the connection is down, so every
+// (re)subscription starts with a full comparison, and a slow scan runs as a safety net.
+func watchConfig(ctx context.Context, client *virt.Client, ch *confighist.Store, log *slog.Logger) {
+	deb := confighist.NewDebouncer(time.Second, ch.Changed)
+	defer deb.Stop()
+	go func() {
+		t := time.NewTicker(5 * time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				ch.Sweep()
+			}
+		}
+	}()
+	for ctx.Err() == nil {
+		events, err := client.ConfigEvents(ctx)
+		if err != nil {
+			log.Debug("configuration events unavailable, retrying", "err", err)
+		} else {
+			ch.Sweep() // catch up on what happened before or between subscriptions
+			for ev := range events {
+				if ev.Stopped {
+					ch.Forget(ev.UUID)
+					continue
+				}
+				deb.Add(ev.UUID, ev.Persistent, ev.Live)
+			}
+		}
 		select {
 		case <-ctx.Done():
-			return
-		case <-t.C:
+		case <-time.After(5 * time.Second):
 		}
 	}
 }

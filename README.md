@@ -63,7 +63,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 - **Settings form** for CPU (topology, model), memory (balloon), boot order, firmware — with a **"review changes" XML diff** before saving; vCPUs and memory are applied live where possible
 - **Tuning**: CPU and emulator pinning, huge pages, NUMA memory policy
 - **XML editor** for everything else, validated by libvirt
-- **Configuration history**: every version of a machine's definition — also changes made with `virsh` — with a diff and one-click restore
+- **Configuration history**: every version of a machine's definition, recorded from libvirt's events — also changes made with `virsh`, live-only changes on running machines, and a warning when `/etc/libvirt/qemu/*.xml` was edited but not loaded — with a diff and one-click restore
 - **Hardware**: add/remove disks and network adapters (hot-plug), insert/eject ISOs, **grow disks**
 - **Storage QoS & SLAs**: guarantee and cap I/O bandwidth (`read_bytes_sec`, `write_bytes_sec`) and IOPS (`read_iops_sec`, `write_iops_sec`, burst ceilings) per virtual disk using QEMU `<iotune>`, applied live without guest downtime
 - **Confidential Computing**: machines with encrypted memory (**AMD SEV / SEV-SNP**, **Intel TDX**) on hosts whose CPU and firmware offer it; VirtoMir reads what the host supports from libvirt and only offers that
