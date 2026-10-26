@@ -130,7 +130,7 @@
   </section>
 {/if}
 
-<Dialog open={dlg} title={disabling ? 'Turn off two-step sign-in' : recovery.length ? 'Save your recovery codes' : t('Turn on two-step sign-in')} onclose={() => (dlg = false)} width={480}>
+<Dialog open={dlg} title={disabling ? t('Turn off two-step sign-in') : recovery.length ? t('Save your recovery codes') : t('Turn on two-step sign-in')} onclose={() => (dlg = false)} width={480}>
   {#if recovery.length}
     <div class="rec">
       <p class="warn">{t('Each code signs you in once if your phone is gone. Keep them somewhere safe — they are not shown again.')}</p>
@@ -146,7 +146,7 @@
           <ol class="steps">
             <li>{t('Scan this with your authenticator app:')}</li>
           </ol>
-          <img class="qr" src={setup.qr} alt="QR code for the authenticator app" width="200" height="200" />
+          <img class="qr" src={setup.qr} alt={t('QR code for the authenticator app')} width="200" height="200" />
           <p class="hint">{t('Can\'t scan? Enter this key:')} <span class="mono key">{setup.secret.replace(/(.{4})/g, '$1 ').trim()}</span></p>
           <ol class="steps" start="2"><li>{t('Enter the 6-digit code it shows:')}</li></ol>
         {:else if !formErr}
@@ -168,7 +168,7 @@
     {:else}
       <button class="ui-btn ghost" onclick={() => (dlg = false)}>{t('Cancel')}</button>
       <button class="ui-btn {disabling ? 'danger' : 'primary'}" form="tf-form" disabled={busy || code.trim().length < 6}>
-        {busy ? 'Checking…' : disabling ? 'Turn off' : 'Turn on'}
+        {busy ? t('Checking…') : disabling ? t('Turn off') : t('Turn on')}
       </button>
     {/if}
   {/snippet}

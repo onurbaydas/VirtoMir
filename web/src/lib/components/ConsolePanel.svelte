@@ -54,7 +54,7 @@
     switching = true
     try {
       await api.put(`/api/v1/domains/${encodeURIComponent(d.uuid)}/display`, { protocol: to })
-      toasts.push({ kind: 'info', title: t('{name} uses {v} from its next start', { name: d.name, v: to.toUpperCase() }), detail: running ? 'Shut it down and start it again (a reboot inside the guest is not enough).' : undefined })
+      toasts.push({ kind: 'info', title: t('{name} uses {v} from its next start', { name: d.name, v: to.toUpperCase() }), detail: running ? t('Shut it down and start it again (a reboot inside the guest is not enough).') : undefined })
       await load()
     } catch (e) {
       toasts.push({ kind: 'error', title: t('Display not changed'), detail: errorText(e) })

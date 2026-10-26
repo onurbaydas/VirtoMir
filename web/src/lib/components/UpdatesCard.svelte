@@ -84,7 +84,7 @@
 <section class="ui-panel card">
   <header>
     <h2>{t('Updates')}</h2>
-    <button class="ui-btn sm ghost" disabled={checking} onclick={() => check(true)}><RefreshCw size={13} /> {checking ? 'Checking…' : t('Check now')}</button>
+    <button class="ui-btn sm ghost" disabled={checking} onclick={() => check(true)}><RefreshCw size={13} /> {checking ? t('Checking…') : t('Check now')}</button>
   </header>
   {#if error}<div class="ui-error-box">{error}</div>{/if}
   {#if st}

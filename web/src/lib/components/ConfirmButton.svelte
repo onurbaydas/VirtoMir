@@ -3,6 +3,7 @@
   // with the consequence spelled out), the second runs it. Disarms itself after a few seconds.
   import type { Component } from 'svelte'
   import { errorText } from '../api'
+  import { t } from '../i18n.svelte'
   import { toasts } from '../toast.svelte'
 
   interface Props {
@@ -51,5 +52,5 @@
   onblur={() => (armed = false)}
 >
   {#if Icon}<Icon size={size === 'sm' ? 14 : 15} />{/if}
-  {busy ? 'Working…' : armed ? confirm : label}
+  {busy ? t('Working…') : armed ? confirm : label}
 </button>

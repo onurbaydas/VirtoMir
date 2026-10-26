@@ -24,12 +24,12 @@
       <h1>{t('Virtual Machines')}</h1>
     </div>
     <div class="chips">
-      <span class="chip on" title={t('Running machines')}>● {running.length} RUNNING</span>
+      <span class="chip on" title={t('Running machines')}>● {t('{n} running', { n: running.length })}</span>
       {#if paused.length}
-        <span class="chip paused" title={t('Paused machines')}>⏸ {paused.length} PAUSED</span>
+        <span class="chip paused" title={t('Paused machines')}>⏸ {t('{n} paused', { n: paused.length })}</span>
       {/if}
-      <span class="chip" title={t('Stopped machines')}>○ {stopped.length} STOPPED</span>
-      <span class="chip" title={t('Total defined guests')}>{domains.length} TOTAL</span>
+      <span class="chip" title={t('Stopped machines')}>○ {t('{n} stopped', { n: stopped.length })}</span>
+      <span class="chip" title={t('Total defined guests')}>{t('{n} in total', { n: domains.length })}</span>
     </div>
   </div>
   <div class="head-right">

@@ -42,7 +42,7 @@
   )
 </script>
 
-<svelte:head><title>{host?.hostname ? `${host.hostname} · VirtoMir` : 'VirtoMir'}</title></svelte:head>
+<svelte:head><title>{host?.hostname ? t('{host} · VirtoMir', { host: host.hostname }) : 'VirtoMir'}</title></svelte:head>
 
 <header class="page-head">
   <div>

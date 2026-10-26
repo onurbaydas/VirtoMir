@@ -79,14 +79,14 @@
         a={{ label: t('Read'), data: io.diskRead, color: '--accent' }}
         b={{ label: t('Write'), data: io.diskWrite, color: '--accent-2' }}
         tick={live.tick}
-        empty={d.disks === undefined ? 'Collecting…' : 'No disks'}
+        empty={d.disks === undefined ? t('Collecting…') : t('No disks')}
       />
       <IOChart
         title={t('Network')}
         a={{ label: t('Receive'), data: io.netRx, color: '--accent' }}
         b={{ label: t('Send'), data: io.netTx, color: '--accent-2' }}
         tick={live.tick}
-        empty={d.nets === undefined ? 'Collecting…' : t('No network adapters')}
+        empty={d.nets === undefined ? t('Collecting…') : t('No network adapters')}
       />
     </div>
 

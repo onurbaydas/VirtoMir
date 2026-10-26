@@ -3,6 +3,7 @@
 
 import { api, ApiError, type Action, type Domain, type DomainState, type HostInfo, type Snapshot } from './api'
 import { toasts } from './toast.svelte'
+import { t } from './i18n.svelte'
 
 /** Points kept for live charts (1 per second → one minute). */
 export const HISTORY = 60
@@ -29,14 +30,14 @@ function sum<T>(xs: T[] | undefined, f: (x: T) => number): number {
 
 /** Labels for actions: button text and the in-progress text. */
 export const ACTIONS: Record<Action, { label: string; progress: string }> = {
-  start: { label: 'Start', progress: 'Starting…' },
-  shutdown: { label: 'Shut down', progress: 'Shutting down…' },
-  reboot: { label: 'Reboot', progress: 'Rebooting…' },
-  'force-off': { label: 'Force off', progress: 'Powering off…' },
-  pause: { label: 'Pause', progress: 'Pausing…' },
-  resume: { label: 'Resume', progress: 'Resuming…' },
-  reset: { label: 'Reset', progress: 'Resetting…' },
-  save: { label: 'Save to disk', progress: 'Saving memory…' },
+  start: { label: t('Start'), progress: t('Starting…') },
+  shutdown: { label: t('Shut down'), progress: t('Shutting down…') },
+  reboot: { label: t('Reboot'), progress: t('Rebooting…') },
+  'force-off': { label: t('Force off'), progress: t('Powering off…') },
+  pause: { label: t('Pause'), progress: t('Pausing…') },
+  resume: { label: t('Resume'), progress: t('Resuming…') },
+  reset: { label: t('Reset'), progress: t('Resetting…') },
+  save: { label: t('Save to disk'), progress: t('Saving memory…') },
 }
 
 /** State an action is finished at; reboot has no visible end state. */
@@ -196,9 +197,9 @@ class Live {
         p.nudged = true
         toasts.push({
           kind: 'warn',
-          title: `${d.name} is still running`,
-          detail: 'The guest did not react to the shutdown request.',
-          action: { label: 'Force off', danger: true, run: () => this.act(d, 'force-off') },
+          title: t('{name} is still running', { name: d.name }),
+          detail: t('The guest did not react to the shutdown request.'),
+          action: { label: t('Force off'), danger: true, run: () => this.act(d, 'force-off') },
         })
       }
     }
@@ -212,7 +213,7 @@ class Live {
       delete this.pending[d.uuid]
       toasts.push({
         kind: 'error',
-        title: `${ACTIONS[action].label} failed for ${d.name}`,
+        title: t('{action} failed for {name}', { action: ACTIONS[action].label, name: d.name }),
         detail: e instanceof ApiError ? e.message : String(e),
       })
     }

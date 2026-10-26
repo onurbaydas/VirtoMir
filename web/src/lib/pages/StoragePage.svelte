@@ -305,7 +305,7 @@
         <span class="p-path mono">{p.path ?? p.type}</span>
         {#if p.active}
           <span class="bar"><span style:width="{usedPct(p)}%" class:full={usedPct(p) > 90}></span></span>
-          <span class="p-sub num">{formatBytes(p.availableBytes)} free of {formatBytes(p.capacityBytes)} · {plural(p.volumes, 'volume')}</span>
+          <span class="p-sub num">{t('{free} free of {size}', { free: formatBytes(p.availableBytes), size: formatBytes(p.capacityBytes) })} · {plural(p.volumes, 'volume')}</span>
         {/if}
       </button>
     {/each}
@@ -371,7 +371,7 @@
                 {#if v.format === 'iso'}<Disc size={15} />{:else}<HardDrive size={15} />{/if}
                 <span class="titles">
                   <span class="vn">{v.name}</span>
-                  <span class="vp mono" title={v.path}>{v.backing ? `overlay of ${v.backing}` : v.path}</span>
+                  <span class="vp mono" title={v.path}>{v.backing ? t('overlay of {backing}', { backing: v.backing }) : v.path}</span>
                 </span>
               </span>
               <span role="cell" class="muted">{fmtLabel(v)}</span>
@@ -390,7 +390,7 @@
                   confirm={t('Delete for good?')}
                   icon={Trash}
                   disabled={v.usedBy.length > 0}
-                  title={v.usedBy.length ? 'In use by a machine' : t('Delete this volume')}
+                  title={v.usedBy.length ? t('In use by a machine') : t('Delete this volume')}
                   failure={t('Could not delete {name}', { name: v.name })}
                   run={async () => {
                     await api.deleteVolume(current!.name, v.name)
@@ -437,7 +437,7 @@
   </form>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={() => (volDlg = false)}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="vol-form" disabled={vBusy}>{vBusy ? 'Creating…' : t('Create volume')}</button>
+    <button class="ui-btn primary" form="vol-form" disabled={vBusy}>{vBusy ? t('Creating…') : t('Create volume')}</button>
   {/snippet}
 </Dialog>
 
@@ -452,7 +452,7 @@
   </form>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={() => (growVol = null)}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="grow-form" disabled={growBusy}>{growBusy ? 'Growing…' : 'Grow'}</button>
+    <button class="ui-btn primary" form="grow-form" disabled={growBusy}>{growBusy ? t('Growing…') : t('Grow')}</button>
   {/snippet}
 </Dialog>
 
@@ -541,22 +541,22 @@
     {/if}
     {#if pType === 'dir' || pType === 'netfs'}
     <label class="ui-field">
-      <span class="label">{pType === 'netfs' ? 'Mount at' : 'Directory'}</span>
+      <span class="label">{pType === 'netfs' ? t('Mount at') : t('Directory')}</span>
       <input class="ui-input mono" bind:value={pPath} placeholder={pType === 'netfs' ? '/var/lib/libvirt/shared' : '/srv/vm-images'} required />
-      <span class="hint">{pType === 'netfs' ? 'Mounted now and on every boot (the host needs the NFS client, e.g. nfs-common).' : t('Created if it does not exist. The pool starts now and on every boot.')}</span>
+      <span class="hint">{pType === 'netfs' ? t('Mounted now and on every boot (the host needs the NFS client, e.g. nfs-common).') : t('Created if it does not exist. The pool starts now and on every boot.')}</span>
     </label>
     {/if}
     {#if cluster.clustered && !localDisks}
       <label class="check">
         <input type="checkbox" bind:checked={pEverywhere} />
-        <span>{t('Create it on every host of the cluster{v}', { v: pType === 'netfs' ? ' — machines on it can then move between hosts without copying their disks' : '' })}</span>
+        <span>{t('Create it on every host of the cluster{v}', { v: pType === 'netfs' ? t(' — machines on it can then move between hosts without copying their disks') : '' })}</span>
       </label>
     {/if}
     {#if pErr}<div class="ui-error-box">{pErr}</div>{/if}
   </form>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={() => (poolDlg = false)}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="pool-form" disabled={pBusy}>{pBusy ? 'Creating…' : t('Create pool')}</button>
+    <button class="ui-btn primary" form="pool-form" disabled={pBusy}>{pBusy ? t('Creating…') : t('Create pool')}</button>
   {/snippet}
 </Dialog>
 

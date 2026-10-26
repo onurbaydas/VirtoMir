@@ -11,7 +11,7 @@
   import { track } from '../jobs'
   import { TIERS, eff, type Tier } from '../storageeff'
   import { activePools, allVolumes, isISO, type PoolVolume } from '../media'
-  import { formatBytes } from '../format'
+  import { formatBytes, plural } from '../format'
   import { machineHref, router } from '../router.svelte'
   import { toasts } from '../toast.svelte'
   import { cluster } from '../cluster.svelte'
@@ -158,7 +158,7 @@
   const rename = () =>
     run(async () => {
       await api.rename(detail.uuid, newName)
-      toasts.push({ kind: 'info', title: `Renamed to ${newName}` })
+      toasts.push({ kind: 'info', title: t('Renamed to {name}', { name: newName }) })
       onchange()
       onclose()
     })
@@ -176,7 +176,7 @@
       const job = await api.clone(detail.uuid, newName)
       onclose()
       track(job, {
-        success: `${newName} is ready`,
+        success: t('{name} is ready', { name: newName }),
         onSuccess: (j) => j.result && router.navigate(machineHref(j.result)),
       })
     })
@@ -202,7 +202,7 @@
       const job = await api.move(detail.uuid, moveHost, movePool)
       onclose()
       track(job, {
-        success: `${detail.name} is now on ${target.name}`,
+        success: t('{name} is now on {host}', { name: detail.name, host: target.name }),
         onSuccess: () => router.go(target.self ? null : target.id, `/machines/${detail.uuid}`),
       })
     })
@@ -221,7 +221,7 @@
         detail: r.liveError
           ? t('Saved for the next start; it could not be added live: {liveError}', { liveError: r.liveError })
           : active
-            ? 'Added live and for the next start.'
+            ? t('Added live and for the next start.')
             : t('The machine gets it from its next start.'),
       })
       onchange()
@@ -234,11 +234,11 @@
       const kept = res.keptVolumes.map((k) => `${k.path} (${k.reason})`).join(', ')
       toasts.push({
         kind: kept ? 'warn' : 'info',
-        title: `${detail.name} deleted`,
+        title: t('{name} deleted', { name: detail.name }),
         detail: res.removedVolumes.length
-          ? `Removed ${res.removedVolumes.length} disk${res.removedVolumes.length > 1 ? 's' : ''}.${kept ? ' Kept: ' + kept : ''}`
+          ? t('Removed {disks}.', { disks: plural(res.removedVolumes.length, 'disk') }) + (kept ? ' ' + t('Kept: {list}', { list: kept }) : '')
           : kept
-            ? 'Kept: ' + kept
+            ? t('Kept: {list}', { list: kept })
             : undefined,
       })
       onclose()
@@ -253,8 +253,8 @@
       else res = await api.attachDisk(detail.uuid, { device: 'cdrom', path: isoPath || undefined })
       toasts.push({
         kind: 'info',
-        title: `Added ${res.target}`,
-        detail: active ? 'Hot-plugged into the running machine.' : undefined,
+        title: t('Added {target}', { target: res.target }),
+        detail: active ? t('Hot-plugged into the running machine.') : undefined,
       })
       onchange()
       onclose()
@@ -274,7 +274,7 @@
     run(async () => {
       if (!drive?.target) return
       await api.changeMedia(detail.uuid, drive.target, source)
-      toasts.push({ kind: 'info', title: source ? `Inserted ${source.split('/').pop()}` : `Ejected ${drive.title}` })
+      toasts.push({ kind: 'info', title: source ? t('Inserted {name}', { name: source.split('/').pop() ?? source }) : t('Ejected {name}', { name: drive.title }) })
       onchange()
       onclose()
     })
@@ -409,7 +409,7 @@
   {/snippet}
 </Dialog>
 
-<Dialog open={which === 'move'} title={t('Move {name}', { name: detail.name })} subtitle={active ? 'Live migration: it keeps running' : t('To another host of this cluster')} {onclose}>
+<Dialog open={which === 'move'} title={t('Move {name}', { name: detail.name })} subtitle={active ? t('Live migration: it keeps running') : t('To another host of this cluster')} {onclose}>
   <form id="move" class="form" onsubmit={(e) => (e.preventDefault(), move())}>
     {#if targets.length === 0}
       <div class="ui-error-box">{t('No other host of the cluster is reachable right now.')}</div>
@@ -445,7 +445,7 @@
   </form>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="move" disabled={busy || !moveHost || (!active && !movePool)}>{active ? 'Migrate live' : 'Move'}</button>
+    <button class="ui-btn primary" form="move" disabled={busy || !moveHost || (!active && !movePool)}>{active ? t('Migrate live') : t('Move')}</button>
   {/snippet}
 </Dialog>
 
@@ -499,7 +499,7 @@
 </Dialog>
 
 
-<Dialog open={which === 'disk'} title={t('Add storage')} subtitle={active ? 'Hot-plugged into the running machine and kept for the next boot' : undefined} {onclose} width={520}>
+<Dialog open={which === 'disk'} title={t('Add storage')} subtitle={active ? t('Hot-plugged into the running machine and kept for the next boot') : undefined} {onclose} width={520}>
   <form id="disk" class="form" onsubmit={(e) => (e.preventDefault(), addDisk())}>
     <div class="seg" role="radiogroup" aria-label={t('What to add')}>
       <label class:on={diskMode === 'new'}><input type="radio" bind:group={diskMode} value="new" /> {t('New disk')}</label>
@@ -553,7 +553,7 @@
   </form>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="disk" disabled={busy || (diskMode === 'existing' && !existing)}>{busy ? 'Adding…' : 'Add'}</button>
+    <button class="ui-btn primary" form="disk" disabled={busy || (diskMode === 'existing' && !existing)}>{busy ? t('Adding…') : t('Add')}</button>
   {/snippet}
 </Dialog>
 
@@ -586,7 +586,7 @@
   </form>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="nic" disabled={busy || !nicChoice}>{busy ? 'Adding…' : t('Add adapter')}</button>
+    <button class="ui-btn primary" form="nic" disabled={busy || !nicChoice}>{busy ? t('Adding…') : t('Add adapter')}</button>
   {/snippet}
 </Dialog>
 
@@ -595,13 +595,13 @@
     <label class="ui-field">
       <span class="label">{t('New size (GiB)')}</span>
       <input class="ui-input" type="number" min={Math.floor(currentGiB) + 1} max="65536" bind:value={growGiB} />
-      <span class="hint">{t('Currently {v}. Disks can only grow — shrinking would destroy data.{v2}', { v: currentGiB ? `${currentGiB.toFixed(1)} GiB` : 'unknown', v2: active ? ' The running machine sees the new size immediately.' : '' })}</span>
+      <span class="hint">{t('Currently {v}. Disks can only grow — shrinking would destroy data.{v2}', { v: currentGiB ? `${currentGiB.toFixed(1)} GiB` : t('unknown'), v2: active ? ' ' + t('The running machine sees the new size immediately.') : '' })}</span>
     </label>
     {#if error}<div class="ui-error-box">{error}</div>{/if}
   </form>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="grow" disabled={busy || growGiB <= currentGiB}>{busy ? 'Growing…' : t('Grow disk')}</button>
+    <button class="ui-btn primary" form="grow" disabled={busy || growGiB <= currentGiB}>{busy ? t('Growing…') : t('Grow disk')}</button>
   {/snippet}
 </Dialog>
 
@@ -656,7 +656,7 @@
   {/snippet}
 </Dialog>
 
-<Dialog open={which === 'qos'} title={t('Storage QoS & SLA: {v}', { v: drive?.title ?? 'Disk' })} subtitle={t('Limit IOPS and throughput to prevent noisy-neighbor starvation.')} {onclose}>
+<Dialog open={which === 'qos'} title={t('Storage QoS & SLA: {v}', { v: drive?.title ?? t('Disk') })} subtitle={t('Limit IOPS and throughput to prevent noisy-neighbor starvation.')} {onclose}>
   <form id="qos" class="form" onsubmit={(e) => (e.preventDefault(), saveQoS())}>
     <div class="row">
       <label class="ui-field">
@@ -697,7 +697,7 @@
 </Dialog>
 
 
-<Dialog open={which === 'media'} title={t('{v}: media', { v: drive?.title ?? 'Drive' })} subtitle={drive?.summary} {onclose}>
+<Dialog open={which === 'media'} title={t('{v}: media', { v: drive?.title ?? t('Drive') })} subtitle={drive?.summary} {onclose}>
   <div class="form">
     <label class="ui-field">
       <span class="label">{t('Insert image')}</span>

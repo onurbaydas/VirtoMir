@@ -29,7 +29,7 @@
     {#if onselect}
       <input class="sel" type="checkbox" checked={selected} aria-label={t('Select {name}', { name: d.name })} onchange={(e) => onselect(e.currentTarget.checked)} />
     {/if}
-    <span class="avatar" class:on={active} title={d.template ? 'Template' : d.kind === 'container' ? 'Container' : undefined}>
+    <span class="avatar" class:on={active} title={d.template ? t('Template') : d.kind === 'container' ? t('Container') : undefined}>
       {#if d.template}
         <LayoutTemplate size={16} />
       {:else if d.kind === 'container'}
@@ -75,7 +75,7 @@
 
   <div class="metric num" role="cell" title={t('Virtual CPUs')}>{plural(d.vcpus, 'vCPU')}</div>
 
-  <div class="metric num" role="cell" title={d.memoryKiB === d.maxMemoryKiB ? 'Memory' : t('Current / maximum memory (balloon)')}>{memLabel}</div>
+  <div class="metric num" role="cell" title={d.memoryKiB === d.maxMemoryKiB ? t('Memory') : t('Current / maximum memory (balloon)')}>{memLabel}</div>
 
   <div class="cpu" role="cell">
     {#if active}

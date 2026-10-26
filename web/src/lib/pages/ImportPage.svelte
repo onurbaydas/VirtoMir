@@ -105,7 +105,7 @@
       </div>
       {#if progress !== null}
         <div class="bar" title={t('Uploading')}><span style:width="{progress * 100}%"></span></div>
-        <span class="hint">{progress < 1 ? `Uploading… ${Math.round(progress * 100)} %` : t('Converting the disks…')}</span>
+        <span class="hint">{progress < 1 ? t('Uploading… {pct} %', { pct: Math.round(progress * 100) }) : t('Converting the disks…')}</span>
       {/if}
       {#if ovaErr}<div class="ui-error-box">{ovaErr}</div>{/if}
       <div class="actions">

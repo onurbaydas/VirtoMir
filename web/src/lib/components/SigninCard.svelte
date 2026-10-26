@@ -95,15 +95,15 @@
     </div>
 
     {#if error}<div class="ui-error-box">{error}</div>{/if}
-    <div class="actions"><button class="ui-btn primary" disabled={!dirty || saving} onclick={save}>{saving ? 'Saving…' : 'Save'}</button></div>
+    <div class="actions"><button class="ui-btn primary" disabled={!dirty || saving} onclick={save}>{saving ? t('Saving…') : t('Save')}</button></div>
   </section>
 {/if}
 
 {#snippet roles(r: GroupRoles)}
   <div class="grid3">
-    {#each [['admin', 'Admins'], ['operator', 'Operators'], ['viewer', 'Viewers']] as [key, label] (key)}
+    {#each [['admin', t('Admins')], ['operator', t('Operators')], ['viewer', t('Viewers')]] as [key, label] (key)}
       <label class="ui-field">
-        <span class="label">{label} — groups</span>
+        <span class="label">{t('{role} — groups', { role: label })}</span>
         <input class="ui-input mono" value={join(r[key as keyof GroupRoles])} oninput={(e) => setRoles(r, key as keyof GroupRoles, e.currentTarget.value)} placeholder="vm-{key}s" />
       </label>
     {/each}

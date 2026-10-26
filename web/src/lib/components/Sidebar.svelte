@@ -41,10 +41,10 @@
     !live.streamOpen ? 'down' : live.snapshot?.connected === false ? 'degraded' : live.snapshot ? 'up' : 'pending',
   )
   const STATUS_TEXT: Record<Status, string> = {
-    up: 'Connected',
-    degraded: 'libvirt unreachable',
+    up: t('Connected'),
+    degraded: t('libvirt unreachable'),
     down: t('VirtoMir unreachable'),
-    pending: 'Connecting…',
+    pending: t('Connecting…'),
   }
 
   type NavItem = { name: string; href: string; label: string; icon: typeof Server; role: 'viewer' | 'operator' | 'admin'; beta?: boolean }
@@ -159,7 +159,7 @@
     <span class="host-dot {status}" title={STATUS_TEXT[status]}></span>
     <div class="host-text">
       <span class="host-name">{(cluster.clustered ? cluster.current?.name : null) ?? live.host?.hostname?.split('.')[0] ?? '…'}</span>
-      <span class="host-status">{status === 'up' ? (cluster.clustered ? t('{length} hosts in cluster', { length: cluster.members.length }) : 'Connected') : STATUS_TEXT[status]}</span>
+      <span class="host-status">{status === 'up' ? (cluster.clustered ? t('{length} hosts in cluster', { length: cluster.members.length }) : t('Connected')) : STATUS_TEXT[status]}</span>
     </div>
   </div>
   {#if cluster.clustered}
@@ -170,7 +170,7 @@
           role="radio"
           aria-checked="false"
           disabled={!m.reachable}
-          title={m.reachable ? `Show ${m.name}` : (m.error ?? t('Not reachable'))}
+          title={m.reachable ? t('Show {name}', { name: m.name }) : (m.error ?? t('Not reachable'))}
           onclick={() => cluster.open(m.id)}
         >
           <span class="mdot" class:on={m.reachable} class:crashed={!m.reachable}></span>
@@ -259,7 +259,7 @@
     {#if session.info}
       <a class="who" class:active={router.route.name === 'account'} href="/account" onclick={router.link} title={t('Your account, API tokens and updates')}>
         <span class="avatar"><UserRound size={14} /></span>
-        <span class="uname">{session.info.user ?? 'dev mode'}<small>{session.role}</small></span>
+        <span class="uname">{session.info.user ?? t('dev mode')}<small>{session.role}</small></span>
       </a>
       {#if session.can('admin')}
         <a class="icon" class:active={router.route.name === 'settings'} href="/settings" onclick={router.link} title={t('Host settings')} aria-label={t('Host settings')}><Settings size={15} /></a>

@@ -139,7 +139,7 @@
             {/each}
           </select>
           <button class="ui-btn sm" disabled={!free.length || creating === p.address || !session.can('admin')} title={session.why('admin') || (free.length ? '' : t('No free slices left on this card'))} onclick={() => createSlice(p)}>
-            <Plus size={14} /> {creating === p.address ? 'Creating…' : t('Create slice')}
+            <Plus size={14} /> {creating === p.address ? t('Creating…') : t('Create slice')}
           </button>
         </div>
         {#each mdevs.filter((m) => m.parent === p.address) as m (m.uuid)}
@@ -147,7 +147,7 @@
             <span class="dot" class:ok={m.active && !m.usedBy.length} class:used={m.usedBy.length > 0}></span>
             <div class="main">
               <span><b>{m.typeName || m.type}</b> {#if !m.active}<span class="why">{t('not running')}</span>{/if}</span>
-              <span class="meta mono">{m.uuid}{m.autostart ? '' : ' · does not start with the host'}</span>
+              <span class="meta mono">{m.uuid}{m.autostart ? '' : t(' · does not start with the host')}</span>
               {#if m.usedBy.length}<span class="used-by">Given to {m.usedBy.join(', ')}</span>{/if}
             </div>
             <span class="act"><ConfirmButton label={t('Delete')} confirm={t('Delete this slice?')} icon={Trash} failure={t('Slice not deleted')} disabled={m.usedBy.length > 0 || !session.can('admin')} title={m.usedBy.length ? t('Remove it from ') + m.usedBy.join(', ') + ' first' : session.why('admin')} run={() => deleteSlice(m.uuid)} /></span>

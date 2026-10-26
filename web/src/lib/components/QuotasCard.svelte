@@ -65,8 +65,8 @@
   {@const q = session.quota}
   <section class="ui-panel card">
     <h2><Gauge size={16} /> {t('Your quota')}</h2>
-    <p class="hint">{t('You may create machines yourself up to these limits{v}, and change or delete the ones you created.', { v: cluster.clustered ? ' (on this host)' : '' })}</p>
-    {#each [['Machines', q.used!.machines, q.rule!.machines, ''], ['vCPUs', q.used!.vcpus, q.rule!.vcpus, ''], ['Memory', q.used!.memoryMiB, q.rule!.memoryMiB, ' MiB'], ...(q.rule!.diskGiB != null ? [['Disk', q.used!.diskGiB ?? 0, q.rule!.diskGiB, ' GiB']] : [])] as [label, used, max, unit] (label)}
+    <p class="hint">{t('You may create machines yourself up to these limits{v}, and change or delete the ones you created.', { v: cluster.clustered ? t(' (on this host)') : '' })}</p>
+    {#each [[t('Machines'), q.used!.machines, q.rule!.machines, ''], [t('vCPUs'), q.used!.vcpus, q.rule!.vcpus, ''], [t('Memory'), q.used!.memoryMiB, q.rule!.memoryMiB, ' MiB'], ...(q.rule!.diskGiB != null ? [[t('Disk'), q.used!.diskGiB ?? 0, q.rule!.diskGiB, ' GiB']] : [])] as [label, used, max, unit] (label)}
       <div class="meter">
         <span class="m-label">{label}</span>
         <span class="bar" class:full={Number(used) >= Number(max)}><span style:width="{pct(Number(used), Number(max))}%"></span></span>
@@ -88,7 +88,7 @@
     {:else}
       {#if rules.length}
         <div class="rules">
-          <span class="th">{t('For')}</span><span class="th">{t('Name')}</span><span class="th">{t('Machines')}</span><span class="th">{t('vCPUs')}</span><span class="th">{t('Memory (MiB)')}</span><span class="th" title="The full size of their machines' own disks; empty: no limit">{t('Disk (GiB)')}</span><span></span>
+          <span class="th">{t('For')}</span><span class="th">{t('Name')}</span><span class="th">{t('Machines')}</span><span class="th">{t('vCPUs')}</span><span class="th">{t('Memory (MiB)')}</span><span class="th" title={t('The full size of their machines\' own disks; empty: no limit')}>{t('Disk (GiB)')}</span><span></span>
           {#each rules as r, i (i)}
             <select class="ui-input" bind:value={r.kind} aria-label={t('Rule for')}>
               <option value="group">{t('Group')}</option>
@@ -109,7 +109,7 @@
         <button class="ui-btn sm" onclick={add}><Plus size={14} /> {t('Add rule')}</button>
         <span class="spacer"></span>
         {#if cluster.clustered}<label class="ui-switch"><input type="checkbox" bind:checked={everywhere} /> {t('Same on every host')}</label>{/if}
-        <button class="ui-btn primary" disabled={!dirty || saving} onclick={save}>{saving ? 'Saving…' : 'Save'}</button>
+        <button class="ui-btn primary" disabled={!dirty || saving} onclick={save}>{saving ? t('Saving…') : t('Save')}</button>
       </div>
     {/if}
   </section>

@@ -85,7 +85,7 @@
     <button class="ui-btn ghost" onclick={() => onclose(false)}>{t('Cancel')}</button>
     {#if review}
       <button class="ui-btn" onclick={() => (review = false)}>{t('Edit')}</button>
-      <button class="ui-btn primary" disabled={saving} onclick={submit}><Save size={14} /> {saving ? 'Saving…' : 'Save'}</button>
+      <button class="ui-btn primary" disabled={saving} onclick={submit}><Save size={14} /> {saving ? t('Saving…') : t('Save')}</button>
     {:else}
       <button class="ui-btn" disabled={!dirty} onclick={() => (text = original ?? '')}>{t('Undo changes')}</button>
       <button class="ui-btn primary" disabled={!dirty || !!parseError} onclick={() => (review = true)}>{t('Review changes')}</button>

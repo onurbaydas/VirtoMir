@@ -30,7 +30,7 @@
         const pools = await api.pools()
         const stopped = pools.filter((p) => !p.active)
         const full = pools.find((p) => p.active && p.capacityBytes > 0 && p.allocationBytes / p.capacityBytes > 0.9)
-        storageIssue = stopped.length ? `${stopped.length} storage pool${stopped.length > 1 ? 's' : ''} stopped` : full ? `${full.name} is ${Math.round((full.allocationBytes / full.capacityBytes) * 100)}% full` : ''
+        storageIssue = stopped.length ? t('Stopped storage pools: {n}', { n: stopped.length }) : full ? t('{name} is {pct}% full', { name: full.name, pct: Math.round((full.allocationBytes / full.capacityBytes) * 100) }) : ''
       } catch {
         storageIssue = ''
       }
@@ -49,8 +49,8 @@
       } else quorum = null
     }
     void poll()
-    const t = setInterval(() => void poll(), 10_000)
-    return () => clearInterval(t)
+    const iv = setInterval(() => void poll(), 10_000)
+    return () => clearInterval(iv)
   })
 
   const PAGE: Record<string, string> = {
@@ -98,7 +98,7 @@
     {#if alerts.open > 0}
       <a class="signal" class:danger={alerts.critical} class:warn={!alerts.critical} href="/alerts" onclick={router.link} title={t('Unacknowledged alerts')}><Bell size={14} /> {alerts.open}</a>
     {/if}
-    <button class="icon-btn" onclick={toggleDrawer} title="Tasks, recent changes and API calls (`)">
+    <button class="icon-btn" onclick={toggleDrawer} title={t('Tasks, recent changes and API calls (`)')}>
       <ListChecks size={16} />
       {#if running}<span class="dot-count">{running}</span>{/if}
     </button>

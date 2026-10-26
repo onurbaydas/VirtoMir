@@ -77,7 +77,7 @@
   const ago = (s?: string) => {
     if (!s) return 'never'
     const m = Math.round((Date.now() - Date.parse(s)) / 60000)
-    return m < 1 ? 'just now' : m < 60 ? tt('{m} min ago', { m: m }) : m < 1440 ? `${Math.round(m / 60)} h ago` : date(s)
+    return m < 1 ? tt('just now') : m < 60 ? tt('{m} min ago', { m: m }) : m < 1440 ? tt('{h} h ago', { h: Math.round(m / 60) }) : date(s)
   }
 </script>
 
@@ -123,7 +123,7 @@
       {#if session.can('admin')}
         <label class="ui-switch small"><input type="checkbox" bind:checked={showAll} /> {tt('Everyone\'s')}</label>
       {/if}
-      <button class="ui-btn primary" onclick={openNew} disabled={session.info?.mode === 'none'} title={session.info?.mode === 'none' ? 'Tokens need sign-in to be enabled' : ''}>
+      <button class="ui-btn primary" onclick={openNew} disabled={session.info?.mode === 'none'} title={session.info?.mode === 'none' ? tt('Tokens need sign-in to be enabled') : ''}>
         <Plus size={15} /> {tt('New token')}
       </button>
     </div>

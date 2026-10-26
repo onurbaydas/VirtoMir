@@ -37,11 +37,11 @@
   }
   const since = (s: string) => {
     const m = Math.round((Date.now() - Date.parse(s)) / 60000)
-    return m < 1 ? 'just now' : m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`
+    return m < 1 ? t('just now') : m < 60 ? t('{m} min', { m }) : m < 1440 ? t('{h} h', { h: Math.round(m / 60) }) : t('{d} d', { d: Math.round(m / 1440) })
   }
   const lasted = (a: Alert) => {
     const m = Math.round((Date.parse(a.resolved!) - Date.parse(a.started)) / 60000)
-    return m < 1 ? '<1 min' : m < 60 ? `${m} min` : `${Math.round(m / 60)} h`
+    return m < 1 ? t('<1 min') : m < 60 ? t('{m} min', { m }) : t('{h} h', { h: Math.round(m / 60) })
   }
   const when = (s: string) => new Date(s).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
   // In a cluster an alert belongs to a member: links open that member's page.
@@ -168,7 +168,7 @@
     testing = true
     try {
       await api.testChannel($state.snapshot(ch))
-      toasts.push({ kind: 'info', title: t('Test sent to {v}', { v: ch.name || 'the channel' }) })
+      toasts.push({ kind: 'info', title: t('Test sent to {v}', { v: ch.name || t('the channel') }) })
     } catch (e) {
       toasts.push({ kind: 'error', title: t('Test failed'), detail: errorText(e) })
     } finally {
@@ -331,7 +331,7 @@
             <strong>{ch.name}</strong>
             <span class="muted mono">{ch.kind === 'webhook' ? `${ch.format} · ${ch.url}` : `email · ${ch.to}`}</span>
           </div>
-          <span class="badge {ch.minSeverity} small">{ch.minSeverity === 'critical' ? 'critical only' : 'all'}</span>
+          <span class="badge {ch.minSeverity} small">{ch.minSeverity === 'critical' ? t('critical only') : t('all')}</span>
           <button class="ui-btn sm ghost" disabled={testing} onclick={() => test(ch)}><Send size={14} /> {t('Test')}</button>
           <button class="ui-btn sm ghost icon" aria-label={t('Edit')} onclick={() => editChannel(i)}><Pencil size={14} /></button>
           <button class="ui-btn sm ghost icon" aria-label={t('Remove')} onclick={() => cfg?.channels.splice(i, 1)}><Trash size={14} /></button>
@@ -362,19 +362,19 @@
 
 {#if view !== 'alerts' && cfg}
   <footer class="ui-panel bar">
-    <span class="status">{cfgErr || (dirty ? 'Unsaved changes' : t('Everything is saved'))}</span>
+    <span class="status">{cfgErr || (dirty ? t('Unsaved changes') : t('Everything is saved'))}</span>
     {#if cluster.clustered}
       <label class="everywhere"><input type="checkbox" bind:checked={everywhere} /> {t('Same on every host')}</label>
     {/if}
     <button class="ui-btn ghost" disabled={!dirty || saving} onclick={() => (cfg = JSON.parse(saved))}>{t('Reset')}</button>
-    <button class="ui-btn primary" disabled={!dirty || saving} onclick={saveCfg}><Save size={14} /> {saving ? 'Saving…' : 'Save'}</button>
+    <button class="ui-btn primary" disabled={!dirty || saving} onclick={saveCfg}><Save size={14} /> {saving ? t('Saving…') : t('Save')}</button>
   </footer>
 {/if}
 
-<Dialog open={editing !== null} title={editIndex >= 0 ? 'Edit channel' : editing?.kind === 'email' ? 'New email channel' : t('New webhook')} onclose={() => (editing = null)} width={520}>
+<Dialog open={editing !== null} title={editIndex >= 0 ? t('Edit channel') : editing?.kind === 'email' ? t('New email channel') : t('New webhook')} onclose={() => (editing = null)} width={520}>
   {#if editing}
     <form id="ch-form" class="form" onsubmit={keepChannel}>
-      <label class="ui-field"><span class="label">{t('Name')}</span><input class="ui-input" bind:value={editing.name} placeholder={editing.kind === 'email' ? 'Ops team' : 'My phone'} required /></label>
+      <label class="ui-field"><span class="label">{t('Name')}</span><input class="ui-input" bind:value={editing.name} placeholder={editing.kind === 'email' ? t('Ops team') : t('My phone')} required /></label>
       {#if editing.kind === 'webhook'}
         <div class="formats" role="radiogroup" aria-label={t('Format')}>
           {#each FORMATS as f (f.key)}
@@ -404,7 +404,7 @@
     <button class="ui-btn ghost" type="button" disabled={testing || !editing} onclick={() => editing && test(editing)}><Send size={14} /> {t('Send test')}</button>
     <span class="spacer"></span>
     <button class="ui-btn ghost" onclick={() => (editing = null)}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="ch-form">{editIndex >= 0 ? 'Keep changes' : t('Add channel')}</button>
+    <button class="ui-btn primary" form="ch-form">{editIndex >= 0 ? t('Keep changes') : t('Add channel')}</button>
   {/snippet}
 </Dialog>
 

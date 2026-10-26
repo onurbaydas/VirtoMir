@@ -2,10 +2,11 @@
 
 import { api, type Job } from './api'
 import { toasts } from './toast.svelte'
+import { t } from './i18n.svelte'
 
 /** host: the cluster member the job runs on, when it is not the one being shown. */
 export function track(job: Job, opts: { success: string; onSuccess?: (j: Job) => void; host?: string }) {
-  const id = toasts.push({ kind: 'info', title: job.title, detail: 'Working…', sticky: true })
+  const id = toasts.push({ kind: 'info', title: job.title, detail: t('Working…'), sticky: true })
   const poll = async () => {
     let j: Job
     try {
@@ -15,7 +16,7 @@ export function track(job: Job, opts: { success: string; onSuccess?: (j: Job) =>
       return
     }
     if (j.state === 'running') {
-      toasts.update(id, { detail: j.message || 'Working…' })
+      toasts.update(id, { detail: j.message || t('Working…') })
       setTimeout(poll, 1000)
       return
     }
@@ -24,7 +25,7 @@ export function track(job: Job, opts: { success: string; onSuccess?: (j: Job) =>
       toasts.push({ kind: 'info', title: opts.success })
       opts.onSuccess?.(j)
     } else {
-      toasts.push({ kind: 'error', title: `${job.title} failed`, detail: j.message })
+      toasts.push({ kind: 'error', title: t('{title} failed', { title: job.title }), detail: j.message })
     }
   }
   setTimeout(poll, 800)

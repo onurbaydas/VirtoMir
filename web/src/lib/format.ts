@@ -58,8 +58,8 @@ export function plural(n: number, one: string, many = one + 's'): string {
 /** "5 s ago", "3 min ago" for connection-loss messages. */
 export function ago(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))
-  if (s < 60) return `${s} s ago`
+  if (s < 60) return t('{s} s ago', { s })
   const m = Math.round(s / 60)
-  if (m < 60) return `${m} min ago`
-  return `${Math.round(m / 60)} h ago`
+  if (m < 60) return t('{m} min ago', { m })
+  return t('{h} h ago', { h: Math.round(m / 60) })
 }

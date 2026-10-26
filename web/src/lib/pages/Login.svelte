@@ -65,7 +65,7 @@
       <img src={import.meta.env.BASE_URL + 'favicon.svg'} alt="" width="40" height="40" />
       <div>
         <div class="wordmark">VirtoMir</div>
-        <div class="tagline">{t('Sign in with your account on this host{v}', { v: methods.ldap ? ' or in the directory' : '' })}</div>
+        <div class="tagline">{t('Sign in with your account on this host{v}', { v: methods.ldap ? t(' or in the directory') : '' })}</div>
       </div>
     </div>
 
@@ -98,7 +98,7 @@
 
     <button class="ui-btn primary submit" disabled={busy || (pending ? code.trim().length < 6 : !user || !password)}>
       <LogIn size={15} />
-      {busy ? 'Signing in…' : pending ? 'Verify' : 'Sign in'}
+      {busy ? t('Signing in…') : pending ? t('Verify') : t('Sign in')}
     </button>
     {#if pending}
       <button type="button" class="ui-btn ghost" onclick={back}>{t('Use another account')}</button>
@@ -106,7 +106,7 @@
       <div class="or"><span>{t('or')}</span></div>
       <a class="ui-btn sso" href="/api/v1/auth/oidc/start"><KeyRound size={15} /> {methods.oidcLabel || t('Sign in with single sign-on')}</a>
     {/if}
-    <p class="note">{t('Root and members of the')} <span class="mono">{t('libvirt')}</span> {t('group can sign in{v}.', { v: methods.ldap || methods.oidc ? ', and directory users whose groups have a role' : '' })}</p>
+    <p class="note">{t('Root and members of the')} <span class="mono">{t('libvirt')}</span> {t('group can sign in{v}.', { v: methods.ldap || methods.oidc ? t(', and directory users whose groups have a role') : '' })}</p>
   </form>
 </div>
 

@@ -10,13 +10,13 @@
 
   /** What each kind is for, in plain words. "once": a machine has at most one. */
   const KINDS: { kind: ExtraDeviceKind; title: string; text: string; icon: typeof Timer; once?: boolean }[] = [
-    { kind: 'filesystem', title: 'Shared folder', text: 'A folder of this host, mounted inside the guest (virtiofs).', icon: FolderSymlink },
-    { kind: 'clipboard', title: 'Clipboard sharing', text: 'Copy and paste between the console and the guest.', icon: ClipboardCopy, once: true },
-    { kind: 'video', title: 'Video card and monitors', text: 'Change the display adapter or give the guest up to 4 monitors.', icon: Gpu },
-    { kind: 'mdev', title: 'vGPU slice', text: 'A share of a host graphics card split into mediated devices.', icon: Layers },
-    { kind: 'watchdog', title: 'Watchdog', text: 'Resets or stops the machine when the guest hangs (or changes what an existing one does).', icon: Timer },
-    { kind: 'tpm', title: 'TPM 2.0', text: 'Trusted Platform Module, needed by Windows 11 and disk encryption.', icon: ShieldCheck, once: true },
-    { kind: 'rng', title: 'Random number generator', text: 'Gives the guest entropy from the host, so it boots and makes keys faster.', icon: Dices, once: true },
+    { kind: 'filesystem', title: t('Shared folder'), text: t('A folder of this host, mounted inside the guest (virtiofs).'), icon: FolderSymlink },
+    { kind: 'clipboard', title: t('Clipboard sharing'), text: t('Copy and paste between the console and the guest.'), icon: ClipboardCopy, once: true },
+    { kind: 'video', title: t('Video card and monitors'), text: t('Change the display adapter or give the guest up to 4 monitors.'), icon: Gpu },
+    { kind: 'mdev', title: t('vGPU slice'), text: t('A share of a host graphics card split into mediated devices.'), icon: Layers },
+    { kind: 'watchdog', title: t('Watchdog'), text: t('Resets or stops the machine when the guest hangs (or changes what an existing one does).'), icon: Timer },
+    { kind: 'tpm', title: 'TPM 2.0', text: t('Trusted Platform Module, needed by Windows 11 and disk encryption.'), icon: ShieldCheck, once: true },
+    { kind: 'rng', title: t('Random number generator'), text: t('Gives the guest entropy from the host, so it boots and makes keys faster.'), icon: Dices, once: true },
   ]
 </script>
 
@@ -133,11 +133,11 @@
         detail: r.liveError
           ? t('Saved for the next start; it could not be added live: {liveError}', { liveError: r.liveError })
           : r.appliesOnNextBoot
-            ? 'The machine gets it from its next start (shut it down and start it again; a restart from inside the guest is not enough).'
+            ? t('The machine gets it from its next start (shut it down and start it again; a restart from inside the guest is not enough).')
             : kind === 'filesystem'
               ? t('Inside the guest: mount -t virtiofs {tag} /mnt', { tag: tag })
               : active
-                ? 'Added to the running machine.'
+                ? t('Added to the running machine.')
                 : undefined,
       })
       onchange()
@@ -150,7 +150,7 @@
   }
 </script>
 
-<Dialog {open} title={start === 'video' ? 'Video card and monitors' : t('Add a device')} subtitle={t('Hardware for {name}', { name: detail.name })} {onclose} width={600}>
+<Dialog {open} title={start === 'video' ? t('Video card and monitors') : t('Add a device')} subtitle={t('Hardware for {name}', { name: detail.name })} {onclose} width={600}>
   <form id="add-device" class="form" onsubmit={(e) => (e.preventDefault(), add())}>
     <div class="kinds" role="radiogroup" aria-label={t('Device')}>
       {#each KINDS as k (k.kind)}
@@ -160,7 +160,7 @@
           <span class="icon"><k.icon size={16} /></span>
           <span class="kind-text">
             <b>{k.title}</b>
-            <span>{has ? 'This machine has one already.' : k.text}</span>
+            <span>{has ? t('This machine has one already.') : k.text}</span>
           </span>
         </label>
       {/each}
@@ -221,7 +221,7 @@
               <input type="radio" name="mdev" value={m.uuid} bind:group={mdevPick} disabled={taken} />
               <span class="hd-text">
                 <span><b>{m.typeName || m.type}</b> <span class="muted">on {m.parent}</span></span>
-                <span class="hd-meta mono">{m.uuid}{m.active ? '' : ' · not running'}</span>
+                <span class="hd-meta mono">{m.uuid}{m.active ? '' : t(' · not running')}</span>
                 {#if taken}<span class="hd-why">Given to {m.usedBy.join(', ')}</span>{/if}
               </span>
             </label>
@@ -272,7 +272,7 @@
   </form>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="add-device" disabled={busy || !ready}>{busy ? 'Adding…' : t('Add device')}</button>
+    <button class="ui-btn primary" form="add-device" disabled={busy || !ready}>{busy ? t('Adding…') : t('Add device')}</button>
   {/snippet}
 </Dialog>
 

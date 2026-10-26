@@ -21,6 +21,7 @@
   import PcapSnifferModal from '../components/PcapSnifferModal.svelte'
   import { ent, type HostInterface } from '../enterprise'
   import { clash, freeV4, parseV4 } from '../netcalc'
+  import { plural } from '../format'
 
   let nets = $state<VNetwork[] | null>(null)
   let error = $state('')
@@ -283,7 +284,7 @@
             <span class="sub mono">{netLine(n)}</span>
           </span>
           <span class="state" class:on={n.active}>{n.active ? t('active') : t('stopped')}</span>
-          <span class="users">{n.usedBy.length ? `${n.usedBy.length} machine${n.usedBy.length > 1 ? 's' : ''}` : 'unused'}</span>
+          <span class="users">{n.usedBy.length ? plural(n.usedBy.length, 'machine') : t('unused')}</span>
           <span class="chev"><ChevronDown size={16} /></span>
         </button>
 
@@ -300,7 +301,7 @@
               {#if n.active}
                 <ConfirmButton
                   label={t('Stop')}
-                  confirm={n.usedBy.length ? 'Machines lose network — stop?' : t('Stop network?')}
+                  confirm={n.usedBy.length ? t('Machines lose network — stop?') : t('Stop network?')}
                   icon={Square}
                   run={() => act(n, 'stop')}
                 />
@@ -312,7 +313,7 @@
                 confirm={t('Delete network?')}
                 icon={Trash}
                 disabled={n.usedBy.length > 0}
-                title={n.usedBy.length ? 'Used by ' + n.usedBy.join(', ') : t('Delete this network')}
+                title={n.usedBy.length ? t('Used by {list}', { list: n.usedBy.join(', ') }) : t('Delete this network')}
                 failure={t('Could not delete {name}', { name: n.name })}
                 run={async () => {
                   await api.deleteNetwork(n.name)
@@ -422,7 +423,7 @@
         <input class="ui-input" bind:value={resName} />
       </label>
     </div>
-    <span class="hint">{t('Must be inside {v}; addresses outside the DHCP range ({dhcpStart} – {dhcpEnd}) avoid clashes.', { v: resNet?.subnet ?? 'the subnet', dhcpStart: resNet?.dhcpStart, dhcpEnd: resNet?.dhcpEnd })}</span>
+    <span class="hint">{t('Must be inside {v}; addresses outside the DHCP range ({dhcpStart} – {dhcpEnd}) avoid clashes.', { v: resNet?.subnet ?? t('the subnet'), dhcpStart: resNet?.dhcpStart, dhcpEnd: resNet?.dhcpEnd })}</span>
     {#if resErr}<div class="ui-error-box">{resErr}</div>{/if}
   </form>
   {#snippet footer()}
@@ -509,7 +510,7 @@
         <label class="ui-field">
           <span class="label">{t('IPv6 subnet')}</span>
           <input class="ui-input mono" bind:value={spec.subnet6} placeholder={t('fd12:3456:789a:1::/64')} required />
-          <span class="hint">{t('A /64. The host becomes ::1 and announces the prefix, so machines configure themselves (SLAAC){v}. A random private (fd…) prefix is filled in; use your own global prefix for routed networks.', { v: spec.mode === 'nat' ? '; their IPv6 traffic is translated to the host’s address (NAT66)' : '' })}</span>
+          <span class="hint">{t('A /64. The host becomes ::1 and announces the prefix, so machines configure themselves (SLAAC){v}. A random private (fd…) prefix is filled in; use your own global prefix for routed networks.', { v: spec.mode === 'nat' ? t('; their IPv6 traffic is translated to the host’s address (NAT66)') : '' })}</span>
         </label>
         <label class="ui-switch"><input type="checkbox" bind:checked={spec.dhcp6} /> {t('Also hand out addresses with DHCPv6 (::100 – ::ffff)')}</label>
       {/if}

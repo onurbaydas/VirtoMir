@@ -119,7 +119,7 @@
     try {
       const name = url.split('/').pop()!.replace(/\.img$/, '.qcow2')
       const job = await ent.download(imagePool, url, name, '')
-      track(job, { success: `${name} is ready in ${imagePool}` })
+      track(job, { success: t('{name} is ready in {pool}', { name, pool: imagePool }) })
     } catch (e) {
       toasts.push({ kind: 'error', title: t('Download not started'), detail: errorText(e) })
     }
