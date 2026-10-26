@@ -435,7 +435,7 @@ func (c *Client) UploadVolume(ctx context.Context, pool, name string, size int64
 		return Volume{}, err
 	}
 	if err := l.StorageVolUpload(vol, &ctxReader{ctx: ctx, r: io.LimitReader(br, size)}, 0, uint64(size), 0); err != nil {
-		_ = l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal)
+		dropVolume(c.log, l, vol)
 		if ctx.Err() != nil {
 			return Volume{}, ctx.Err()
 		}

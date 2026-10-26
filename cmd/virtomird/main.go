@@ -103,6 +103,7 @@ func main() {
 		level = slog.LevelDebug
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	slog.SetDefault(log) // helpers without a logger of their own log the same way
 
 	if flag.Arg(0) == "join" {
 		if err := runJoin(c, flag.Arg(1), log); err != nil {

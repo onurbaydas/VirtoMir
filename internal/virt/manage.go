@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path"
 	"slices"
 	"strings"
@@ -315,7 +316,7 @@ func (c *Client) Clone(ctx context.Context, uuid, name string, report func(strin
 	var created []libvirt.StorageVol
 	rollback := func() {
 		for _, v := range created {
-			_ = l.StorageVolDelete(v, libvirt.StorageVolDeleteNormal)
+			dropVolume(c.log, l, v)
 		}
 	}
 	if x.Devices != nil {
@@ -438,7 +439,7 @@ func copyVolume(l *libvirt.Libvirt, src, newName string) (libvirt.StorageVol, st
 	}
 	p, err := l.StorageVolGetPath(vol)
 	if err != nil {
-		_ = l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal)
+		dropVolume(slog.Default(), l, vol)
 		return libvirt.StorageVol{}, "", classify(err)
 	}
 	return vol, p, nil

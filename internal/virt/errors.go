@@ -3,6 +3,7 @@ package virt
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
 
 	"github.com/digitalocean/go-libvirt"
@@ -30,6 +31,15 @@ func invalidf(format string, a ...any) error {
 
 func refusedf(format string, a ...any) error {
 	return &OperationError{Message: fmt.Sprintf(format, a...)}
+}
+
+// dropVolume deletes a volume an operation created before it failed (rollback). If that
+// fails too, the leftover is logged so an admin can find and remove it.
+func dropVolume(log *slog.Logger, l *libvirt.Libvirt, v libvirt.StorageVol) {
+	if err := l.StorageVolDelete(v, libvirt.StorageVolDeleteNormal); err != nil {
+		log.Warn("rollback: could not delete a volume left by a failed operation; remove it by hand",
+			"pool", v.Pool, "volume", v.Name, "path", v.Key, "err", err)
+	}
 }
 
 // classify turns libvirt RPC errors into ErrNotFound / *InvalidError / *OperationError;
