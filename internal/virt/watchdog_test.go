@@ -29,10 +29,14 @@ func TestWatchDropsAHungConnection(t *testing.T) {
 func TestWatchKeepsAnAnsweringConnection(t *testing.T) {
 	fastWatch(t)
 	var pings, drops atomic.Int32
-	done := make(chan struct{})
-	go watch(done, func() error { pings.Add(1); return nil }, func() { drops.Add(1) })
+	done, exited := make(chan struct{}), make(chan struct{})
+	go func() {
+		watch(done, func() error { pings.Add(1); return nil }, func() { drops.Add(1) })
+		close(exited)
+	}()
 	time.Sleep(150 * time.Millisecond)
 	close(done)
+	<-exited // before the cleanup restores the intervals
 	if pings.Load() < 3 || drops.Load() != 0 {
 		t.Fatalf("pings=%d drops=%d", pings.Load(), drops.Load())
 	}

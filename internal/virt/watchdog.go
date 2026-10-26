@@ -46,7 +46,8 @@ func (k *keepConn) close() {
 // watch pings through ping every watchEvery until done is closed; a ping that does not
 // return within watchTimeout makes it call drop once and stop.
 func watch(done <-chan struct{}, ping func() error, drop func()) {
-	t := time.NewTicker(watchEvery)
+	every, timeout := watchEvery, watchTimeout // read once: tests change them
+	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
 		select {
@@ -63,7 +64,7 @@ func watch(done <-chan struct{}, ping func() error, drop func()) {
 		case <-done:
 			return
 		case <-answered:
-		case <-time.After(watchTimeout):
+		case <-time.After(timeout):
 			drop()
 			return
 		}
