@@ -54,7 +54,7 @@ func ComputeHash(e Entry) string {
 const (
 	// Keep is how many entries stay in memory.
 	Keep = 1000
-	// MaxFileSize rotates the log to <file>.1.
+	// MaxFileSize rotates the log to <file>.1 (older ones shift up, see OldFiles).
 	MaxFileSize = 10 << 20
 )
 
@@ -76,13 +76,7 @@ func Open(path string) (*Log, error) {
 		return l, nil
 	}
 
-	var files []string
-	if _, err := os.Stat(path + ".1"); err == nil {
-		files = append(files, path+".1")
-	}
-	if _, err := os.Stat(path); err == nil {
-		files = append(files, path)
-	}
+	files := logFiles(path)
 	if len(files) == 0 {
 		return l, nil
 	}
@@ -169,23 +163,66 @@ func (l *Log) Add(e Entry) error {
 		return nil
 	}
 
+	// A failed rotation must not lose the entry: it is still appended, and the error is
+	// returned so the caller logs it (the file just keeps growing until rotation works).
+	var rotErr error
 	if st, err := os.Stat(l.path); err == nil && st.Size() > MaxFileSize {
-		_ = os.Rename(l.path, l.path+".1")
+		rotErr = rotate(l.path)
 	}
 	if err := os.MkdirAll(filepath.Dir(l.path), 0o750); err != nil {
-		return err
+		return errors.Join(rotErr, err)
 	}
 	f, err := os.OpenFile(l.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640)
 	if err != nil {
-		return err
+		return errors.Join(rotErr, err)
 	}
 	defer f.Close()
 	b, err := json.Marshal(e)
 	if err != nil {
-		return err
+		return errors.Join(rotErr, err)
 	}
 	_, err = f.Write(append(b, '\n'))
-	return err
+	return errors.Join(rotErr, err)
+}
+
+// OldFiles is how many rotated files (<file>.1 newest … <file>.N oldest) are kept.
+const OldFiles = 5
+
+// logFiles lists the existing log files of path, oldest first (path.N … path.1, path).
+func logFiles(path string) []string {
+	var files []string
+	for i := OldFiles; i >= 1; i-- {
+		if p := path + "." + strconv.Itoa(i); fileExists(p) {
+			files = append(files, p)
+		}
+	}
+	if fileExists(path) {
+		files = append(files, path)
+	}
+	return files
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+// rotate shifts path.1 → path.2 … and path → path.1, dropping the oldest file. It goes
+// from the oldest down, so a failure part-way never overwrites a newer file.
+func rotate(path string) error {
+	for i := OldFiles; i >= 1; i-- {
+		from := path
+		if i > 1 {
+			from = path + "." + strconv.Itoa(i-1)
+		}
+		if !fileExists(from) {
+			continue
+		}
+		if err := os.Rename(from, path+"."+strconv.Itoa(i)); err != nil {
+			return fmt.Errorf("rotate activity log: %w", err)
+		}
+	}
+	return nil
 }
 
 // VerificationResult describes the outcome of verifying an audit log's cryptographic chain.
@@ -207,13 +244,7 @@ func (l *Log) loadDiskEntries() ([]Entry, *VerificationResult, error) {
 		return out, nil, nil
 	}
 
-	var files []string
-	if _, err := os.Stat(l.path + ".1"); err == nil {
-		files = append(files, l.path+".1")
-	}
-	if _, err := os.Stat(l.path); err == nil {
-		files = append(files, l.path)
-	}
+	files := logFiles(l.path)
 	if len(files) == 0 {
 		return nil, nil, nil
 	}

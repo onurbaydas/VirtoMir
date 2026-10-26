@@ -727,3 +727,71 @@ func TestVerifyRotatedLogGapDetection(t *testing.T) {
 		t.Errorf("expected TamperedSeq 57, got %d", res.TamperedSeq)
 	}
 }
+
+func TestRotateKeepsSeveralOldFiles(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "activity.jsonl")
+	l, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := func(n int) {
+		for i := 0; i < n; i++ {
+			if err := l.Add(Entry{User: "u", Method: "POST", Path: "/x", Status: 200}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	add(2)
+	if err := rotate(path); err != nil {
+		t.Fatal(err)
+	}
+	add(2)
+	if err := rotate(path); err != nil {
+		t.Fatal(err)
+	}
+	add(2)
+
+	// The newest file is path, then .1, .2: the chain still verifies across all three.
+	for _, p := range []string{path, path + ".1", path + ".2"} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("missing %s: %v", p, err)
+		}
+	}
+	res, err := l.Verify()
+	if err != nil || !res.Valid || res.VerifiedCount != 6 {
+		t.Fatalf("verify across rotated files = %+v, %v", res, err)
+	}
+	var buf bytes.Buffer
+	if err := l.Export(&buf, "jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(buf.String(), `"user"`); n != 6 {
+		t.Errorf("export has %d entries, want 6", n)
+	}
+	re, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := re.Add(Entry{User: "u", Path: "/y", Status: 200}); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ := re.Verify(); !res.Valid || res.VerifiedCount != 7 {
+		t.Errorf("after reopen = %+v", res)
+	}
+
+	// Rotating more often than OldFiles drops only the oldest.
+	for i := 0; i < OldFiles+2; i++ {
+		add(1)
+		if err := rotate(path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 1; i <= OldFiles; i++ {
+		if _, err := os.Stat(path + "." + fmt.Sprint(i)); err != nil {
+			t.Errorf("%s.%d missing", path, i)
+		}
+	}
+	if _, err := os.Stat(path + "." + fmt.Sprint(OldFiles+1)); err == nil {
+		t.Errorf("more than %d old files kept", OldFiles)
+	}
+}
