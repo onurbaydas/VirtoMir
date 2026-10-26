@@ -328,7 +328,14 @@ func (s *Scheduler) tick(ctx context.Context) {
 func (s *Scheduler) launch(_ context.Context, sc Schedule, dir string) {
 	title := map[Kind]string{Snapshots: "Automatic snapshot", Backups: "Automatic backup"}[sc.Kind]
 	s.start(string(sc.Kind), title, func(ctx context.Context, report func(string)) (string, error) {
+		finished := false
+		defer func() {
+			if !finished { // execute panicked: the schedule must not stay "running" for ever
+				s.finish(sc.ID, "", errors.New("internal error (see the virtomird log)"))
+			}
+		}()
 		result, err := s.execute(ctx, sc, dir, report)
+		finished = true
 		s.finish(sc.ID, result, err)
 		return result, err
 	})

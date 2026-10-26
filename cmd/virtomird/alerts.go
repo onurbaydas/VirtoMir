@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"sync"
 	"time"
@@ -20,7 +21,7 @@ const anomalyRecent = 15 * time.Minute
 // watchAlerts feeds every live snapshot into the alert engine. Pool usage comes from a
 // slower loop (once a minute) and metric anomalies from one every 5 minutes, so neither
 // ever delays the 1 s sampler.
-func watchAlerts(ctx context.Context, hub *live.Hub, eng *alerts.Engine, client *virt.Client, ins *insights.Engine, cephStore *ceph.Store) {
+func watchAlerts(ctx context.Context, log *slog.Logger, hub *live.Hub, eng *alerts.Engine, client *virt.Client, ins *insights.Engine, cephStore *ceph.Store) {
 	var mu sync.Mutex
 	var pools []alerts.Pool
 	fresh := false
@@ -28,7 +29,7 @@ func watchAlerts(ctx context.Context, hub *live.Hub, eng *alerts.Engine, client 
 	var cephHealth *alerts.Ceph      // new reading of the Ceph cluster this host manages
 
 	if cephStore != nil {
-		go func() {
+		safeGo(ctx, log, "Ceph health", func(ctx context.Context) {
 			t := time.NewTicker(time.Minute)
 			defer t.Stop()
 			for {
@@ -43,10 +44,10 @@ func watchAlerts(ctx context.Context, hub *live.Hub, eng *alerts.Engine, client 
 				case <-t.C:
 				}
 			}
-		}()
+		})
 	}
 
-	go func() {
+	safeGo(ctx, log, "anomaly detection", func(ctx context.Context) {
 		t := time.NewTicker(5 * time.Minute)
 		defer t.Stop()
 		for {
@@ -74,9 +75,9 @@ func watchAlerts(ctx context.Context, hub *live.Hub, eng *alerts.Engine, client 
 			anomalies = found
 			mu.Unlock()
 		}
-	}()
+	})
 
-	go func() {
+	safeGo(ctx, log, "pool usage", func(ctx context.Context) {
 		t := time.NewTicker(time.Minute)
 		defer t.Stop()
 		for {
@@ -99,7 +100,7 @@ func watchAlerts(ctx context.Context, hub *live.Hub, eng *alerts.Engine, client 
 			case <-t.C:
 			}
 		}
-	}()
+	})
 
 	hub.AddObserver(func(s live.Snapshot) {
 		o := alerts.Observation{Time: s.Time, Connected: s.Connected, HostCPU: s.Host.CPUPercent}

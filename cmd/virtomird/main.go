@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -171,10 +172,10 @@ func run(c config, log *slog.Logger) error {
 			log.Warn("save metric history", "err", err)
 		}
 	}()
-	go saveHistory(ctx, hist, log)
+	safeGo(ctx, log, "save metric history", func(ctx context.Context) { saveHistory(ctx, hist, log) })
 
 	insightsEngine := insights.New(hist)
-	go recordPools(ctx, client, hist)
+	safeGo(ctx, log, "record pools", func(ctx context.Context) { recordPools(ctx, client, hist) })
 	hub := live.NewHub(client, time.Second, log)
 	hub.SetRecorder(hist)
 	alertEngine, err := alerts.Open(filepath.Join(c.stateDir, "alerts.json"), log)
@@ -183,9 +184,10 @@ func run(c config, log *slog.Logger) error {
 	if err != nil {
 		log.Warn("Ceph", "err", err)
 	}
-	watchAlerts(ctx, hub, alertEngine, client, insightsEngine, cephStore)
+	watchAlerts(ctx, log, hub, alertEngine, client, insightsEngine, cephStore)
 
 	jobManager := jobs.New(ctx)
+	jobManager.Log = log
 	hostName := c.name
 	if hostName == "" {
 		hostName, _ = os.Hostname()
@@ -203,9 +205,9 @@ func run(c config, log *slog.Logger) error {
 	if _, err := client.SweepPartialBackups(virt.BackupDir(scheduler.Settings().BackupDir), time.Hour); err != nil {
 		log.Warn("remove unfinished backups", "err", err)
 	}
-	go scheduler.Run(ctx)
+	safeGo(ctx, log, "scheduler", scheduler.Run)
 	hubDone := make(chan struct{})
-	go func() { hub.Run(ctx); close(hubDone) }()
+	go func() { runSafe(ctx, log, "live hub", hub.Run); close(hubDone) }()
 	defer func() { <-hubDone }()
 
 	fipsInfo := compliance.GetFIPSInfo("/", fipsEnforce)
@@ -223,7 +225,7 @@ func run(c config, log *slog.Logger) error {
 		log.Warn("configuration history", "err", err)
 	} else {
 		opts.ConfigHistory = ch
-		go sweepConfig(ctx, ch)
+		safeGo(ctx, log, "configuration history", func(ctx context.Context) { sweepConfig(ctx, ch) })
 	}
 	if q, err := quota.Open(filepath.Join(c.stateDir, "quotas.json")); q == nil {
 		log.Warn("quotas", "err", err)
@@ -273,7 +275,7 @@ func run(c config, log *slog.Logger) error {
 		log.Warn("zfs replication", "err", err)
 	} else {
 		opts.ZFSRep = zr
-		go zr.Run(ctx)
+		safeGo(ctx, log, "zfs replication", zr.Run)
 	}
 	if c.drExperimental {
 		wireDR(&opts, client, c.stateDir, log)
@@ -290,7 +292,7 @@ func run(c config, log *slog.Logger) error {
 		opts.Content = contentStore
 		syncManager := content.NewSyncManager(contentStore, jobManager, client, opts.Cluster, nil, log)
 		opts.ContentSync = syncManager
-		go syncManager.Start(ctx)
+		safeGo(ctx, log, "content sync", syncManager.Start)
 	}
 	if plStore, err := placement.Open(filepath.Join(c.stateDir, "placement.json")); err != nil {
 		log.Warn("placement store", "err", err)
@@ -313,7 +315,7 @@ func run(c config, log *slog.Logger) error {
 		}
 		mgr := catalog.NewLeaseManager(catStore, leaseCtrl{client}, notifier, log, leaseOpts...)
 		opts.LeaseMgr = mgr
-		go mgr.Run(ctx)
+		safeGo(ctx, log, "catalog leases", mgr.Run)
 	}
 	if st, err := lcm.Open(filepath.Join(c.stateDir, "lcm.json")); err != nil {
 		log.Warn("rolling upgrades", "err", err)
@@ -360,14 +362,14 @@ func run(c config, log *slog.Logger) error {
 		opts.K8s = st
 	}
 	apiServer := api.NewServer(opts)
-	go syncCluster(ctx, apiServer)
-	go apiServer.RunReportSchedules(ctx)
-	go apiServer.RunDRS(ctx)
-	go apiServer.RunDRRPO(ctx)
+	safeGo(ctx, log, "cluster sync", func(ctx context.Context) { syncCluster(ctx, apiServer) })
+	safeGo(ctx, log, "report schedules", apiServer.RunReportSchedules)
+	safeGo(ctx, log, "DRS", apiServer.RunDRS)
+	safeGo(ctx, log, "DR RPO", apiServer.RunDRRPO)
 	apiServer.RunLCM(ctx)
 	apiServer.RunK8s(ctx)
 	apiServer.RunBaremetal(ctx)
-	go keepTunnels(ctx, client, log)
+	safeGo(ctx, log, "tunnels", func(ctx context.Context) { keepTunnels(ctx, client, log) })
 	if opts.Updater != nil {
 		opts.Updater.InitConfig(c.stateDir)
 		go opts.Updater.StartAutoUpdater(ctx, c.stateDir, func(action, details string) {
@@ -419,7 +421,7 @@ func run(c config, log *slog.Logger) error {
 		}
 		apiServer.SetHA(mgr)
 		haDone := make(chan struct{})
-		go func() { mgr.Run(ctx); close(haDone) }()
+		go func() { runSafe(ctx, log, "high availability", mgr.Run); close(haDone) }()
 		defer func() { <-haDone }() // disarms the watchdog before exiting
 	}
 
@@ -467,6 +469,42 @@ func run(c config, log *slog.Logger) error {
 			return err
 		}
 		return nil
+	}
+}
+
+// restartBackoff is the first pause before runSafe restarts a loop that panicked.
+var restartBackoff = 5 * time.Second
+
+// safeGo runs a background loop in its own goroutine under runSafe.
+func safeGo(ctx context.Context, log *slog.Logger, name string, run func(context.Context)) {
+	go runSafe(ctx, log, name, run)
+}
+
+// runSafe calls run(ctx). If it panics, the panic and its stack are logged and run starts
+// again after a short pause (a background loop must not take the daemon and every running
+// machine operation down with it). It returns when run returns normally or ctx ends.
+func runSafe(ctx context.Context, log *slog.Logger, name string, run func(context.Context)) {
+	backoff := restartBackoff
+	for {
+		panicked := func() (panicked bool) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Error("background task panicked; restarting it", "task", name, "panic", r, "stack", string(debug.Stack()))
+					panicked = true
+				}
+			}()
+			run(ctx)
+			return false
+		}()
+		if !panicked || ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		backoff = min(2*backoff, 5*time.Minute)
 	}
 }
 
