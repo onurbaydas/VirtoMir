@@ -1,10 +1,12 @@
 <script lang="ts">
   import { t } from '../i18n.svelte'
   // Every saved version of the machine's definition (ADR-0021): who changed what, when —
-  // including changes made outside VirtoMir — and one click to go back to any of them.
+  // including changes made outside VirtoMir — and one click to go back to any of them. Beside
+  // them, versions of the running configuration (changes made live only) and a warning when
+  // the definition file was edited but libvirt has not loaded it.
   import History from '@lucide/svelte/icons/history'
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw'
-  import { api, errorText, type ConfigVersion } from '../api'
+  import { api, errorText, type ConfigHistory, type ConfigVersion } from '../api'
   import { diffLines, hunks, type DiffLine } from '../diff'
   import { session } from '../session.svelte'
   import { toasts } from '../toast.svelte'
@@ -12,7 +14,10 @@
 
   let { uuid, active, version, onchange }: { uuid: string; active: boolean; version: unknown; onchange: () => void } = $props()
 
-  let versions = $state<ConfigVersion[] | null>(null)
+  let history = $state<ConfigHistory | null>(null)
+  // Saved definitions and running configurations in one timeline, newest first.
+  let versions = $derived(history ? [...history.versions, ...(history.live ?? [])].sort((a, b) => Date.parse(b.time) - Date.parse(a.time)) : null)
+  let saved = $derived(history?.versions ?? [])
   let error = $state('')
   let selected = $state<string | null>(null)
   let diff = $state<(DiffLine | null)[] | null>(null)
@@ -20,9 +25,9 @@
 
   async function load() {
     try {
-      versions = await api.configVersions(uuid)
+      history = await api.configHistory(uuid)
       error = ''
-      if (!selected || !versions.some((v) => v.id === selected)) selected = versions[0]?.id ?? null
+      if (!selected || !versions?.some((v) => v.id === selected)) selected = versions?.[0]?.id ?? null
     } catch (e) {
       error = errorText(e)
     }
@@ -40,7 +45,10 @@
     diffErr = ''
     if (!id || !list) return
     const i = list.findIndex((v) => v.id === id)
-    const prev = list[i + 1]
+    // The version before it of the same kind; a first running configuration is compared with the saved definition.
+    const cur = list[i]
+    const older = list.slice(i + 1)
+    const prev = older.find((v) => !!v.live === !!cur.live) ?? (cur.live ? older.find((v) => !v.live) : undefined)
     void (async () => {
       try {
         const [after, before] = await Promise.all([api.configVersion(uuid, id), prev ? api.configVersion(uuid, prev.id) : Promise.resolve('')])
@@ -62,31 +70,79 @@
     await load()
   }
 
+  async function loadFile() {
+    const r = await api.loadDefinitionFile(uuid)
+    toasts.push({ kind: 'info', title: t('Definition file loaded'), detail: r.appliesOnNextBoot ? t('The machine is running: it uses the loaded definition from its next start.') : undefined })
+    onchange()
+    await load()
+  }
+
   const when = (t: string) => new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' })
+  const liveOnly = (v: ConfigVersion) => !!v.live && v.source !== 'started' && v.source !== 'first seen'
   const who = (v: ConfigVersion) =>
-    v.source === 'first seen' ? 'First version VirtoMir saw' : v.source === 'outside' ? 'Changed outside VirtoMir (virsh or another tool)' : `Changed by ${v.user}`
+    v.live
+      ? v.source === 'started' ? t('Running configuration at start')
+        : v.source === 'first seen' ? t('Running configuration when VirtoMir first saw it')
+        : v.user ? t('Changed live by {user}', { user: v.user }) : t('Changed live outside VirtoMir')
+      : v.source === 'first seen' ? t('First version VirtoMir saw')
+        : v.source === 'outside' ? t('Changed outside VirtoMir (virsh or another tool)')
+        : t('Changed by {user}', { user: v.user ?? '' })
+  // How it was noticed (only worth saying for changes made outside VirtoMir).
+  const via = (v: ConfigVersion) => (v.source === 'outside' ? (v.via === 'event' ? t('seen as it happened') : v.via === 'scan' ? t('found by the periodic check') : '') : '')
   let sel = $derived(versions?.find((v) => v.id === selected))
-  let isCurrent = $derived(!!versions && versions[0]?.id === selected)
+  let isCurrent = $derived(saved[0]?.id === selected)
 </script>
+
+{#snippet banners()}
+  {#if history?.drift}
+    <div class="note warn" role="status">
+      <span>{t('{file} was edited directly, but libvirt has not loaded it. Load it now, or restart libvirtd.', { file: history.drift.file })}</span>
+      <ConfirmButton
+        label={t('Load file now')}
+        confirm={t('Replace the definition with the file?')}
+        size="md"
+        disabled={!session.can('admin')}
+        title={session.why('admin') || t('Defines the machine from the file, like virsh define')}
+        failure={t('File not loaded')}
+        run={loadFile}
+      />
+    </div>
+  {/if}
+  {#if history?.liveChanges?.length}
+    <div class="note" role="status">
+      <strong>{t('Running differently from the saved configuration (lost at the next shutdown)')}</strong>
+      <ul>
+        {#each history.liveChanges as c (c.what)}
+          <li>
+            {c.what}:
+            {c.kind === 'added' ? t('added live only') : c.kind === 'removed' ? t('removed live only') : t('changed live: {saved} to {live}', { saved: c.saved ?? '', live: c.live ?? '' })}
+          </li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
+{/snippet}
 
 {#if error}
   <div class="ui-error-box">{error}</div>
 {:else if versions === null}
   <p class="muted">{t('Loading…')}</p>
 {:else if versions.length === 0}
+  {@render banners()}
   <div class="empty ui-panel">
     <History size={28} strokeWidth={1.5} />
     <strong>{t('No versions yet')}</strong>
     <span>{t('VirtoMir saves the definition whenever it changes; the first one appears within a minute.')}</span>
   </div>
 {:else}
+  {@render banners()}
   <div class="layout">
     <ol class="ui-panel list" aria-label={t('Versions')}>
-      {#each versions as v, i (v.id)}
+      {#each versions as v (v.id)}
         <li>
           <button class:on={selected === v.id} onclick={() => (selected = v.id)}>
-            <span class="t">{when(v.time)} {#if i === 0}<span class="cur">{t('current')}</span>{/if}</span>
-            <span class="w" class:outside={v.source === 'outside'}>{who(v)}</span>
+            <span class="t">{when(v.time)} {#if v.id === saved[0]?.id}<span class="cur">{t('current')}</span>{/if}{#if v.live}<span class="cur live">{t('live')}</span>{/if}</span>
+            <span class="w" class:outside={v.source === 'outside' || liveOnly(v)}>{who(v)}{#if via(v)} · {via(v)}{/if}</span>
           </button>
         </li>
       {/each}
@@ -99,7 +155,7 @@
             <strong>{who(sel)}</strong>
             <span class="muted">{when(sel.time)}</span>
           </div>
-          {#if !isCurrent}
+          {#if !isCurrent && !sel.live}
             <ConfirmButton
               label={t('Restore this version')}
               confirm={t('Replace the current definition?')}
@@ -112,6 +168,7 @@
             />
           {/if}
         </header>
+        {#if liveOnly(sel)}<p class="live-note">{t('Changed live only — not in the saved configuration, lost at the next shutdown')}</p>{/if}
         <div class="diff mono" aria-label={t('What this change did')}>
           {#if diffErr}
             <p class="err">{diffErr}</p>
@@ -182,6 +239,38 @@
     background: var(--accent-soft);
     color: var(--accent);
     font-size: 11px;
+  }
+  .note {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--accent-soft);
+    font-size: 13px;
+  }
+  .note.warn {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: color-mix(in srgb, var(--warn) 14%, transparent);
+  }
+  .note ul {
+    margin: 0;
+    padding-left: 18px;
+  }
+  .cur.live {
+    background: color-mix(in srgb, var(--warn) 18%, transparent);
+    color: var(--warn);
+  }
+  .live-note {
+    margin: 0;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--warn);
+    font-size: 12.5px;
   }
   .detail header {
     display: flex;
