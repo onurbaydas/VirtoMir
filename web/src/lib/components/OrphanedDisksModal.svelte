@@ -89,7 +89,7 @@
               <td>{o.pool}{o.shared ? ' (shared)' : ''}</td>
               <td class="mono">{formatBytes(o.vol.capacityBytes)}</td>
               <td class="mono">{formatBytes(o.vol.allocationBytes)}</td>
-              <td>{#if session.can('admin')}<ConfirmButton label={t('Delete')} confirm={t('Delete for good?')} icon={Trash} run={() => remove(o)} />{/if}</td>
+              <td>{#if o.vol.writing}<span class="muted small">{t('being written')}</span>{:else if session.can('admin')}<ConfirmButton label={t('Delete')} confirm={t('Delete for good?')} icon={Trash} run={() => remove(o)} />{/if}</td>
             </tr>
           {/each}
         </tbody>

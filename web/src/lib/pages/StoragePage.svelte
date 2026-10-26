@@ -411,13 +411,13 @@
                 {v.allocationBytes !== v.capacityBytes ? `${formatBytes(v.allocationBytes)} / ` : ''}{formatBytes(v.capacityBytes)}
               </span>
               <span role="cell" class="used">
-                {#if v.usedBy.length}{v.usedBy.join(', ')}{:else}<span class="muted">—</span>{/if}
+                {#if v.usedBy.length}{v.usedBy.join(', ')}{:else if v.writing}<span class="muted">{t('being written')}</span>{:else}<span class="muted">—</span>{/if}
               </span>
               <span role="cell" class="act" inert={!session.can('admin')}>
-                {#if v.format !== 'iso' && v.usedBy.length === 0}
+                {#if v.format !== 'iso' && v.usedBy.length === 0 && !v.writing}
                   <button class="ui-btn sm ghost" onclick={() => openGrow(v)} title={t('Make this volume bigger')}><Maximize2 size={14} /> {t('Grow')}</button>
                 {/if}
-                <ConfirmButton
+                {#if !v.writing}<ConfirmButton
                   label={t('Delete')}
                   confirm={t('Delete for good?')}
                   icon={Trash}
@@ -429,7 +429,7 @@
                     toasts.push({ kind: 'info', title: `${v.name} deleted` })
                     await refresh()
                   }}
-                />
+                />{/if}
               </span>
             </div>
           {/each}

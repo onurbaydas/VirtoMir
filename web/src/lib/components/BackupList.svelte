@@ -4,6 +4,7 @@
   import ArchiveRestore from '@lucide/svelte/icons/archive-restore'
   import Trash from '@lucide/svelte/icons/trash'
   import Zap from '@lucide/svelte/icons/zap'
+  import ShieldCheck from '@lucide/svelte/icons/shield-check'
   import Power from '@lucide/svelte/icons/power'
   import CloudUpload from '@lucide/svelte/icons/cloud-upload'
   import { api, errorText, type BackupInfo, type Pool } from '../api'
@@ -31,6 +32,17 @@
   const when = (s: string) => new Date(s).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
   const took = (s: number) => (s < 60 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`)
 
+  const RESTORE_POOLS = ['dir', 'netfs', 'fs', 'logical', 'zfs']
+
+  async function verify(b: BackupInfo) {
+    try {
+      const job = await api.verifyBackup(b.id, host)
+      track(job, { success: t('{domain}: backup checked', { domain: b.domain }), host, onSuccess: onchange, onFailure: onchange })
+    } catch (err) {
+      toasts.push({ kind: 'error', title: t('Could not check the backup'), detail: errorText(err) })
+    }
+  }
+
   // ---- Restore ------------------------------------------------------------------------
   let restoring = $state<BackupInfo | null>(null)
   let name = $state('')
@@ -42,24 +54,34 @@
     name = `${b.domain}-restored`
     error = ''
     try {
-      pools = (await (host ? api.poolsOn(host) : api.pools())).filter((p) => p.active && p.type === 'dir')
+      pools = (await (host ? api.poolsOn(host) : api.pools())).filter((p) => p.active && RESTORE_POOLS.includes(p.type))
       if (!pools.some((p) => p.name === pool) && pools[0]) pool = pools[0].name
     } catch (e) {
       error = errorText(e)
     }
   }
   let restoreBusy = $state(false)
+  // A restore refused because the backup's files changed or failed their check: the reason
+  // and what to retry with, so the person can accept the risk and go on.
+  let refused = $state<{ b: BackupInfo; name: string; pool: string; message: string } | null>(null)
   async function restore(e: SubmitEvent) {
     e.preventDefault()
-    if (!restoring || restoreBusy) return
+    if (restoring) await startRestore(restoring, name, pool, false)
+  }
+  async function startRestore(b: BackupInfo, asName: string, asPool: string, force: boolean) {
+    if (restoreBusy) return
     restoreBusy = true
     try {
-      const job = await api.restoreBackup(restoring.id, name, pool, host)
+      const job = await api.restoreBackup(b.id, asName, asPool, host, force)
       restoring = null
+      refused = null
       const m = host ? cluster.members.find((x) => x.id === host) : undefined
       track(job, {
-        success: `${name} restored`,
+        success: `${asName} restored`,
         host,
+        onFailure: (j) => {
+          if (/restore it anyway/i.test(j.message ?? '')) refused = { b, name: asName, pool: asPool, message: j.message ?? '' }
+        },
         onSuccess: (j) => j.result && (m ? router.go(m.self ? null : m.id, `/machines/${j.result}`) : router.navigate(machineHref(j.result))),
       })
     } catch (err) {
@@ -82,6 +104,8 @@
         <span class="when">
           {when(b.created)}
           {#if b.automatic}<span class="tag">{t('automatic')}</span>{/if}
+          {#if b.checkError}<span class="tag bad" title={b.checkError}>{t('check failed')}</span>
+          {:else if b.verified}<span class="tag ok" title={t('Files checked {time}', { time: when(b.verified) })}>{t('verified')}</span>{/if}
           {#if b.incremental}<span class="tag" title={t('Holds only what changed since the backup before it, which it needs to be restored.')}>{t('incremental')}</span>{/if}
         </span>
         <span class="meta">{formatBytes(b.sizeBytes)} · {b.disks.map((d) => d.target).join(', ')} · {b.live ? 'live' : 'offline'} · took {took(b.durationSec)}</span>
@@ -91,6 +115,9 @@
           <CloudUpload size={14} /> {t('Copy off-site')}
         </button>
       {/if}
+      <button class="ui-btn sm ghost" disabled={!session.can('admin')} title={session.why('admin') || t('Check that the backup files are intact')} onclick={() => verify(b)}>
+        <ShieldCheck size={14} /> {t('Verify')}
+      </button>
       <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin') || t('Create a new machine from this backup')} onclick={() => openRestore(b)}>
         <ArchiveRestore size={14} /> {t('Restore…')}
       </button>
@@ -123,7 +150,7 @@
       <select class="ui-input" bind:value={pool}>
         {#each pools as p (p.name)}<option value={p.name}>{p.name} — {formatBytes(p.availableBytes)} free</option>{/each}
       </select>
-      {#if pools.length === 0 && !error}<span class="hint warn">{t('No started directory pool to restore into. Create or start one under Storage.')}</span>{/if}
+      {#if pools.length === 0 && !error}<span class="hint warn">{t('No started pool to restore into. Create or start one under Storage.')}</span>{/if}
       <span class="hint" class:warn={!!target && needed > target.availableBytes}>{t('Needs about {needed} (more if the disks are fuller than the compressed backup).', { needed: formatBytes(needed) })}</span>
     </label>
     {#if error}<div class="ui-error-box">{error}</div>{/if}
@@ -131,6 +158,16 @@
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={() => (restoring = null)}>{t('Cancel')}</button>
     <button class="ui-btn primary" form="restore-form" disabled={restoreBusy || !pool || pools.length === 0}><ArchiveRestore size={14} /> {restoreBusy ? t('Starting…') : t('Restore')}</button>
+  {/snippet}
+</Dialog>
+
+<Dialog open={refused !== null} title={t('Backup may be damaged')} subtitle={refused ? `${refused.b.domain}, ${when(refused.b.created)}` : ''} onclose={() => (refused = null)}>
+  <div class="ui-error-box">{refused?.message}</div>
+  {#snippet footer()}
+    <button class="ui-btn ghost" onclick={() => (refused = null)}>{t('Cancel')}</button>
+    <button class="ui-btn primary" disabled={restoreBusy} onclick={() => refused && startRestore(refused.b, refused.name, refused.pool, true)}>
+      <ArchiveRestore size={14} /> {restoreBusy ? t('Starting…') : t('Restore anyway')}
+    </button>
   {/snippet}
 </Dialog>
 
@@ -175,6 +212,12 @@
     color: var(--text-3);
     font-size: 11px;
     font-weight: 400;
+  }
+  .tag.ok {
+    color: var(--ok);
+  }
+  .tag.bad {
+    color: var(--danger);
   }
   .meta {
     color: var(--text-3);
