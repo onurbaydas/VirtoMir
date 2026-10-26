@@ -198,6 +198,11 @@ func run(c config, log *slog.Logger) error {
 		scheduleRunner{client, offsiteStore}, jobStarter(jobManager), log)
 	logStoreErr(log, "schedules", err)
 	client.ProtectedDirs = func() []string { return []string{c.stateDir, scheduler.Settings().BackupDir} }
+	// No backup job survives a restart: folders a crash left half-written go (unless another
+	// host sharing the location wrote to them within the hour).
+	if _, err := client.SweepPartialBackups(virt.BackupDir(scheduler.Settings().BackupDir), time.Hour); err != nil {
+		log.Warn("remove unfinished backups", "err", err)
+	}
 	go scheduler.Run(ctx)
 	hubDone := make(chan struct{})
 	go func() { hub.Run(ctx); close(hubDone) }()

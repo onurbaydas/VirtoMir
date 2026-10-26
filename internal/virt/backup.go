@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/digitalocean/go-libvirt"
@@ -67,6 +69,9 @@ func (c *Client) ListBackups(dir BackupDir, uuid string) ([]Backup, error) {
 		return out, err
 	}
 	for _, m := range matches {
+		if strings.HasSuffix(filepath.Dir(m), partialSuffix) { // still being written (or abandoned)
+			continue
+		}
 		b, err := readManifest(m)
 		if err != nil || (uuid != "" && b.DomainUUID != uuid) {
 			continue
@@ -97,7 +102,7 @@ func writeManifest(dest string, b Backup) error {
 func backupPath(dir BackupDir, id string) (string, error) {
 	p := filepath.Join(string(dir), filepath.FromSlash(id))
 	rel, err := filepath.Rel(string(dir), p)
-	if err != nil || strings.HasPrefix(rel, "..") || strings.Count(filepath.ToSlash(rel), "/") != 1 {
+	if err != nil || strings.HasPrefix(rel, "..") || strings.Count(filepath.ToSlash(rel), "/") != 1 || strings.HasSuffix(rel, partialSuffix) {
 		return "", fmt.Errorf("%w: no backup %s", ErrNotFound, id)
 	}
 	if _, err := os.Stat(filepath.Join(p, manifestName)); err != nil {
@@ -145,6 +150,100 @@ func machineFolder(name, uuid string) string {
 	return fmt.Sprintf("%s-%s", name, strings.ReplaceAll(uuid, "-", "")[:8])
 }
 
+// partialSuffix marks a backup folder that is still being written. It gets its final name
+// only once the manifest is in it, so a crash never leaves something that looks complete.
+const partialSuffix = ".partial"
+
+// backupNames serializes picking and finalizing backup folder names in this process.
+var backupNames sync.Mutex
+
+// reserveBackupDir creates a new, empty <stamp>[-n].partial folder in machineDir whose
+// final name <stamp>[-n] is free too: two backups started in the same second never share
+// a folder (and one's failure never deletes the other's files).
+func reserveBackupDir(machineDir, stamp string) (partial, final string, err error) {
+	backupNames.Lock()
+	defer backupNames.Unlock()
+	for n := 1; n < 1000; n++ {
+		name := stamp
+		if n > 1 {
+			name = fmt.Sprintf("%s-%d", stamp, n)
+		}
+		final = filepath.Join(machineDir, name)
+		if _, err := os.Lstat(final); !errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		partial = final + partialSuffix
+		switch err := os.Mkdir(partial, 0o750); {
+		case err == nil:
+			return partial, final, nil
+		case errors.Is(err, fs.ErrExist):
+			continue
+		default:
+			return "", "", fmt.Errorf("create backup folder: %w", err)
+		}
+	}
+	return "", "", fmt.Errorf("create backup folder: no free name for %s in %s", stamp, machineDir)
+}
+
+// finishBackupDir gives a complete backup its final name.
+func finishBackupDir(partial, final string) error {
+	backupNames.Lock()
+	defer backupNames.Unlock()
+	if _, err := os.Lstat(final); !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("finish backup: %s appeared meanwhile", final)
+	}
+	if err := os.Rename(partial, final); err != nil {
+		return fmt.Errorf("finish backup: %w", err)
+	}
+	return nil
+}
+
+// SweepPartialBackups removes backup folders left half-written (by a crash or a restart
+// during a backup) in dir. Only folders in which nothing changed for olderThan go, so a
+// backup that another host writes to a shared location right now is left alone.
+func (c *Client) SweepPartialBackups(dir BackupDir, olderThan time.Duration) (int, error) {
+	if err := dir.check(); err != nil {
+		return 0, err
+	}
+	matches, err := filepath.Glob(filepath.Join(string(dir), "*", "*"+partialSuffix))
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	var errs []error
+	for _, m := range matches {
+		if !idleSince(m, time.Now().Add(-olderThan)) {
+			continue
+		}
+		if err := os.RemoveAll(m); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		c.log.Warn("removed an unfinished backup", "path", m)
+		n++
+	}
+	return n, errors.Join(errs...)
+}
+
+// idleSince reports whether the folder and every file directly in it are older than t.
+func idleSince(folder string, t time.Time) bool {
+	st, err := os.Stat(folder)
+	if err != nil || !st.IsDir() || st.ModTime().After(t) {
+		return false
+	}
+	entries, err := os.ReadDir(folder)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil || info.ModTime().After(t) {
+			return false
+		}
+	}
+	return true
+}
+
 // BackupDomain takes a backup. Running machines are backed up live and consistently with
 // libvirt's backup job (no downtime, no snapshot left behind) — incrementally when opts and
 // the machine allow it (see backup_incr.go); stopped ones are copied in full with qemu-img.
@@ -171,12 +270,19 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, o
 	}
 	started := time.Now()
 	stamp := started.UTC().Format("20060102-150405")
-	dest := filepath.Join(string(dir), machineFolder(d.Name, formatUUID(d.UUID)), stamp)
-	if err := os.MkdirAll(dest, 0o750); err != nil {
+	machineDir := filepath.Join(string(dir), machineFolder(d.Name, formatUUID(d.UUID)))
+	if err := os.MkdirAll(machineDir, 0o750); err != nil {
 		return Backup{}, fmt.Errorf("create backup folder: %w", err)
 	}
+	dest, final, err := reserveBackupDir(machineDir, stamp)
+	if err != nil {
+		return Backup{}, err
+	}
+	stamp = filepath.Base(final) // with its -n suffix, if any
 	fail := func(err error) (Backup, error) {
-		_ = os.RemoveAll(dest)
+		if rerr := os.RemoveAll(dest); rerr != nil {
+			c.log.Warn("could not remove the failed backup", "path", dest, "err", rerr)
+		}
 		return Backup{}, err
 	}
 
@@ -261,7 +367,10 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, o
 	if err := writeManifest(dest, b); err != nil {
 		return fail(err)
 	}
-	rel, _ := filepath.Rel(string(dir), dest)
+	if err := finishBackupDir(dest, final); err != nil {
+		return fail(err)
+	}
+	rel, _ := filepath.Rel(string(dir), final)
 	b.ID = filepath.ToSlash(rel)
 	// The new checkpoint is the base of the next incremental backup; older ones go.
 	if b.Checkpoint != "" {
@@ -490,7 +599,9 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 	var written []string
 	rollback := func() {
 		for _, f := range written {
-			_ = os.Remove(f)
+			if err := os.Remove(f); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				c.log.Warn("restore rollback: could not remove a copied disk", "path", f, "err", err)
+			}
 		}
 		_ = l.StoragePoolRefresh(sp, 0)
 	}
@@ -512,12 +623,14 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 			rollback()
 			return "", fmt.Errorf("restore %s: %w", bd.Target, err)
 		}
+		// Registered before the copy (dst did not exist, see above): a failed or cancelled
+		// convert must not leave a partial disk behind that blocks the next attempt.
+		written = append(written, dst)
 		cmd := exec.CommandContext(ctx, "qemu-img", convertArgs("qcow2", src, dst, false)...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			rollback()
 			return "", fmt.Errorf("restore %s: %v: %s", bd.Target, err, strings.TrimSpace(string(out)))
 		}
-		written = append(written, dst)
 		if disk := findDisk(&x, bd.Target); disk != nil {
 			disk.Source = &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: dst}}
 			disk.Driver = &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "qcow2", Cache: driverCache(disk.Driver), Discard: "unmap"}
