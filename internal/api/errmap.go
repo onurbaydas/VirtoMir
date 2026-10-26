@@ -17,6 +17,7 @@ import (
 //   - the host's disk is full: 507
 //   - a file or folder does not exist: 404
 //   - VirtoMir may not read or write a file: 403 naming the path
+//   - a read-only file system (e.g. /home under ProtectHome): 403 with what to do
 //   - anything else: 500 "Something went wrong: <short message>"
 func plainError(err error) (int, string) {
 	msg := shortError(err.Error())
@@ -25,6 +26,8 @@ func plainError(err error) (int, string) {
 		return http.StatusServiceUnavailable, "VirtoMir cannot reach libvirt right now (" + msg + "). Is libvirtd (or virtqemud) running? VirtoMir reconnects by itself."
 	case errors.Is(err, syscall.ENOSPC):
 		return http.StatusInsufficientStorage, "Not enough space on the host's disk: " + msg
+	case errors.Is(err, syscall.EROFS):
+		return http.StatusForbidden, readOnlyMessage(pathOf(err), msg)
 	case errors.Is(err, fs.ErrNotExist):
 		if p := pathOf(err); p != "" {
 			return http.StatusNotFound, p + " does not exist"
@@ -37,6 +40,19 @@ func plainError(err error) (int, string) {
 		return http.StatusForbidden, "Permission denied: " + msg
 	}
 	return http.StatusInternalServerError, "Something went wrong: " + msg
+}
+
+// readOnlyMessage explains "read-only file system". Under /home the usual cause is the
+// service sandbox (ProtectHome=read-only in the systemd unit), which the admin can lift.
+func readOnlyMessage(path, msg string) string {
+	if path == "" {
+		return "That location is read-only for VirtoMir: " + msg
+	}
+	if path == "/home" || strings.HasPrefix(path, "/home/") {
+		return path + " is read-only for VirtoMir: the service may not write under /home (ProtectHome). " +
+			"Use another folder such as /srv or /var/lib, or allow it with `systemctl edit virtomird` and [Service] ProtectHome=false."
+	}
+	return path + " is read-only for VirtoMir (the file system is mounted read-only or the service may not write there). Use another folder."
 }
 
 // pathOf returns the file or folder of an *os.PathError (or LinkError) in err's chain.
