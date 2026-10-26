@@ -37,6 +37,8 @@ type Client struct {
 	ProtectedDirs func() []string
 
 	metas metaCache
+
+	leases leaseSet // long operations per machine (lease.go)
 }
 
 func NewClient(socket string, log *slog.Logger) *Client {

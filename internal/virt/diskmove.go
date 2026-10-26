@@ -23,6 +23,11 @@ func (c *Client) MoveDisk(ctx context.Context, uuid, target, pool string, report
 	if err != nil {
 		return err
 	}
+	release, err := c.leases.take("disk move", false, machineKey(formatUUID(d.UUID)))
+	if err != nil {
+		return err
+	}
+	defer release()
 	sum, err := summary(l, d)
 	if err != nil {
 		return classify(err)

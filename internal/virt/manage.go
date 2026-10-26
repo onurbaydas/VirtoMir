@@ -105,6 +105,11 @@ func (c *Client) Delete(uuid string, removeStorage bool) (DeleteResult, error) {
 	if err != nil {
 		return res, err
 	}
+	release, err := c.leases.take("delete", true, machineKey(formatUUID(d.UUID)))
+	if err != nil {
+		return res, err
+	}
+	defer release()
 	sum, err := summary(l, d)
 	if err != nil {
 		return res, classify(err)
@@ -286,6 +291,11 @@ func (c *Client) Clone(ctx context.Context, uuid, name string, report func(strin
 	if err != nil {
 		return "", err
 	}
+	release, err := c.leases.take("clone", true, machineKey(formatUUID(d.UUID)), nameKey(name))
+	if err != nil {
+		return "", err
+	}
+	defer release()
 	if _, err := l.DomainLookupByName(name); err == nil {
 		return "", refusedf("A machine named %s already exists.", name)
 	}

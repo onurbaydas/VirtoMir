@@ -256,6 +256,13 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, o
 	if err != nil {
 		return Backup{}, err
 	}
+	// Taken before the state is read: a machine found shut off stays so (VirtoMir refuses
+	// to start it) until its disks are copied.
+	release, err := c.leases.take("backup", true, machineKey(formatUUID(d.UUID)))
+	if err != nil {
+		return Backup{}, err
+	}
+	defer release()
 	sum, err := summary(l, d)
 	if err != nil {
 		return Backup{}, classify(err)
@@ -346,6 +353,13 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, o
 			if out, err := cmd.CombinedOutput(); err != nil {
 				return fail(fmt.Errorf("copy %s: %v: %s", bd.Target, err, strings.TrimSpace(string(out))))
 			}
+		}
+		// Started behind VirtoMir's back (virsh) while the disks were copied: the copy may
+		// mix old and new blocks, so it is not kept.
+		if now, err := summary(l, d); err != nil {
+			return fail(classify(err))
+		} else if isOn(now.State) || now.State == StatePaused {
+			return fail(refusedf("%s was started while its disks were copied, so the copy may be inconsistent and was discarded. Back it up again.", d.Name))
 		}
 	}
 
@@ -579,6 +593,11 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 	if err != nil {
 		return "", err
 	}
+	release, err := c.leases.take("restore", false, nameKey(name))
+	if err != nil {
+		return "", err
+	}
+	defer release()
 	if _, err := l.DomainLookupByName(name); err == nil {
 		return "", refusedf("A machine named %s already exists.", name)
 	}
