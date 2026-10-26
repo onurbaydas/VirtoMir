@@ -1,6 +1,6 @@
 # Maintainer: Onur Baydas <onurbaydas1@gmail.com>
 pkgname=virtomir-bin
-pkgver=1.0.0
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="A Detailed Control Deck for Virtual Environments (KVM / QEMU / libvirt)"
 arch=('x86_64' 'aarch64')

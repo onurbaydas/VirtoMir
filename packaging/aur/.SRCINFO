@@ -1,6 +1,6 @@
 pkgbase = virtomir-bin
 	pkgdesc = A Detailed Control Deck for Virtual Environments (KVM / QEMU / libvirt)
-	pkgver = 1.0.0
+	pkgver = 1.1.0
 	pkgrel = 1
 	url = https://github.com/onurbaydas/VirtoMir
 	arch = x86_64
@@ -15,9 +15,9 @@ pkgbase = virtomir-bin
 	provides = virtomir
 	conflicts = virtomir
 	backup = etc/pam.d/virtomir
-	source_x86_64 = virtomir-bin-1.0.0-x86_64.tar.gz::https://github.com/onurbaydas/VirtoMir/releases/download/v1.0.0/virtomir_v1.0.0_linux_amd64.tar.gz
+	source_x86_64 = virtomir-bin-1.1.0-x86_64.tar.gz::https://github.com/onurbaydas/VirtoMir/releases/download/v1.1.0/virtomir_v1.1.0_linux_amd64.tar.gz
 	sha256sums_x86_64 = SKIP
-	source_aarch64 = virtomir-bin-1.0.0-aarch64.tar.gz::https://github.com/onurbaydas/VirtoMir/releases/download/v1.0.0/virtomir_v1.0.0_linux_arm64.tar.gz
+	source_aarch64 = virtomir-bin-1.1.0-aarch64.tar.gz::https://github.com/onurbaydas/VirtoMir/releases/download/v1.1.0/virtomir_v1.1.0_linux_arm64.tar.gz
 	sha256sums_aarch64 = SKIP
 
 pkgname = virtomir-bin
