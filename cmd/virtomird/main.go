@@ -199,6 +199,18 @@ func run(c config, log *slog.Logger) error {
 	scheduler, err := schedule.Open(filepath.Join(c.stateDir, "schedules.json"), filepath.Join(c.stateDir, "backups"),
 		scheduleRunner{client, offsiteStore}, jobStarter(jobManager), log)
 	logStoreErr(log, "schedules", err)
+	if alertEngine != nil {
+		scheduler.OnResult = func(sc schedule.Schedule, err error) {
+			if sc.Kind != schedule.Backups {
+				return
+			}
+			name := sc.Domain
+			if d, derr := client.DomainDetail(sc.Domain); derr == nil {
+				name = d.Name
+			}
+			alertEngine.ScheduledBackup(sc.Domain, name, err)
+		}
+	}
 	client.ProtectedDirs = func() []string { return []string{c.stateDir, scheduler.Settings().BackupDir} }
 	// No backup job survives a restart: folders a crash left half-written go (unless another
 	// host sharing the location wrote to them within the hour).

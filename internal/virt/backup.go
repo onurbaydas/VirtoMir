@@ -714,12 +714,15 @@ func (c *Client) PruneBackups(dir BackupDir, uuid string, keep func([]time.Time)
 	}
 	// Newest first, so a chain goes from its end and every delete finds no dependents.
 	n := 0
+	var errs []error
 	for _, b := range auto {
 		if drop[b.ID] {
-			if err := c.DeleteBackup(dir, b.ID); err == nil {
-				n++
+			if err := c.DeleteBackup(dir, b.ID); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", b.ID, err))
+				continue
 			}
+			n++
 		}
 	}
-	return n, nil
+	return n, errors.Join(errs...)
 }

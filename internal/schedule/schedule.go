@@ -90,6 +90,10 @@ type Scheduler struct {
 	settings  Settings
 	schedules []Schedule
 	running   map[string]bool
+
+	// OnResult, if set, hears how every run ended (err nil = success), e.g. to raise and
+	// resolve an alert. It is called without the scheduler's lock held.
+	OnResult func(sc Schedule, err error)
 }
 
 // Open loads path. defaultBackupDir is used until an admin picks another location
@@ -370,12 +374,12 @@ func (s *Scheduler) execute(ctx context.Context, sc Schedule, dir string, report
 		}
 		names, err := s.runner.ListAutoSnapshots(sc.Domain)
 		if err != nil {
-			return name, nil
+			return s.retentionFailed(sc, fmt.Sprintf("took %s", name), err), nil
 		}
 		removed := 0
 		for _, old := range s.expired(sc.Policy(), names) {
 			if err := s.runner.DeleteSnapshot(sc.Domain, old); err != nil {
-				break
+				return s.retentionFailed(sc, fmt.Sprintf("took %s, removed %d old", name, removed), fmt.Errorf("delete %s: %w", old, err)), nil
 			}
 			removed++
 		}
@@ -384,10 +388,22 @@ func (s *Scheduler) execute(ctx context.Context, sc Schedule, dir string, report
 		if err := s.runner.Backup(ctx, dir, sc.Domain, sc.FullEvery, report); err != nil {
 			return "", err
 		}
-		n, _ := s.runner.PruneBackups(dir, sc.Domain, sc.Policy().Keep)
+		n, err := s.runner.PruneBackups(dir, sc.Domain, sc.Policy().Keep)
+		if err != nil {
+			return s.retentionFailed(sc, fmt.Sprintf("backed up, removed %d old", n), err), nil
+		}
 		return fmt.Sprintf("backed up, removed %d old", n), nil
 	}
 	return "", fmt.Errorf("unknown kind %s", sc.Kind)
+}
+
+// retentionFailed is the result of a run whose snapshot or backup was made but whose
+// clean-up of old ones failed: the run succeeded, the result says what was not removed.
+func (s *Scheduler) retentionFailed(sc Schedule, done string, err error) string {
+	if s.log != nil {
+		s.log.Warn("schedule retention failed", "schedule", sc.ID, "kind", sc.Kind, "domain", sc.Domain, "err", err)
+	}
+	return done + "; removing old ones failed: " + err.Error()
 }
 
 // expired is the automatic snapshots (oldest first) the policy no longer keeps. A name that
@@ -411,10 +427,10 @@ func (s *Scheduler) expired(p Policy, names []string) []string {
 
 func (s *Scheduler) finish(id, result string, err error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	delete(s.running, id)
 	i := slices.IndexFunc(s.schedules, func(x Schedule) bool { return x.ID == id })
 	if i < 0 {
+		s.mu.Unlock()
 		return
 	}
 	now := s.now()
@@ -424,6 +440,11 @@ func (s *Scheduler) finish(id, result string, err error) {
 		sc.LastError, sc.LastResult = err.Error(), ""
 	}
 	s.saveLocked()
+	done, hook := *sc, s.OnResult
+	s.mu.Unlock()
+	if hook != nil {
+		hook(done, err)
+	}
 }
 
 func newID() string {

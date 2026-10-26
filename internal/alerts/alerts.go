@@ -42,9 +42,20 @@ const (
 	LibvirtDown Kind = "libvirt.down" // virtomird cannot reach libvirt
 	VMAnomaly   Kind = "vm.anomaly"   // a machine's metric far from its usual (robust z-score, ADR-0066)
 	CephHealth  Kind = "ceph.health"  // the Ceph cluster is not HEALTH_OK (critical on HEALTH_ERR, ADR-0073)
+	// BackupFailed: a scheduled backup failed (Target: one machine UUID or all). Not from
+	// observations: ScheduledBackup raises it, and the schedule's next success resolves it.
+	BackupFailed Kind = "backup.failed"
 )
 
-var kinds = []Kind{HostCPU, HostMem, VMCPU, VMCrashed, VMDown, PoolFree, LibvirtDown, VMAnomaly, CephHealth}
+var kinds = []Kind{HostCPU, HostMem, VMCPU, VMCrashed, VMDown, PoolFree, LibvirtDown, VMAnomaly, CephHealth, BackupFailed}
+
+// eventKind: alerts of these kinds are raised and resolved by events, not by Observe.
+func eventKind(k Kind) bool { return k == BackupFailed }
+
+// hiddenKinds are rules the Alerts page cannot show yet; Config leaves them out and
+// SetConfig keeps the stored ones when they are not sent back.
+// TODO: drop once web/src/lib/pages/AlertsPage.svelte (KINDS) knows "backup.failed".
+var hiddenKinds = []Kind{BackupFailed}
 
 type Rule struct {
 	ID        string   `json:"id"`
@@ -91,6 +102,7 @@ func DefaultRules() []Rule {
 		{ID: "vm-cpu", Kind: VMCPU, Enabled: false, Threshold: 95, ForSec: 600, Severity: Warning},
 		{ID: "vm-anomaly", Kind: VMAnomaly, Enabled: false, Severity: Warning},
 		{ID: "ceph-health", Kind: CephHealth, Enabled: true, ForSec: 60, Severity: Warning},
+		{ID: "backup-failed", Kind: BackupFailed, Enabled: true, Severity: Warning},
 	}
 }
 
@@ -238,7 +250,7 @@ func (e *Engine) Config() Config {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	c := e.cfg
-	c.Rules = slices.Clone(c.Rules)
+	c.Rules = slices.DeleteFunc(slices.Clone(c.Rules), func(r Rule) bool { return slices.Contains(hiddenKinds, r.Kind) })
 	c.Channels = slices.Clone(c.Channels)
 	if c.SMTP.Password != "" {
 		c.SMTP.Password = maskedSecret
@@ -322,6 +334,11 @@ func (e *Engine) SetConfig(c Config) error {
 	defer e.mu.Unlock()
 	if c.SMTP.Password == maskedSecret {
 		c.SMTP.Password = e.cfg.SMTP.Password
+	}
+	for _, r := range e.cfg.Rules { // rules Config did not show come back as they were
+		if slices.Contains(hiddenKinds, r.Kind) && !slices.ContainsFunc(c.Rules, func(x Rule) bool { return x.ID == r.ID }) {
+			c.Rules = append(c.Rules, r)
+		}
 	}
 	e.cfg = c
 	// Forget pending conditions of removed or disabled rules; their alerts resolve next round.
@@ -428,7 +445,7 @@ func (e *Engine) Observe(o Observation) {
 	}
 	for k, id := range e.active {
 		// Without libvirt, machines and pools are unknown: keep their alerts as they are.
-		if firingNow[k] || (!o.Connected && e.kindOf(k.rule) != LibvirtDown) {
+		if firingNow[k] || eventKind(e.kindOf(k.rule)) || (!o.Connected && e.kindOf(k.rule) != LibvirtDown) {
 			continue
 		}
 		{
@@ -445,6 +462,12 @@ func (e *Engine) Observe(o Observation) {
 			delete(e.pending, k)
 		}
 	}
+	e.publishLocked(events)
+}
+
+// publishLocked stores new and resolved alerts and sends their events. It is called with
+// e.mu held and releases it.
+func (e *Engine) publishLocked(events []Event) {
 	if len(events) > 0 {
 		for len(e.alerts) > Keep {
 			i := slices.IndexFunc(e.alerts, func(a Alert) bool { return a.Resolved != nil })
@@ -466,6 +489,43 @@ func (e *Engine) Observe(o Observation) {
 		ev.channels, ev.smtp = channels, smtp
 		notify(ev)
 	}
+}
+
+// ScheduledBackup records how a scheduled backup run of a machine ended: a failure raises
+// the backup-failed alert for it (once, until resolved), a success resolves it. machine is
+// the display name.
+func (e *Engine) ScheduledBackup(machineUUID, machine string, runErr error) {
+	if e == nil {
+		return
+	}
+	now := time.Now().UTC()
+	e.mu.Lock()
+	var events []Event
+	for _, r := range e.cfg.Rules {
+		if r.Kind != BackupFailed {
+			continue
+		}
+		k := pendingKey{r.ID, machineUUID}
+		id, active := e.active[k]
+		fails := runErr != nil && r.Enabled && (r.Target == "" || strings.EqualFold(r.Target, machineUUID))
+		switch {
+		case fails && !active:
+			a := Alert{
+				ID: newID(), RuleID: r.ID, Kind: r.Kind, Severity: r.Severity,
+				Subject: machine, SubjectID: machineUUID, Message: "Scheduled backup of " + machine + " failed: " + runErr.Error(), Started: now,
+			}
+			e.alerts = append(e.alerts, a)
+			e.active[k] = a.ID
+			events = append(events, Event{Type: Firing, Alert: a})
+		case !fails && active:
+			delete(e.active, k)
+			if i := slices.IndexFunc(e.alerts, func(a Alert) bool { return a.ID == id }); i >= 0 {
+				e.alerts[i].Resolved = &now
+				events = append(events, Event{Type: ResolvedEvent, Alert: e.alerts[i]})
+			}
+		}
+	}
+	e.publishLocked(events)
 }
 
 func (e *Engine) kindOf(ruleID string) Kind {

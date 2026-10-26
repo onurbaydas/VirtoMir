@@ -18,7 +18,7 @@ func TestCorruptFileIsKept(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, err := Open(p, nil)
-	if s == nil || len(s.Config().Rules) != len(DefaultRules()) {
+	if s == nil || len(s.Config().Rules) != len(DefaultRules())-len(hiddenKinds) {
 		t.Fatal("not the defaults")
 	}
 	var ce *atomicfile.CorruptError
