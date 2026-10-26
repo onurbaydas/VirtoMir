@@ -208,10 +208,15 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** Machine-readable reason when the server gives one, e.g. "changed" (edited elsewhere). */
+    readonly code = '',
   ) {
     super(message)
   }
 }
+
+/** The save was refused because the machine's configuration changed since it was loaded. */
+export const changedElsewhere = (e: unknown) => e instanceof ApiError && e.status === 409 && e.code === 'changed'
 
 /** Called on every 401 so the app can show the sign-in page (set by the session store). */
 let onUnauthorized: () => void = () => {}
@@ -224,6 +229,7 @@ interface SendOpts {
   json?: unknown
   body?: BodyInit
   contentType?: string
+  headers?: Record<string, string>
 }
 
 /** API paths that are always about the host serving the UI: sign-in, cluster, tokens. */
@@ -251,7 +257,7 @@ export function wsURL(path: string): string {
 
 async function send(method: string, path: string, opts: SendOpts = {}): Promise<Response> {
   path = scoped(path)
-  const headers: Record<string, string> = { Accept: opts.accept ?? 'application/json' }
+  const headers: Record<string, string> = { Accept: opts.accept ?? 'application/json', ...opts.headers }
   let body = opts.body
   if (opts.json !== undefined) {
     headers['Content-Type'] = 'application/json'
@@ -268,13 +274,16 @@ async function send(method: string, path: string, opts: SendOpts = {}): Promise<
   apiLog.add({ time: Date.now(), method, path, status: res.status, ms: Math.round(performance.now() - started) })
   if (!res.ok) {
     let msg = res.statusText
+    let code = ''
     try {
-      msg = (await res.json()).error ?? msg
+      const b = await res.json()
+      msg = b.error ?? msg
+      code = typeof b.code === 'string' ? b.code : ''
     } catch {
       /* non-JSON error body */
     }
     if (res.status === 401 && !path.startsWith('/api/v1/auth/')) onUnauthorized()
-    throw new ApiError(msg, res.status)
+    throw new ApiError(msg, res.status, code)
   }
   return res
 }
@@ -677,6 +686,8 @@ export interface Settings {
 export interface SettingsView extends Settings {
   bootDevices: { key: string; label: string }[]
   hotplugMemoryMiB?: number
+  /** Version of the definition the form was loaded from; sent back when saving. */
+  version?: string
 }
 
 export interface SaveResult extends DefineResult {
@@ -1556,8 +1567,14 @@ export const api = {
   /** inactive: the persistent config used on next boot instead of the live one. */
   domainXML: async (uuid: string, inactive = false) =>
     (await send('GET', `${domainPath(uuid)}/xml${inactive ? '?inactive=true' : ''}`, { accept: 'application/xml' })).text(),
-  saveXML: async (uuid: string, xml: string): Promise<DefineResult> =>
-    (await send('PUT', `${domainPath(uuid)}/xml`, { body: xml, contentType: 'application/xml' })).json(),
+  /** version: from nextBootXML(); the save is refused (changedElsewhere) if the machine changed since. */
+  saveXML: async (uuid: string, xml: string, version?: string): Promise<DefineResult> =>
+    (await send('PUT', `${domainPath(uuid)}/xml`, { body: xml, contentType: 'application/xml', headers: version ? { 'If-Match': `"${version}"` } : {} })).json(),
+  /** The next-boot definition with its version, for editing. */
+  nextBootXML: async (uuid: string): Promise<{ xml: string; version: string }> => {
+    const res = await send('GET', `${domainPath(uuid)}/xml?inactive=true`, { accept: 'application/xml' })
+    return { xml: await res.text(), version: (res.headers.get('ETag') ?? '').replace(/^W\//, '').replace(/"/g, '') }
+  },
   action: (uuid: string, action: Action) => request<void>('POST', `${domainPath(uuid)}/actions/${action}`),
   create: (spec: CreateSpec, respool?: string) =>
     request<{ uuid: string; startError?: string }>('POST', `/api/v1/domains${respool ? `?respool=${enc(respool)}` : ''}`, spec),
@@ -1625,7 +1642,9 @@ export const api = {
   settings: (uuid: string) => request<SettingsView>('GET', `${domainPath(uuid)}/settings`),
   previewSettings: (uuid: string, s: Settings) =>
     request<{ before: string; after: string }>('POST', `${domainPath(uuid)}/settings/preview`, s),
-  saveSettings: (uuid: string, s: Settings) => request<SaveResult>('PUT', `${domainPath(uuid)}/settings`, s),
+  /** version: from settings(); the save is refused (changedElsewhere) if the machine changed since. */
+  saveSettings: async (uuid: string, s: Settings, version?: string): Promise<SaveResult> =>
+    (await send('PUT', `${domainPath(uuid)}/settings`, { json: s, headers: version ? { 'If-Match': `"${version}"` } : {} })).json(),
   resizeDisk: (uuid: string, target: string, sizeGiB: number) =>
     request<void>('POST', `${domainPath(uuid)}/disks/${enc(target)}/resize`, { sizeGiB }),
   guestInfo: (uuid: string) => request<GuestInfo>('GET', `${domainPath(uuid)}/guest`),

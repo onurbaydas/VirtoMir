@@ -314,6 +314,9 @@ func (s *Server) getDomainXML(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	if inactive {
+		w.Header().Set("ETag", `"`+xmlVersion(x)+`"`) // sent back in If-Match when saving
+	}
 	_, _ = io.WriteString(w, x)
 }
 
@@ -322,6 +325,9 @@ func (s *Server) putDomainXML(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
 	if err != nil {
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "could not read the XML: " + err.Error()})
+		return
+	}
+	if !s.checkVersion(w, r, r.PathValue("uuid")) {
 		return
 	}
 	res, err := s.backend.DefineXML(r.PathValue("uuid"), string(body))

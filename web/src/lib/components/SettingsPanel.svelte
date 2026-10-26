@@ -11,7 +11,7 @@
   import FileDiff from '@lucide/svelte/icons/file-diff'
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert'
   import Zap from '@lucide/svelte/icons/zap'
-  import { api, errorText, type Settings, type SettingsView } from '../api'
+  import { api, changedElsewhere, errorText, type Settings, type SettingsView } from '../api'
   import { diffLines, hunks, type DiffLine } from '../diff'
   import { live } from '../live.svelte'
   import { formatKiB } from '../format'
@@ -29,6 +29,8 @@
   let loadErr = $state('')
   let saving = $state(false)
   let saveErr = $state('')
+  /** The save was refused because the machine changed since the form was loaded. */
+  let stale = $state(false)
   let diff = $state<(DiffLine | null)[] | null>(null)
   let diffBusy = $state(false)
 
@@ -38,6 +40,8 @@
       view = v
       form = pick(v)
       loadErr = ''
+      saveErr = ''
+      stale = false
       diff = null
     } catch (e) {
       loadErr = errorText(e)
@@ -48,7 +52,7 @@
   })
 
   function pick(v: SettingsView): Settings {
-    const { bootDevices: _b, hotplugMemoryMiB: _h, ...s } = v
+    const { bootDevices: _b, hotplugMemoryMiB: _h, version: _v, ...s } = v
     return { ...s, bootOrder: [...s.bootOrder], pinning: [...(s.pinning ?? [])] }
   }
 
@@ -145,7 +149,7 @@
     saving = true
     saveErr = ''
     try {
-      const res = await api.saveSettings(uuid, $state.snapshot(form))
+      const res = await api.saveSettings(uuid, $state.snapshot(form), view?.version)
       const liveNote = res.appliedLive.length ? t('Applied now: {v}. ', { v: res.appliedLive.join(', ') }) : ''
       toasts.push({
         kind: res.liveErrors.length ? 'warn' : 'info',
@@ -158,6 +162,7 @@
       onsaved()
     } catch (e) {
       saveErr = errorText(e)
+      stale = changedElsewhere(e)
     } finally {
       saving = false
     }
@@ -424,7 +429,12 @@
       <button class="ui-btn" onclick={review} disabled={!dirty || problems.length > 0 || diffBusy}><FileDiff size={14} /> {diffBusy ? t('Comparing…') : t('Review changes')}</button>
       <button class="ui-btn primary" onclick={save} disabled={!dirty || problems.length > 0 || saving || !session.canManage(owner)} title={session.whyManage(owner)}><Save size={14} /> {saving ? t('Saving…') : t('Save')}</button>
     </footer>
-    {#if saveErr}<div class="ui-error-box" role="alert">{saveErr}</div>{/if}
+    {#if saveErr}
+      <div class="ui-error-box" role="alert">
+        {saveErr}
+        {#if stale}<button class="ui-btn sm" onclick={() => void load()}>{t('Reload (drops your edits)')}</button>{/if}
+      </div>
+    {/if}
   </div>
 {/if}
 
