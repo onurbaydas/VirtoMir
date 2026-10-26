@@ -111,7 +111,7 @@ func TestErrorMapping(t *testing.T) {
 		err  error
 		want int
 	}{
-		{errors.New("libvirt down"), http.StatusBadGateway},
+		{errors.New("something odd"), http.StatusInternalServerError},
 		{fmt.Errorf("%w: no domain", virt.ErrNotFound), http.StatusNotFound},
 		{&virt.OperationError{Message: "domain is already running"}, http.StatusConflict},
 	}
@@ -122,7 +122,11 @@ func TestErrorMapping(t *testing.T) {
 		}
 		var body map[string]string
 		_ = json.Unmarshal(rec.Body.Bytes(), &body)
-		if body["error"] != c.err.Error() {
+		want := c.err.Error()
+		if c.want == http.StatusInternalServerError {
+			want = "Something went wrong: " + want
+		}
+		if body["error"] != want {
 			t.Errorf("error = %q", body["error"])
 		}
 	}

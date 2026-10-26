@@ -603,7 +603,8 @@ func (s *Server) decode(w http.ResponseWriter, r *http.Request, v any) bool {
 }
 
 // writeError maps backend errors to HTTP: 404 unknown object, 422 invalid input,
-// 409 refused operation, 429 login lockout, 502 VirtoMir is up but libvirt is not answering.
+// 409 refused operation, 429 login lockout; the rest by plainError (503 libvirt unreachable,
+// 507 disk full, 404 missing file, 500 otherwise).
 func (s *Server) writeError(w http.ResponseWriter, err error) {
 	status := http.StatusBadGateway
 	var opErr *virt.OperationError
@@ -629,10 +630,12 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, context.Canceled):
 		status = 499 // client went away; nobody reads this
 	}
-	if status == http.StatusBadGateway {
+	msg := err.Error()
+	if status == http.StatusBadGateway { // no typed mapping: say it plainly (errmap.go), log it all
 		s.log.Error("request failed", "err", err)
+		status, msg = plainError(err)
 	}
-	s.writeJSON(w, status, map[string]string{"error": err.Error()})
+	s.writeJSON(w, status, map[string]string{"error": msg})
 }
 
 // done answers a successful change and refreshes the live view.
