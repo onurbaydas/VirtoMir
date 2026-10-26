@@ -512,11 +512,13 @@ func (s *Server) createSnapshot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) revertSnapshot(w http.ResponseWriter, r *http.Request) {
-	if err := s.backend.RevertSnapshot(r.PathValue("uuid"), r.PathValue("name")); err != nil {
+	// ?safety=false skips the snapshot of the current state that is taken first.
+	res, err := s.backend.RevertSnapshot(r.PathValue("uuid"), r.PathValue("name"), r.URL.Query().Get("safety") != "false")
+	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	s.done(w, http.StatusNoContent, nil)
+	s.done(w, http.StatusOK, res)
 }
 
 func (s *Server) deleteSnapshot(w http.ResponseWriter, r *http.Request) {

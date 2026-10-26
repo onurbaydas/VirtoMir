@@ -612,7 +612,7 @@ function domainRoute(host: w.DemoHost, method: string, rest: string[], q: URLSea
     }
     case method === 'POST' && rest.length === 4 && rest[1] === 'snapshots' && rest[3] === 'revert': {
       m.snapshots.forEach((s) => (s.current = s.name === rest[2]))
-      return none()
+      return json({ safetyNote: 'The demo takes no safety snapshots.' })
     }
     case method === 'DELETE' && rest.length === 3 && rest[1] === 'snapshots':
       m.snapshots = m.snapshots.filter((s) => s.name !== rest[2]).map((s) => (s.parent === rest[2] ? { ...s, parent: undefined } : s))

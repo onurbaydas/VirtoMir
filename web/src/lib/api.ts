@@ -1617,7 +1617,9 @@ export const api = {
     (await request<{ snapshots: SnapshotInfo[] }>('GET', `${domainPath(uuid)}/snapshots`)).snapshots,
   createSnapshot: (uuid: string, name: string, description: string) =>
     request<{ name: string }>('POST', `${domainPath(uuid)}/snapshots`, { name, description }),
-  revertSnapshot: (uuid: string, name: string) => request<void>('POST', `${domainPath(uuid)}/snapshots/${enc(name)}/revert`),
+  /** Takes a safety snapshot of the current state first (safety=false skips it). */
+  revertSnapshot: (uuid: string, name: string, safety = true) =>
+    request<{ safetySnapshot?: string; safetyNote?: string }>('POST', `${domainPath(uuid)}/snapshots/${enc(name)}/revert${safety ? '' : '?safety=false'}`),
   deleteSnapshot: (uuid: string, name: string) => request<void>('DELETE', `${domainPath(uuid)}/snapshots/${enc(name)}`),
 
   settings: (uuid: string) => request<SettingsView>('GET', `${domainPath(uuid)}/settings`),

@@ -5,6 +5,7 @@ import (
 	"path"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/digitalocean/go-libvirt"
@@ -196,28 +197,90 @@ func (c *Client) CreateSnapshot(uuid string, spec SnapshotSpec) (string, error) 
 	return spec.Name, nil
 }
 
-// RevertSnapshot returns the machine to the snapshot. Changes since then are lost.
-func (c *Client) RevertSnapshot(uuid, name string) error {
+// RevertResult tells what a revert did besides going back: the safety snapshot it took of
+// the state that was given up, or why it took none.
+type RevertResult struct {
+	SafetySnapshot string `json:"safetySnapshot,omitempty"`
+	SafetyNote     string `json:"safetyNote,omitempty"`
+}
+
+// RevertSnapshot returns the machine to the snapshot. With safety, the current state is
+// kept first as a snapshot named before-revert-<time>, so the revert can be undone; when
+// that is not possible the result says why and the revert goes on. A machine whose disks
+// other machines build on (linked clones) is never reverted: that would break them.
+func (c *Client) RevertSnapshot(uuid, name string, safety bool) (RevertResult, error) {
+	var res RevertResult
 	l, d, err := c.lookup(uuid)
 	if err != nil {
-		return err
+		return res, err
 	}
 	if err := c.guardTemplate(l, d, "go back to a snapshot"); err != nil {
-		return err
+		return res, err
+	}
+	s, err := l.DomainSnapshotLookupByName(d, name, 0)
+	if err != nil {
+		return res, classify(err)
+	}
+	x, err := c.parseDomain(l, d, true)
+	if err != nil {
+		return res, err
+	}
+	users, err := c.diskUsers(l)
+	if err != nil {
+		return res, fmt.Errorf("could not check which machines build on %s's disks: %w", d.Name, err)
+	}
+	if err := revertBlockers(x, d.Name, users); err != nil {
+		return res, err
+	}
+	if safety {
+		res = c.safetySnapshot(uuid, d.Name)
 	}
 	release, err := c.leases.take("snapshot revert", false, machineKey(formatUUID(d.UUID)))
 	if err != nil {
-		return err
+		return res, err
 	}
 	defer release()
-	s, err := l.DomainSnapshotLookupByName(d, name, 0)
-	if err != nil {
-		return classify(err)
-	}
 	if err := l.DomainRevertToSnapshot(s, 0); err != nil {
-		return classify(err)
+		return res, classify(err)
 	}
-	c.log.Info("snapshot reverted", "domain", d.Name, "snapshot", name)
+	c.log.Info("snapshot reverted", "domain", d.Name, "snapshot", name, "safety", res.SafetySnapshot)
+	return res, nil
+}
+
+// safetySnapshot keeps the state a revert gives up. Machines with external snapshots (disks
+// that are not all qcow2) are skipped: a newer snapshot there can stop the revert itself.
+func (c *Client) safetySnapshot(uuid, machine string) RevertResult {
+	existing, err := c.ListSnapshots(uuid)
+	if err != nil {
+		return RevertResult{SafetyNote: "No safety snapshot: " + err.Error()}
+	}
+	if slices.ContainsFunc(existing, func(s Snapshot) bool { return s.Location == "external" }) {
+		return RevertResult{SafetyNote: "No safety snapshot: " + machine + "'s snapshots are kept in files next to its disks, where a newer snapshot could block going back."}
+	}
+	name := "before-revert-" + time.Now().Format("20060102-150405")
+	if _, err := c.CreateSnapshot(uuid, SnapshotSpec{Name: name, Description: "Taken automatically before going back to an older snapshot."}); err != nil {
+		return RevertResult{SafetyNote: "No safety snapshot: " + err.Error()}
+	}
+	return RevertResult{SafetySnapshot: name}
+}
+
+// revertBlockers refuses a revert when another machine uses one of this machine's writable
+// disks as its backing image (a linked clone): going back would change what it builds on.
+func revertBlockers(x *libvirtxml.Domain, self string, users map[string][]string) error {
+	if x.Devices == nil {
+		return nil
+	}
+	for _, disk := range x.Devices.Disks {
+		if !snapshotsDisk(disk) {
+			continue
+		}
+		src, _ := diskSource(disk.Source)
+		for _, u := range users[src] {
+			if base, ok := strings.CutSuffix(u, " (as backing image)"); ok && base != self {
+				return refusedf("%s cannot go back to a snapshot: %s builds on its disk %s (a linked clone), and would break. Delete or fully copy %s first.", self, base, src, base)
+			}
+		}
+	}
 	return nil
 }
 

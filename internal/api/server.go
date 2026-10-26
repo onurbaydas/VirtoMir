@@ -71,7 +71,7 @@ type Backend interface {
 
 	ListSnapshots(uuid string) ([]virt.Snapshot, error)
 	CreateSnapshot(uuid string, spec virt.SnapshotSpec) (string, error)
-	RevertSnapshot(uuid, name string) error
+	RevertSnapshot(uuid, name string, safety bool) (virt.RevertResult, error)
 	DeleteSnapshot(uuid, name string) error
 
 	ListPools() ([]virt.Pool, error)
