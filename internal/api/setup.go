@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -91,9 +93,10 @@ func (s *Server) getSetup(w http.ResponseWriter, _ *http.Request) {
 	case kvmErr == nil:
 		add(SetupCheck{ID: "kvm", OK: true, Needed: true, Title: "Hardware virtualization", Detail: "/dev/kvm is there: machines run at full speed."})
 	case strings.Contains(flags, " vmx") || strings.Contains(flags, " svm"):
-		add(SetupCheck{ID: "kvm", Needed: true, Title: "Hardware virtualization", Detail: "The CPU supports it, but /dev/kvm is missing: load the module (modprobe kvm_intel or kvm_amd)."})
+		// Not blocking: machines still run, emulated (slowly), and the detail says how to fix it.
+		add(SetupCheck{ID: "kvm", Title: "Hardware virtualization", Detail: "The CPU supports it, but /dev/kvm is missing: load the module (modprobe kvm_intel or kvm_amd)."})
 	default:
-		add(SetupCheck{ID: "kvm", Needed: true, Title: "Hardware virtualization", Detail: "No /dev/kvm: turn on VT-x / AMD-V in the BIOS (on a virtual host: nested virtualization). Without it machines are emulated and very slow."})
+		add(SetupCheck{ID: "kvm", Title: "Hardware virtualization", Detail: "No /dev/kvm: turn on VT-x / AMD-V in the BIOS (on a virtual host: nested virtualization). Without it machines are emulated and very slow."})
 	}
 
 	if pools, err := s.backend.ListPools(); err == nil {
@@ -102,6 +105,9 @@ func (s *Server) getSetup(w http.ResponseWriter, _ *http.Request) {
 			if p.Active && (p.Type == "dir" || p.Type == "netfs" || p.Type == "fs") {
 				c.OK, c.Detail = true, "Pool "+p.Name+" ("+p.Path+")."
 				break
+			}
+			if !p.Active && p.Type == "dir" && !strings.HasPrefix(c.Detail, "Pool") {
+				c.Detail = "Pool " + p.Name + " (" + p.Path + ") exists but is stopped: start it."
 			}
 		}
 		add(c)
@@ -113,6 +119,10 @@ func (s *Server) getSetup(w http.ResponseWriter, _ *http.Request) {
 				c.OK, c.Detail = true, "Network "+n.Name+" ("+n.Mode+")."
 				break
 			}
+			// Debian and Ubuntu ship libvirt's "default" NAT network defined but stopped.
+			if !n.Active && n.Mode != "isolated" && !strings.HasPrefix(c.Detail, "Network") {
+				c.Detail = "Network " + n.Name + " (" + n.Mode + ") exists but is stopped: start it."
+			}
 		}
 		add(c)
 	}
@@ -120,12 +130,16 @@ func (s *Server) getSetup(w http.ResponseWriter, _ *http.Request) {
 		dir := s.schedules.Settings().BackupDir
 		out.BackupDir = dir
 		c := SetupCheck{ID: "backups", Title: "Backup location", Detail: "Backups go to " + dir + ". Another disk or an NFS mount is better than the system disk."}
+		// Only looks: the folder is created by the first backup, never by opening this page.
 		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
 			c.OK = true
-		} else if err := os.MkdirAll(dir, 0o755); err == nil {
+		} else if errors.Is(err, fs.ErrNotExist) {
 			c.OK = true
+			c.Detail = "Backups go to " + dir + " (created with the first backup). Another disk or an NFS mount is better than the system disk."
+		} else if err == nil {
+			c.Detail = dir + " is not a folder: choose another backup location."
 		} else {
-			c.Detail = "Backups would go to " + dir + ", which cannot be created: " + err.Error()
+			c.Detail = "Backups would go to " + dir + ", which cannot be used: " + err.Error()
 		}
 		add(c)
 	}

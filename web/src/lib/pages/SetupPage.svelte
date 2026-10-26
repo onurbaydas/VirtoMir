@@ -5,7 +5,7 @@
   import Check from '@lucide/svelte/icons/check'
   import CircleAlert from '@lucide/svelte/icons/circle-alert'
   import Info from '@lucide/svelte/icons/info'
-  import { api, errorText, type Pool } from '../api'
+  import { api, errorText, type Pool, type VNetwork } from '../api'
   import { ent } from '../enterprise'
   import { track } from '../jobs'
   import { router } from '../router.svelte'
@@ -59,6 +59,29 @@
 
   // ---- fixes --------------------------------------------------------------------------
   let poolPath = $state('/var/lib/libvirt/images')
+  // A pool or network that exists but is stopped (Debian and Ubuntu ship libvirt's
+  // "default" network that way) is started and set to autostart instead of adding another.
+  let stoppedPool = $state<Pool | null>(null)
+  let stoppedNet = $state<VNetwork | null>(null)
+  $effect(() => {
+    void checks
+    api.pools().then((p) => (stoppedPool = p.find((x) => !x.active && x.type === 'dir') ?? null)).catch(() => {})
+    api
+      .networks()
+      .then((n) => (stoppedNet = n.find((x) => !x.active && x.mode !== 'isolated' && x.name === 'default') ?? n.find((x) => !x.active && x.mode !== 'isolated') ?? null))
+      .catch(() => {})
+  })
+  const startPool = (p: Pool) =>
+    step('pool', async () => {
+      await api.poolAction(p.name, 'start')
+      await api.poolAutostart(p.name, true)
+    }, t('Pool {name} started', { name: p.name }))
+  const startNetwork = (n: VNetwork) =>
+    step('network', async () => {
+      await api.networkAction(n.name, 'start')
+      await api.networkAutostart(n.name, true)
+    }, t('Network {name} started', { name: n.name }))
+
   const createPool = () =>
     step('pool', async () => {
       const taken = new Set((await api.pools()).map((p) => p.name))
@@ -135,14 +158,23 @@
         <div class="body">
           <b>{c.title}</b>
           <span class="detail">{c.detail}</span>
-          {#if c.id === 'pool' && !c.ok}
+          {#if c.id === 'pool' && !c.ok && stoppedPool}
+            <div class="fix">
+              <button class="ui-btn primary" disabled={busy === 'pool'} onclick={() => startPool(stoppedPool!)}>{t('Start {name} and start it with the host', { name: stoppedPool.name })}</button>
+            </div>
+          {:else if c.id === 'pool' && !c.ok}
             <div class="fix">
               <input class="ui-input mono" bind:value={poolPath} aria-label={t('Directory for disks and images')} />
-              <button class="ui-btn primary" disabled={busy === 'pool'} onclick={createPool}>{busy === 'pool' ? 'Creating…' : t('Create pool')}</button>
+              <button class="ui-btn primary" disabled={busy === 'pool'} onclick={createPool}>{busy === 'pool' ? t('Creating…') : t('Create pool')}</button>
+            </div>
+          {:else if c.id === 'network' && !c.ok && stoppedNet}
+            <div class="fix">
+              <button class="ui-btn primary" disabled={busy === 'network'} onclick={() => startNetwork(stoppedNet!)}>{t('Start {name} and start it with the host', { name: stoppedNet.name })}</button>
+              <a class="ui-btn ghost" href="/networks" onclick={router.link}>{t('Bridge to the LAN instead…')}</a>
             </div>
           {:else if c.id === 'network' && !c.ok}
             <div class="fix">
-              <button class="ui-btn primary" disabled={busy === 'network'} onclick={createNetwork}>{busy === 'network' ? 'Creating…' : t('Create a NAT network')}</button>
+              <button class="ui-btn primary" disabled={busy === 'network'} onclick={createNetwork}>{busy === 'network' ? t('Creating…') : t('Create a NAT network')}</button>
               <a class="ui-btn ghost" href="/networks" onclick={router.link}>{t('Bridge to the LAN instead…')}</a>
             </div>
           {:else if c.id === 'backups'}
