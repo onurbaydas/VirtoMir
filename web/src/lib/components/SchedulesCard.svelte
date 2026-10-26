@@ -22,7 +22,7 @@
   function blank(kind: Kind): ScheduleInfo {
     return kind === 'snapshot'
       ? { id: '', kind, domain: uuid, enabled: false, every: 'daily', at: '03:00', weekday: 0, hours: 6, keep: 7 }
-      : { id: '', kind, domain: uuid, enabled: false, every: 'weekly', at: '02:00', weekday: 0, hours: 6, keep: 4, keepDaily: 7, keepWeekly: 4, keepMonthly: 12, keepYearly: 1, fullEvery: 7 }
+      : { id: '', kind, domain: uuid, enabled: false, every: 'daily', at: '02:00', weekday: 0, hours: 6, keep: 7, keepDaily: 7, keepWeekly: 4, keepMonthly: 12, keepYearly: 0, fullEvery: 7 }
   }
 
   async function load() {
@@ -66,14 +66,41 @@
     if (!drafts[k].id) return
     try {
       await api.runSchedule(drafts[k].id)
-      toasts.push({ kind: 'info', title: `${k === 'snapshot' ? 'Snapshot' : 'Backup'} started`, detail: t('Retention runs right after it.') })
+      toasts.push({ kind: 'info', title: k === 'snapshot' ? t('Snapshot started') : t('Backup started'), detail: t('Retention runs right after it.') })
       setTimeout(load, 3000)
     } catch (e) {
       toasts.push({ kind: 'error', title: t('Could not start'), detail: errorText(e) })
     }
   }
 
-  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  // ---- Backup retention presets: plain choices first, the raw GFS numbers under "Custom". ----
+  type Preset = 'daily7' | 'weekly4' | 'gfs' | 'custom'
+  const PRESETS: { key: Preset; label: string }[] = [
+    { key: 'daily7', label: t('Every night, keep 7') },
+    { key: 'weekly4', label: t('Every week, keep 4') },
+    { key: 'gfs', label: t('GFS: 7 daily, 4 weekly, 12 monthly') },
+    { key: 'custom', label: t('Custom') },
+  ]
+  const PRESET_VALUES: Record<Exclude<Preset, 'custom'>, Partial<ScheduleInfo>> = {
+    daily7: { every: 'daily', keep: 7, keepDaily: 0, keepWeekly: 0, keepMonthly: 0, keepYearly: 0 },
+    weekly4: { every: 'weekly', keep: 4, keepDaily: 0, keepWeekly: 0, keepMonthly: 0, keepYearly: 0 },
+    gfs: { every: 'daily', keep: 7, keepDaily: 7, keepWeekly: 4, keepMonthly: 12, keepYearly: 0 },
+  }
+  function presetOf(s: ScheduleInfo): Preset {
+    for (const [k, v] of Object.entries(PRESET_VALUES) as [Exclude<Preset, 'custom'>, Partial<ScheduleInfo>][]) {
+      if ((Object.keys(v) as (keyof ScheduleInfo)[]).every((f) => (s[f] ?? 0) === v[f])) return k
+    }
+    return 'custom'
+  }
+  let custom = $state(false)
+  function pickPreset(p: Preset) {
+    custom = p === 'custom'
+    if (p !== 'custom') Object.assign(drafts.backup, PRESET_VALUES[p])
+  }
+  /** Upper bound of backups kept: the last N plus one per kept day, week, month and year. */
+  const keptAtMost = (s: ScheduleInfo) => (s.keep || 0) + (s.keepDaily || 0) + (s.keepWeekly || 0) + (s.keepMonthly || 0) + (s.keepYearly || 0)
+
+  const DAYS = [t('Sunday'), t('Monday'), t('Tuesday'), t('Wednesday'), t('Thursday'), t('Friday'), t('Saturday')]
   const when = (s?: string) => (s ? new Date(s).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '')
   const LABEL: Record<Kind, { title: string; what: string }> = {
     snapshot: { title: t('Automatic snapshots'), what: t('Quick points to return to, stored inside the disk image. Not a backup: they live and die with the disk.') },
@@ -104,19 +131,35 @@
             </select>
             {#if d.every === 'hours'}
               <select class="ui-input" bind:value={d.hours} aria-label={t('Hours')}>
-                {#each [1, 2, 3, 4, 6, 8, 12] as h (h)}<option value={h}>every {h} h</option>{/each}
+                {#each [1, 2, 3, 4, 6, 8, 12] as h (h)}<option value={h}>{t('every {h} h', { h })}</option>{/each}
               </select>
             {:else}
               {#if d.every === 'weekly'}
                 <select class="ui-input" bind:value={d.weekday} aria-label={t('Weekday')}>
-                  {#each DAYS as day, i (day)}<option value={i}>on {day}</option>{/each}
+                  {#each DAYS as day, i (day)}<option value={i}>{t('on {day}', { day })}</option>{/each}
                 </select>
               {/if}
               <input class="ui-input time" type="time" bind:value={d.at} aria-label={t('At')} />
             {/if}
-            <span class="keep">{t('keep the last')} <input class="ui-input num" type="number" min="1" max="365" bind:value={d.keep} aria-label={t('Keep')} /></span>
+            {#if k === 'snapshot' || custom || presetOf(d) === 'custom'}
+              <span class="keep">{t('keep the last')} <input class="ui-input num" type="number" min="1" max="365" bind:value={d.keep} aria-label={t('Keep')} /></span>
+            {/if}
           </div>
           {#if k === 'backup'}
+            {@const preset = custom ? 'custom' : presetOf(d)}
+            <div class="presets" role="radiogroup" aria-label={t('How long backups are kept')} inert={!session.can('admin')}>
+              {#each PRESETS as p (p.key)}
+                <label class:on={preset === p.key}><input type="radio" name="preset-{uuid}" checked={preset === p.key} onchange={() => pickPreset(p.key)} /> {p.label}</label>
+              {/each}
+            </div>
+            <p class="what">
+              {t('About {n} backups are kept at most.', { n: keptAtMost(d) })}
+              {(d.fullEvery ?? 0) > 1
+                ? t('A full copy every {n} backups; the ones in between copy only what changed.', { n: d.fullEvery ?? 0 })
+                : t('Every backup is a full copy.')}
+            </p>
+          {/if}
+          {#if k === 'backup' && (custom || presetOf(d) === 'custom')}
             <div class="gfs-row" inert={!session.can('admin')}>
               <span class="gfs-title">{t('GFS Retention:')}</span>
               <label class="gfs-item">{t('Daily')} <input class="ui-input gfs-num" type="number" min="0" max="365" bind:value={d.keepDaily} placeholder="0" /></label>
@@ -134,15 +177,15 @@
             {#if d.lastError}
               <span class="err">{t('Last run failed: {lastError}', { lastError: d.lastError })}</span>
             {:else if d.lastResult}
-              <span class="muted">Last: {when(d.lastRun)} — {d.lastResult}</span>
+              <span class="muted">{t('Last: {when} — {result}', { when: when(d.lastRun), result: d.lastResult })}</span>
             {/if}
-            {#if d.enabled && d.nextRun}<span class="muted">Next: {when(d.nextRun)}</span>{/if}
+            {#if d.enabled && d.nextRun}<span class="muted">{t('Next: {when}', { when: when(d.nextRun) })}</span>{/if}
           </div>
           <div class="actions">
             {#if d.id}
               <button class="ui-btn sm ghost" onclick={() => runNow(k)} disabled={!session.can('admin')} title={session.why('admin')}><Play size={13} /> {t('Run now')}</button>
             {/if}
-            <button class="ui-btn sm primary" disabled={!dirty(k) || busy === k || !session.can('admin')} onclick={() => save(k)}>{busy === k ? 'Saving…' : 'Save'}</button>
+            <button class="ui-btn sm primary" disabled={!dirty(k) || busy === k || !session.can('admin')} onclick={() => save(k)}>{busy === k ? t('Saving…') : t('Save')}</button>
           </div>
         </div>
       {/each}
@@ -179,6 +222,28 @@
   }
   .sched.on {
     border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .presets label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .presets label.on {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .presets input {
+    margin: 0;
   }
   .what {
     margin: 0;
