@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/user"
 	"slices"
+	"strings"
 )
 
 // Role is what a user may do. Higher roles include the lower ones.
@@ -57,7 +58,8 @@ type Identity struct {
 	Via string `json:"via,omitempty"`
 }
 
-// Groups maps Linux groups to roles. Root is always Admin. An empty group name is unused.
+// Groups maps Linux groups to roles. Root is always Admin. Each field may list several
+// groups separated by commas; empty names and groups the host does not have are skipped.
 type Groups struct {
 	Admin, Operator, Viewer string
 }
@@ -75,12 +77,16 @@ func (g Groups) RoleOf(name string) Role {
 	if err != nil {
 		return NoAccess
 	}
-	in := func(group string) bool {
-		if group == "" {
-			return false
+	in := func(groups string) bool {
+		for _, group := range strings.Split(groups, ",") {
+			if group = strings.TrimSpace(group); group == "" {
+				continue
+			}
+			if gr, err := user.LookupGroup(group); err == nil && slices.Contains(ids, gr.Gid) {
+				return true
+			}
 		}
-		gr, err := user.LookupGroup(group)
-		return err == nil && slices.Contains(ids, gr.Gid)
+		return false
 	}
 	switch {
 	case in(g.Admin):

@@ -106,7 +106,7 @@
       <div class="or"><span>{t('or')}</span></div>
       <a class="ui-btn sso" href="/api/v1/auth/oidc/start"><KeyRound size={15} /> {methods.oidcLabel || t('Sign in with single sign-on')}</a>
     {/if}
-    <p class="note">{t('Root and members of the')} <span class="mono">{t('libvirt')}</span> {t('group can sign in{v}.', { v: methods.ldap || methods.oidc ? t(', and directory users whose groups have a role') : '' })}</p>
+    <p class="note">{methods.ldap || methods.oidc ? t('Root, administrators of this host (groups sudo, wheel or libvirt) and directory users whose groups have a role can sign in.') : t('Root and administrators of this host (groups sudo, wheel or libvirt) can sign in.')}</p>
   </form>
 </div>
 

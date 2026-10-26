@@ -61,15 +61,35 @@ fi
 
 # ---- Checks ---------------------------------------------------------------------------
 if [ "$SKIP_CHECKS" = 0 ]; then
-	if [ ! -S /var/run/libvirt/libvirt-sock ] && [ ! -S /run/libvirt/libvirt-sock ]; then
-		warn "libvirt does not seem to be running (no /run/libvirt/libvirt-sock)."
-		if command -v apt-get >/dev/null; then
-			warn "Install it with: apt-get install -y qemu-system-x86 libvirt-daemon-system ovmf swtpm"
-		elif command -v dnf >/dev/null; then
-			warn "Install it with: dnf install -y @virtualization edk2-ovmf swtpm && systemctl enable --now libvirtd"
+	libvirt_up() { [ -S /var/run/libvirt/libvirt-sock ] || [ -S /run/libvirt/libvirt-sock ]; }
+	start_libvirt() {
+		if systemctl cat virtqemud.socket >/dev/null 2>&1; then
+			# Modular daemons (Fedora, RHEL, newer Debian): virtproxyd gives the classic socket.
+			for u in virtqemud virtnetworkd virtstoraged virtnodedevd virtproxyd; do
+				systemctl enable --now "$u.socket" >/dev/null 2>&1 || true
+			done
+		else
+			systemctl enable --now libvirtd.service >/dev/null 2>&1 || true
 		fi
-		die "start libvirt first, or pass --skip-checks"
+		sleep 1
+	}
+	if ! libvirt_up; then
+		start_libvirt
 	fi
+	if ! libvirt_up; then
+		say "Installing libvirt and QEMU/KVM"
+		if command -v apt-get >/dev/null; then
+			DEBIAN_FRONTEND=noninteractive apt-get install -y qemu-system libvirt-daemon-system qemu-utils ovmf swtpm ||
+				die "could not install libvirt"
+		elif command -v dnf >/dev/null; then
+			dnf install -y @virtualization qemu-img edk2-ovmf swtpm || die "could not install libvirt"
+		else
+			die "install libvirt and QEMU/KVM with your package manager, then run this again"
+		fi
+		start_libvirt
+		libvirt_up || die "libvirt does not start (systemctl status libvirtd virtqemud.socket)"
+	fi
+	command -v qemu-img >/dev/null || warn "qemu-img is missing: backups and disk copies need it (package qemu-utils or qemu-img)."
 	[ -e /dev/kvm ] || warn "/dev/kvm is missing: virtual machines will run without hardware acceleration (slow)."
 fi
 
@@ -94,7 +114,8 @@ if [ "$DOWNLOAD" = 1 ]; then
 			grep -o "https://[^\"]*_linux_${ARCH}\.tar\.gz" | head -n1) ||
 			die "no public release found; for a private repository install and sign in to the gh CLI, or use --from"
 		curl -fsSL -o "$WORK/release.tar.gz" "$URL"
-		curl -fsSL -o "$WORK/release.tar.gz.sha256" "$URL.sha256" || true
+		curl -fsSL -o "$WORK/release.tar.gz.sha256" "$URL.sha256" ||
+			warn "no checksum published for this release: the download is NOT verified"
 	fi
 	for f in "$WORK"/*.tar.gz; do
 		FROM=$f
@@ -152,6 +173,18 @@ if [ "$UPGRADE" = 1 ]; then
 	systemctl restart virtomird.service
 else
 	systemctl enable --now virtomird.service
+	# Open the port in the host firewall, unless VirtoMir only listens locally.
+	case "$LISTEN" in
+	127.* | localhost:*) ;;
+	*)
+		if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+			ufw allow "${LISTEN##*:}/tcp" >/dev/null 2>&1 || true
+		elif command -v firewall-cmd >/dev/null && firewall-cmd --state >/dev/null 2>&1; then
+			firewall-cmd --permanent --add-port="${LISTEN##*:}/tcp" >/dev/null 2>&1 || true
+			firewall-cmd --add-port="${LISTEN##*:}/tcp" >/dev/null 2>&1 || true
+		fi
+		;;
+	esac
 fi
 
 sleep 1
@@ -166,12 +199,8 @@ PORT=${LISTEN##*:}
 case "$LISTEN" in 127.* | localhost:*) HOST=127.0.0.1 ;; esac
 echo
 say "VirtoMir is running: https://${HOST:-$(hostname)}:$PORT/"
-echo "    Sign in with root or a member of the 'libvirt' group (usermod -aG libvirt <user>)."
+echo "    Sign in as root or an administrator (groups sudo, wheel or libvirt)."
 echo "    The certificate is self-signed: your browser will ask you to confirm it once."
 echo "    Replace it with -tls files -tls-cert … -tls-key … in $UNIT if you have a real one."
-if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
-	echo "    Firewall: ufw allow $PORT/tcp"
-elif command -v firewall-cmd >/dev/null && firewall-cmd --state >/dev/null 2>&1; then
-	echo "    Firewall: firewall-cmd --permanent --add-port=$PORT/tcp && firewall-cmd --reload"
-fi
+
 echo "    Logs: journalctl -u virtomird -f    Uninstall: sudo $0 --uninstall"

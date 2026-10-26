@@ -36,8 +36,8 @@ cat >"$PKG/etc/default/virtomird" <<'EOF'
 #
 # -listen 127.0.0.1:8420   only local access (e.g. behind a reverse proxy)
 # -tls files -tls-cert /etc/ssl/… -tls-key /etc/ssl/…   your own certificate
-# -auth-group libvirt      members of this group (and root) are admins
-# -update-repo ""          turn off the update check (Account → Updates)
+# -auth-group libvirt,sudo  members of these groups (and root) are admins (default: libvirt,wheel,sudo)
+# -update-repo ""          turn off the update check (Host settings → Updates)
 VIRTOMIRD_ARGS="-listen 0.0.0.0:8420"
 # Only for a private release repository: a GitHub token that may read it.
 #VIRTOMIR_GITHUB_TOKEN=
@@ -93,8 +93,8 @@ Installed-Size: $SIZE
 Section: admin
 Priority: optional
 Homepage: https://github.com/onurbaydas/VirtoMir
-Depends: libc6 (>= 2.34), libpam0g, libpam-runtime, libvirt-daemon-system, qemu-system-x86 | qemu-system-arm, adduser
-Recommends: qemu-utils, ovmf, swtpm, swtpm-tools, tcpdump, virtiofsd, restic
+Depends: libc6 (>= 2.34), libpam0g, libpam-runtime, libvirt-daemon-system, qemu-system-x86 | qemu-system-arm, qemu-utils, adduser
+Recommends: ovmf, swtpm, swtpm-tools, tcpdump, virtiofsd, restic
 Suggests: ipmitool, nfs-common, open-iscsi, ceph-common, openvswitch-switch, lvm2, zfsutils-linux, libvirt-daemon-driver-storage-zfs
 Description: detailed web control deck for KVM/QEMU virtual machines
  VirtoMir is a web UI and API for libvirt hosts: machines with consoles, snapshots,
@@ -102,8 +102,8 @@ Description: detailed web control deck for KVM/QEMU virtual machines
  hosts as one cluster with live migration and high availability.
  .
  It installs next to an existing libvirt; nothing about the host's distribution
- changes. Open https://<host>:8420/ and sign in with a Linux account in the libvirt
- group (admins) or virtomir-operator / virtomir-viewer.
+ changes. Open https://<host>:8420/ and sign in as root or an administrator (sudo
+ or libvirt group), or as a member of virtomir-operator / virtomir-viewer.
 EOF
 
 printf '/etc/default/virtomird\n/etc/pam.d/virtomir\n' >"$PKG/DEBIAN/conffiles"
@@ -121,15 +121,32 @@ if [ "$1" = configure ]; then
 		if [ -n "$2" ]; then
 			systemctl try-restart virtomird.service || true # upgrade
 		else
+			# First install: nothing left for the admin to do by hand.
+			if systemctl cat virtqemud.socket >/dev/null 2>&1; then
+				for u in virtqemud virtnetworkd virtstoraged virtnodedevd virtproxyd; do
+					systemctl enable --now "$u.socket" >/dev/null 2>&1 || true
+				done
+			else
+				systemctl enable --now libvirtd.service >/dev/null 2>&1 || true
+			fi
+			# libvirt's "default" NAT network: started and set to start with the host.
+			if command -v virsh >/dev/null 2>&1 && virsh -q -c qemu:///system net-info default >/dev/null 2>&1; then
+				virsh -q -c qemu:///system net-autostart default >/dev/null 2>&1 || true
+				virsh -q -c qemu:///system net-start default >/dev/null 2>&1 || true
+			fi
+			# Firewall: open the web UI port if ufw or firewalld is on.
+			if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+				ufw allow 8420/tcp >/dev/null 2>&1 || true
+			elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+				firewall-cmd --permanent --add-port=8420/tcp >/dev/null 2>&1 || true
+				firewall-cmd --add-port=8420/tcp >/dev/null 2>&1 || true
+			fi
 			systemctl start virtomird.service || true
 		fi
 	fi
 	addr=$(hostname -I 2>/dev/null | cut -d' ' -f1)
 	echo "VirtoMir: open https://${addr:-<this-host>}:8420/ (self-signed certificate) and sign in"
-	echo "          with a Linux account in the 'libvirt' group (or root)."
-	if [ ! -S /run/libvirt/libvirt-sock ] && [ ! -S /var/run/libvirt/libvirt-sock ]; then
-		echo "          libvirt is not running yet: systemctl enable --now libvirtd"
-	fi
+	echo "          as root or an administrator (sudo or libvirt group)."
 fi
 exit 0
 EOF

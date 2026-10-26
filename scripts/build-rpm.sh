@@ -54,8 +54,8 @@ Release:        1
 Summary:        Detailed web control deck for KVM/QEMU virtual machines (experimental package)
 License:        AGPL-3.0-or-later
 URL:            https://github.com/onurbaydas/VirtoMir
-Requires:       pam, libvirt-daemon-kvm, qemu-kvm, systemd
-Recommends:     qemu-img, edk2-ovmf, swtpm, swtpm-tools, tcpdump, virtiofsd, restic
+Requires:       pam, libvirt-daemon-kvm, libvirt-daemon-config-network, qemu-kvm, qemu-img, systemd
+Recommends:     edk2-ovmf, swtpm, swtpm-tools, tcpdump, virtiofsd, restic
 %global debug_package %{nil}
 %global __strip /bin/true
 
@@ -83,8 +83,23 @@ install -Dm0644 $SRC/LICENSE %{buildroot}/usr/share/licenses/virtomir/LICENSE
 %post
 for g in virtomir-operator virtomir-viewer; do getent group \$g >/dev/null || groupadd -r \$g; done
 systemctl daemon-reload >/dev/null 2>&1 || :
-if [ \$1 -eq 1 ]; then systemctl enable --now virtomird.service >/dev/null 2>&1 || :; fi
-echo "VirtoMir: open https://<this-host>:8420/ and sign in with a Linux account in the 'libvirt' group (or root)."
+if [ \$1 -eq 1 ]; then
+  # libvirt: Fedora and RHEL use the modular daemons; virtproxyd gives the classic socket VirtoMir uses.
+  if systemctl cat virtqemud.socket >/dev/null 2>&1; then
+    for u in virtqemud virtnetworkd virtstoraged virtnodedevd virtinterfaced virtsecretd virtnwfilterd virtproxyd; do
+      systemctl enable --now \$u.socket >/dev/null 2>&1 || :
+    done
+  else
+    systemctl enable --now libvirtd.service >/dev/null 2>&1 || :
+  fi
+  # firewalld: open the web UI port in the default zone (kept and right now; no reload).
+  if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+    firewall-cmd --permanent --add-port=8420/tcp >/dev/null 2>&1 || :
+    firewall-cmd --add-port=8420/tcp >/dev/null 2>&1 || :
+  fi
+  systemctl enable --now virtomird.service >/dev/null 2>&1 || :
+fi
+echo "VirtoMir: open https://<this-host>:8420/ and sign in as root or an administrator (groups wheel or libvirt)."
 
 %preun
 if [ \$1 -eq 0 ]; then systemctl disable --now virtomird.service >/dev/null 2>&1 || :; fi

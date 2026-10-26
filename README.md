@@ -211,7 +211,7 @@ The repository is built by `scripts/build-repos.sh` in the release workflow (`In
 sudo apt install ./virtomir_1.0.0_amd64.deb   # or _arm64.deb; pulls libvirt and QEMU if missing
 ```
 
-It starts `virtomird` right away on port 8420 (self-signed HTTPS); the first admin to sign in is walked through what the host still needs (storage, a network, a backup location, a first image). Sign in with a Linux account in the `libvirt` group (admins), `virtomir-operator` or `virtomir-viewer`. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Later versions install from the UI (Host settings → Updates). Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
+Every package does the host setup itself: it pulls in libvirt and QEMU/KVM, starts libvirt and its `default` NAT network, opens port 8420 in ufw or firewalld when one is on, and starts `virtomird` (self-signed HTTPS). Nothing is left to type. The first admin to sign in is walked through what the host still needs (storage, a backup location, a first image). Sign in as `root` or with your own account if you are an administrator (groups `sudo`, `wheel` or `libvirt`); members of `virtomir-operator` and `virtomir-viewer` get fewer rights. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Later versions install from the UI (Host settings → Updates). Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
 
 ### Fedora / RHEL package (experimental)
 
@@ -223,20 +223,16 @@ Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf`
 
 ### Tarball
 
-Requirements: a Linux host with **libvirt + QEMU/KVM** running and **systemd**.
+Requirements: a Linux host with **systemd**. If libvirt and QEMU/KVM are missing, the installer adds them with apt or dnf.
 
 ```sh
-# Debian / Ubuntu: libvirt itself, if you don't have it yet
-sudo apt install qemu-system-x86 libvirt-daemon-system ovmf swtpm
-
-# Download a release, unpack it and run the installer
 tar xzf virtomir_v1.0.0_linux_amd64.tar.gz
 sudo ./virtomir_v1.0.0_linux_amd64/install.sh
 ```
 
-The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pam.d/virtomir`) and a systemd unit, starts it and prints the address — usually `https://<host>:8420/`. Your browser asks you to accept the self-signed certificate once.
+The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pam.d/virtomir`) and a systemd unit, opens the port in ufw or firewalld, starts it and prints the address — usually `https://<host>:8420/`. Your browser asks you to accept the self-signed certificate once.
 
-- Sign in as `root` or as a user in the `libvirt` group (`sudo usermod -aG libvirt <user>`).
+- Sign in as `root` or as an administrator (groups `sudo`, `wheel` or `libvirt`).
 - Only local access, behind your own reverse proxy: `sudo ./install.sh --listen 127.0.0.1:8420`
 - Upgrade: run the installer of the new release. Remove: `sudo ./install.sh --uninstall` (your VMs are not touched).
 - From GitHub directly: `sudo ./install.sh --download` (uses the `gh` CLI for private repositories).
@@ -249,7 +245,7 @@ The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pa
 |---|---|---|
 | `-listen` | `127.0.0.1:8420` (installer: `0.0.0.0:8420`) | address and port |
 | `-auth` | `pam` | `none` disables sign-in — development only |
-| `-auth-group` | `libvirt` | besides root, who may sign in as admin |
+| `-auth-group` | `libvirt,wheel,sudo` | besides root, who may sign in as admin (comma-separated groups) |
 | `-operator-group` | `virtomir-operator` | members may run machines but not change them |
 | `-viewer-group` | `virtomir-viewer` | members may look but change nothing |
 | `-tls` | `auto` | `auto` (self-signed in `-state-dir`), `files` (`-tls-cert`, `-tls-key`), `off` (behind a TLS proxy) |

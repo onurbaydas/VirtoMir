@@ -82,7 +82,9 @@ func main() {
 	flag.StringVar(&c.listen, "listen", "127.0.0.1:8420", "HTTP(S) listen address")
 	flag.StringVar(&c.socket, "libvirt-socket", virt.DefaultSocket, "libvirt UNIX socket")
 	flag.StringVar(&c.authMode, "auth", "pam", `sign-in: "pam" (Linux accounts) or "none" (development only)`)
-	flag.StringVar(&c.authGroup, "auth-group", "libvirt", "members of this group (and root) are admins")
+	// The host's own administrators (wheel on Fedora/RHEL, sudo on Debian/Ubuntu) can already
+	// become root, so they sign in as admins without being added to libvirt first.
+	flag.StringVar(&c.authGroup, "auth-group", "libvirt,wheel,sudo", "members of these comma-separated groups (and root) are admins")
 	flag.StringVar(&c.operatorGroup, "operator-group", "virtomir-operator", "members may run machines (power, console, snapshots) but not change them")
 	flag.StringVar(&c.viewerGroup, "viewer-group", "virtomir-viewer", "members may look at everything but change nothing")
 	flag.StringVar(&c.pamService, "pam-service", "virtomir", "PAM service name (/etc/pam.d/<name>)")
