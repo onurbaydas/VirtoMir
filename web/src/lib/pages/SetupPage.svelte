@@ -11,6 +11,7 @@
   import { router } from '../router.svelte'
   import { session } from '../session.svelte'
   import { toasts } from '../toast.svelte'
+  import SetupBridge from '../components/SetupBridge.svelte'
 
   interface SetupCheck {
     id: string
@@ -88,6 +89,7 @@
       await api.createPool({ name: taken.has('default') ? 'images' : 'default', path: poolPath.trim() })
     }, t('Storage pool created'))
 
+  let bridgeOpen = $state(false)
   const createNetwork = () =>
     step('network', async () => {
       const nets = await api.networks()
@@ -170,14 +172,20 @@
           {:else if c.id === 'network' && !c.ok && stoppedNet}
             <div class="fix">
               <button class="ui-btn primary" disabled={busy === 'network'} onclick={() => startNetwork(stoppedNet!)}>{t('Start {name} and start it with the host', { name: stoppedNet.name })}</button>
-              <a class="ui-btn ghost" href="/networks" onclick={router.link}>{t('Bridge to the LAN instead…')}</a>
+              <button class="ui-btn ghost" onclick={() => (bridgeOpen = !bridgeOpen)} aria-expanded={bridgeOpen}>{t('Bridge to the LAN instead…')}</button>
             </div>
           {:else if c.id === 'network' && !c.ok}
             <div class="fix">
               <button class="ui-btn primary" disabled={busy === 'network'} onclick={createNetwork}>{busy === 'network' ? t('Creating…') : t('Create a NAT network')}</button>
-              <a class="ui-btn ghost" href="/networks" onclick={router.link}>{t('Bridge to the LAN instead…')}</a>
+              <button class="ui-btn ghost" onclick={() => (bridgeOpen = !bridgeOpen)} aria-expanded={bridgeOpen}>{t('Bridge to the LAN instead…')}</button>
             </div>
-          {:else if c.id === 'backups'}
+          {:else if c.id === 'network' && c.ok && !bridgeOpen}
+            <div class="fix"><button class="ui-btn ghost" onclick={() => (bridgeOpen = true)}>{t('Also bridge machines to the LAN…')}</button></div>
+          {/if}
+          {#if c.id === 'network' && bridgeOpen}
+            <SetupBridge ondone={() => ((bridgeOpen = false), void load())} />
+          {/if}
+          {#if c.id === 'backups'}
             <div class="fix">
               <input class="ui-input mono" bind:value={backupDir} aria-label={t('Backup location')} />
               <button class="ui-btn" disabled={busy === 'backups' || !backupDir.trim()} onclick={saveBackups}>{t('Save')}</button>
