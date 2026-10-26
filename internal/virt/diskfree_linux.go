@@ -20,3 +20,21 @@ func diskSpace(path string) (free, total uint64, ok bool) {
 		}
 	}
 }
+
+// onSystemDisk reports whether path (or its nearest existing parent) is on the same file
+// system as "/".
+func onSystemDisk(path string) bool {
+	var root syscall.Stat_t
+	if syscall.Stat("/", &root) != nil {
+		return false
+	}
+	for p := filepath.Clean(path); ; p = filepath.Dir(p) {
+		var st syscall.Stat_t
+		if err := syscall.Stat(p, &st); err == nil {
+			return st.Dev == root.Dev
+		}
+		if parent := filepath.Dir(p); parent == p {
+			return false
+		}
+	}
+}

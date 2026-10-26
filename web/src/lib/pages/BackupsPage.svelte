@@ -20,6 +20,7 @@
   let freeBytes = $state<number | undefined>()
   let totalBytes = $state<number | undefined>()
   let oldDirs = $state<string[]>([])
+  let onSystemDisk = $state(false)
   let newDir = $state('')
   let dirEverywhere = $state(false)
   let error = $state('')
@@ -31,6 +32,7 @@
       freeBytes = r.freeBytes
       totalBytes = r.totalBytes
       oldDirs = r.oldDirs ?? []
+      onSystemDisk = !!r.onSystemDisk
       if (!cluster.clustered) {
         backups = r.backups
       } else {
@@ -177,6 +179,10 @@
     <span class="hint">{backups?.length ?? 0} backups</span>
   </div>
 </section>
+
+{#if onSystemDisk}
+  <p class="ui-panel card hint">{t('Backups are on the system disk: they do not survive that disk failing. Another disk or an NFS mount is safer.')}</p>
+{/if}
 
 {#if lowSpace}
   <section class="ui-panel card failing" role="alert">
