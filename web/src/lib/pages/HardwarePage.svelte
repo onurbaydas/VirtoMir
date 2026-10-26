@@ -97,10 +97,6 @@
     </div>
   </section>
 
-  <HostTopologyPanel />
-
-  <GpuPoolPanel pci={hw.pci} />
-
   <h2 class="sub"><Cpu size={16} /> {t('PCI devices')}</h2>
   {#each groups as [g, devs] (g)}
     <section class="ui-panel group">
@@ -193,6 +189,9 @@
       <p class="muted pad">{t('No USB devices are connected.')}</p>
     {/each}
   </section>
+
+  <HostTopologyPanel />
+  <GpuPoolPanel pci={hw.pci} />
 {/if}
 
 <style>

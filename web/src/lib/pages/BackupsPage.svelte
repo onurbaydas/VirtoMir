@@ -2,7 +2,7 @@
   import { t } from '../i18n.svelte'
   import Archive from '@lucide/svelte/icons/archive'
   import FolderCog from '@lucide/svelte/icons/folder-cog'
-  import { api, errorText, type BackupInfo } from '../api'
+  import { api, errorText, type BackupInfo, type ScheduleInfo } from '../api'
   import { formatBytes } from '../format'
   import { machineHref, router } from '../router.svelte'
   import { live } from '../live.svelte'
@@ -69,6 +69,45 @@
   let localIds = $derived(new Set((backups ?? []).filter((b) => !b.hostId || cluster.members.find((m) => m.id === b.hostId)?.self).map((b) => b.id)))
   let exists = (uuid: string) => live.snapshot?.domains.some((d) => d.uuid === uuid)
 
+  // Protection at a glance: machines of this host without an automatic backup, and
+  // automatic backups whose last run failed (so a failure never stays silent).
+  let schedules = $state<ScheduleInfo[] | null>(null)
+  const loadSchedules = () =>
+    api
+      .schedules()
+      .then((s) => (schedules = s))
+      .catch(() => (schedules = null))
+  $effect(() => {
+    void loadSchedules()
+  })
+  let backupSchedules = $derived((schedules ?? []).filter((s) => s.kind === 'backup'))
+  let unprotected = $derived(
+    schedules === null
+      ? []
+      : (live.snapshot?.domains ?? []).filter((d) => !d.template && !backupSchedules.some((s) => s.enabled && s.domain === d.uuid)),
+  )
+  let failing = $derived(backupSchedules.filter((s) => s.enabled && s.lastError))
+  const nameOf = (uuid: string) => live.snapshot?.domains.find((d) => d.uuid === uuid)?.name ?? uuid
+  let protecting = $state<Record<string, boolean>>({})
+  async function protect(uuid: string) {
+    if (protecting[uuid]) return
+    protecting[uuid] = true
+    try {
+      const existing = backupSchedules.find((s) => s.domain === uuid)
+      await api.saveSchedule(
+        existing
+          ? { ...existing, enabled: true }
+          : { id: '', kind: 'backup', domain: uuid, enabled: true, every: 'daily', at: '02:00', weekday: 0, hours: 6, keep: 7, fullEvery: 7 },
+      )
+      toasts.push({ kind: 'info', title: t('Automatic backups on for {name}', { name: nameOf(uuid) }), detail: t('Every night at 02:00, the last 7 kept. Change it on the machine\'s Backups tab.') })
+      await loadSchedules()
+    } catch (e) {
+      toasts.push({ kind: 'error', title: t('Automatic backups not turned on'), detail: errorText(e) })
+    } finally {
+      protecting[uuid] = false
+    }
+  }
+
   async function saveDir() {
     try {
       const target = newDir.trim()
@@ -126,7 +165,34 @@
   </div>
 </section>
 
-<OffsitePanel {localIds} onchange={load} onready={(r) => (offsiteReady = r)} />
+{#if failing.length}
+  <section class="ui-panel card failing" role="alert">
+    <h2>{t('Automatic backups that failed')}</h2>
+    {#each failing as s (s.id)}
+      <div class="row">
+        <a href={machineHref(s.domain, 'backups')} onclick={router.link}>{nameOf(s.domain)}</a>
+        <span class="hint">{s.lastError}</span>
+      </div>
+    {/each}
+  </section>
+{/if}
+
+{#if unprotected.length}
+  <section class="ui-panel card">
+    <header class="g-head">
+      <span>{t('Machines without automatic backups')}</span>
+      <span class="hint">{unprotected.length}</span>
+    </header>
+    {#each unprotected as d (d.uuid)}
+      <div class="row">
+        <a href={machineHref(d.uuid, 'backups')} onclick={router.link}>{d.name}</a>
+        <button class="ui-btn sm" disabled={!session.can('admin') || protecting[d.uuid]} title={session.why('admin')} onclick={() => protect(d.uuid)}>
+          {t('Back up every night')}
+        </button>
+      </div>
+    {/each}
+  </section>
+{/if}
 
 {#if error}
   <div class="ui-error-box">{error}</div>
@@ -167,7 +233,29 @@
   {/each}
 {/if}
 
+<OffsitePanel {localIds} onchange={load} onready={(r) => (offsiteReady = r)} />
+
 <style>
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 2px;
+    border-top: 1px solid var(--border);
+  }
+  .row a {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .failing {
+    border-color: var(--danger);
+  }
+  .failing h2 {
+    margin: 0 0 6px;
+    color: var(--danger);
+    font-size: 15px;
+  }
   .everywhere {
     display: flex;
     align-items: center;

@@ -18,6 +18,7 @@
   import NoisyNeighborsPanel from '../components/NoisyNeighborsPanel.svelte'
   import CapacitySimulator from '../components/CapacitySimulator.svelte'
   import DrsRecommendationDeck from '../components/DrsRecommendationDeck.svelte'
+  import { cluster } from '../cluster.svelte'
 
   let histRange = $state<Range>('24h')
   let snap = $derived(live.snapshot)
@@ -127,7 +128,7 @@
 
 <NoisyNeighborsPanel />
 
-<CapacitySimulator />
+{#if cluster.clustered}<CapacitySimulator />{/if}
 
 <DrsRecommendationDeck />
 

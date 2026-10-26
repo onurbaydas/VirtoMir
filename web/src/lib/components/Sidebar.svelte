@@ -26,6 +26,8 @@
   import FolderKanban from '@lucide/svelte/icons/folder-kanban'
   import ShoppingBag from '@lucide/svelte/icons/shopping-bag'
   import BookOpen from '@lucide/svelte/icons/book-open'
+  import ChevronRight from '@lucide/svelte/icons/chevron-right'
+  import Settings from '@lucide/svelte/icons/settings'
   import { cluster } from '../cluster.svelte'
   import { alerts } from '../alerts.svelte'
   import { session } from '../session.svelte'
@@ -45,35 +47,83 @@
     pending: 'Connecting…',
   }
 
-  const ALL_NAV = [
+  type NavItem = { name: string; href: string; label: string; icon: typeof Server; role: 'viewer' | 'operator' | 'admin'; beta?: boolean }
+  // Daily single-host work stays at the top; everything else lives in groups that open on
+  // demand (P1: nothing is hidden for good, it is one click deeper).
+  const PRIMARY: NavItem[] = [
     { name: 'overview', href: '/', label: t('Overview'), icon: LayoutDashboard, role: 'viewer' },
     { name: 'machines', href: '/machines', label: t('Machines'), icon: Boxes, role: 'viewer' },
     { name: 'storage', href: '/storage', label: t('Storage'), icon: HardDrive, role: 'viewer' },
-    { name: 'ceph', href: '/ceph', label: t('Ceph'), icon: Database, role: 'viewer' },
-    { name: 'library', href: '/library', label: t('Content Library'), icon: BookOpen, role: 'viewer' },
     { name: 'networks', href: '/networks', label: t('Networks'), icon: Network, role: 'viewer' },
-    { name: 'sdn', href: '/sdn', label: t('SDN'), icon: Waypoints, role: 'viewer' },
-    { name: 'physnet', href: '/physnet', label: t('Physical network'), icon: RouterIcon, role: 'viewer' },
-    { name: 'k8s', href: '/kubernetes', label: t('Kubernetes'), icon: Ship, role: 'viewer' },
-    { name: 'baremetal', href: '/baremetal', label: t('Bare metal'), icon: ServerCog, role: 'viewer' },
-    { name: 'hardware', href: '/hardware', label: t('Hardware'), icon: CircuitBoard, role: 'viewer' },
     { name: 'backups', href: '/backups', label: t('Backups'), icon: Archive, role: 'viewer' },
     { name: 'alerts', href: '/alerts', label: t('Alerts'), icon: Bell, role: 'viewer' },
-    { name: 'activity', href: '/activity', label: t('Activity'), icon: ClockArrowUp, role: 'admin' },
-    { name: 'projects', href: '/projects', label: t('Projects'), icon: FolderKanban, role: 'admin' },
-    { name: 'catalog', href: '/catalog', label: t('Catalog'), icon: ShoppingBag, role: 'viewer' },
-    { name: 'insights', href: '/insights', label: t('Insights'), icon: TrendingUp, role: 'viewer' },
-    { name: 'reports', href: '/reports', label: t('Reports'), icon: FileText, role: 'viewer' },
-    { name: 'compliance', href: '/compliance', label: t('Compliance'), icon: ShieldCheck, role: 'viewer' },
-  ] as const
-  // Cluster: admins always (that is where hosts are added), others once there is one.
-  let NAV = $derived([
-    ...ALL_NAV.filter((n) => session.can(n.role)),
-    ...(session.can('admin') || cluster.clustered
-      ? [{ name: 'cluster', href: '/cluster', label: t('Cluster'), icon: Server, role: 'viewer' } as const]
-      : []),
-  ])
+    { name: 'hardware', href: '/hardware', label: t('Hardware'), icon: CircuitBoard, role: 'viewer' },
+  ]
+  type Group = { id: string; label: string; items: NavItem[] }
+  let GROUPS = $derived<Group[]>(
+    [
+      {
+        id: 'ops',
+        label: t('Operations'),
+        items: [
+          { name: 'insights', href: '/insights', label: t('Insights'), icon: TrendingUp, role: 'viewer' },
+          { name: 'reports', href: '/reports', label: t('Reports'), icon: FileText, role: 'viewer' },
+          { name: 'compliance', href: '/compliance', label: t('Compliance'), icon: ShieldCheck, role: 'viewer' },
+          { name: 'library', href: '/library', label: t('Content Library'), icon: BookOpen, role: 'viewer' },
+          { name: 'activity', href: '/activity', label: t('Activity'), icon: ClockArrowUp, role: 'admin' },
+        ] satisfies NavItem[],
+      },
+      {
+        id: 'dc',
+        label: t('Datacenter'),
+        items: [
+          // Cluster: admins always (that is where hosts are added), others once there is one.
+          ...(session.can('admin') || cluster.clustered ? [{ name: 'cluster', href: '/cluster', label: t('Cluster'), icon: Server, role: 'viewer' } as NavItem] : []),
+          { name: 'ceph', href: '/ceph', label: t('Ceph'), icon: Database, role: 'viewer', beta: true },
+          { name: 'sdn', href: '/sdn', label: t('SDN'), icon: Waypoints, role: 'viewer', beta: true },
+          { name: 'physnet', href: '/physnet', label: t('Physical network'), icon: RouterIcon, role: 'viewer' },
+          { name: 'k8s', href: '/kubernetes', label: t('Kubernetes'), icon: Ship, role: 'viewer', beta: true },
+          { name: 'baremetal', href: '/baremetal', label: t('Bare metal'), icon: ServerCog, role: 'viewer', beta: true },
+        ] satisfies NavItem[],
+      },
+      {
+        id: 'tenancy',
+        label: t('Self-service'),
+        items: [
+          { name: 'projects', href: '/projects', label: t('Projects'), icon: FolderKanban, role: 'admin' },
+          { name: 'catalog', href: '/catalog', label: t('Catalog'), icon: ShoppingBag, role: 'viewer' },
+        ] satisfies NavItem[],
+      },
+    ]
+      .map((g) => ({ ...g, items: g.items.filter((n) => session.can(n.role)) }))
+      .filter((g) => g.items.length > 0),
+  )
+  let NAV = $derived(PRIMARY.filter((n) => session.can(n.role)))
 
+  // Which groups are open: remembered per browser; a cluster opens Datacenter by default,
+  // and the group of the page being shown is always open.
+  const OPEN_KEY = 'virtomir.nav.open'
+  let opened = $state<Record<string, boolean>>(readOpen())
+  function readOpen(): Record<string, boolean> {
+    try {
+      return JSON.parse(localStorage.getItem(OPEN_KEY) ?? '{}') ?? {}
+    } catch {
+      return {}
+    }
+  }
+  function toggle(id: string) {
+    opened = { ...opened, [id]: !isOpen(id) }
+    try {
+      localStorage.setItem(OPEN_KEY, JSON.stringify(opened))
+    } catch {
+      /* private mode: the choice lasts until the page reloads */
+    }
+  }
+  const holdsRoute = (g: Group) => g.items.some((n) => n.name === router.route.name)
+  function isOpen(id: string): boolean {
+    return opened[id] ?? (id === 'dc' && cluster.clustered)
+  }
+  let mobileNav = $derived([...NAV, ...GROUPS.flatMap((g) => (isOpen(g.id) || holdsRoute(g) ? g.items : []))])
   let domains = $derived(live.snapshot?.domains ?? [])
   let vmFilter = $state('')
   let filteredDomains = $derived(
@@ -92,7 +142,7 @@
 <header class="mobile">
   <a class="m-brand" href="/" onclick={router.link}><img src={import.meta.env.BASE_URL + 'favicon.svg'} alt="VirtoMir" width="22" height="22" /></a>
   <nav class="m-nav" aria-label={t('Main')}>
-    {#each NAV as n (n.name)}
+    {#each mobileNav as n (n.name)}
       <a class:active={router.route.name === n.name} href={router.scoped(n.href)} onclick={router.link}>{n.label}</a>
     {/each}
     <a class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} aria-label={t('New machine')}><Plus size={16} /></a>
@@ -149,6 +199,30 @@
         {/if}
       </a>
     {/each}
+    {#each GROUPS as g (g.id)}
+      {@const open = isOpen(g.id) || holdsRoute(g)}
+      <button class="group" aria-expanded={open} onclick={() => toggle(g.id)} disabled={holdsRoute(g)}>
+        <ChevronRight size={13} class="chev" />
+        <span class="label">{g.label}</span>
+        {#if !open}<span class="gcount">{g.items.length}</span>{/if}
+      </button>
+      {#if open}
+        {#each g.items as n (n.name)}
+          {@const Icon = n.icon}
+          <a
+            class="item sub"
+            class:active={router.route.name === n.name}
+            href={router.scoped(n.href)}
+            aria-current={router.route.name === n.name ? 'page' : undefined}
+            onclick={router.link}
+          >
+            <Icon size={15} />
+            <span class="label">{n.label}</span>
+            {#if n.beta}<span class="tag" title={t('Experimental: tested on nested KVM, not yet on real hardware')}>{t('beta')}</span>{/if}
+          </a>
+        {/each}
+      {/if}
+    {/each}
   </nav>
 
   <div class="section">
@@ -187,6 +261,9 @@
         <span class="avatar"><UserRound size={14} /></span>
         <span class="uname">{session.info.user ?? 'dev mode'}<small>{session.role}</small></span>
       </a>
+      {#if session.can('admin')}
+        <a class="icon" class:active={router.route.name === 'settings'} href="/settings" onclick={router.link} title={t('Host settings')} aria-label={t('Host settings')}><Settings size={15} /></a>
+      {/if}
       {#if session.info.user}
         <button class="icon" title={t('Sign out')} aria-label={t('Sign out')} onclick={() => session.logout()}><LogOut size={15} /></button>
       {/if}
@@ -307,8 +384,11 @@
   }
   aside nav {
     display: flex;
+    flex: none;
     flex-direction: column;
+    max-height: 62vh;
     padding: 2px 10px;
+    overflow-y: auto;
   }
   .item {
     display: flex;
@@ -363,6 +443,52 @@
   .count.alert.crit {
     background: var(--cadmium);
     color: #fff;
+  }
+  .group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 2px 8px 3px;
+    border: 0;
+    border-bottom: 1px solid var(--border-strong);
+    background: none;
+    color: var(--text-2);
+    font-family: var(--font-display);
+    font-size: 12.5px;
+    font-stretch: 75%;
+    font-weight: 800;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+  }
+  .group:hover:not(:disabled) {
+    color: var(--text);
+  }
+  .group:disabled {
+    cursor: default;
+  }
+  .group :global(.chev) {
+    flex: none;
+    transition: transform var(--dur-fast);
+  }
+  .group[aria-expanded='true'] :global(.chev) {
+    transform: rotate(90deg);
+  }
+  .gcount {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--text-3);
+  }
+  .item.sub {
+    min-height: 27px;
+    font-size: 14px;
+  }
+  .icon.active {
+    background: var(--invert-bg);
+    color: var(--invert-fg);
   }
   .section {
     display: flex;

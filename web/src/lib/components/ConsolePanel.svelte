@@ -91,15 +91,18 @@
   {/if}
 
   {#if error}
-    <div class="ui-error-box">{error}</div>
+    <div class="ui-error-box">
+      {error}
+      <button class="link" onclick={() => void load()}>{t('Try again')}</button>
+    </div>
   {:else if !info}
     <div class="msg ui-panel"><span class="spin"></span></div>
   {:else if !running}
     <div class="msg ui-panel">
       <Monitor size={32} strokeWidth={1.5} />
-      <strong>{d.name} is off</strong>
+      <strong>{t('{name} is off', { name: d.name })}</strong>
       <span>{t('Start it to see its screen. The console connects by itself once it runs.')}</span>
-      <button class="ui-btn primary" disabled={!session.can('operator')} title={session.why('operator')} onclick={() => live.act(d, 'start')}>
+      <button class="ui-btn primary" disabled={!session.can('operator') || !!live.pending[d.uuid]} title={session.why('operator')} onclick={() => live.act(d, 'start')}>
         <Play size={14} /> {t('Start')}
       </button>
     </div>
@@ -116,7 +119,13 @@
   {:else}
     <div class="msg ui-panel">
       <strong>{t('No console')}</strong>
-      <span>{t('This machine has neither a VNC display nor a serial console. Add one in the XML editor (a')} <span class="mono">&lt;graphics type='vnc'/&gt;</span> {t('device).')}</span>
+      <span>{t('This machine has neither a screen nor a text console.')}</span>
+      {#if info.display === ''}
+        <button class="ui-btn primary" disabled={switching || !session.can('admin')} title={session.why('admin')} onclick={() => switchDisplay('vnc')}>
+          <Monitor size={14} /> {t('Add a screen (VNC)')}
+        </button>
+        <span class="small">{t('It shows from the next start of the machine.')}</span>
+      {/if}
     </div>
   {/if}
   {#if !standalone && info?.display && session.can('admin')}
@@ -197,6 +206,9 @@
   .msg strong {
     color: var(--text);
     font-size: 15px;
+  }
+  .small {
+    font-size: 12px;
   }
   .spin {
     width: 22px;

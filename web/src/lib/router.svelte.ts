@@ -31,6 +31,7 @@ export type Route =
   | { name: 'insights' }
   | { name: 'compliance' }
   | { name: 'setup' }
+  | { name: 'settings' }
   | { name: 'library' }
   | { name: 'not-found' }
 
@@ -61,6 +62,7 @@ function parse(path: string, hash: string): Route {
   if (path === '/insights') return { name: 'insights' }
   if (path === '/compliance') return { name: 'compliance' }
   if (path === '/setup') return { name: 'setup' }
+  if (path === '/settings') return { name: 'settings' }
   const c = /^\/console\/([0-9a-fA-F-]{36})$/.exec(path)
   if (c) return { name: 'console', uuid: c[1].toLowerCase(), head: Math.max(0, (Number(hash.replace(/^#/, '')) || 1) - 1) }
   const m = /^\/machines\/([0-9a-fA-F-]{36})$/.exec(path)

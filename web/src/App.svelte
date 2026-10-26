@@ -36,6 +36,7 @@
   import InsightsPage from './lib/pages/InsightsPage.svelte'
   import CompliancePage from './lib/pages/CompliancePage.svelte'
   import SetupPage from './lib/pages/SetupPage.svelte'
+  import HostSettingsPage from './lib/pages/HostSettingsPage.svelte'
   import { api } from './lib/api'
   import ConsolePage from './lib/pages/ConsolePage.svelte'
   import Login from './lib/pages/Login.svelte'
@@ -170,6 +171,8 @@
           <HardwarePage />
         {:else if route.name === 'setup'}
           <SetupPage />
+        {:else if route.name === 'settings'}
+          <HostSettingsPage />
         {:else if route.name === 'reports'}
           <ReportsPage />
         {:else if route.name === 'insights'}

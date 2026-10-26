@@ -2,10 +2,8 @@
   import { t as tt, lang, LANGS, setLang, type Lang } from '../i18n.svelte'
   import { router } from '../router.svelte'
   import QuotasCard from '../components/QuotasCard.svelte'
-  import SigninCard from '../components/SigninCard.svelte'
   import IntegrationsCard from '../components/IntegrationsCard.svelte'
   import TwoFactorCard from '../components/TwoFactorCard.svelte'
-  import UpdatesCard from '../components/UpdatesCard.svelte'
   import KeyRound from '@lucide/svelte/icons/key-round'
   import Plus from '@lucide/svelte/icons/plus'
   import Trash from '@lucide/svelte/icons/trash'
@@ -104,14 +102,14 @@
       {#each LANGS as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
     </select>
   </label>
-  {#if session.can('admin')}<a class="ui-btn sm ghost setup" href="/setup" onclick={router.link}>{tt('Run the host setup again')}</a>{/if}
+  {#if session.can('admin')}<a class="ui-btn sm ghost setup" href="/settings" onclick={router.link}>{tt('Host settings')}</a>{/if}
 </section>
 
-{#if session.can('admin')}<UpdatesCard />{/if}
 <TwoFactorCard />
-<QuotasCard />
-{#if session.can('admin')}<SigninCard />{/if}
-<IntegrationsCard />
+{#if !session.can('admin')}
+  <QuotasCard />
+  <IntegrationsCard />
+{/if}
 
 <section class="ui-panel card">
   <header class="head">

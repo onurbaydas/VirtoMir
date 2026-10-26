@@ -19,6 +19,7 @@
   import Radio from '@lucide/svelte/icons/radio'
   import SdnTopologyDiagram from '../components/SdnTopologyDiagram.svelte'
   import PcapSnifferModal from '../components/PcapSnifferModal.svelte'
+  import { ent } from '../enterprise'
 
   let nets = $state<VNetwork[] | null>(null)
   let error = $state('')
@@ -115,7 +116,15 @@
     withV6 = false
     formErr = ''
     dlg = true
+    ent
+      .interfaces()
+      .then((ifs) => {
+        hostBridges = ifs.filter((i) => i.kind === 'bridge' && !i.name.startsWith('virbr')).map((i) => i.name)
+        if (!spec.bridge && hostBridges[0]) spec.bridge = hostBridges[0]
+      })
+      .catch(() => (hostBridges = []))
   }
+  let hostBridges = $state<string[]>([])
   let everywhere = $state(true)
   async function create(e: SubmitEvent) {
     e.preventDefault()
@@ -232,7 +241,6 @@
   </div>
 </header>
 
-<SdnTopologyDiagram />
 
 {#if error}
   <div class="ui-error-box">{error}</div>
@@ -370,6 +378,11 @@
   </div>
 {/if}
 
+<!-- How the host's own ports and bridges are wired: needed once, for a LAN bridge. -->
+<details class="wiring">
+  <summary>{t('Host wiring: ports, bridges, bonds and VLANs')}</summary>
+  <SdnTopologyDiagram />
+</details>
 
 <PcapSnifferModal open={snifferOpen} onclose={() => (snifferOpen = false)} />
 
@@ -405,7 +418,7 @@
       <input class="ui-input" bind:value={spec.name} placeholder={t('lab')} required pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" />
     </label>
     <div class="modes" role="radiogroup" aria-label={t('Network type')}>
-      {#each ['nat', 'isolated', 'route', 'bridge', 'vxlan'] as m (m)}
+      {#each ['nat', 'isolated', 'route', 'bridge', ...(cluster.clustered ? ['vxlan'] : [])] as m (m)}
         <label class="mode-opt" class:on={spec.mode === m}>
           <input type="radio" name="mode" value={m} bind:group={spec.mode} />
           <strong>{MODE[m].label}</strong>
@@ -416,8 +429,15 @@
     {#if spec.mode === 'bridge'}
       <label class="ui-field">
         <span class="label">{t('Host bridge')}</span>
-        <input class="ui-input mono" bind:value={spec.bridge} placeholder="br0" required />
-        <span class="hint">{t('The bridge must already exist on the host (e.g. created with NetworkManager, netplan or ovs-vsctl).')}</span>
+        <input class="ui-input mono" bind:value={spec.bridge} placeholder={hostBridges[0] ?? 'br0'} list="host-bridges" required />
+        <datalist id="host-bridges">{#each hostBridges as b (b)}<option value={b}></option>{/each}</datalist>
+        <span class="hint">
+          {#if hostBridges.length}
+            {t('Bridges on this host: {list}.', { list: hostBridges.join(', ') })}
+          {:else}
+            {t('This host has no bridge yet. Create one from a network port under "Host wiring" below.')}
+          {/if}
+        </span>
       </label>
       <label class="ui-switch"><input type="checkbox" bind:checked={spec.ovs} /> {t('It is an Open vSwitch bridge')}</label>
       {#if spec.ovs}
@@ -487,6 +507,16 @@
 </Dialog>
 
 <style>
+  .wiring {
+    margin-top: 18px;
+  }
+  .wiring > summary {
+    margin-bottom: 10px;
+    color: var(--text-2);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
   .lead {
     margin: 0;
     color: var(--text-3);

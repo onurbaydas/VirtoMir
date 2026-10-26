@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { t } from '../i18n.svelte'
   import { session } from '../session.svelte'
   import ArrowLeft from '@lucide/svelte/icons/arrow-left'
@@ -207,9 +208,9 @@
     source !== 'cloud'
       ? ''
       : !/^[a-z_][a-z0-9_-]{0,31}$/.test(ciUser)
-        ? 'User name: lowercase letters, digits, "_" or "-".'
+        ? t('User name: lowercase letters, digits, "_" or "-".')
         : !ciPassword && keys.length === 0
-          ? 'Set a password or an SSH key to be able to sign in.'
+          ? t('Set a password or an SSH key to be able to sign in.')
           : '',
   )
   let bootable = $derived(source === 'iso' ? withDisk || !!iso : source === 'cloud' ? !!baseImage : !!existingDisk)
@@ -283,11 +284,47 @@
       })
   })
 
-  let canCreate = $derived(
-    kind === 'container'
-      ? nameValid && !nameTaken && ctAvailable && rootPasswordOK && vcpus >= 1 && memGiB > 0
-      : nameValid && !nameTaken && bootable && !ciProblem && vcpus >= 1 && memGiB > 0,
+  // The first thing that keeps "Create" disabled, in plain words next to the button.
+  let blocker = $derived(
+    !name.trim()
+      ? t('Give the machine a name.')
+      : !nameValid
+        ? t('The name may only use letters, digits, ".", "_", "+" and "-".')
+        : nameTaken
+          ? t('A machine with this name already exists.')
+          : vcpus < 1 || !(memGiB > 0)
+            ? t('Give it at least one vCPU and some memory.')
+            : kind === 'container'
+              ? !ctAvailable
+                ? t('System containers are not available on this host.')
+                : !rootPasswordOK
+                  ? t('Set a root password of at least 8 characters.')
+                  : ''
+              : !bootable
+                ? source === 'iso'
+                  ? t('Add a disk or installation media.')
+                  : source === 'cloud'
+                    ? t('Choose a cloud image.')
+                    : t('Choose the disk image to boot.')
+                : ciProblem
+                  ? ciProblem
+                  : '',
   )
+  let canCreate = $derived(!blocker)
+  // Not blocking, but worth saying: an empty disk with nothing to install from, and more
+  // vCPUs or memory than the host has.
+  let noInstaller = $derived(kind === 'vm' && source === 'iso' && withDisk && !iso)
+  let overCPU = $derived(vcpus > maxCPUs)
+  let overMem = $derived(memGiB > maxMemGiB)
+
+  // A cloud image needs a file pool; keep the pool choice valid when the source changes.
+  $effect(() => {
+    if (source !== 'cloud') return
+    const fp = filePools
+    if (fp.length && !fp.some((p) => p.name === untrack(() => pool))) pool = fp[0].name
+  })
+  let moreOpen = $state(false)
+  let codeOpen = $state(false)
 
   let busy = $state(false)
   let error = $state('')
@@ -376,7 +413,7 @@
 
 <svelte:head><title>{t('New machine · VirtoMir')}</title></svelte:head>
 
-<a class="back" href="/" onclick={router.link}><ArrowLeft size={15} /> {t('Overview')}</a>
+<a class="back" href={router.scoped('/machines')} onclick={router.link}><ArrowLeft size={15} /> {t('Machines')}</a>
 <header class="page-head">
   <div>
     <h1>{t('New machine')}</h1>
@@ -561,14 +598,22 @@
         <label for="vcpus">{t('Virtual CPUs')}</label>
         <input id="vcpus" type="range" min="1" max={maxCPUs} bind:value={vcpus} />
         <input class="ui-input num-in" type="number" min="1" max="512" bind:value={vcpus} aria-label={t('Virtual CPUs')} />
-        <span class="hint">{t('The host has {maxCPUs} threads; machines may share them.', { maxCPUs: maxCPUs })}</span>
+        <span class="hint" class:warn={overCPU}>
+          {overCPU
+            ? t('More vCPUs than the host has ({maxCPUs} threads): the machine will run slowly.', { maxCPUs })
+            : t('The host has {maxCPUs} threads; machines may share them.', { maxCPUs: maxCPUs })}
+        </span>
       </div>
       <div class="slider">
         <label for="mem">{t('Memory (GiB)')}</label>
         <input id="mem" type="range" min="1" max={maxMemGiB} step="1" bind:value={memGiB} />
         <input class="ui-input num-in" type="number" min="0.25" step="0.25" bind:value={memGiB} aria-label={t('Memory in GiB')} />
         <span class="hint" class:warn={memGiB > maxMemGiB * 0.8}>
-          {t('{v}The host has {memoryKiB}.', { v: memGiB > maxMemGiB * 0.8 ? 'Close to all host memory — the host may start swapping. ' : '', memoryKiB: formatKiB(live.host?.memoryKiB ?? 0) })}
+          {overMem
+            ? t('More memory than the host has ({memoryKiB}): the machine may not start, or the host will swap.', { memoryKiB: formatKiB(live.host?.memoryKiB ?? 0) })
+            : memGiB > maxMemGiB * 0.8
+              ? t('Close to all host memory — the host may start swapping. The host has {memoryKiB}.', { memoryKiB: formatKiB(live.host?.memoryKiB ?? 0) })
+              : t('The host has {memoryKiB}.', { memoryKiB: formatKiB(live.host?.memoryKiB ?? 0) })}
         </span>
       </div>
       {#if kind === 'vm' && gpuPools.length}
@@ -646,13 +691,13 @@
             {/if}
           </label>
         </div>
-        <label class="ui-field">
-          <span class="label">{t('Provisioning Policy')}</span>
-          <select class="ui-input" bind:value={provisioning}>
-            <option value="thin">{t('Thin (sparse, allocate on demand)')}</option>
-            <option value="thick">{t('Thick (fully preallocated, highest sustained performance)')}</option>
-          </select>
+        <label class="ui-switch">
+          <input type="checkbox" checked={provisioning === 'thick'} onchange={(e) => (provisioning = e.currentTarget.checked ? 'thick' : 'thin')} />
+          {t('Reserve the whole size now (thick: steadier performance, uses the space at once)')}
         </label>
+        {#if noInstaller}
+          <p class="warn-note">{t('No installer picked: the machine will start with an empty disk. Pick an ISO above, or use network boot.')}</p>
+        {/if}
       {:else if source === 'iso' && !iso}
         <p class="error">{t('Without a disk the machine needs installation media to boot from.')}</p>
       {/if}
@@ -733,16 +778,17 @@
                   <option value="bios">{t('BIOS (legacy)')}</option>
                 </select>
               </label>
-              <label class="ui-field">
-                <span class="label">{t('Confidential Computing')}</span>
-                <select class="ui-input" bind:value={confidential} disabled={!ccKinds.length}>
-                  <option value="">{t('None (standard VM)')}</option>
-                  {#if ccKinds.includes('sev')}<option value="sev">{t('AMD SEV (Secure Encrypted Virtualization)')}</option>{/if}
-                  {#if ccKinds.includes('sev-snp')}<option value="sev-snp">{t('AMD SEV-SNP (Secure Nested Paging)')}</option>{/if}
-                  {#if ccKinds.includes('tdx')}<option value="tdx">{t('Intel TDX (Trust Domain Extensions)')}</option>{/if}
-                </select>
-                {#if !ccKinds.length}<span class="hint">{t('This host offers no memory encryption (AMD SEV or Intel TDX).')}</span>{/if}
-              </label>
+              {#if ccKinds.length}
+                <label class="ui-field">
+                  <span class="label">{t('Confidential Computing')}</span>
+                  <select class="ui-input" bind:value={confidential}>
+                    <option value="">{t('None (standard VM)')}</option>
+                    {#if ccKinds.includes('sev')}<option value="sev">{t('AMD SEV (Secure Encrypted Virtualization)')}</option>{/if}
+                    {#if ccKinds.includes('sev-snp')}<option value="sev-snp">{t('AMD SEV-SNP (Secure Nested Paging)')}</option>{/if}
+                    {#if ccKinds.includes('tdx')}<option value="tdx">{t('Intel TDX (Trust Domain Extensions)')}</option>{/if}
+                  </select>
+                </label>
+              {/if}
             </div>
             <label class="ui-switch"><input type="checkbox" bind:checked={secureBoot} disabled={firmware === 'bios'} /> {t('Secure Boot')}</label>
             <label class="ui-switch"><input type="checkbox" bind:checked={tpm} /> {t('TPM 2.0 (required by Windows 11)')}</label>
@@ -771,24 +817,33 @@
       <dt>{t('Firmware')}</dt><dd>{firmware === 'uefi' ? 'UEFI' : 'BIOS'}{secureBoot && firmware === 'uefi' ? ', Secure Boot' : ''}{tpm ? ', TPM' : ''}</dd>
       {/if}
     </dl>
-    {#if myProjects.length}
-      <label class="ui-field">
-        <span class="label">{t('Project')}</span>
-        <select class="ui-input" bind:value={project}>
-          <option value="">{t('No project (global)')}</option>
-          {#each myProjects as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-        </select>
-        <span class="hint">{t('Only the projects you may change things in; their pools and networks are the choices above.')}</span>
-      </label>
-    {/if}
-    {#if respools.length}
-      <label class="ui-field">
-        <span class="label">{t('Resource pool')}</span>
-        <select class="ui-input" bind:value={respool}>
-          <option value="">{t('None')}</option>
-          {#each respools as rp (rp.id)}<option value={rp.id}>{rp.name}</option>{/each}
-        </select>
-      </label>
+    {#if myProjects.length || respools.length}
+      <button type="button" class="adv small-adv" aria-expanded={moreOpen || !!project || !!respool} onclick={() => (moreOpen = !moreOpen)}>
+        {t('Project and resource pool')}
+        <span class="adv-sum">{[project && projects.name(project), respool && respools.find((r) => r.id === respool)?.name].filter(Boolean).join(' · ') || t('none')}</span>
+        <span class="chev" class:up={moreOpen || !!project || !!respool}><ChevronDown size={16} /></span>
+      </button>
+      {#if moreOpen || project || respool}
+        {#if myProjects.length}
+          <label class="ui-field">
+            <span class="label">{t('Project')}</span>
+            <select class="ui-input" bind:value={project}>
+              <option value="">{t('No project (global)')}</option>
+              {#each myProjects as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+            </select>
+            <span class="hint">{t('Only the projects you may change things in; their pools and networks are the choices above.')}</span>
+          </label>
+        {/if}
+        {#if respools.length}
+          <label class="ui-field">
+            <span class="label">{t('Resource pool')}</span>
+            <select class="ui-input" bind:value={respool}>
+              <option value="">{t('None')}</option>
+              {#each respools as rp (rp.id)}<option value={rp.id}>{rp.name}</option>{/each}
+            </select>
+          </label>
+        {/if}
+      {/if}
     {/if}
     <label class="ui-switch"><input type="checkbox" bind:checked={start} /> {t('Start it right away')}</label>
     {#if error}<div class="ui-error-box">{error}</div>{/if}
@@ -798,11 +853,15 @@
     {/if}
     <button class="ui-btn primary create" disabled={!canCreate || busy || !session.canCreate}>
       <Rocket size={15} />
-      {busy ? 'Creating…' : start ? 'Create and start' : 'Create'}
+      {busy ? t('Creating…') : start ? t('Create and start') : t('Create')}
     </button>
-    {#if kind === 'vm' && !bootable}<span class="error">{t('Add a disk or installation media.')}</span>{/if}
+    {#if blocker && session.canCreate}<span class="error" role="status">{blocker}</span>{/if}
 
-    <IaCPanel {spec} />
+    <button type="button" class="adv small-adv" aria-expanded={codeOpen} onclick={() => (codeOpen = !codeOpen)}>
+      {t('As code (API, Ansible, virt-install)')}
+      <span class="chev" class:up={codeOpen}><ChevronDown size={16} /></span>
+    </button>
+    {#if codeOpen}<IaCPanel {spec} />{/if}
   </aside>
 </form>
 
@@ -1059,6 +1118,20 @@
     font-weight: 600;
     text-align: left;
     cursor: pointer;
+  }
+  .small-adv {
+    justify-content: space-between;
+    color: var(--text-2);
+    font-size: 13px;
+  }
+  .warn-note {
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
+    color: var(--text);
+    font-size: 12.5px;
   }
   .adv-sum {
     margin-left: auto;

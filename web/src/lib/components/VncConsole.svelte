@@ -123,7 +123,15 @@
     clearTimeout(retryTimer)
     conn = 'connecting'
     message = ''
-    const { default: RFB } = await import('@novnc/novnc')
+    let RFB: typeof import('@novnc/novnc').default
+    try {
+      RFB = (await import('@novnc/novnc')).default
+    } catch (e) {
+      // The console code could not be loaded (e.g. VirtoMir was updated meanwhile).
+      conn = 'error'
+      message = t('The console could not be loaded ({error}). Reload the page.', { error: e instanceof Error ? e.message : String(e) })
+      return
+    }
     if (destroyed) return
     const url = wsURL(`/api/v1/domains/${encodeURIComponent(uuid)}/console/vnc${head ? `?head=${head}` : ''}`)
     const r = new RFB(screen, url, { shared: true, wsProtocols: ['binary'], credentials: password ? { password } : undefined })
@@ -143,12 +151,15 @@
     r.addEventListener('disconnect', (e: Event) => {
       rfb = null
       if (destroyed) return
+      // A refused password or security handshake will not fix itself: no retry loop, the
+      // error stays on screen with its "Try again" button.
+      if (conn === 'error') return
       const clean = (e as CustomEvent<{ clean: boolean }>).detail?.clean
       conn = 'disconnected'
       // Reconnect with backoff: 1, 2, 4, … up to 15 s. A rebooting guest comes back on its own.
       const wait = Math.min(15, 2 ** retry) * 1000
       retry++
-      message = clean ? 'The console closed.' : t('Connection lost.')
+      message = clean ? t('The console closed.') : t('Connection lost.')
       retryTimer = setTimeout(connect, wait)
     })
     r.addEventListener('credentialsrequired', () => {
@@ -160,7 +171,7 @@
     })
     r.addEventListener('securityfailure', (e: Event) => {
       conn = 'error'
-      message = `Security negotiation failed: ${(e as CustomEvent<{ reason?: string }>).detail?.reason ?? 'unknown reason'}`
+      message = t('Security negotiation failed: {reason}', { reason: (e as CustomEvent<{ reason?: string }>).detail?.reason ?? t('unknown reason') })
     })
     r.addEventListener('clipboard', (e: Event) => {
       guestClip = (e as CustomEvent<{ text: string }>).detail.text

@@ -69,14 +69,35 @@
   let pending = $derived(live.pending[uuid])
   let gone = $derived(!!detail && !!live.snapshot?.connected && !liveDom)
 
+  /** A failed refresh after the first load: the page keeps the last data and says so. */
+  let reloadErr = $state('')
+  // Only the newest request may update the page: a slow older answer (or one for the
+  // machine shown before) must not overwrite it.
+  let seq = 0
   async function load() {
+    const my = ++seq
     try {
-      detail = await api.domain(uuid)
+      const d = await api.domain(uuid)
+      if (my !== seq) return
+      detail = d
       error = null
+      reloadErr = ''
     } catch (e) {
-      error = e instanceof ApiError ? { status: e.status, message: e.message } : { status: 0, message: String(e) }
+      if (my !== seq) return
+      if (detail) reloadErr = errorText(e)
+      else error = e instanceof ApiError ? { status: e.status, message: e.message } : { status: 0, message: String(e) }
     }
   }
+
+  // Another machine opened in the same page: forget the previous one at once.
+  let shown = ''
+  $effect.pre(() => {
+    if (uuid === shown) return
+    shown = uuid
+    detail = null
+    error = null
+    reloadErr = ''
+  })
 
   // Reload the definition whenever the machine changes state (devices, ports and addresses
   // change on start/stop). Running machines get a slow refresh for DHCP leases.
@@ -89,14 +110,23 @@
     return () => clearInterval(t)
   })
 
-  type Tab = 'overview' | 'console' | 'firewall' | 'settings' | 'hardware' | 'snapshots' | 'backups' | 'changes' | 'xml'
-  const TABS: Tab[] = ['overview', 'console', 'firewall', 'settings', 'hardware', 'snapshots', 'backups', 'changes', 'xml']
+  // Six everyday tabs; firewall, change history and raw XML live one level deeper under
+  // "Advanced". Their old links (#firewall, #changes, #xml) still open them there.
+  type Tab = 'overview' | 'console' | 'settings' | 'hardware' | 'snapshots' | 'backups' | 'advanced'
+  type Sub = 'firewall' | 'changes' | 'xml'
+  const TABS: Tab[] = ['overview', 'console', 'settings', 'hardware', 'snapshots', 'backups', 'advanced']
+  const SUBS: Sub[] = ['changes', 'firewall', 'xml']
   // A system container (ADR-0055) has no VM settings, firewall, snapshots or backups.
-  const VM_ONLY: Tab[] = ['firewall', 'settings', 'snapshots', 'backups']
+  const VM_ONLY: Tab[] = ['settings', 'snapshots', 'backups']
   let container = $derived(detail?.kind === 'container')
+  let hash = $derived(router.route.name === 'machine' ? router.route.tab : '')
   let tab = $derived.by<Tab>(() => {
-    const want = router.route.name === 'machine' && TABS.includes(router.route.tab as Tab) ? (router.route.tab as Tab) : 'overview'
+    const want: Tab = SUBS.includes(hash as Sub) ? 'advanced' : TABS.includes(hash as Tab) ? (hash as Tab) : 'overview'
     return container && VM_ONLY.includes(want) ? 'overview' : want
+  })
+  let sub = $derived.by<Sub>(() => {
+    const want: Sub = SUBS.includes(hash as Sub) ? (hash as Sub) : 'changes'
+    return container && want === 'firewall' ? 'changes' : want
   })
 
   // ---- Management ---------------------------------------------------------------------
@@ -126,7 +156,7 @@
           ? { label: t('Turn into a normal machine'), icon: LayoutTemplate, run: () => void setTemplate(false), disabled: admin }
           : { label: t('Make template…'), icon: LayoutTemplate, run: () => (dlg = 'template'), disabled: admin },
       )
-    if (detail.persistent)
+    if (detail.persistent && (projects.list.length > 0 || !!dom?.project))
       items.push({
         label: t('Move to project…'),
         icon: FolderKanban,
@@ -214,7 +244,14 @@
     })
     await load()
   }
-  const setTab = (t: Tab) => router.navigate(`/machines/${uuid}${t === 'overview' ? '' : '#' + t}`, { replace: true })
+  // Unsaved settings: ask before leaving the tab (the panel also guards reloads).
+  let settingsDirty = $state(false)
+  function go(to: string) {
+    if (settingsDirty && tab === 'settings' && to !== 'settings' && !confirm(t('Leave without saving your changes to the settings?'))) return
+    router.navigate(`/machines/${uuid}${to && to !== 'overview' ? '#' + to : ''}`, { replace: true })
+  }
+  const setTab = (to: Tab) => go(to)
+  const setSub = (to: Sub) => go(to)
 
   // ---- Overview cards -------------------------------------------------------------
 
@@ -250,33 +287,38 @@
     value === undefined || value === null || value === '' ? null : { label, value: String(value), tech }
   const clean = (xs: (Prop | null)[]) => xs.filter((x): x is Prop => x !== null)
 
+  // Everyday facts first; the plumbing (firmware files, emulator, power events) is folded
+  // away under "Technical details".
   let systemProps = $derived.by(() => {
     if (!detail) return []
     const s = detail.system
-    const hv =
-      s.hypervisor === 'kvm'
-        ? 'KVM (hardware accelerated)'
-        : s.hypervisor === 'qemu'
-          ? 'QEMU emulation (no acceleration, slow)'
-          : s.hypervisor
-    const fw = s.firmware === 'uefi' ? (s.secureBoot ? 'UEFI with Secure Boot' : 'UEFI') : t('BIOS (legacy)')
+    const fw = s.firmware === 'uefi' ? (s.secureBoot ? t('UEFI with Secure Boot') : t('UEFI')) : t('BIOS (legacy)')
     return clean([
-      p('Hypervisor', hv, 'domain@type'),
-      p('Architecture', s.arch, 'os/type@arch'),
-      p( t('Chipset / machine type'), s.machine, 'os/type@machine'),
-      p('Firmware', fw, s.firmware === 'uefi' ? 'os@firmware / os/loader' : 'os/loader'),
-      p( t('Firmware image'), s.loader, 'os/loader'),
-      p( t('UEFI variables'), s.nvram, 'os/nvram'),
-      p( t('Kernel (direct boot)'), s.kernel, 'os/kernel'),
-      p( t('Kernel command line'), s.cmdline, 'os/cmdline'),
-      p( t('Boot menu'), s.bootMenu ? 'shown' : null, 'os/bootmenu@enable'),
-      p('Clock', s.clock, 'clock@offset'),
-      p( t('When the guest powers off'), POWER_EVENT[s.onPoweroff ?? ''] ?? s.onPoweroff, 'on_poweroff'),
-      p( t('When the guest reboots'), POWER_EVENT[s.onReboot ?? ''] ?? s.onReboot, 'on_reboot'),
-      p( t('When the guest crashes'), POWER_EVENT[s.onCrash ?? ''] ?? s.onCrash, 'on_crash'),
-      p('Emulator', s.emulator, 'devices/emulator'),
+      p(t('Firmware'), fw, s.firmware === 'uefi' ? 'os@firmware / os/loader' : 'os/loader'),
+      p(t('Boot menu'), s.bootMenu ? t('shown') : null, 'os/bootmenu@enable'),
+      s.hypervisor === 'qemu' ? p(t('Hypervisor'), t('QEMU emulation (no acceleration, slow)'), 'domain@type') : null,
     ])
   })
+  let techProps = $derived.by(() => {
+    if (!detail) return []
+    const s = detail.system
+    const hv = s.hypervisor === 'kvm' ? t('KVM (hardware accelerated)') : s.hypervisor === 'qemu' ? t('QEMU emulation (no acceleration, slow)') : s.hypervisor
+    return clean([
+      p(t('Hypervisor'), hv, 'domain@type'),
+      p(t('Architecture'), s.arch, 'os/type@arch'),
+      p(t('Chipset / machine type'), s.machine, 'os/type@machine'),
+      p(t('Firmware image'), s.loader, 'os/loader'),
+      p(t('UEFI variables'), s.nvram, 'os/nvram'),
+      p(t('Kernel (direct boot)'), s.kernel, 'os/kernel'),
+      p(t('Kernel command line'), s.cmdline, 'os/cmdline'),
+      p(t('Clock'), s.clock, 'clock@offset'),
+      p(t('When the guest powers off'), POWER_EVENT[s.onPoweroff ?? ''] ?? s.onPoweroff, 'on_poweroff'),
+      p(t('When the guest reboots'), POWER_EVENT[s.onReboot ?? ''] ?? s.onReboot, 'on_reboot'),
+      p(t('When the guest crashes'), POWER_EVENT[s.onCrash ?? ''] ?? s.onCrash, 'on_crash'),
+      p(t('Emulator'), s.emulator, 'devices/emulator'),
+    ])
+  })
+  let techOpen = $state(false)
 
   let cpuProps = $derived.by(() => {
     if (!detail) return []
@@ -341,7 +383,7 @@
 
 <svelte:head><title>{title}</title></svelte:head>
 
-<a class="back" href="/" onclick={router.link}><ArrowLeft size={15} /> {t('Overview')}</a>
+<a class="back" href={router.scoped('/machines')} onclick={router.link}><ArrowLeft size={15} /> {t('Machines')}</a>
 
 {#if error && !detail}
   <div class="state-msg">
@@ -367,6 +409,12 @@
     <div class="gone" role="status">
       <TriangleAlert size={16} />
       {t('This machine is no longer on the host. What you see is its last known configuration.')}
+    </div>
+  {:else if reloadErr}
+    <div class="gone" role="status">
+      <TriangleAlert size={16} />
+      <span>{t('Could not refresh this page; showing the last known state.')} <span class="mono">{reloadErr}</span></span>
+      <button class="link" onclick={load}>{t('Try again')}</button>
     </div>
   {/if}
 
@@ -461,9 +509,6 @@
       </button>
     {/if}
     {#if !container}
-    <button role="tab" aria-selected={tab === 'firewall'} class:on={tab === 'firewall'} onclick={() => setTab('firewall')}>
-      {t('Firewall')}
-    </button>
     <button role="tab" aria-selected={tab === 'settings'} class:on={tab === 'settings'} onclick={() => setTab('settings')}>
       {t('Settings')}
     </button>
@@ -479,8 +524,7 @@
       {t('Backups')}
     </button>
     {/if}
-    <button role="tab" aria-selected={tab === 'changes'} class:on={tab === 'changes'} onclick={() => setTab('changes')}>{t('Changes')}</button>
-    <button role="tab" aria-selected={tab === 'xml'} class:on={tab === 'xml'} onclick={() => setTab('xml')}>{t('XML')}</button>
+    <button role="tab" aria-selected={tab === 'advanced'} class:on={tab === 'advanced'} onclick={() => setTab('advanced')}>{t('Advanced')}</button>
   </div>
 
   {#if tab === 'overview'}
@@ -497,13 +541,20 @@
             </ol>
           </div>
         {/if}
-        {#if detail.system.features.length}
-          <div class="sub-block">
-            <h3>{t('Platform features')}</h3>
-            <div class="chips">
-              {#each detail.system.features as f (f)}<span class="chip" title="features/{f}">{FEATURE[f] ?? f}</span>{/each}
+        <button class="more" aria-expanded={techOpen} onclick={() => (techOpen = !techOpen)}>
+          <span class="chev" class:up={techOpen}><ChevronDown size={15} /></span>
+          {t('Technical details')}
+        </button>
+        {#if techOpen}
+          <PropList props={techProps} />
+          {#if detail.system.features.length}
+            <div class="sub-block">
+              <h3>{t('Platform features')}</h3>
+              <div class="chips">
+                {#each detail.system.features as f (f)}<span class="chip" title="features/{f}">{FEATURE[f] ?? f}</span>{/each}
+              </div>
             </div>
-          </div>
+          {/if}
         {/if}
       </section>
       <div class="col">
@@ -573,33 +624,25 @@
       {#if advancedCount}
         <button class="more" aria-expanded={showAdvanced} onclick={() => (showAdvanced = !showAdvanced)}>
           <span class="chev" class:up={showAdvanced}><ChevronDown size={15} /></span>
-          {t('{v} {device} (controllers, balloon, RNG, TPM…)', { v: showAdvanced ? 'Hide' : 'Show', device: plural(advancedCount, 'more device') })}
+          {showAdvanced ? t('Hide {device} and expert settings', { device: plural(advancedCount, 'more device') }) : t('Show {device} (controllers, balloon, RNG, TPM…) and expert settings', { device: plural(advancedCount, 'more device') })}
         </button>
       {/if}
       {#if detail.devices.length === 0}
         <div class="state-msg"><strong>{t('No devices defined')}</strong></div>
       {/if}
-      {#if detail.persistent}<QemuArgsCard {uuid} onsaved={load} />{/if}
+      {#if detail.persistent && (showAdvanced || advancedCount === 0)}<QemuArgsCard {uuid} onsaved={load} />{/if}
     </div>
   {:else if tab === 'console'}
     <div role="tabpanel">
       {#if liveDom}<ConsolePanel d={liveDom} />{/if}
     </div>
-  {:else if tab === 'firewall'}
-    <div role="tabpanel">
-      <FirewallPanel {uuid} name={dom.name} {active} />
-    </div>
   {:else if tab === 'settings'}
     <div role="tabpanel">
-      <SettingsPanel {uuid} {active} onsaved={load} />
+      <SettingsPanel {uuid} {active} onsaved={load} ondirty={(d) => (settingsDirty = d)} />
     </div>
   {:else if tab === 'backups'}
     <div role="tabpanel">
       <BackupsPanel {uuid} name={dom.name} {active} />
-    </div>
-  {:else if tab === 'changes'}
-    <div role="tabpanel">
-      <ChangesPanel {uuid} {active} version={stateKey} onchange={load} />
     </div>
   {:else if tab === 'snapshots'}
     <div role="tabpanel">
@@ -607,7 +650,20 @@
     </div>
   {:else}
     <div role="tabpanel">
-      <XmlView {uuid} name={dom.name} {active} persistent={dom.persistent} version={stateKey} onsaved={load} />
+      <div class="subtabs" role="tablist" aria-label={t('Advanced sections')}>
+        <button role="tab" aria-selected={sub === 'changes'} class:on={sub === 'changes'} onclick={() => setSub('changes')}>{t('Change history')}</button>
+        {#if !container}
+          <button role="tab" aria-selected={sub === 'firewall'} class:on={sub === 'firewall'} onclick={() => setSub('firewall')}>{t('Firewall')}</button>
+        {/if}
+        <button role="tab" aria-selected={sub === 'xml'} class:on={sub === 'xml'} onclick={() => setSub('xml')}>{t('XML')}</button>
+      </div>
+      {#if sub === 'firewall'}
+        <FirewallPanel {uuid} name={dom.name} {active} />
+      {:else if sub === 'xml'}
+        <XmlView {uuid} name={dom.name} {active} persistent={dom.persistent} version={stateKey} onsaved={load} />
+      {:else}
+        <ChangesPanel {uuid} {active} version={stateKey} onchange={load} />
+      {/if}
     </div>
   {/if}
 
@@ -784,6 +840,37 @@
   }
   .tabs + :global(*) {
     margin-top: 22px;
+  }
+  .subtabs {
+    display: inline-flex;
+    gap: 2px;
+    margin-bottom: 16px;
+    padding: 3px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    box-shadow: var(--bevel-in);
+  }
+  .subtabs button {
+    height: 30px;
+    padding: 0 14px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-2);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .subtabs button:hover {
+    color: var(--text);
+  }
+  .subtabs button.on {
+    background: var(--metal);
+    outline: 1px solid var(--border-strong);
+    box-shadow: var(--bevel);
+    color: var(--text);
   }
   .count {
     padding: 0 5px;

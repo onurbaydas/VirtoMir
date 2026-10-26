@@ -29,6 +29,7 @@
   import Cable from '@lucide/svelte/icons/cable'
   import PoolEfficiency from '../components/PoolEfficiency.svelte'
   import NvmeDialog from '../components/NvmeDialog.svelte'
+  import ActionMenu, { type MenuItem } from '../components/ActionMenu.svelte'
   import { eff, type Tier } from '../storageeff'
 
   let { pool: selected }: { pool: string } = $props()
@@ -244,6 +245,13 @@
     }
   }
 
+  // Tools few single hosts need sit in the "more" menu instead of the header.
+  const moreTools: MenuItem[] = [
+    { label: t('From Content Library'), icon: BookOpen, hint: t('Browse cluster-wide content library'), run: () => router.navigate(router.scoped('/library')) },
+    { label: t('ZFS Replication'), icon: RefreshCw, hint: t('Automated differential block-level storage replication between nodes'), run: () => (zfsOpen = true) },
+    { label: t('NVMe/TCP'), icon: Cable, hint: t('Connect NVMe/TCP storage targets'), run: () => (nvmeOpen = true) },
+  ]
+
   const usedPct = (p: Pool) => (p.capacityBytes ? (p.allocationBytes / p.capacityBytes) * 100 : 0)
   const fmtLabel = (v: Volume) => (v.format === 'iso' ? 'ISO image' : v.format ? v.format.toUpperCase() : v.type)
 </script>
@@ -268,17 +276,9 @@
     <p class="lead">{t('Disk images and installation media live in storage pools, usually directories on this host.')}</p>
   </div>
   <div class="head-right">
-    <a class="ui-btn" href={router.scoped('/library')} onclick={router.link} title={t('Browse cluster-wide content library')}>
-      <BookOpen size={15} /> {t('From Content Library')}
-    </a>
+    <ActionMenu label={t('More storage tools')} items={moreTools} />
     <button class="ui-btn" onclick={() => (orphanedOpen = true)} title={t('Find disks not attached to any VM')}>
       <HardDrive size={15} /> {t('Unused disks')}
-    </button>
-    <button class="ui-btn" onclick={() => (zfsOpen = true)} title={t('Automated differential block-level storage replication between nodes')}>
-      <RefreshCw size={15} /> {t('ZFS Replication')}
-    </button>
-    <button class="ui-btn" onclick={() => (nvmeOpen = true)} title={t('Connect NVMe/TCP storage targets')}>
-      <Cable size={15} /> {t('NVMe/TCP')}
     </button>
     <button class="ui-btn" onclick={() => (isoOpen = true)} title={t('The host downloads an image from a URL into a pool')}>
       <Download size={15} /> {t('Download from URL')}
@@ -341,7 +341,7 @@
               <RefreshCw size={14} /> {t('Rescan')}
             </button>
             <ConfirmButton label={t('Stop')} confirm={t('Stop the pool?')} icon={Square} run={() => poolAction(current!, 'stop')} />
-            <button class="ui-btn sm" onclick={() => fileInput?.click()} disabled={!!uploading}><Upload size={14} /> {t('Upload ISO')}</button>
+            <button class="ui-btn sm" onclick={() => fileInput?.click()} disabled={!!uploading}><Upload size={14} /> {t('Upload image')}</button>
             <button class="ui-btn sm primary" onclick={openVolume}><Plus size={14} /> {t('New volume')}</button>
           {:else}
             <ConfirmButton
@@ -361,7 +361,7 @@
       <PoolEfficiency pool={current} tier={tiers[current.name]} ontier={loadTiers} />
       <input
         type="file"
-        accept=".iso,.img,.raw"
+        accept=".iso,.img,.raw,.qcow2"
         hidden
         bind:this={fileInput}
         onchange={(e) => {

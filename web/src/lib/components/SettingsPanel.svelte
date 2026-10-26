@@ -21,7 +21,8 @@
   // The machine's owner (quota self-service): live list entry for this machine.
   let owner = $derived(live.snapshot?.domains.find((d) => d.uuid === uuid))
 
-  let { uuid, active, onsaved }: { uuid: string; active: boolean; onsaved: () => void } = $props()
+  /** ondirty: told whether the form holds unsaved edits (the page asks before leaving the tab). */
+  let { uuid, active, onsaved, ondirty }: { uuid: string; active: boolean; onsaved: () => void; ondirty?: (dirty: boolean) => void } = $props()
 
   let view = $state<SettingsView | null>(null)
   let form = $state<Settings | null>(null)
@@ -71,6 +72,15 @@
   const badSet = (s: string) => !!s && !CPUSET.test(s)
 
   let dirty = $derived(!!form && !!view && JSON.stringify(form) !== JSON.stringify(pick(view)))
+  // Unsaved edits: tell the page, and let the browser ask before a reload or closing the tab.
+  $effect(() => {
+    ondirty?.(dirty)
+    if (!dirty) return
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  })
+  $effect(() => () => ondirty?.(false))
   let hostThreads = $derived(live.host?.cpus ?? 0)
   let hostMemMiB = $derived(Math.floor((live.host?.memoryKiB ?? 0) / 1024))
 
@@ -391,7 +401,7 @@
       </div>
     </section>
 
-    <ProtectionCard {uuid} name={owner?.name ?? uuid} />
+    {#if cluster.clustered}<ProtectionCard {uuid} name={owner?.name ?? uuid} />{/if}
 
     {#if diff}
       <section class="ui-panel diff mono" aria-label={t('XML changes')}>
@@ -408,11 +418,11 @@
 
     <footer class="ui-panel bar">
       <span class="status" class:bad={problems.length > 0}>
-        {problems[0] ?? (dirty ? 'Unsaved changes' : t('Everything is saved'))}
+        {problems[0] ?? (dirty ? t('Unsaved changes') : t('Everything is saved'))}
       </span>
       <button class="ui-btn ghost" onclick={() => view && ((form = pick(view)), (diff = null))} disabled={!dirty || saving}><Undo2 size={14} /> {t('Reset')}</button>
-      <button class="ui-btn" onclick={review} disabled={!dirty || problems.length > 0 || diffBusy}><FileDiff size={14} /> {diffBusy ? 'Comparing…' : t('Review changes')}</button>
-      <button class="ui-btn primary" onclick={save} disabled={!dirty || problems.length > 0 || saving || !session.canManage(owner)} title={session.whyManage(owner)}><Save size={14} /> {saving ? 'Saving…' : 'Save'}</button>
+      <button class="ui-btn" onclick={review} disabled={!dirty || problems.length > 0 || diffBusy}><FileDiff size={14} /> {diffBusy ? t('Comparing…') : t('Review changes')}</button>
+      <button class="ui-btn primary" onclick={save} disabled={!dirty || problems.length > 0 || saving || !session.canManage(owner)} title={session.whyManage(owner)}><Save size={14} /> {saving ? t('Saving…') : t('Save')}</button>
     </footer>
     {#if saveErr}<div class="ui-error-box" role="alert">{saveErr}</div>{/if}
   </div>

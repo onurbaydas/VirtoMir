@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '../i18n.svelte'
   // First-run setup (ADR-0045): what this host needs before the first machine, each with a
-  // one-click fix. Reachable again from Account → "Run the setup again".
+  // one-click fix. Reachable again from Host settings.
   import Check from '@lucide/svelte/icons/check'
   import CircleAlert from '@lucide/svelte/icons/circle-alert'
   import Info from '@lucide/svelte/icons/info'
