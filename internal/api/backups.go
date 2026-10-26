@@ -13,7 +13,8 @@ type Backupper interface {
 	ListBackups(dir virt.BackupDir, uuid string) ([]virt.Backup, error)
 	BackupDomain(ctx context.Context, dir virt.BackupDir, uuid string, opts virt.BackupOptions, report func(string)) (virt.Backup, error)
 	DeleteBackup(dir virt.BackupDir, id string) error
-	RestoreBackup(ctx context.Context, dir virt.BackupDir, id, name, pool string, report func(string)) (string, error)
+	RestoreBackup(ctx context.Context, dir virt.BackupDir, id, name, pool string, force bool, report func(string)) (string, error)
+	VerifyBackup(ctx context.Context, dir virt.BackupDir, id string, report func(string)) (virt.Backup, error)
 }
 
 // Flattener merges an incremental backup's chain for an off-site copy (*virt.Client).
@@ -25,6 +26,7 @@ func (s *Server) backupRoutes(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/backups", s.listBackups)
 	mux.HandleFunc("DELETE /api/v1/backups", s.deleteBackup)
 	mux.HandleFunc("POST /api/v1/backups/restore", s.restoreBackup)
+	mux.HandleFunc("POST /api/v1/backups/verify", s.verifyBackup)
 	mux.HandleFunc("GET /api/v1/backups/settings", s.getBackupSettings)
 	mux.HandleFunc("PUT /api/v1/backups/settings", s.putBackupSettings)
 	mux.HandleFunc("POST /api/v1/domains/{uuid}/backup", s.backupNow)
@@ -55,7 +57,36 @@ func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, map[string]any{"backups": list, "dir": dir})
+	out := map[string]any{"backups": list, "dir": dir}
+	if free, total, ok := virt.BackupSpace(dir); ok {
+		out["freeBytes"], out["totalBytes"] = free, total
+	}
+	if old := s.schedules.Settings().OldBackupDirs; len(old) > 0 {
+		out["oldDirs"] = old
+	}
+	s.writeJSON(w, http.StatusOK, out)
+}
+
+// verifyBackup checks a backup's files again (qemu-img check, recorded checksums) as a job.
+func (s *Server) verifyBackup(w http.ResponseWriter, r *http.Request) {
+	b, dir, ok := s.backups(w)
+	if !ok {
+		return
+	}
+	var body struct {
+		ID string `json:"id"`
+	}
+	if !s.decode(w, r, &body) {
+		return
+	}
+	job := s.jobs.Start("verify", "Verify backup", func(ctx context.Context, report func(string)) (string, error) {
+		res, err := b.VerifyBackup(ctx, dir, body.ID, report)
+		if err != nil {
+			return "", err
+		}
+		return res.ID + " is intact", nil
+	})
+	s.writeJSON(w, http.StatusAccepted, job)
 }
 
 func (s *Server) backupNow(w http.ResponseWriter, r *http.Request) {
@@ -104,12 +135,14 @@ func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 		Pool string `json:"pool"`
+		// Force restores a backup whose files failed their check or changed since.
+		Force bool `json:"force"`
 	}
 	if !s.decode(w, r, &body) {
 		return
 	}
 	job := s.jobs.Start("restore", "Restore as "+body.Name, func(ctx context.Context, report func(string)) (string, error) {
-		uuid, err := b.RestoreBackup(ctx, dir, body.ID, body.Name, body.Pool, report)
+		uuid, err := b.RestoreBackup(ctx, dir, body.ID, body.Name, body.Pool, body.Force, report)
 		s.live.Refresh()
 		return uuid, err
 	})

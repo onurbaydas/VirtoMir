@@ -435,12 +435,18 @@ export interface BackupInfo {
   created: string
   live: boolean
   automatic: boolean
-  disks: { target: string; file: string; source: string; sizeBytes: number }[]
+  disks: { target: string; file: string; source: string; sizeBytes: number; sha256?: string }[]
   sizeBytes: number
   durationSec: number
   /** Only what changed since `parent` (another backup ID); it needs that backup to restore. */
   incremental?: boolean
   parent?: string
+  /** When the files last passed their checksum check. */
+  verified?: string
+  /** Why the last check failed. */
+  checkError?: string
+  /** The folder the backup lives in. */
+  location?: string
 }
 
 export interface ScheduleInfo {
@@ -733,6 +739,8 @@ export interface Volume {
   allocationBytes: number
   backing?: string
   usedBy: string[]
+  /** A running job is writing the file; it cannot be deleted. */
+  writing?: boolean
 }
 
 export interface VNetwork {
@@ -1526,11 +1534,12 @@ export const api = {
   testChannel: (ch: AlertChannel) => request<void>('POST', '/api/v1/alerts/test', ch),
 
   backups: async (domain?: string, host?: string) =>
-    request<{ backups: BackupInfo[]; dir: string }>('GET', at(host, `/api/v1/backups${domain ? `?domain=${enc(domain)}` : ''}`)),
+    request<{ backups: BackupInfo[]; dir: string; freeBytes?: number; totalBytes?: number; oldDirs?: string[] }>('GET', at(host, `/api/v1/backups${domain ? `?domain=${enc(domain)}` : ''}`)),
   backupNow: (uuid: string, incremental = false) => request<Job>('POST', `${domainPath(uuid)}/backup`, { incremental }),
   deleteBackup: (id: string, host?: string) => request<void>('DELETE', at(host, `/api/v1/backups?id=${enc(id)}`)),
-  restoreBackup: (id: string, name: string, pool: string, host?: string) =>
-    request<Job>('POST', at(host, '/api/v1/backups/restore'), { id, name, pool }),
+  restoreBackup: (id: string, name: string, pool: string, host?: string, force?: boolean) =>
+    request<Job>('POST', at(host, '/api/v1/backups/restore'), { id, name, pool, ...(force ? { force } : {}) }),
+  verifyBackup: (id: string, host?: string) => request<Job>('POST', at(host, '/api/v1/backups/verify'), { id }),
   backupSettings: () => request<{ backupDir: string }>('GET', '/api/v1/backups/settings'),
   offsite: (host?: string) => request<{ config: OffsiteConfig; status: { restic?: string; configured: boolean } }>('GET', at(host, '/api/v1/offsite')),
   saveOffsite: (c: OffsiteConfig, host?: string) =>

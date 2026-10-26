@@ -319,6 +319,13 @@ func (c *Client) Clone(ctx context.Context, uuid, name string, report func(strin
 			dropVolume(c.log, l, v)
 		}
 	}
+	// The copies belong to no machine until the clone is defined: mark them as being written.
+	var writing []func()
+	defer func() {
+		for _, done := range writing {
+			done()
+		}
+	}()
 	if x.Devices != nil {
 		for i := range x.Devices.Disks {
 			disk := &x.Devices.Disks[i]
@@ -338,6 +345,7 @@ func (c *Client) Clone(ctx context.Context, uuid, name string, report func(strin
 			}
 			src := disk.Source.File.File
 			report(fmt.Sprintf("Copying disk %s (%s)…", targetOf(disk), path.Base(src)))
+			writing = append(writing, inFlight.add(path.Join(path.Dir(src), cloneVolName(name, disk))))
 			vol, newPath, err := copyVolume(l, src, cloneVolName(name, disk))
 			if err != nil {
 				rollback()

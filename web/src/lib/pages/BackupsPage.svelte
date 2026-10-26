@@ -17,6 +17,9 @@
   type HostBackup = BackupInfo & { hostId?: string; hostName?: string }
   let backups = $state<HostBackup[] | null>(null)
   let dir = $state('')
+  let freeBytes = $state<number | undefined>()
+  let totalBytes = $state<number | undefined>()
+  let oldDirs = $state<string[]>([])
   let newDir = $state('')
   let dirEverywhere = $state(false)
   let error = $state('')
@@ -25,6 +28,9 @@
     try {
       const r = await api.backups()
       dir = r.dir
+      freeBytes = r.freeBytes
+      totalBytes = r.totalBytes
+      oldDirs = r.oldDirs ?? []
       if (!cluster.clustered) {
         backups = r.backups
       } else {
@@ -63,6 +69,7 @@
       size: list.reduce((n, b) => n + b.sizeBytes, 0),
     }))
   })
+  let lowSpace = $derived(freeBytes !== undefined && !!totalBytes && freeBytes < totalBytes * 0.1)
   let total = $derived((backups ?? []).reduce((n, b) => n + b.sizeBytes, 0))
   let offsiteReady = $state(false)
   // Backups on the host shown here (the off-site settings are per host).
@@ -119,12 +126,12 @@
         toasts.push({
           kind: failed.length ? 'warn' : 'info',
           title: failed.length ? t('Saved on {v} of {length} hosts', { v: res.length - failed.length, length: res.length }) : t('Backup location saved on every host'),
-          detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') || t('New backups go there; existing ones stay where they are.'),
+          detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') || t('New backups go there; existing backups stay listed.'),
         })
       } else {
         const r = await api.saveBackupSettings(target)
         dir = r.backupDir
-        toasts.push({ kind: 'info', title: t('Backup location saved'), detail: t('New backups go there; existing ones stay where they are.') })
+        toasts.push({ kind: 'info', title: t('Backup location saved'), detail: t('New backups go there; existing backups stay listed.') })
       }
       await load()
     } catch (e) {
@@ -158,12 +165,25 @@
     {:else}
       <span class="mono">{dir}</span>
     {/if}
+    {#if freeBytes !== undefined && totalBytes}
+      <span class="hint" class:low={lowSpace}>{t('{free} free of {total}', { free: formatBytes(freeBytes), total: formatBytes(totalBytes) })}</span>
+    {/if}
+    {#if oldDirs.length}
+      <span class="hint">{t('Backups in earlier locations stay listed: {dirs}', { dirs: oldDirs.join(', ') })}</span>
+    {/if}
   </div>
   <div class="total">
     <span class="num">{formatBytes(total)}</span>
     <span class="hint">{backups?.length ?? 0} backups</span>
   </div>
 </section>
+
+{#if lowSpace}
+  <section class="ui-panel card failing" role="alert">
+    <h2>{t('The backup location is almost full')}</h2>
+    <span class="hint">{t('Less than 10% is free. New backups may fail; free up space or choose another location.')}</span>
+  </section>
+{/if}
 
 {#if failing.length}
   <section class="ui-panel card failing" role="alert">
@@ -255,6 +275,9 @@
     margin: 0 0 6px;
     color: var(--danger);
     font-size: 15px;
+  }
+  .low {
+    color: var(--danger);
   }
   .everywhere {
     display: flex;

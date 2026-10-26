@@ -59,6 +59,9 @@ type Schedule struct {
 type Settings struct {
 	// BackupDir is where backups go (an absolute path; NFS mounts work).
 	BackupDir string `json:"backupDir"`
+	// OldBackupDirs are the earlier backup locations, newest first: the backups made there
+	// stay listed, pruned and restorable. Kept by the scheduler, not set by the API.
+	OldBackupDirs []string `json:"oldBackupDirs,omitempty"`
 }
 
 // Runner does the actual work (implemented by an adapter over *virt.Client).
@@ -71,7 +74,12 @@ type Runner interface {
 	// PruneBackups removes the automatic backups of uuid in dir that keep rejects; keep gets
 	// their creation times and answers which to keep.
 	PruneBackups(dir, uuid string, keep func([]time.Time) []bool) (int, error)
+	// MachineExists reports whether the machine uuid is still defined.
+	MachineExists(uuid string) (bool, error)
 }
+
+// ErrMachineGone is the error of a schedule whose machine no longer exists.
+var ErrMachineGone = errors.New("the machine no longer exists; delete this schedule")
 
 // AutoPrefix marks snapshots made by schedules; retention only ever touches these.
 const AutoPrefix = "auto-"
@@ -238,14 +246,59 @@ func (s *Scheduler) Settings() Settings {
 	return s.settings
 }
 
+// SetSettings changes the backup location. The folder is created if needed and must be
+// writable; the previous location is remembered so its backups stay listed.
 func (s *Scheduler) SetSettings(st Settings) error {
 	if !filepath.IsAbs(st.BackupDir) || strings.Contains(st.BackupDir, "..") {
 		return errors.New("the backup location must be an absolute path")
 	}
+	st.BackupDir = filepath.Clean(st.BackupDir)
+	if err := checkWritable(st.BackupDir); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	st.OldBackupDirs = rememberDir(s.settings.OldBackupDirs, s.settings.BackupDir, st.BackupDir)
 	s.settings = st
 	s.saveLocked()
+	return nil
+}
+
+// rememberDir is old with prev in front (when the location changes from prev to next),
+// without next and without duplicates.
+func rememberDir(old []string, prev, next string) []string {
+	out := []string{}
+	for _, d := range append([]string{prev}, old...) {
+		if d == "" {
+			continue
+		}
+		d = filepath.Clean(d)
+		if d != next && !slices.Contains(out, d) {
+			out = append(out, d)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// checkWritable creates dir if needed and proves a file can be written in it.
+func checkWritable(dir string) error {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return fmt.Errorf("cannot create the backup location %s: %w", dir, err)
+	}
+	f, err := os.CreateTemp(dir, ".virtomir-write-test-*")
+	if err != nil {
+		return fmt.Errorf("cannot write to the backup location %s: %w", dir, err)
+	}
+	name := f.Name()
+	_, werr := f.WriteString("virtomir")
+	cerr := f.Close()
+	_ = os.Remove(name)
+	if err := errors.Join(werr, cerr); err != nil {
+		return fmt.Errorf("cannot write to the backup location %s: %w", dir, err)
+	}
 	return nil
 }
 
@@ -283,6 +336,23 @@ func (s *Scheduler) Delete(id string) error {
 	s.schedules = slices.Delete(s.schedules, i, i+1)
 	s.saveLocked()
 	return nil
+}
+
+// DeleteForDomain removes every schedule of machine uuid (when the machine is deleted) and
+// says how many there were.
+func (s *Scheduler) DeleteForDomain(uuid string) int {
+	if uuid == "" {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := len(s.schedules)
+	s.schedules = slices.DeleteFunc(s.schedules, func(x Schedule) bool { return x.Domain == uuid })
+	if removed := n - len(s.schedules); removed > 0 {
+		s.saveLocked()
+		return removed
+	}
+	return 0
 }
 
 // Run checks for due schedules every 30 seconds until ctx ends.
@@ -365,6 +435,11 @@ func (s *Scheduler) RunNow(id string) error {
 }
 
 func (s *Scheduler) execute(ctx context.Context, sc Schedule, dir string, report func(string)) (string, error) {
+	// A machine deleted outside VirtoMir (virsh undefine): say so plainly instead of a
+	// libvirt "not found" every time; the Backups page lists the failing schedule.
+	if ok, err := s.runner.MachineExists(sc.Domain); err == nil && !ok {
+		return "", ErrMachineGone
+	}
 	switch sc.Kind {
 	case Snapshots:
 		name := AutoPrefix + s.now().Format("20060102-150405") // seconds: "Run now" twice a minute must not collide

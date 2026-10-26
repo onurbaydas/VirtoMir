@@ -37,6 +37,12 @@ type Backup struct {
 	Incremental bool   `json:"incremental,omitempty"`
 	Parent      string `json:"parent,omitempty"`
 	Checkpoint  string `json:"checkpoint,omitempty"`
+	// Verified is when the disk files were last checked (qemu-img check and checksums, see
+	// backup_verify.go); CheckError is what that check found wrong ("" = fine).
+	Verified   *time.Time `json:"verified,omitempty"`
+	CheckError string     `json:"checkError,omitempty"`
+	// Location is the earlier backup folder this backup is in ("" = the current one); not stored.
+	Location string `json:"location,omitempty"`
 }
 
 type BackupDisk struct {
@@ -44,6 +50,7 @@ type BackupDisk struct {
 	File      string `json:"file"` // relative to the backup directory
 	Source    string `json:"source"`
 	SizeBytes uint64 `json:"sizeBytes"`
+	SHA256    string `json:"sha256,omitempty"` // of File, recorded when the backup was made
 }
 
 const manifestName = "manifest.json"
@@ -58,27 +65,29 @@ func (b BackupDir) check() error {
 	return nil
 }
 
-// ListBackups scans the backup directory; uuid "" lists all machines.
+// ListBackups scans the backup directory and the earlier backup locations (see
+// backup_dirs.go); uuid "" lists all machines. Newest first.
 func (c *Client) ListBackups(dir BackupDir, uuid string) ([]Backup, error) {
-	out := []Backup{}
-	if err := dir.check(); err != nil {
-		return out, err
-	}
-	matches, err := filepath.Glob(filepath.Join(string(dir), "*", "*", manifestName))
+	out, err := c.listIn(dir, uuid)
 	if err != nil {
 		return out, err
 	}
-	for _, m := range matches {
-		if strings.HasSuffix(filepath.Dir(m), partialSuffix) { // still being written (or abandoned)
+	seen := map[string]bool{}
+	for _, b := range out {
+		seen[b.ID] = true
+	}
+	for _, old := range c.backupDirs(dir)[1:] {
+		more, err := c.listIn(old, uuid)
+		if err != nil {
 			continue
 		}
-		b, err := readManifest(m)
-		if err != nil || (uuid != "" && b.DomainUUID != uuid) {
-			continue
+		for _, b := range more {
+			if !seen[b.ID] {
+				seen[b.ID] = true
+				b.Location = string(old)
+				out = append(out, b)
+			}
 		}
-		rel, _ := filepath.Rel(string(dir), filepath.Dir(m))
-		b.ID = filepath.ToSlash(rel)
-		out = append(out, b)
 	}
 	slices.SortFunc(out, func(a, b Backup) int { return b.Created.Compare(a.Created) })
 	return out, nil
@@ -113,11 +122,11 @@ func backupPath(dir BackupDir, id string) (string, error) {
 
 // DeleteBackup removes one backup directory.
 func (c *Client) DeleteBackup(dir BackupDir, id string) error {
-	p, err := backupPath(dir, id)
+	loc, p, err := c.locateBackup(dir, id)
 	if err != nil {
 		return err
 	}
-	if deps := dependents(dir, id); len(deps) > 0 {
+	if deps := dependents(loc, id); len(deps) > 0 {
 		return refusedf("Incremental backup %s builds on %s. Delete the newer backups of its chain first.", deps[0], id)
 	}
 	if err := os.RemoveAll(p); err != nil {
@@ -308,7 +317,9 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, o
 		incremental := false
 		if qcow2 {
 			b.Checkpoint = checkpointPrefix + stamp
-			if earlier, err := c.ListBackups(dir, b.DomainUUID); err == nil {
+			// Only backups in the current location: an incremental one links to its parent
+			// by a path relative to the machine's folder.
+			if earlier, err := c.listIn(dir, b.DomainUUID); err == nil {
 				parent, incremental = pickParent(earlier, checkpointNames(l, d), b.Disks, opts.FullEvery, func(id string) bool {
 					return backupFilesExist(dir, earlier, id)
 				})
@@ -324,6 +335,9 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, o
 		from := ""
 		if incremental {
 			from = parent.Checkpoint
+		}
+		if err := c.backupRoom(l, d, dir, disks, incremental); err != nil {
+			return fail(err)
 		}
 		err := c.liveBackup(ctx, l, d, dest, b.Disks, from, b.Checkpoint, report)
 		if ok {
@@ -342,6 +356,9 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, o
 			return fail(err)
 		}
 	} else {
+		if err := c.backupRoom(l, d, dir, disks, false); err != nil {
+			return fail(err)
+		}
 		for i, bd := range b.Disks {
 			report(fmt.Sprintf("Copying disk %s (%d of %d)…", bd.Target, i+1, len(b.Disks)))
 			// Opened as the format libvirt uses, never probed (see imagefmt.go).
@@ -376,6 +393,10 @@ func (c *Client) BackupDomain(ctx context.Context, dir BackupDir, uuid string, o
 			b.Disks[i].SizeBytes = uint64(st.Size())
 			b.SizeBytes += uint64(st.Size())
 		}
+	}
+	// A backup that does not pass its own check is no backup: the run fails (and alerts).
+	if err := verifyBackupFiles(ctx, dest, &b, true, report); err != nil {
+		return fail(fmt.Errorf("the new backup failed its check, so it was discarded: %w", err))
 	}
 	b.DurationSec = time.Since(started).Seconds()
 	if err := writeManifest(dest, b); err != nil {
@@ -568,18 +589,22 @@ func xmlEscape(s string) string {
 
 // RestoreBackup creates a new machine from a backup: disks are copied into pool, the
 // definition gets the new name, a new UUID and new MAC addresses. The original machine
-// (if it still exists) is never touched.
-func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, pool string, report func(string)) (string, error) {
+// (if it still exists) is never touched. A backup whose files no longer match their
+// recorded checksums, or whose last check failed, is only restored with force.
+func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, pool string, force bool, report func(string)) (string, error) {
 	if err := checkName("Machine", name); err != nil {
 		return "", err
 	}
-	p, err := backupPath(dir, id)
+	_, p, err := c.locateBackup(dir, id)
 	if err != nil {
 		return "", err
 	}
 	b, err := readManifest(filepath.Join(p, manifestName))
 	if err != nil {
 		return "", err
+	}
+	if b.CheckError != "" && !force {
+		return "", refusedf("This backup failed its last check (%s). Restore it anyway only if you accept that it may be damaged.", b.CheckError)
 	}
 	raw, err := os.ReadFile(filepath.Join(p, "domain.xml"))
 	if err != nil {
@@ -610,26 +635,43 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 		return "", classify(err)
 	}
 	var px libvirtxml.StoragePool
-	if err := px.Unmarshal(praw); err != nil || px.Target == nil || px.Target.Path == "" || px.Type != "dir" {
-		return "", invalidf("Restore into a directory pool (pool %s is not one).", pool)
+	if err := px.Unmarshal(praw); err != nil {
+		return "", err
+	}
+	fileTarget := px.Type == "dir" || px.Type == "netfs" || px.Type == "fs"
+	switch {
+	case fileTarget && (px.Target == nil || px.Target.Path == ""):
+		return "", invalidf("Pool %s has no target folder.", pool)
+	case !fileTarget && px.Type != "logical" && px.Type != "zfs":
+		return "", invalidf("Restore into a directory, NFS, file system, LVM or ZFS pool (pool %s is %s).", pool, px.Type)
+	}
+	if !force {
+		if err := checksumsMatch(ctx, p, b, report); err != nil {
+			return "", err
+		}
 	}
 
 	prepareClone(&x, name)
-	var written []string
+	var written []string            // files this restore created
+	var volumes []libvirt.StorageVol // block volumes this restore created
+	var finished []func()
+	defer func() {
+		for _, f := range finished {
+			f()
+		}
+	}()
 	rollback := func() {
 		for _, f := range written {
 			if err := os.Remove(f); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				c.log.Warn("restore rollback: could not remove a copied disk", "path", f, "err", err)
 			}
 		}
+		for _, v := range volumes {
+			dropVolume(c.log, l, v)
+		}
 		_ = l.StoragePoolRefresh(sp, 0)
 	}
 	for i, bd := range b.Disks {
-		dst := filepath.Join(px.Target.Path, fmt.Sprintf("%s-%s.qcow2", name, bd.Target))
-		if _, err := os.Stat(dst); err == nil {
-			rollback()
-			return "", refusedf("%s already exists in pool %s.", filepath.Base(dst), pool)
-		}
 		report(fmt.Sprintf("Restoring disk %s (%d of %d)…", bd.Target, i+1, len(b.Disks)))
 		// Backups are qcow2 files VirtoMir wrote: standalone, or for an incremental backup a
 		// chain inside the machine's backup folder; anything else is refused.
@@ -642,17 +684,53 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 			rollback()
 			return "", fmt.Errorf("restore %s: %w", bd.Target, err)
 		}
-		// Registered before the copy (dst did not exist, see above): a failed or cancelled
-		// convert must not leave a partial disk behind that blocks the next attempt.
-		written = append(written, dst)
-		cmd := exec.CommandContext(ctx, "qemu-img", convertArgs("qcow2", src, dst, false)...)
+		disk := findDisk(&x, bd.Target)
+		if fileTarget {
+			dst := filepath.Join(px.Target.Path, fmt.Sprintf("%s-%s.qcow2", name, bd.Target))
+			if _, err := os.Stat(dst); err == nil {
+				rollback()
+				return "", refusedf("%s already exists in pool %s.", filepath.Base(dst), pool)
+			}
+			// Registered before the copy (dst did not exist, see above): a failed or cancelled
+			// convert must not leave a partial disk behind that blocks the next attempt.
+			written = append(written, dst)
+			finished = append(finished, inFlight.add(dst))
+			cmd := exec.CommandContext(ctx, "qemu-img", convertArgs("qcow2", src, dst, false)...)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				rollback()
+				return "", fmt.Errorf("restore %s: %v: %s", bd.Target, err, strings.TrimSpace(string(out)))
+			}
+			if disk != nil {
+				disk.Source = &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: dst}}
+				disk.Driver = &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "qcow2", Cache: driverCache(disk.Driver), Discard: "unmap"}
+				disk.BackingStore = nil
+			}
+			continue
+		}
+		// LVM / ZFS: a raw volume of the disk's virtual size, written in place.
+		size := uint64(0)
+		if len(chain) > 0 {
+			size = chain[0].VirtualSize
+		}
+		if size == 0 {
+			rollback()
+			return "", fmt.Errorf("restore %s: the size of the backed-up disk is unknown", bd.Target)
+		}
+		vol, dst, err := createVolume(l, pool, fmt.Sprintf("%s-%s", name, bd.Target), size, "raw")
+		if err != nil {
+			rollback()
+			return "", fmt.Errorf("restore %s: %w", bd.Target, err)
+		}
+		volumes = append(volumes, vol)
+		finished = append(finished, inFlight.add(dst))
+		cmd := exec.CommandContext(ctx, "qemu-img", "convert", "-n", "-f", "qcow2", "-O", "raw", src, dst)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			rollback()
 			return "", fmt.Errorf("restore %s: %v: %s", bd.Target, err, strings.TrimSpace(string(out)))
 		}
-		if disk := findDisk(&x, bd.Target); disk != nil {
-			disk.Source = &libvirtxml.DomainDiskSource{File: &libvirtxml.DomainDiskSourceFile{File: dst}}
-			disk.Driver = &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "qcow2", Cache: driverCache(disk.Driver), Discard: "unmap"}
+		if disk != nil {
+			disk.Source = &libvirtxml.DomainDiskSource{Block: &libvirtxml.DomainDiskSourceBlock{Dev: dst}}
+			disk.Driver = &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "raw", Cache: driverCache(disk.Driver), IO: "native", Discard: "unmap"}
 			disk.BackingStore = nil
 		}
 	}
@@ -668,10 +746,9 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 		rollback()
 		return "", classify(err)
 	}
-	c.log.Info("backup restored", "backup", id, "as", name)
+	c.log.Info("backup restored", "backup", id, "as", name, "pool", pool)
 	return formatUUID(nd.UUID), nil
 }
-
 func driverCache(d *libvirtxml.DomainDiskDriver) string {
 	if d == nil {
 		return ""
