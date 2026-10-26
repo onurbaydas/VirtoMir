@@ -32,6 +32,10 @@ type Client struct {
 	// ("" = /var/lib/virtomir/containers).
 	ContainerDir string
 
+	// ProtectedDirs, when set, returns the directories VirtoMir keeps its own files in (the
+	// state directory, the backup location); no storage pool may be created in them.
+	ProtectedDirs func() []string
+
 	metas metaCache
 }
 

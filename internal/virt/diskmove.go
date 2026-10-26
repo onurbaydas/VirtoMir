@@ -81,10 +81,14 @@ func (c *Client) MoveDisk(ctx context.Context, uuid, target, pool string, report
 		return err
 	}
 	c.refreshPool(l, pool)
-	if vol, err := l.StorageVolLookupByPath(src); err == nil && len(c.diskUsers(l)[src]) == 0 {
-		report("Deleting the old image…")
-		if err := l.StorageVolDelete(vol, 0); err != nil {
-			c.log.Warn("old image kept", "path", src, "err", err)
+	if vol, err := l.StorageVolLookupByPath(src); err == nil {
+		if err := c.checkVolumeUnused(l, vol, src, src); err != nil {
+			c.log.Warn("old image kept", "path", src, "reason", err)
+		} else {
+			report("Deleting the old image…")
+			if err := l.StorageVolDelete(vol, 0); err != nil {
+				c.log.Warn("old image kept", "path", src, "err", err)
+			}
 		}
 	}
 	c.log.Info("disk moved", "domain", d.Name, "target", target, "from", src, "to", dst)

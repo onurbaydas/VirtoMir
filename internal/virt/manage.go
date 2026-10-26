@@ -2,6 +2,7 @@ package virt
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"slices"
@@ -127,12 +128,20 @@ func (c *Client) Delete(uuid string, removeStorage bool) (DeleteResult, error) {
 		return res, nil
 	}
 	var disks []string
+	var inUse map[string][]string
 	if removeStorage {
 		x, err := c.parseDomain(l, d, true)
 		if err != nil {
 			return res, err
 		}
 		disks = deletableDisks(x)
+		// Checked before undefining: if it cannot be known who else uses the disks, nothing
+		// is deleted at all.
+		if len(disks) > 0 {
+			if inUse, err = c.diskUsers(l); err != nil {
+				return res, refusedf("Could not check which other machines use the disks of %s, so nothing was deleted: %v", d.Name, err)
+			}
+		}
 	}
 	flags := libvirt.DomainUndefineManagedSave | libvirt.DomainUndefineSnapshotsMetadata |
 		libvirt.DomainUndefineCheckpointsMetadata | libvirt.DomainUndefineNvram | libvirt.DomainUndefineTpm
@@ -144,15 +153,22 @@ func (c *Client) Delete(uuid string, removeStorage bool) (DeleteResult, error) {
 	if len(disks) == 0 {
 		return res, nil
 	}
-	inUse := c.diskUsers(l)
 	for _, p := range disks {
-		if users := inUse[p]; len(users) > 0 {
+		users := slices.DeleteFunc(slices.Clone(inUse[p]), func(u string) bool { return u == d.Name })
+		if len(users) > 0 {
 			res.KeptVolumes = append(res.KeptVolumes, KeptVolume{p, "also used by " + strings.Join(users, ", ")})
 			continue
 		}
 		vol, err := l.StorageVolLookupByPath(p)
 		if err != nil {
 			res.KeptVolumes = append(res.KeptVolumes, KeptVolume{p, "not in a storage pool"})
+			continue
+		}
+		if backers, err := c.volumeBackers(l, vol, p); err != nil {
+			res.KeptVolumes = append(res.KeptVolumes, KeptVolume{p, "could not check whether other images are based on it: " + err.Error()})
+			continue
+		} else if len(backers) > 0 {
+			res.KeptVolumes = append(res.KeptVolumes, KeptVolume{p, "the base image of " + strings.Join(backers, ", ")})
 			continue
 		}
 		if err := l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal); err != nil {
@@ -190,19 +206,26 @@ func deletableDisks(x *libvirtxml.Domain) []string {
 	return out
 }
 
-// diskUsers maps disk image paths to the machines that reference them.
-func (c *Client) diskUsers(l *libvirt.Libvirt) map[string][]string {
+// diskUsers maps disk image paths to the machines that reference them. It fails closed: when
+// the machines cannot be listed or one definition cannot be read, the error says so (the map
+// then holds what could be read, good enough for display but not for deleting anything).
+func (c *Client) diskUsers(l *libvirt.Libvirt) (map[string][]string, error) {
 	out := map[string][]string{}
 	doms, _, err := l.ConnectListAllDomains(1, libvirt.ConnectListDomainsActive|libvirt.ConnectListDomainsInactive)
 	if err != nil {
-		return out
+		return out, classify(err)
 	}
+	var errs []error
 	// Linked clones read their template's disks; libvirt only shows that chain while they run.
 	ownDisks := map[string][]string{}
 	linked := map[string][]string{}
 	for _, d := range doms {
 		x, err := c.parseDomain(l, d, false)
-		if err != nil || x.Devices == nil {
+		if err != nil {
+			errs = append(errs, fmt.Errorf("read the definition of %s: %w", d.Name, err))
+			continue
+		}
+		if x.Devices == nil {
 			continue
 		}
 		if t := c.meta(l, d).LinkedFrom; t != "" {
@@ -233,7 +256,7 @@ func (c *Client) diskUsers(l *libvirt.Libvirt) map[string][]string {
 			}
 		}
 	}
-	return out
+	return out, errors.Join(errs...)
 }
 
 func (c *Client) parseDomain(l *libvirt.Libvirt, d libvirt.Domain, inactive bool) (*libvirtxml.Domain, error) {

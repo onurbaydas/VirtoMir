@@ -197,6 +197,7 @@ func run(c config, log *slog.Logger) error {
 	scheduler, err := schedule.Open(filepath.Join(c.stateDir, "schedules.json"), filepath.Join(c.stateDir, "backups"),
 		scheduleRunner{client, offsiteStore}, jobStarter(jobManager), log)
 	logStoreErr(log, "schedules", err)
+	client.ProtectedDirs = func() []string { return []string{c.stateDir, scheduler.Settings().BackupDir} }
 	go scheduler.Run(ctx)
 	hubDone := make(chan struct{})
 	go func() { hub.Run(ctx); close(hubDone) }()

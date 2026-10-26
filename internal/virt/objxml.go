@@ -100,8 +100,22 @@ func (c *Client) DefinePoolXML(name, doc string) (ObjectSaveResult, error) {
 	if x.UUID != "" && !strings.EqualFold(x.UUID, formatUUID(p.UUID)) {
 		return res, invalidf("The XML must keep <uuid>%s</uuid>.", formatUUID(p.UUID))
 	}
-	if cur, err := l.StoragePoolGetXMLDesc(p, 1); err == nil && sameXML(cur, doc) {
+	cur, err := l.StoragePoolGetXMLDesc(p, 1)
+	if err == nil && sameXML(cur, doc) {
 		return res, nil
+	}
+	// A directory pool moved to a new path gets the same checks as a new pool.
+	if (x.Type == "dir" || x.Type == "fs" || x.Type == "netfs") && x.Target != nil {
+		var old libvirtxml.StoragePool
+		if err != nil || old.Unmarshal(cur) != nil || old.Target == nil || old.Target.Path != x.Target.Path {
+			var protected []string
+			if c.ProtectedDirs != nil {
+				protected = c.ProtectedDirs()
+			}
+			if _, err := checkPoolPath(x.Target.Path, protected); err != nil {
+				return res, err
+			}
+		}
 	}
 	if _, err := l.StoragePoolDefineXML(doc, 0); err != nil {
 		return res, classify(err)
