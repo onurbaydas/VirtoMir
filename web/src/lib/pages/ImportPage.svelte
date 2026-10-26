@@ -19,9 +19,11 @@
       .then((p) => {
         pools = p.filter((x) => x.type === 'dir' || x.type === 'netfs')
         pool = (pools.find((x) => x.name === 'default') ?? pools[0])?.name ?? ''
+        poolErr = pools.length ? '' : t('No started directory or NFS pool to import into. Create or start one under Storage first.')
       })
-      .catch(() => {})
+      .catch((e) => (poolErr = errorText(e)))
   })
+  let poolErr = $state('')
 
   // ---- OVA --------------------------------------------------------------------------------
   let file = $state<File | null>(null)
@@ -78,6 +80,7 @@
 </header>
 
 {#if !admin}<div class="ui-error-box">{session.why('admin')}</div>{/if}
+{#if poolErr}<div class="ui-error-box">{poolErr}</div>{/if}
 
 <div class="cards">
   <section class="ui-panel card">

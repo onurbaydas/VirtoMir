@@ -153,7 +153,16 @@
     if (editIndex >= 0) cfg.channels[editIndex] = editing
     else cfg.channels.push(editing)
     editing = null
+    // Saved at once: a channel that only lives in the page until a second Save is easily lost.
+    void saveCfg()
   }
+  // Unsaved rule changes: ask before the tab is closed or reloaded.
+  $effect(() => {
+    if (!dirty) return
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  })
   async function test(ch: AlertChannel) {
     testing = true
     try {

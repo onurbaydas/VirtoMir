@@ -179,7 +179,7 @@
     <h2>{t('Machines')}</h2>
     {#if counts.all > 0}
       <div class="tabs" role="tablist">
-        {#each [['all', 'All'], ['running', 'Running'], ['stopped', 'Stopped']] as [key, label] (key)}
+        {#each [['all', t('All')], ['running', t('Running')], ['stopped', t('Stopped')]] as [key, label] (key)}
           <button
             role="tab"
             aria-selected={filter === key}
@@ -190,14 +190,16 @@
           </button>
         {/each}
       </div>
-      <label class="proj-filter">
-        <span class="sr-only">{t('Filter by project')}</span>
-        <select bind:value={projectFilter} aria-label={t('Filter by project')}>
-          <option value="">{t('All projects')}</option>
-          <option value="none">{t('No project (global)')}</option>
-          {#each projects.list as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-        </select>
-      </label>
+      {#if projects.list.length}
+        <label class="proj-filter">
+          <span class="sr-only">{t('Filter by project')}</span>
+          <select bind:value={projectFilter} aria-label={t('Filter by project')}>
+            <option value="">{t('All projects')}</option>
+            <option value="none">{t('No project (global)')}</option>
+            {#each projects.list as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+          </select>
+        </label>
+      {/if}
       <label class="search">
         <Search size={15} />
         <input type="search" placeholder={t('Find by name or UUID')} bind:value={query} spellcheck="false" />
@@ -207,9 +209,9 @@
 
   {#if picked.length}
     <div class="bulk" role="toolbar" aria-label={t('Actions for selected machines')}>
-      <strong>{picked.length} selected</strong>
+      <strong>{t('{n} selected', { n: picked.length })}</strong>
       <button class="ui-btn sm" disabled={!picked.some(canStart)} onclick={() => bulk('start', canStart)}>
-        <Play size={14} /> Start {picked.filter(canStart).length || ''}
+        <Play size={14} /> {t('Start {v}', { v: picked.filter(canStart).length || '' })}
       </button>
       <button class="ui-btn sm" disabled={!picked.some(canStop)} onclick={() => bulk('shutdown', canStop)}>
         <Power size={14} /> {t('Shut down {v}', { v: picked.filter(canStop).length || '' })}
@@ -255,7 +257,7 @@
           {#if session.can('admin')}<a class="ui-btn primary new" href="/machines/new" onclick={router.link}>{t('New machine')}</a>{/if}
         {:else}
           <strong>{t('Nothing matches')}</strong>
-          <button class="link" onclick={() => ((filter = 'all'), (query = ''))}>{t('Show all machines')}</button>
+          <button class="link" onclick={() => ((filter = 'all'), (query = ''), (projectFilter = ''), (hostFilter = null))}>{t('Show all machines')}</button>
         {/if}
       </div>
     {:else}

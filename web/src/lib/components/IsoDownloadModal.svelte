@@ -22,10 +22,14 @@
   $effect(() => {
     if (!open) return
     error = ''
-    void api.pools().then((p) => {
-      pools = p.filter((x) => x.active && ['dir', 'netfs', 'fs'].includes(x.type))
-      pool = pools.some((x) => x.name === poolName) ? poolName : (pools[0]?.name ?? '')
-    })
+    void api
+      .pools()
+      .then((p) => {
+        pools = p.filter((x) => x.active && ['dir', 'netfs', 'fs'].includes(x.type))
+        pool = pools.some((x) => x.name === poolName) ? poolName : (pools[0]?.name ?? '')
+        if (!pools.length) error = t('No started directory or NFS pool to download into. Create or start one first.')
+      })
+      .catch((e) => (error = errorText(e)))
   })
 
   // Name from the URL until the user types one.

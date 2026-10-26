@@ -127,7 +127,7 @@
               failure={t('Could not revert to {name}', { name: s.name })}
               run={async () => {
                 await api.revertSnapshot(uuid, s.name)
-                toasts.push({ kind: 'info', title: `Reverted to ${s.name}` })
+                toasts.push({ kind: 'info', title: t('Reverted to {name}', { name: s.name }) })
                 await load()
                 onchange()
               }}
@@ -141,6 +141,7 @@
               failure={t('Could not delete {name}', { name: s.name })}
               run={async () => {
                 await api.deleteSnapshot(uuid, s.name)
+                toasts.push({ kind: 'info', title: t('Snapshot {name} deleted', { name: s.name }) })
                 await load()
               }}
             />
