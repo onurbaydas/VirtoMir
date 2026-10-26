@@ -50,6 +50,8 @@ func TestRequiredRole(t *testing.T) {
 		{"POST", "/api/v1/domains/u1/snapshots", auth.Operator},
 		{"POST", "/api/v1/domains/u1/snapshots/s1/revert", auth.Operator},
 		{"DELETE", "/api/v1/domains/u1/snapshots/s1", auth.Admin},
+		{"POST", "/api/v1/domains/u1/config-history/load-file", auth.Admin},
+		{"GET", "/api/v1/domains/u1/config-history", auth.Viewer},
 		{"GET", "/api/v1/domains/u1/console/vnc", auth.Operator},
 		{"DELETE", "/api/v1/domains/u1", auth.Admin},
 		{"PUT", "/api/v1/domains/u1/xml", auth.Admin},

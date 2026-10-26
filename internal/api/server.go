@@ -132,6 +132,8 @@ type Options struct {
 	GroupsOf func(user string) []string
 	// ConfigHistory nil: machine definitions are not versioned.
 	ConfigHistory *confighist.Store
+	// ConfigDrift nil: definition files edited by hand are not noticed.
+	ConfigDrift *confighist.DriftWatcher
 	Cluster       *cluster.Store
 	Fingerprint   string
 	HostName      string
@@ -241,6 +243,7 @@ type Server struct {
 	insights          *insights.Engine
 
 	confighist   *confighist.Store
+	configDrift  *confighist.DriftWatcher
 	quotas       *quota.Store
 	oidc         oidcFlows
 	oidcClient   *http.Client // nil: default (tests use a client trusting their provider)
@@ -342,7 +345,7 @@ func NewServer(o Options) *Server {
 		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts, schedules: o.Schedules, fipsInfo: o.FIPSInfo,
 		complianceScanner: cs,
 		cluster:           o.Cluster, fingerprint: o.Fingerprint, hostName: o.HostName, listenPort: o.ListenPort,
-		confighist: o.ConfigHistory, quotas: o.Quotas, groupsOf: o.GroupsOf,
+		confighist: o.ConfigHistory, configDrift: o.ConfigDrift, quotas: o.Quotas, groupsOf: o.GroupsOf,
 		ha: o.HA, reports: o.Reports, respools: o.Respools, hostinfo: o.HostInfo, updater: o.Updater, stateDir: o.StateDir, hostnet: o.HostNet, offsite: o.Offsite,
 		vmwareStore: o.VMwareStore, vmwareWaves: o.VMwareWaves, vmwareLister: vl, vmwarePreflight: vp, vmwareConverter: vc,
 		drs: o.DRS, placement: o.Placement, projects: o.Projects, rateLimiter: rl, zfsRep: o.ZFSRep,
