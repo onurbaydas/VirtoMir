@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -8,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/onurbaydas/virtomir/internal/activity"
 	"github.com/onurbaydas/virtomir/internal/auth"
@@ -175,5 +177,44 @@ func TestActivityCSV(t *testing.T) {
 	}
 	if !strings.HasPrefix(body, "time,user,token,remote,method,path,status,error\n") || !strings.Contains(body, ",onur,,") || !strings.Contains(body, "/api/v1/domains/u1/actions/start") {
 		t.Errorf("csv body:\n%s", body)
+	}
+}
+
+func TestWatchSessionClosesWhenTokenRevoked(t *testing.T) {
+	old := sessionWatchEvery
+	sessionWatchEvery = 5 * time.Millisecond
+	defer func() { sessionWatchEvery = old }()
+
+	m := auth.New(stubAuthn{}, func(string) auth.Role { return auth.Admin })
+	tokens, _ := auth.OpenTokens("")
+	secret, tok, err := tokens.Create(auth.Identity{Name: "onur", Role: auth.Admin}, "ci", auth.Operator, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewServer(Options{Backend: &fakeBackend{}, Live: &fakeLive{}, Auth: m, Tokens: tokens, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+
+	r := httptest.NewRequest("GET", "/api/v1/domains/u1/console/vnc", nil)
+	r.Header.Set("Authorization", "Bearer "+secret)
+	r = r.WithContext(context.WithValue(r.Context(), identityKey, auth.Identity{Name: "onur", Role: auth.Operator, Token: "ci"}))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { s.watchSession(ctx, cancel, r); close(done) }()
+
+	select {
+	case <-done:
+		t.Fatal("watcher stopped while the token was still valid")
+	case <-time.After(60 * time.Millisecond):
+	}
+	if err := tokens.Revoke(auth.Identity{Name: "onur", Role: auth.Admin}, tok.ID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+		if ctx.Err() == nil {
+			t.Error("revoked token did not cancel the console")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("console stayed open after the token was revoked")
 	}
 }

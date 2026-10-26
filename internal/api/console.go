@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -87,7 +88,7 @@ func (s *Server) consoleVNC(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return // Accept has answered (e.g. cross-origin refused)
 	}
-	ws.SetReadLimit(-1)
+	ws.SetReadLimit(consoleReadLimit)
 	s.recordConsole(r, uuid, "vnc")
 
 	ctx, cancel := context.WithCancel(r.Context())
@@ -124,7 +125,7 @@ func (s *Server) consoleSPICE(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	ws.SetReadLimit(-1)
+	ws.SetReadLimit(consoleReadLimit)
 	if s.firstSpiceChannel(identity(r).Name, uuid) {
 		s.recordConsole(r, uuid, "spice")
 	}
@@ -196,7 +197,7 @@ func (s *Server) consoleSerial(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	ws.SetReadLimit(1 << 20)
+	ws.SetReadLimit(consoleReadLimit)
 	s.recordConsole(r, uuid, "serial")
 
 	ctx, cancel := context.WithCancel(r.Context())
@@ -215,21 +216,34 @@ func (s *Server) consoleSerial(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// sessionWatchEvery is how often an open console re-checks its session or token (a var for tests).
+var sessionWatchEvery = 30 * time.Second
+
+// Browsers only send small input messages (keys, pointer, clipboard text), so a console
+// socket never needs to accept more than this per message.
+const consoleReadLimit = 1 << 20
+
 // watchSession ends a long console connection when the browser session expires or the
-// user signs out (token connections live as long as the token is valid).
+// user signs out, or when the API token that opened it is revoked or expires.
 func (s *Server) watchSession(ctx context.Context, cancel context.CancelFunc, r *http.Request) {
-	if id := identity(r); s.auth == nil || id.Token != "" || id.Via != "" {
+	id := identity(r)
+	if s.auth == nil || id.Via != "" {
 		return
 	}
 	token := auth.SessionToken(r)
-	t := time.NewTicker(30 * time.Second)
+	valid := func() bool { return s.auth.Valid(token) }
+	if id.Token != "" {
+		bearer, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		valid = func() bool { _, ok := s.authenticate(r, bearer, true); return ok }
+	}
+	t := time.NewTicker(sessionWatchEvery)
 	defer t.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if !s.auth.Valid(token) {
+			if !valid() {
 				cancel()
 				return
 			}
