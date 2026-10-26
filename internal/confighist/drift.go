@@ -22,8 +22,8 @@ const DefaultXMLDir = "/etc/libvirt/qemu"
 // loaded and only reads the file again when it restarts (or the file is defined again).
 type Drift struct {
 	FileChanged bool      `json:"fileChanged"` // always true; present only while a file is ahead of libvirt
-	File    string    `json:"file"`
-	Modified time.Time `json:"modified"`
+	File        string    `json:"file"`
+	Modified    time.Time `json:"modified"`
 }
 
 // DriftWatcher compares libvirt's definition files with what libvirt has loaded. It looks at

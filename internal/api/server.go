@@ -134,10 +134,10 @@ type Options struct {
 	ConfigHistory *confighist.Store
 	// ConfigDrift nil: definition files edited by hand are not noticed.
 	ConfigDrift *confighist.DriftWatcher
-	Cluster       *cluster.Store
-	Fingerprint   string
-	HostName      string
-	ListenPort    string
+	Cluster     *cluster.Store
+	Fingerprint string
+	HostName    string
+	ListenPort  string
 
 	// HA nil: no high availability (the manager is connected later with SetHA).
 	HA       *ha.Store

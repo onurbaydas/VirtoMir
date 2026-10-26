@@ -16,7 +16,7 @@ func TestRememberDir(t *testing.T) {
 		{nil, "/a", "/b", []string{"/a"}},
 		{[]string{"/a"}, "/b", "/c", []string{"/b", "/a"}},
 		{[]string{"/b", "/a"}, "/c", "/a", []string{"/c", "/b"}}, // back to an old one: no longer "old"
-		{[]string{"/a"}, "/a/", "/b", []string{"/a"}},             // cleaned, no duplicate
+		{[]string{"/a"}, "/a/", "/b", []string{"/a"}},            // cleaned, no duplicate
 		{nil, "/a", "/a", nil},
 	}
 	for _, c := range cases {

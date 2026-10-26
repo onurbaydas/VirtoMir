@@ -437,10 +437,10 @@ func TestPlacementRuleClearHosts(t *testing.T) {
 
 	hosts := []string{"host1", "host2"}
 	rule := PlacementRule{
-		Name:     "host-rule",
-		Kind:     PlacementVMHost,
-		Domains:  []string{"uuid-1"},
-		Hosts:    &hosts,
+		Name:    "host-rule",
+		Kind:    PlacementVMHost,
+		Domains: []string{"uuid-1"},
+		Hosts:   &hosts,
 	}
 	created, err := c.CreatePlacementRule(ctx, rule)
 	if err != nil {
@@ -480,4 +480,3 @@ func TestPlacementRuleClearHosts(t *testing.T) {
 		t.Errorf("expected nil hosts after unsetting, got: %v", *r2.Hosts)
 	}
 }
-
