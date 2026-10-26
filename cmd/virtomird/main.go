@@ -449,6 +449,7 @@ func run(c config, log *slog.Logger) error {
 		Addr:              c.listen,
 		Handler:           apiServer.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second, // keep-alive connections nobody uses; no WriteTimeout (SSE, websockets, downloads)
 		TLSConfig:         tlsConf,
 	}
 
