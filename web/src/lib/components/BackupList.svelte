@@ -48,9 +48,11 @@
       error = errorText(e)
     }
   }
+  let restoreBusy = $state(false)
   async function restore(e: SubmitEvent) {
     e.preventDefault()
-    if (!restoring) return
+    if (!restoring || restoreBusy) return
+    restoreBusy = true
     try {
       const job = await api.restoreBackup(restoring.id, name, pool, host)
       restoring = null
@@ -62,6 +64,8 @@
       })
     } catch (err) {
       error = errorText(err)
+    } finally {
+      restoreBusy = false
     }
   }
   let needed = $derived(restoring ? restoring.disks.reduce((n, d) => n + d.sizeBytes, 0) : 0)
@@ -119,13 +123,14 @@
       <select class="ui-input" bind:value={pool}>
         {#each pools as p (p.name)}<option value={p.name}>{p.name} — {formatBytes(p.availableBytes)} free</option>{/each}
       </select>
+      {#if pools.length === 0 && !error}<span class="hint warn">{t('No started directory pool to restore into. Create or start one under Storage.')}</span>{/if}
       <span class="hint" class:warn={!!target && needed > target.availableBytes}>{t('Needs about {needed} (more if the disks are fuller than the compressed backup).', { needed: formatBytes(needed) })}</span>
     </label>
     {#if error}<div class="ui-error-box">{error}</div>{/if}
   </form>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={() => (restoring = null)}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="restore-form"><ArchiveRestore size={14} /> {t('Restore')}</button>
+    <button class="ui-btn primary" form="restore-form" disabled={restoreBusy || !pool || pools.length === 0}><ArchiveRestore size={14} /> {restoreBusy ? t('Starting…') : t('Restore')}</button>
   {/snippet}
 </Dialog>
 

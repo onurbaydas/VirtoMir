@@ -4,6 +4,7 @@
 
 
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { t } from '../i18n.svelte'
   // The machine page's dialogs: rename, clone, delete, add disk, add adapter, change media.
   import { api, errorText, type DomainDetail, type Device, type Pool, type VNetwork } from '../api'
@@ -66,8 +67,13 @@
   let targetPools = $state<Pool[] | null>(null)
   let targets = $derived(cluster.members.filter((m) => m.id !== cluster.current?.id && m.reachable))
 
+  // Reset only when a dialog opens: the page reloads `detail` every few seconds, and that
+  // must not wipe what the user is typing.
   $effect(() => {
-    if (!which) return
+    if (which) untrack(() => reset(which))
+  })
+
+  function reset(which: NonNullable<ManageDialog>) {
     error = ''
     busy = false
     newName = which === 'clone' ? `${detail.name}-clone` : detail.name
@@ -131,7 +137,7 @@
         })
         .catch((e) => (error = errorText(e)))
     }
-  })
+  }
 
   let ownDisks = $derived(detail.devices.filter((d) => d.kind === 'disk'))
   let isos = $derived(volumes.filter((v) => isISO(v.vol)))
@@ -340,6 +346,9 @@
     removeStorage = opts.purgeDisks
     remove()
   }}
+  {busy}
+  {error}
+  blocked={active ? t('Stop the machine first.') : ''}
   {onclose}
 />
 
@@ -489,34 +498,6 @@
   {/snippet}
 </Dialog>
 
-<Dialog open={which === 'delete'} title={t('Delete {name}?', { name: detail.name })} {onclose}>
-  <div class="form">
-    {#if active}
-      <div class="ui-error-box">{t('Stop the machine first.')}</div>
-    {:else}
-      <p class="text">{t('The machine\'s definition, snapshots, UEFI variables and TPM state are removed. This cannot be undone.')}</p>
-      {#if ownDisks.length}
-        <label class="ui-switch danger-switch"><input type="checkbox" bind:checked={removeStorage} /> {t('Also delete its disks')}</label>
-        <ul class="disks">
-          {#each ownDisks as d (d.title)}
-            <li class:gone={removeStorage}>
-              <span class="mono">{d.props.find((p) => p.label === 'Source')?.value ?? d.title}</span>
-              {#if d.capacityBytes}<span class="muted">{formatBytes(d.capacityBytes)}</span>{/if}
-            </li>
-          {/each}
-        </ul>
-        <p class="hint">{removeStorage ? 'Disks used by other machines or outside a storage pool are kept.' : t('The disk images stay in their pool and can be attached to another machine.')}</p>
-      {/if}
-    {/if}
-    {#if error}<div class="ui-error-box">{error}</div>{/if}
-  </div>
-  {#snippet footer()}
-    <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
-    <button class="ui-btn danger" onclick={remove} disabled={busy || active}>
-      {busy ? 'Deleting…' : removeStorage ? 'Delete machine and disks' : t('Delete machine')}
-    </button>
-  {/snippet}
-</Dialog>
 
 <Dialog open={which === 'disk'} title={t('Add storage')} subtitle={active ? 'Hot-plugged into the running machine and kept for the next boot' : undefined} {onclose} width={520}>
   <form id="disk" class="form" onsubmit={(e) => (e.preventDefault(), addDisk())}>
@@ -838,33 +819,6 @@
     font-size: 13px;
     display: grid;
     gap: 6px;
-  }
-  .disks {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    display: grid;
-    gap: 4px;
-  }
-  .disks li {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 12.5px;
-    transition:
-      border-color var(--dur-fast),
-      background var(--dur-fast);
-  }
-  .disks li.gone {
-    border-color: color-mix(in srgb, var(--danger) 45%, transparent);
-    background: var(--danger-soft);
-    text-decoration: line-through;
-  }
-  .danger-switch :global(input:checked) {
-    background: var(--danger);
   }
   .muted {
     color: var(--text-3);

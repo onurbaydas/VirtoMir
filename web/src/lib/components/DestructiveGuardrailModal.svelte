@@ -12,9 +12,15 @@
     targetUuid?: string
     onconfirm: (opts: { purgeDisks: boolean }) => void
     onclose: () => void
+    /** The request is in flight: the button waits and cannot be pressed twice. */
+    busy?: boolean
+    /** Why the server refused, shown above the buttons. */
+    error?: string
+    /** Set when the action is not possible right now (e.g. the machine is running). */
+    blocked?: string
   }
 
-  let { open, targetName, targetUuid, onconfirm, onclose }: Props = $props()
+  let { open, targetName, targetUuid, onconfirm, onclose, busy = false, error = '', blocked = '' }: Props = $props()
 
   let typedName = $state('')
   let purgeDisks = $state(false)
@@ -28,7 +34,7 @@
   let canConfirm = $derived(typedName.trim() === targetName.trim())
 
   function confirm() {
-    if (!canConfirm) return
+    if (!canConfirm || busy || blocked) return
     onconfirm({ purgeDisks })
   }
 </script>
@@ -78,18 +84,23 @@
           placeholder={targetName}
           autocomplete="off"
           spellcheck="false"
+          onkeydown={(e) => e.key === 'Enter' && confirm()}
         />
       </div>
+      {#if blocked}<div class="ui-error-box">{blocked}</div>{/if}
+      {#if error}<div class="ui-error-box" role="alert">{error}</div>{/if}
     </div>
 
     <div class="guardrail-footer">
       <button class="ui-btn" onclick={onclose}>{t('Cancel')}</button>
       <button
         class="ui-btn danger-confirm"
-        disabled={!canConfirm}
+        disabled={!canConfirm || busy || !!blocked}
         onclick={confirm}
       >
-        {#if !canConfirm}
+        {#if busy}
+          <span>{t('Deleting…')}</span>
+        {:else if !canConfirm}
           <span>{t('Type the name to continue')}</span>
         {:else}
           <Trash size={14} />

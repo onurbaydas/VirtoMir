@@ -109,6 +109,7 @@
       try {
         const [p, n] = await Promise.all([api.pools(), api.networks()])
         pools = p.filter((x) => x.active)
+        networks = n.filter((x) => x.active)
         const candidatePools = pools.filter((p) => ['dir', 'netfs', 'fs', 'logical', 'zfs', 'rbd'].includes(p.type))
         if (!candidatePools.some((x) => x.name === pool) && candidatePools[0]) pool = candidatePools[0].name
         storagePolicies = (await policies.list().catch(() => [])).filter((x) => candidatePools.some((p) => p.name === x.pool))

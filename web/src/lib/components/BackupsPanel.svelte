@@ -30,12 +30,17 @@
     void load()
   })
 
+  let starting = $state(false)
   async function backupNow() {
+    if (starting) return
+    starting = true
     try {
       const job = await api.backupNow(uuid, incremental)
-      track(job, { success: `${name} backed up`, onSuccess: () => void load() })
+      track(job, { success: t('{name} backed up', { name }), onSuccess: () => void load() })
     } catch (e) {
       toasts.push({ kind: 'error', title: t('Backup not started'), detail: errorText(e) })
+    } finally {
+      starting = false
     }
   }
 </script>
@@ -52,7 +57,7 @@
       </p>
     </div>
     <div class="now">
-      <button class="ui-btn primary" disabled={!session.can('operator')} title={session.why('operator')} onclick={backupNow}>
+      <button class="ui-btn primary" disabled={!session.can('operator') || starting} title={session.why('operator')} onclick={backupNow}>
         <Archive size={15} /> {t('Back up now')}
       </button>
       <label class="ui-switch" title={t('A running machine with qcow2 disks copies only what changed since its previous backup; otherwise the backup is full.')}>
