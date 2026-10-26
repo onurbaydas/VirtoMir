@@ -726,11 +726,18 @@ func watchConfig(ctx context.Context, client *virt.Client, ch *confighist.Store,
 			}
 		}
 	}()
+	last := "" // the error last logged at Warn; repeats go to Debug
 	for ctx.Err() == nil {
 		events, err := client.ConfigEvents(ctx)
 		if err != nil {
-			log.Debug("configuration events unavailable, retrying", "err", err)
+			if err.Error() != last {
+				log.Warn("configuration events unavailable, retrying", "err", err)
+			} else {
+				log.Debug("configuration events unavailable, retrying", "err", err)
+			}
+			last = err.Error()
 		} else {
+			last = ""
 			ch.Sweep() // catch up on what happened before or between subscriptions
 			for ev := range events {
 				if ev.Stopped {
