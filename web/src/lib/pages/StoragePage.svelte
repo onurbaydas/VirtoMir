@@ -24,6 +24,7 @@
   import Download from '@lucide/svelte/icons/download'
   import OrphanedDisksModal from '../components/OrphanedDisksModal.svelte'
   import IsoDownloadModal from '../components/IsoDownloadModal.svelte'
+  import { uploads } from '../uploads.svelte'
   import ZfsReplicationModal from '../components/ZfsReplicationModal.svelte'
   import BookOpen from '@lucide/svelte/icons/book-open'
   import Cable from '@lucide/svelte/icons/cable'
@@ -160,23 +161,10 @@
   }
 
   // ---- Upload ---------------------------------------------------------------------
-  let fileInput = $state<HTMLInputElement>()
-  let uploading = $state<{ name: string; fraction: number; abort: AbortController } | null>(null)
-  async function upload(file: File) {
-    if (!current) return
-    const name = file.name.replace(/[^A-Za-z0-9._+-]/g, '_')
-    const abort = new AbortController()
-    uploading = { name, fraction: 0, abort }
-    try {
-      await api.upload(current.name, file, name, (f) => uploading && (uploading.fraction = f), abort.signal)
-      toasts.push({ kind: 'info', title: `${name} uploaded`, detail: `${formatBytes(file.size)} to ${current.name}` })
-      await refresh()
-    } catch (e) {
-      toasts.push({ kind: 'error', title: t('Upload of {name} failed', { name: name }), detail: errorText(e) })
-    } finally {
-      uploading = null
-    }
-  }
+  // Uploads run in the uploads store (they survive leaving this page); a finished one refreshes the list.
+  let isoMode = $state<'file' | 'url'>('file')
+  const addImage = (mode: 'file' | 'url') => ((isoMode = mode), (isoOpen = true))
+  $effect(() => uploads.onDone((p) => p === current?.name && void refresh()))
 
   // ---- New pool -------------------------------------------------------------------
   let poolDlg = $state(false)
@@ -280,8 +268,8 @@
     <button class="ui-btn" onclick={() => (orphanedOpen = true)} title={t('Find disks not attached to any VM')}>
       <HardDrive size={15} /> {t('Unused disks')}
     </button>
-    <button class="ui-btn" onclick={() => (isoOpen = true)} title={t('The host downloads an image from a URL into a pool')}>
-      <Download size={15} /> {t('Download from URL')}
+    <button class="ui-btn" onclick={() => addImage('url')} title={t('Upload an image from this computer, or let the host download one from a URL')}>
+      <Download size={15} /> {t('Add image')}
     </button>
     <button class="ui-btn primary" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((pName = ''), (pPath = ''), (pErr = ''), (poolDlg = true))}>
       <FolderPlus size={15} /> {t('New pool')}
@@ -341,7 +329,7 @@
               <RefreshCw size={14} /> {t('Rescan')}
             </button>
             <ConfirmButton label={t('Stop')} confirm={t('Stop the pool?')} icon={Square} run={() => poolAction(current!, 'stop')} />
-            <button class="ui-btn sm" onclick={() => fileInput?.click()} disabled={!!uploading}><Upload size={14} /> {t('Upload image')}</button>
+            <button class="ui-btn sm" onclick={() => addImage('file')}><Upload size={14} /> {t('Upload image')}</button>
             <button class="ui-btn sm primary" onclick={openVolume}><Plus size={14} /> {t('New volume')}</button>
           {:else}
             <ConfirmButton
@@ -359,26 +347,6 @@
         </div>
       </header>
       <PoolEfficiency pool={current} tier={tiers[current.name]} ontier={loadTiers} />
-      <input
-        type="file"
-        accept=".iso,.img,.raw,.qcow2"
-        hidden
-        bind:this={fileInput}
-        onchange={(e) => {
-          const f = e.currentTarget.files?.[0]
-          e.currentTarget.value = ''
-          if (f) void upload(f)
-        }}
-      />
-
-      {#if uploading}
-        <div class="upload">
-          <span class="mono">{uploading.name}</span>
-          <span class="bar wide"><span style:width="{uploading.fraction * 100}%"></span></span>
-          <span class="num">{Math.round(uploading.fraction * 100)} %</span>
-          <button class="ui-btn sm ghost" onclick={() => uploading?.abort.abort()}>{t('Cancel')}</button>
-        </div>
-      {/if}
 
       {#if volError}
         <div class="ui-error-box">{volError}</div>
@@ -603,6 +571,7 @@
 />
 <IsoDownloadModal
   open={isoOpen}
+  mode={isoMode}
   poolName={current?.name ?? 'default'}
   onclose={() => (isoOpen = false)}
   onsuccess={refresh}
@@ -747,9 +716,6 @@
   .bar span.full {
     background: var(--warn);
   }
-  .bar.wide {
-    flex: 1;
-  }
   .vols {
     padding: 14px 16px;
   }
@@ -780,17 +746,6 @@
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
-  }
-  .upload {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    margin-bottom: 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--bg-elev);
-    font-size: 13px;
   }
   .table {
     display: grid;

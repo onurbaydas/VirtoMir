@@ -37,6 +37,7 @@
   import CompliancePage from './lib/pages/CompliancePage.svelte'
   import SetupPage from './lib/pages/SetupPage.svelte'
   import HostSettingsPage from './lib/pages/HostSettingsPage.svelte'
+  import UploadsPanel from './lib/components/UploadsPanel.svelte'
   import { api } from './lib/api'
   import ConsolePage from './lib/pages/ConsolePage.svelte'
   import Login from './lib/pages/Login.svelte'
@@ -195,6 +196,7 @@
 
 <DeployDialog />
 <Toasts />
+<UploadsPanel />
 <CommandPalette />
 <BottomDrawer />
 
