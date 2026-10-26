@@ -257,6 +257,7 @@ func run(c config, log *slog.Logger) error {
 		opts.VMwareConverter = c
 	}
 	opts.Updater = update.New(c.updateRepo, version, os.Getenv("VIRTOMIR_GITHUB_TOKEN"))
+	opts.Updater.Busy = func() bool { return jobManager.Running() > 0 } // a restart would kill them
 	opts.StateDir = c.stateDir
 	if repStore, err := reports.Open(filepath.Join(c.stateDir, "reports")); err != nil {
 		log.Warn("reports store", "err", err)
