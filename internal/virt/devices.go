@@ -184,6 +184,12 @@ func (c *Client) AttachDisk(uuid string, spec DiskSpec) (string, error) {
 	}
 	if spec.Device == "cdrom" {
 		disk.ReadOnly = &libvirtxml.DomainDiskReadOnly{}
+	} else if created == nil {
+		if src, _ := diskSource(disk.Source); src != "" {
+			if err := c.checkDiskFree(l, src, d.Name); err != nil {
+				return "", err
+			}
+		}
 	}
 	doc, err := disk.Marshal()
 	if err != nil {

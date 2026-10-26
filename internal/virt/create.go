@@ -361,9 +361,18 @@ func (c *Client) CreateDomain(spec CreateSpec) (CreateResult, error) {
 			diskFormat = "raw"
 		}
 	case diskPath != "":
+		iso := strings.HasSuffix(strings.ToLower(diskPath), ".iso")
 		if v, err := l.StorageVolLookupByPath(diskPath); err == nil {
-			if info, err := volumeInfo(l, v); err == nil && info.Format != "iso" {
-				diskFormat = info.Format
+			if info, err := volumeInfo(l, v); err == nil {
+				iso = info.Format == "iso"
+				if !iso {
+					diskFormat = info.Format
+				}
+			}
+		}
+		if !iso {
+			if err := c.checkDiskFree(l, diskPath, spec.Name); err != nil {
+				return CreateResult{}, err
 			}
 		}
 	}
