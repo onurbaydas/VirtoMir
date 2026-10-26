@@ -346,7 +346,7 @@ export interface ApiToken {
 }
 
 export type Severity = 'warning' | 'critical'
-export type AlertKind = 'host.cpu' | 'host.mem' | 'vm.cpu' | 'vm.crashed' | 'vm.down' | 'pool.free' | 'libvirt.down' | 'vm.anomaly' | 'ceph.health'
+export type AlertKind = 'host.cpu' | 'host.mem' | 'vm.cpu' | 'vm.crashed' | 'vm.down' | 'pool.free' | 'libvirt.down' | 'vm.anomaly' | 'ceph.health' | 'backup.failed'
 
 export interface Alert {
   id: string

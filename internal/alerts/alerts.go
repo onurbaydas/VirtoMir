@@ -52,10 +52,9 @@ var kinds = []Kind{HostCPU, HostMem, VMCPU, VMCrashed, VMDown, PoolFree, Libvirt
 // eventKind: alerts of these kinds are raised and resolved by events, not by Observe.
 func eventKind(k Kind) bool { return k == BackupFailed }
 
-// hiddenKinds are rules the Alerts page cannot show yet; Config leaves them out and
-// SetConfig keeps the stored ones when they are not sent back.
-// TODO: drop once web/src/lib/pages/AlertsPage.svelte (KINDS) knows "backup.failed".
-var hiddenKinds = []Kind{BackupFailed}
+// hiddenKinds are rules the Alerts page cannot show; Config leaves them out and SetConfig
+// keeps the stored ones when they are not sent back. Empty while the page knows every kind.
+var hiddenKinds []Kind
 
 type Rule struct {
 	ID        string   `json:"id"`

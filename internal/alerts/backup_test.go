@@ -48,10 +48,10 @@ func TestBackupRuleIsDefaultEverywhere(t *testing.T) {
 	if i < 0 || !e.cfg.Rules[i].Enabled {
 		t.Fatalf("rules = %+v", e.cfg.Rules)
 	}
-	// Hidden from the Alerts page for now, and kept when the page saves without it.
+	// Shown on the Alerts page, and kept when the page saves it back.
 	cfg := e.Config()
-	if slices.ContainsFunc(cfg.Rules, func(r Rule) bool { return r.Kind == BackupFailed }) {
-		t.Fatal("Config shows a rule the Alerts page cannot render")
+	if !slices.ContainsFunc(cfg.Rules, func(r Rule) bool { return r.Kind == BackupFailed }) {
+		t.Fatal("Config hides the backup rule")
 	}
 	if err := e.SetConfig(cfg); err != nil {
 		t.Fatal(err)

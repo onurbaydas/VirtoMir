@@ -25,7 +25,7 @@ VirtoMir is a modern web control panel for **KVM / QEMU / libvirt** that tries t
 
 It installs on an existing Linux host with KVM/libvirt as a single binary (tested on Ubuntu 26.04; testers for Ubuntu 24.04, Debian and Fedora are welcome). No dedicated distribution, no database, no agents.
 
-> 🚧 **Status: 1.0.** Tested on Ubuntu 26.04 on single hosts and small clusters; high availability has not been tried on real BMC hardware yet, and the VMware import is experimental. Testers wanted for other setups and distributions (see [issue #1](https://github.com/onurbaydas/VirtoMir/issues/1)). Test it before you trust it with production.
+> 🚧 **Status: 1.0.** Tested on Ubuntu 26.04 on single hosts and small clusters; high availability has not been tried on real BMC hardware yet, and the VMware import is experimental. From 1.0 on no new features are added: the work goes into making the everyday single-host features solid and easy. Testers wanted for other setups and distributions (see [issue #1](https://github.com/onurbaydas/VirtoMir/issues/1)). Test it before you trust it with production.
 
 ![Overview](docs/screenshots/overview.png)
 
@@ -40,6 +40,15 @@ It installs on an existing Linux host with KVM/libvirt as a single binary (teste
 | Proxmox VE | Powerful, but it *is* the operating system |
 
 VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw libvirt XML, with a modern web interface.
+
+## How the interface is organised
+
+What you use every day on one host is always in front: **Overview, Machines, Storage, Networks, Backups, Alerts and Hardware**. Everything else is one click deeper, never gone:
+
+- The sidebar's **Operations** group (insights, reports, compliance, content library, activity), **Datacenter** group (cluster, Ceph, SDN, physical network, Kubernetes, bare metal; open by default once hosts are joined) and **Self-service** group (projects, catalog) fold open on demand. Experimental pages are marked *beta*. The command palette (Ctrl+K) reaches every page.
+- A machine has six tabs: **Overview, Console, Settings, Hardware, Snapshots, Backups**. Its firewall, change history and XML are under **Advanced**.
+- The new-machine wizard asks only what every machine needs. Projects, resource pools, GPU pools, SDN subnets, IP pools and storage policies appear when they are set up.
+- Host-wide settings (updates, sign-in with LDAP/OIDC, quotas, integrations, the host setup) are on **Host settings**, the gear in the sidebar footer (admins only). Your own role, two-step sign-in and API tokens are on **Account**.
 
 ## Features
 
@@ -65,7 +74,7 @@ VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw l
 - **Import**: OVA appliances, a libvirt domain XML, or a disk image already on the host
 - **From VMware** (experimental): read the inventory of a vCenter or a standalone ESXi host and convert its machines with `virt-v2v` — not tested on real VMware hardware yet
 - **Snapshots** as a tree: take, revert, delete
-- **Backups**: live (no downtime) or offline, restore as a new machine; **automatic snapshots and backups** on a schedule with retention
+- **Backups**: live (no downtime) or offline, restore as a new machine; **automatic snapshots and backups** on a schedule with retention; the Backups page lists the machines without automatic backups (one click protects them) and the automatic backups whose last run failed
 - **Off-site copies** with restic — encrypted and deduplicated, to S3 (or MinIO, Wasabi, Ceph RGW …), Backblaze B2, Azure, Google Cloud Storage, SFTP, a REST server or a disk; every scheduled backup can be copied right after it is made, with its own retention, and brought back with one click
 - **Firewall per machine**: in/out rules by protocol, port and IPv4/IPv6 address, default policies and anti-spoofing — enforced on the host (libvirt network filters), so the guest cannot switch it off; applied live
 - **As code**: the new-machine form shows its exact API request (curl, Ansible) and an equivalent `virt-install`
@@ -75,7 +84,7 @@ VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw l
 - Per machine: CPU, per-vCPU load, disk throughput / IOPS / latency, network traffic, guest-reported memory
 - Host CPU, memory, physical disk and network throughput
 - **History** for 1 h, 6 h, 24 h, 7 days and 30 days — kept by VirtoMir itself, no Prometheus needed
-- …and a **Prometheus endpoint** (`/api/v1/metrics`) for those who have one; the whole API is described by **OpenAPI** (`/api/v1/openapi.json`)
+- …and a **Prometheus endpoint** (`/api/v1/metrics`) for those who have one, with ready-made **Grafana dashboards** (host overview, one machine) and **Prometheus alert rules** in [`contrib/`](contrib/README.md); the whole API is described by **OpenAPI** (`/api/v1/openapi.json`)
 - **Alerts** with sensible defaults (host overloaded, machine crashed, pool filling up, libvirt down) — to a webhook, Slack, Discord, ntfy or e-mail
 - **Host hardware**: vendor, model, BIOS, temperatures, fans and power from the host's own sensors; GPUs with load, memory, temperature and power (NVIDIA, AMD)
 - **Busiest machines** right now, and "would N more machines fit?" from live numbers (with an N+1 check in a cluster)
@@ -142,7 +151,7 @@ VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw l
 - **API tokens** for scripts and automation, limited to their owner's role
 - HTTPS by default (self-signed certificate created on first start, or your own)
 - Session timeouts, lockout after failed sign-ins, CSRF protection, **activity log** of every change (CSV export)
-- **Updates** from the GitHub releases in the UI (Account → Updates): downloaded, checked against the published SHA-256 and its OpenPGP signature, and installed with apt
+- **Updates** from the GitHub releases in the UI (Host settings → Updates): downloaded, checked against the published SHA-256 and its OpenPGP signature, and installed with apt
 
 ### Automation
 
@@ -202,7 +211,7 @@ The repository is built by `scripts/build-repos.sh` in the release workflow (`In
 sudo apt install ./virtomir_1.0.0_amd64.deb   # or _arm64.deb; pulls libvirt and QEMU if missing
 ```
 
-It starts `virtomird` right away on port 8420 (self-signed HTTPS); the first admin to sign in is walked through what the host still needs (storage, a network, a backup location, a first image). Sign in with a Linux account in the `libvirt` group (admins), `virtomir-operator` or `virtomir-viewer`. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Later versions install from the UI (Account → Updates). Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
+It starts `virtomird` right away on port 8420 (self-signed HTTPS); the first admin to sign in is walked through what the host still needs (storage, a network, a backup location, a first image). Sign in with a Linux account in the `libvirt` group (admins), `virtomir-operator` or `virtomir-viewer`. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Later versions install from the UI (Host settings → Updates). Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
 
 ### Fedora / RHEL package (experimental)
 
@@ -282,7 +291,14 @@ VirtoMir is built by one person, together with AI coding agents (their working r
 
 ## Roadmap
 
-The feature set is complete for now; the focus is on hardening what exists. These arrived last and need the most real-world testing:
+The feature set is complete; **no new features are being added**. The work now goes into the everyday single-host features:
+
+- **Data safety**: nothing in use is ever deleted, operations on one machine never overlap, damaged settings files are kept aside instead of being replaced, failed backups always raise an alert.
+- **Clear everyday flows**: the new-machine wizard, the console, storage, networks, backups and the first-run setup, with plain errors and no dead ends.
+- **Less in the way**: advanced and multi-host features one click deeper and only shown once they are set up.
+- **Tests** for the risky paths (delete, restore, snapshot revert).
+
+These arrived last and need the most real-world testing:
 
 - **Kubernetes clusters** on VirtoMir machines (kubeadm through cloud-init, one or three control planes behind kube-vip, flannel or calico, scaling, minor upgrades node by node) and a **CSI driver** for VirtoMir storage pools ([integrations/virtomir-csi](integrations/virtomir-csi)).
 - **Bare-metal onboarding**: new hosts installed over the network (iPXE, Debian 13 preseed, VirtoMir from the apt repository) that join the cluster on their first boot; BMCs boot them through Redfish or IPMI.

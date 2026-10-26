@@ -389,6 +389,7 @@ export const tr: Record<string, string> = {
   "Automated capacity forecasting & backup SLA audits": "Otomatik kapasite tahmini ve yedekleme SLA denetimleri",
   "Automated differential block-level storage replication between nodes": "Düğümler arasında otomatik diferansiyel blok düzeyinde depolama replikasyonu",
   "automatic": "otomatik",
+  "Automatic backup failed (cleared by its next success)": "Otomatik yedekleme başarısız oldu (bir sonraki başarılı yedekte kapanır)",
   "Automatic backups": "Otomatik yedekler",
   "Automatic backups are off": "Otomatik yedekler kapalı",
   "Automatic backups are on": "Otomatik yedekler açık",
