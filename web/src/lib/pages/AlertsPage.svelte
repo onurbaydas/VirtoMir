@@ -12,6 +12,7 @@
   import { alerts, type HostAlert } from '../alerts.svelte'
   import { cluster } from '../cluster.svelte'
   import { live } from '../live.svelte'
+  import { cephOn } from '../ceph'
   import { machineHref, router } from '../router.svelte'
   import { session } from '../session.svelte'
   import { toasts } from '../toast.svelte'
@@ -126,9 +127,14 @@
   }
   const machines = $derived(live.snapshot?.domains ?? [])
   let pools = $state<string[]>([])
+  // The Ceph health rule only means something on a host that manages a Ceph cluster.
+  let cephManaged = $state(false)
   $effect(() => {
-    if (view === 'rules') void api.pools().then((p) => (pools = p.map((x) => x.name))).catch(() => {})
+    if (view !== 'rules') return
+    void api.pools().then((p) => (pools = p.map((x) => x.name))).catch(() => {})
+    void cephOn().status().then((s) => (cephManaged = s.managed)).catch(() => (cephManaged = false))
   })
+  const shown = (kind: string) => kind !== 'ceph.health' || cephManaged
 
   function addRule(kind: AlertKind) {
     cfg?.rules.push({ id: '', kind, enabled: true, threshold: KINDS[kind].unit ? 90 : undefined, forSec: 300, severity: 'warning', target: '' })
@@ -265,6 +271,7 @@
   <section class="ui-panel card">
     <div class="rules">
       {#each cfg.rules as r, i (r.id || i)}
+        {#if shown(r.kind)}
         {@const k = KINDS[r.kind]}
         <div class="rule" class:off={!r.enabled}>
           <label class="ui-switch"><input type="checkbox" bind:checked={r.enabled} aria-label={t('Enabled')} /></label>
@@ -303,11 +310,12 @@
           </select>
           <button class="ui-btn sm ghost icon" aria-label={t('Remove rule')} title={t('Remove rule')} onclick={() => cfg?.rules.splice(i, 1)}><Trash size={14} /></button>
         </div>
+        {/if}
       {/each}
     </div>
     <div class="add">
       <span class="muted">{t('Add a rule:')}</span>
-      {#each Object.entries(KINDS) as [kind, k] (kind)}
+      {#each Object.entries(KINDS).filter(([kind]) => shown(kind)) as [kind, k] (kind)}
         <button class="chip-btn" onclick={() => addRule(kind as AlertKind)}><Plus size={12} /> {k.label}</button>
       {/each}
     </div>
