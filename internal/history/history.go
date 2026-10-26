@@ -8,6 +8,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"math"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // Tier is one resolution.
@@ -69,10 +72,12 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return s, err
 	}
-	defer f.Close()
 	var file fileFormat
-	if err := gob.NewDecoder(f).Decode(&file); err != nil {
-		return s, fmt.Errorf("history file %s unreadable, starting empty: %w", path, err)
+	err = gob.NewDecoder(f).Decode(&file)
+	f.Close()
+	if err != nil {
+		// Keep the unreadable file for inspection; the next save starts a fresh one.
+		return s, atomicfile.Quarantine(path, err)
 	}
 	if file.Version != formatVersion || !sameTiers(file.Tiers) {
 		return s, nil // layout changed: start fresh rather than misread
@@ -104,27 +109,13 @@ func (s *Store) Save() error {
 		}
 	}
 	file := fileFormat{Version: formatVersion, Tiers: Tiers, Series: s.series}
-	tmp := s.path + ".tmp"
-	err := func() error {
-		if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
-			return err
-		}
-		f, err := os.Create(tmp)
-		if err != nil {
-			return err
-		}
-		if err := gob.NewEncoder(f).Encode(&file); err != nil {
-			f.Close()
-			return err
-		}
-		return f.Close()
-	}()
-	s.mu.Unlock()
-	if err != nil {
-		_ = os.Remove(tmp)
+	defer s.mu.Unlock()
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	return atomicfile.WriteFunc(s.path, 0o600, func(w io.Writer) error {
+		return gob.NewEncoder(w).Encode(&file)
+	})
 }
 
 // Add records one sample. NaN values are ignored.

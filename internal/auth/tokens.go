@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // Token is an API token for scripts and tools (Terraform, CI, monitoring). Only a hash of
@@ -58,7 +60,8 @@ func OpenTokens(path string) (*Tokens, error) {
 		return t, err
 	}
 	if err := json.Unmarshal(b, &t.tokens); err != nil {
-		return t, fmt.Errorf("tokens file %s: %w", path, err)
+		t.tokens = nil
+		return t, atomicfile.Quarantine(path, err)
 	}
 	return t, nil
 }
@@ -74,11 +77,7 @@ func (t *Tokens) saveLocked() error {
 	if err := os.MkdirAll(filepath.Dir(t.path), 0o750); err != nil {
 		return err
 	}
-	tmp := t.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, t.path)
+	return atomicfile.Write(t.path, b, 0o600)
 }
 
 func hashSecret(s string) string {

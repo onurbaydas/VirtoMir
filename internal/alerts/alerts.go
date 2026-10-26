@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 type Severity string
@@ -186,7 +188,8 @@ func Open(path string, log *slog.Logger) (*Engine, error) {
 		Alerts []Alert `json:"alerts"`
 	}
 	if err := json.Unmarshal(b, &file); err != nil {
-		return e, fmt.Errorf("alerts file %s: %w", path, err)
+		// Keep the unreadable file: the next save would otherwise replace it with the defaults.
+		return e, atomicfile.Quarantine(path, err)
 	}
 	e.cfg = file.Config
 	if e.cfg.Channels == nil {
@@ -221,10 +224,7 @@ func (e *Engine) saveLocked() {
 		err = os.MkdirAll(filepath.Dir(e.path), 0o750)
 	}
 	if err == nil {
-		tmp := e.path + ".tmp"
-		if err = os.WriteFile(tmp, b, 0o600); err == nil {
-			err = os.Rename(tmp, e.path)
-		}
+		err = atomicfile.Write(e.path, b, 0o600)
 	}
 	if err != nil && e.log != nil {
 		e.log.Warn("save alerts", "err", err)

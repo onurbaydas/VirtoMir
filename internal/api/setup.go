@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // First-run setup (ADR-0045): right after installing, an admin is walked through what a
@@ -47,8 +49,13 @@ func (s *Server) setupIsDone() bool {
 
 func (s *Server) markSetupDone() {
 	b, _ := json.Marshal(map[string]any{"done": true, "at": time.Now().UTC()})
-	_ = os.MkdirAll(s.stateDir, 0o755)
-	_ = os.WriteFile(s.setupFile(), b, 0o644)
+	err := os.MkdirAll(s.stateDir, 0o755)
+	if err == nil {
+		err = atomicfile.Write(s.setupFile(), b, 0o644)
+	}
+	if err != nil && s.log != nil {
+		s.log.Warn("save setup state", "file", s.setupFile(), "err", err)
+	}
 }
 
 func (s *Server) setupDone(w http.ResponseWriter, _ *http.Request) {

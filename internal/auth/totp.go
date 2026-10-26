@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // Two-factor sign-in with time-based one-time codes (RFC 6238: 30 s steps, 6 digits,
@@ -77,11 +79,7 @@ func (t *TwoFactor) saveLocked() error {
 	if err := os.MkdirAll(filepath.Dir(t.path), 0o750); err != nil {
 		return err
 	}
-	tmp := t.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, t.path)
+	return atomicfile.Write(t.path, b, 0o600)
 }
 
 // Enabled reports whether the user must give a code when signing in.

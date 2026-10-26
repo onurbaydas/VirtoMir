@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 	"github.com/onurbaydas/virtomir/internal/signature"
 )
 
@@ -438,20 +439,29 @@ func (c *Checker) SetAutoConfig(cfg AutoConfig) error {
 	dir := c.stateDir
 	c.cfgMu.Unlock()
 
+	var err error
 	if dir != "" {
-		upDir := filepath.Join(dir, "updates")
-		_ = os.MkdirAll(upDir, 0o700)
-		data, err := json.MarshalIndent(cur, "", "  ")
-		if err == nil {
-			_ = os.WriteFile(filepath.Join(upDir, "config.json"), data, 0o600)
-		}
+		err = saveAutoConfig(dir, cur)
 	}
 
 	select {
 	case c.wakeCh <- struct{}{}:
 	default:
 	}
-	return nil
+	return err
+}
+
+// saveAutoConfig writes <stateDir>/updates/config.json atomically.
+func saveAutoConfig(stateDir string, cfg AutoConfig) error {
+	upDir := filepath.Join(stateDir, "updates")
+	if err := os.MkdirAll(upDir, 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return atomicfile.Write(filepath.Join(upDir, "config.json"), data, 0o600)
 }
 
 // autoPass is one background check, and an install when AutoInstall allows it. It holds
@@ -498,10 +508,8 @@ func (c *Checker) autoPass(ctx context.Context, cfg AutoConfig, stateDir string,
 	cur := c.autoCfg
 	c.cfgMu.Unlock()
 
-	upDir := filepath.Join(stateDir, "updates")
-	_ = os.MkdirAll(upDir, 0o700)
-	if data, err := json.MarshalIndent(cur, "", "  "); err == nil {
-		_ = os.WriteFile(filepath.Join(upDir, "config.json"), data, 0o600)
+	if err := saveAutoConfig(stateDir, cur); err != nil && log != nil {
+		log.Warn("auto-update: save settings", "err", err)
 	}
 }
 

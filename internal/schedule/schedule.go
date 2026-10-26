@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 type Kind string
@@ -110,7 +112,8 @@ func Open(path, defaultBackupDir string, runner Runner, start Starter, log *slog
 		Schedules []Schedule `json:"schedules"`
 	}
 	if err := json.Unmarshal(b, &file); err != nil {
-		return s, fmt.Errorf("schedules file %s: %w", path, err)
+		// Keep the unreadable file: the next save would otherwise replace it with an empty list.
+		return s, atomicfile.Quarantine(path, err)
 	}
 	if file.Settings.BackupDir != "" {
 		s.settings = file.Settings
@@ -135,10 +138,7 @@ func (s *Scheduler) saveLocked() {
 	b, _ := json.MarshalIndent(file, "", "  ")
 	err := os.MkdirAll(filepath.Dir(s.path), 0o750)
 	if err == nil {
-		tmp := s.path + ".tmp"
-		if err = os.WriteFile(tmp, b, 0o600); err == nil {
-			err = os.Rename(tmp, s.path)
-		}
+		err = atomicfile.Write(s.path, b, 0o600)
 	}
 	if err != nil && s.log != nil {
 		s.log.Warn("save schedules", "err", err)

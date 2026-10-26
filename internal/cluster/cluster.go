@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // Node is one member of the cluster.
@@ -81,11 +83,7 @@ func (s *Store) save() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return atomicfile.Write(s.path, b, 0o600)
 }
 
 // SelfID is this node's stable ID.

@@ -20,6 +20,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/activity"
 	"github.com/onurbaydas/virtomir/internal/alerts"
 	"github.com/onurbaydas/virtomir/internal/api"
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 	"github.com/onurbaydas/virtomir/internal/auth"
 	"github.com/onurbaydas/virtomir/internal/baremetal"
 	"github.com/onurbaydas/virtomir/internal/catalog"
@@ -150,9 +151,7 @@ func run(c config, log *slog.Logger) error {
 	defer client.Close()
 
 	tokens, err := auth.OpenTokens(filepath.Join(c.stateDir, "tokens.json"))
-	if err != nil {
-		log.Warn("API tokens", "err", err)
-	}
+	logStoreErr(log, "API tokens", err)
 	acts, err := activity.Open(filepath.Join(c.stateDir, "activity.jsonl"))
 	if err != nil {
 		log.Warn("activity log", "err", err)
@@ -166,9 +165,7 @@ func run(c config, log *slog.Logger) error {
 	}
 
 	hist, err := history.Open(filepath.Join(c.stateDir, "history.gob"))
-	if err != nil {
-		log.Warn("metric history", "err", err)
-	}
+	logStoreErr(log, "metric history", err)
 	defer func() {
 		if err := hist.Save(); err != nil {
 			log.Warn("save metric history", "err", err)
@@ -181,9 +178,7 @@ func run(c config, log *slog.Logger) error {
 	hub := live.NewHub(client, time.Second, log)
 	hub.SetRecorder(hist)
 	alertEngine, err := alerts.Open(filepath.Join(c.stateDir, "alerts.json"), log)
-	if err != nil {
-		log.Warn("alerts", "err", err)
-	}
+	logStoreErr(log, "alerts", err)
 	cephStore, err := ceph.Open(filepath.Join(c.stateDir, "ceph.json"))
 	if err != nil {
 		log.Warn("Ceph", "err", err)
@@ -201,9 +196,7 @@ func run(c config, log *slog.Logger) error {
 	}
 	scheduler, err := schedule.Open(filepath.Join(c.stateDir, "schedules.json"), filepath.Join(c.stateDir, "backups"),
 		scheduleRunner{client, offsiteStore}, jobStarter(jobManager), log)
-	if err != nil {
-		log.Warn("schedules", "err", err)
-	}
+	logStoreErr(log, "schedules", err)
 	go scheduler.Run(ctx)
 	hubDone := make(chan struct{})
 	go func() { hub.Run(ctx); close(hubDone) }()
@@ -226,9 +219,10 @@ func run(c config, log *slog.Logger) error {
 		opts.ConfigHistory = ch
 		go sweepConfig(ctx, ch)
 	}
-	if q, err := quota.Open(filepath.Join(c.stateDir, "quotas.json")); err != nil {
+	if q, err := quota.Open(filepath.Join(c.stateDir, "quotas.json")); q == nil {
 		log.Warn("quotas", "err", err)
 	} else {
+		logStoreErr(log, "quotas", err)
 		opts.Quotas = q
 	}
 	haStore, err := ha.Open(filepath.Join(c.stateDir, "ha.json"))
@@ -468,6 +462,21 @@ func run(c config, log *slog.Logger) error {
 		}
 		return nil
 	}
+}
+
+// logStoreErr reports a problem opening a state file. An unreadable file has been moved
+// aside (the store starts empty), which an admin must know about: that is an error.
+func logStoreErr(log *slog.Logger, what string, err error) {
+	if err == nil {
+		return
+	}
+	var ce *atomicfile.CorruptError
+	if errors.As(err, &ce) {
+		log.Error(what+": state file unreadable, moved aside and started empty",
+			"file", ce.Path, "backup", ce.Backup, "err", ce.Err)
+		return
+	}
+	log.Warn(what, "err", err)
 }
 
 // recordPools adds every active pool's used bytes to the history every 10 minutes, the
