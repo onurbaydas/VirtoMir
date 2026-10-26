@@ -64,7 +64,7 @@ func gpuNode(t *testing.T) (*testNode, *gpuFake) {
 func TestCreateWithGPUs(t *testing.T) {
 	n, g := gpuNode(t)
 	admin := n.signIn(t, "onur")
-	resp, body := admin.req("POST", "/api/v1/domains", `{"name":"render-01","vcpus":4,"memoryMiB":8192,"start":true,"gpu":{"pool":"l40s","count":1}}`)
+	resp, body := admin.req("POST", "/api/v1/domains?wait=true", `{"name":"render-01","vcpus":4,"memoryMiB":8192,"start":true,"gpu":{"pool":"l40s","count":1}}`)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("%d %s", resp.StatusCode, body)
 	}
@@ -77,10 +77,10 @@ func TestCreateWithGPUs(t *testing.T) {
 
 	// The card is taken now: a second machine does not get it.
 	g.hw.PCI[0].UsedBy = []string{"render-01"}
-	if resp, body := admin.req("POST", "/api/v1/domains", `{"name":"render-02","gpu":{"pool":"l40s","count":1}}`); resp.StatusCode != http.StatusConflict || !strings.Contains(body, "0 free GPUs") {
+	if resp, body := admin.req("POST", "/api/v1/domains?wait=true", `{"name":"render-02","gpu":{"pool":"l40s","count":1}}`); resp.StatusCode != http.StatusConflict || !strings.Contains(body, "0 free GPUs") {
 		t.Errorf("second machine: %d %s", resp.StatusCode, body)
 	}
-	if resp, _ := admin.req("POST", "/api/v1/domains", `{"name":"x","gpu":{"pool":"nope","count":1}}`); resp.StatusCode != http.StatusNotFound {
+	if resp, _ := admin.req("POST", "/api/v1/domains?wait=true", `{"name":"x","gpu":{"pool":"nope","count":1}}`); resp.StatusCode != http.StatusNotFound {
 		t.Errorf("unknown pool: %d", resp.StatusCode)
 	}
 }
@@ -92,7 +92,7 @@ func TestCreateWithGPUsRollsBack(t *testing.T) {
 	}
 	n.api.hostinfo = gpuReaderMDev(t)
 	g.failMDev = true
-	resp, body := n.signIn(t, "onur").req("POST", "/api/v1/domains", `{"name":"vdi-01","gpu":{"pool":"vgpu","count":1}}`)
+	resp, body := n.signIn(t, "onur").req("POST", "/api/v1/domains?wait=true", `{"name":"vdi-01","gpu":{"pool":"vgpu","count":1}}`)
 	if resp.StatusCode != http.StatusConflict || !strings.Contains(body, "removed again") {
 		t.Fatalf("%d %s", resp.StatusCode, body)
 	}
@@ -125,7 +125,7 @@ func TestGPUQuotaInProjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	g.domains = []virt.Domain{{UUID: "u-1", Name: "render-01", Project: "render", GPUPool: "l40s", GPUCount: 1}}
-	resp, body := n.signIn(t, "onur").req("POST", "/api/v1/domains", `{"name":"render-02","project":"render","gpu":{"pool":"l40s","count":1}}`)
+	resp, body := n.signIn(t, "onur").req("POST", "/api/v1/domains?wait=true", `{"name":"render-02","project":"render","gpu":{"pool":"l40s","count":1}}`)
 	if resp.StatusCode != http.StatusConflict || !strings.Contains(body, "GPU quota of 1 for pool l40s") {
 		t.Errorf("%d %s", resp.StatusCode, body)
 	}

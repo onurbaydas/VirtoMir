@@ -141,7 +141,7 @@ func (c *Client) Create(ctx context.Context, host string, body map[string]any) (
 		UUID       string `json:"uuid"`
 		StartError string `json:"startError"`
 	}
-	if err := c.Do(ctx, http.MethodPost, on(host, "/api/v1/domains"), body, &res); err != nil {
+	if err := c.Do(ctx, http.MethodPost, on(host, "/api/v1/domains?wait=true"), body, &res); err != nil {
 		return "", err
 	}
 	if res.StartError != "" {

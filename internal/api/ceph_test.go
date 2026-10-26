@@ -249,10 +249,10 @@ func TestStoragePoliciesAcrossTheCluster(t *testing.T) {
 	if p, ok := b.api.ceph.Policy("fast"); !ok || p.Pool != "ceph-fast" {
 		t.Errorf("not copied to beta: %+v", p)
 	}
-	if resp, _ := admin.req("POST", "/api/v1/domains", `{"name":"web","vcpus":1,"memoryMiB":512,"diskGiB":10}`); resp.StatusCode >= 300 || a.backend.lastCreate.Pool != "ceph-fast" {
+	if resp, _ := admin.req("POST", "/api/v1/domains?wait=true", `{"name":"web","vcpus":1,"memoryMiB":512,"diskGiB":10}`); resp.StatusCode >= 300 || a.backend.lastCreate.Pool != "ceph-fast" {
 		t.Errorf("the default policy did not pick the pool: %d %q", resp.StatusCode, a.backend.lastCreate.Pool)
 	}
-	if resp, _ := admin.req("POST", "/api/v1/domains", `{"name":"db","vcpus":1,"memoryMiB":512,"diskGiB":10,"storagePolicy":"nope"}`); resp.StatusCode != http.StatusUnprocessableEntity {
+	if resp, _ := admin.req("POST", "/api/v1/domains?wait=true", `{"name":"db","vcpus":1,"memoryMiB":512,"diskGiB":10,"storagePolicy":"nope"}`); resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Errorf("unknown policy: %d", resp.StatusCode)
 	}
 	if resp, _ := admin.req("PUT", "/api/v1/storage/policies/fast", `{"name":"Fast SSD","pool":"ceph-ssd"}`); resp.StatusCode != http.StatusOK {

@@ -390,19 +390,12 @@
     busy = true
     error = ''
     try {
-      if (kind === 'container') {
-        const job = await api.createContainer(spec, respool || undefined)
-        track(job, {
-          success: t('{name} is ready', { name }),
-          onSuccess: (j) => j.result && router.navigate(machineHref(j.result)),
-        })
-        router.navigate('/')
-        return
-      }
-      const res = await api.create(spec, respool || undefined)
-      if (res.startError) toasts.push({ kind: 'warn', title: t('{name} was created but did not start', { name: name }), detail: res.startError })
-      else toasts.push({ kind: 'info', title: start ? `${name} is starting` : `${name} created` })
-      router.navigate(machineHref(res.uuid))
+      const job = await api.create(spec, respool || undefined)
+      track(job, {
+        success: t('{name} is ready', { name }),
+        onSuccess: (j) => j.result && router.navigate(machineHref(j.result)),
+      })
+      router.navigate('/')
     } catch (err) {
       error = errorText(err)
     } finally {

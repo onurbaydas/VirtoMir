@@ -2,12 +2,16 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"time"
 
 	"github.com/onurbaydas/virtomir/internal/auth"
+	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/physnet"
 	"github.com/onurbaydas/virtomir/internal/project"
 	"github.com/onurbaydas/virtomir/internal/respool"
@@ -139,6 +143,14 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	// An adapter on an SDN subnet (ADR-0072) is plugged in after the machine exists: its
 	// OVN port is named after the machine. The machine starts once it is plugged.
+	if c, ok := s.backend.(interface {
+		CheckCreate(virt.CreateSpec) error
+	}); ok {
+		if err := c.CheckCreate(spec.CreateSpec); err != nil { // name taken, disk in use, ...
+			s.writeError(w, err)
+			return
+		}
+	}
 	var ovnNIC *virt.NICSpec
 	startAfter := false
 	if spec.Network != nil && spec.Network.OVNSubnet != "" {
@@ -160,28 +172,81 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// The slow part (copying a cloud image, GPUs, the SDN port) runs as a job; the checks
+	// above and CheckCreate already answered every mistake the caller can make.
 	var res virt.CreateResult
-	if spec.GPU != nil {
-		var ok bool
-		if res, ok = s.createWithGPUs(w, r, spec.CreateSpec, *spec.GPU); !ok {
-			s.dropAddress(spec.IP, addr)
+	var createErr error
+	job := s.jobs.Start("create", "Create machine "+spec.Name, func(ctx context.Context, _ func(string)) (string, error) {
+		res, createErr = s.finishCreate(r.WithContext(ctx), spec.CreateSpec, spec.GPU, spec.IP, addr, ovnNIC, startAfter, rp, spec.Project)
+		if createErr != nil {
+			return "", createErr
+		}
+		s.live.Refresh()
+		if res.StartError != "" {
+			return res.UUID, fmt.Errorf("created, but it did not start: %s", res.StartError)
+		}
+		return res.UUID, nil
+	})
+	if r.URL.Query().Get("wait") != "true" {
+		s.writeJSON(w, http.StatusAccepted, job)
+		return
+	}
+	// ?wait=true: the answer integrations got before machines were created as jobs.
+	for {
+		if j, ok := s.jobs.Get(job.ID); !ok || j.State != jobs.Running {
+			break
+		}
+		select {
+		case <-r.Context().Done():
 			return
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	if createErr != nil {
+		s.writeError(w, createErr)
+		return
+	}
+	s.writeJSON(w, http.StatusCreated, res)
+}
+
+// httpError is a failure that already has its status and message (the GPU placement
+// answers its own); writeError passes it through.
+type httpError struct {
+	status int
+	msg    string
+}
+
+func (e *httpError) Error() string { return e.msg }
+
+// finishCreate makes the machine and everything that hangs on it. It runs in a job, so
+// it cannot answer the HTTP request itself.
+func (s *Server) finishCreate(r *http.Request, spec virt.CreateSpec, gpu *GPURequest, ip *IPRequest, addr physnet.Allocation, ovnNIC *virt.NICSpec, startAfter bool, rp, projectID string) (virt.CreateResult, error) {
+	var res virt.CreateResult
+	if gpu != nil {
+		rec := httptest.NewRecorder()
+		var ok bool
+		if res, ok = s.createWithGPUs(rec, r, spec, *gpu); !ok {
+			s.dropAddress(ip, addr)
+			var body struct {
+				Error string `json:"error"`
+			}
+			_ = json.Unmarshal(rec.Body.Bytes(), &body)
+			return res, &httpError{rec.Code, body.Error}
 		}
 	} else {
 		var err error
-		if res, err = s.backend.CreateDomain(spec.CreateSpec); err != nil {
-			s.dropAddress(spec.IP, addr)
-			s.writeError(w, err)
-			return
+		if res, err = s.backend.CreateDomain(spec); err != nil {
+			s.dropAddress(ip, addr)
+			return res, err
 		}
 	}
-	if spec.IP != nil {
-		if msg := s.claimAddress(r.Context(), spec.IP.Pool, addr, res.UUID); msg != "" && res.StartError == "" {
+	if ip != nil {
+		if msg := s.claimAddress(r.Context(), ip.Pool, addr, res.UUID); msg != "" && res.StartError == "" {
 			res.StartError = msg
 		}
 	}
 	s.recordOwner(r, res.UUID)
-	s.recordProject(res.UUID, spec.Project)
+	s.recordProject(res.UUID, projectID)
 	s.joinRespool(rp, res.UUID)
 	if ovnNIC != nil {
 		if err := s.plugOVN(r.Context(), res.UUID, *ovnNIC); err != nil {
@@ -195,7 +260,7 @@ func (s *Server) createDomain(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.done(w, http.StatusCreated, res)
+	return res, nil
 }
 
 // Containers (ADR-0055) are created in the background: the image may have to be downloaded.

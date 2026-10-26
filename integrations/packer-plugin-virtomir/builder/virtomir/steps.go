@@ -44,7 +44,7 @@ func (s *stepCreate) Run(ctx context.Context, state multistep.StateBag) multiste
 		UUID       string `json:"uuid"`
 		StartError string `json:"startError"`
 	}
-	if err := s.client.do(ctx, http.MethodPost, "/api/v1/domains", body, &res); err != nil {
+	if err := s.client.do(ctx, http.MethodPost, "/api/v1/domains?wait=true", body, &res); err != nil {
 		return halt(state, ui, fmt.Errorf("create the machine: %w", err))
 	}
 	state.Put("uuid", res.UUID)

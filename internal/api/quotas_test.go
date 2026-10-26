@@ -41,14 +41,14 @@ func TestQuotaSelfService(t *testing.T) {
 	op, op2 := signIn(t, h, "op"), signIn(t, h, "view")
 
 	// Within the quota: 1 of 2 machines and 2 of 4 vCPUs used.
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"web","vcpus":2,"memoryMiB":2048}`, op); rec.Code != http.StatusCreated {
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"web","vcpus":2,"memoryMiB":2048}`, op); rec.Code != http.StatusCreated {
 		t.Errorf("create within quota: %d %s", rec.Code, rec.Body)
 	}
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"big","vcpus":4,"memoryMiB":1024}`, op); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "vCPUs") {
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"big","vcpus":4,"memoryMiB":1024}`, op); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "vCPUs") {
 		t.Errorf("over quota: %d %s", rec.Code, rec.Body)
 	}
 	// No rule, no self-service.
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"x","vcpus":1,"memoryMiB":512}`, op2); rec.Code != http.StatusForbidden {
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"x","vcpus":1,"memoryMiB":512}`, op2); rec.Code != http.StatusForbidden {
 		t.Errorf("operator without quota: %d", rec.Code)
 	}
 	// Own machine: delete and settings yes; XML and host devices no.
@@ -104,14 +104,14 @@ func TestDiskQuota(t *testing.T) {
 	h := NewServer(Options{Backend: b, Live: &fakeLive{}, Auth: m, Quotas: q, GroupsOf: func(string) []string { return nil },
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Handler()
 	op := signIn(t, h, "op")
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"a","vcpus":1,"memoryMiB":1024,"diskGiB":20}`, op); rec.Code != http.StatusCreated {
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"a","vcpus":1,"memoryMiB":1024,"diskGiB":20}`, op); rec.Code != http.StatusCreated {
 		t.Errorf("30 + 20 of 50 GiB: %d %s", rec.Code, rec.Body)
 	}
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"b","vcpus":1,"memoryMiB":1024,"diskGiB":21}`, op); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "disk space (30 of 50 GiB used, this needs 21)") {
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"b","vcpus":1,"memoryMiB":1024,"diskGiB":21}`, op); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "disk space (30 of 50 GiB used, this needs 21)") {
 		t.Errorf("over the disk quota: %d %s", rec.Code, rec.Body)
 	}
 	// An existing disk (diskPath) adds nothing.
-	if rec := do(h, "POST", "/api/v1/domains", `{"name":"c","vcpus":1,"memoryMiB":1024,"diskPath":"/var/lib/libvirt/images/c.qcow2","diskGiB":99}`, op); rec.Code != http.StatusCreated {
+	if rec := do(h, "POST", "/api/v1/domains?wait=true", `{"name":"c","vcpus":1,"memoryMiB":1024,"diskPath":"/var/lib/libvirt/images/c.qcow2","diskGiB":99}`, op); rec.Code != http.StatusCreated {
 		t.Errorf("existing disk: %d %s", rec.Code, rec.Body)
 	}
 	if rec := do(h, "GET", "/api/v1/quotas/mine", "", op); !strings.Contains(rec.Body.String(), `"diskGiB":30`) || !strings.Contains(rec.Body.String(), `"diskGiB":50`) {

@@ -279,7 +279,7 @@ func (d *k8sDriver) CreateVM(ctx context.Context, hostID string, r k8s.VMRequest
 		body["ip"] = IPRequest{Pool: r.IPPool}
 	}
 	var res virt.CreateResult
-	if err := d.call(ctx, hostID, http.MethodPost, "/api/v1/domains", body, &res); err != nil {
+	if err := d.call(ctx, hostID, http.MethodPost, "/api/v1/domains?wait=true", body, &res); err != nil {
 		return "", err
 	}
 	if res.StartError != "" {

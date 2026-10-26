@@ -301,6 +301,29 @@ func buildDomain(s CreateSpec, diskPath, diskFormat, seedPath string, diskVolume
 	return x
 }
 
+// CheckCreate answers the mistakes CreateDomain would refuse before it touches any disk
+// (invalid spec, name taken, pool without files, disk in use), so the API can say so
+// before it starts the slow part in the background.
+func (c *Client) CheckCreate(spec CreateSpec) error {
+	if err := spec.normalize(); err != nil {
+		return err
+	}
+	l, err := c.conn()
+	if err != nil {
+		return err
+	}
+	if c.nameTaken(l, spec.Name) {
+		return refusedf("A machine named %s already exists.", spec.Name)
+	}
+	if spec.Pool != "" && !poolKeepsFiles(l, spec.Pool) && (spec.BaseImage != "" || spec.CloudInit != nil) {
+		return invalidf("Pool %s holds block volumes, not files. Cloud images and cloud-init require a directory or NFS pool.", spec.Pool)
+	}
+	if p := spec.DiskPath; p != "" && !strings.HasSuffix(strings.ToLower(p), ".iso") {
+		return c.checkDiskFree(l, p, spec.Name)
+	}
+	return nil
+}
+
 // CreateDomain creates the system disk, defines the machine and optionally starts it.
 func (c *Client) CreateDomain(spec CreateSpec) (CreateResult, error) {
 	if spec.Kind == "container" {

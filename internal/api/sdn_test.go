@@ -177,7 +177,7 @@ func TestSDNMachineAdapters(t *testing.T) {
 			t.Fatalf("%s: %d %s", req[0], resp.StatusCode, body)
 		}
 	}
-	resp, body := admin.req("POST", "/api/v1/domains", `{"name":"web1","project":"web","network":{"ovnSubnet":"prod-web","mac":"52:54:00:aa:bb:cc"},"start":true}`)
+	resp, body := admin.req("POST", "/api/v1/domains?wait=true", `{"name":"web1","project":"web","network":{"ovnSubnet":"prod-web","mac":"52:54:00:aa:bb:cc"},"start":true}`)
 	if resp.StatusCode != http.StatusCreated || strings.Contains(body, "startError") {
 		t.Fatalf("create: %d %s", resp.StatusCode, body)
 	}

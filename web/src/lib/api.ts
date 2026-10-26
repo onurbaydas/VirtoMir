@@ -1576,10 +1576,8 @@ export const api = {
     return { xml: await res.text(), version: (res.headers.get('ETag') ?? '').replace(/^W\//, '').replace(/"/g, '') }
   },
   action: (uuid: string, action: Action) => request<void>('POST', `${domainPath(uuid)}/actions/${action}`),
+  /** A machine or system container is made in the background (a cloud image is copied, a container image may be downloaded); the job's result is its UUID. */
   create: (spec: CreateSpec, respool?: string) =>
-    request<{ uuid: string; startError?: string }>('POST', `/api/v1/domains${respool ? `?respool=${enc(respool)}` : ''}`, spec),
-  /** A system container is made in the background (the image may be downloaded first). */
-  createContainer: (spec: CreateSpec, respool?: string) =>
     request<Job>('POST', `/api/v1/domains${respool ? `?respool=${enc(respool)}` : ''}`, spec),
   /** Memory encryption this host can give new machines (sev, sev-snp, tdx). */
   confidentialKinds: async () => (await request<{ kinds: string[] }>('GET', '/api/v1/host/confidential')).kinds,

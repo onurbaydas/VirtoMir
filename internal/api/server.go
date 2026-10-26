@@ -610,7 +610,10 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 	var opErr *virt.OperationError
 	var invErr *virt.InvalidError
 	var busyErr *virt.BusyError
+	var httpErr *httpError
 	switch {
+	case errors.As(err, &httpErr):
+		status = httpErr.status
 	case errors.Is(err, virt.ErrNotFound), errors.Is(err, zfsrep.ErrNotFound), errors.Is(err, drs.ErrNotFound), errors.Is(err, placement.ErrNotFound), errors.Is(err, dr.ErrNotFound), errors.Is(err, gpool.ErrNotFound), errors.Is(err, sdn.ErrNotFound),
 		errors.Is(err, ceph.ErrNotFound), errors.Is(err, storageeff.ErrNotFound), errors.Is(err, physnet.ErrNotFound), errors.Is(err, k8s.ErrNotFound), errors.Is(err, baremetal.ErrNotFound):
 		status = http.StatusNotFound

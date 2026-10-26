@@ -711,22 +711,24 @@ function domainRoute(host: w.DemoHost, method: string, rest: string[], q: URLSea
 
 function createMachine(host: w.DemoHost, spec: CreateSpec): Reply {
   if (w.machines.some((m) => m.host === host.id && m.name === spec.name)) return json({ error: `A machine named ${spec.name} already exists.` }, 409)
-  const m = addMachine(host.id, {
-    name: spec.name,
-    os: spec.os === 'windows' ? 'windows' : 'ubuntu',
-    vcpus: spec.vcpus,
-    memoryMiB: spec.memoryMiB,
-    diskGiB: spec.diskGiB,
-    firmware: spec.firmware,
-    secureBoot: spec.secureBoot,
-    tpm: spec.tpm,
-    network: spec.network?.network ?? 'default',
-    project: spec.project,
-    state: 'shutoff',
-    profile: 'web',
-  })
-  if (spec.start) setTimeout(() => (m.state = 'running'), 1500)
-  return json({ uuid: m.uuid })
+  return json(job('create', `Create machine ${spec.name}`, 2500, () => {
+    const m = addMachine(host.id, {
+      name: spec.name,
+      os: spec.os === 'windows' ? 'windows' : 'ubuntu',
+      vcpus: spec.vcpus,
+      memoryMiB: spec.memoryMiB,
+      diskGiB: spec.diskGiB,
+      firmware: spec.firmware,
+      secureBoot: spec.secureBoot,
+      tpm: spec.tpm,
+      network: spec.network?.network ?? 'default',
+      project: spec.project,
+      state: 'shutoff',
+      profile: 'web',
+    })
+    if (spec.start) setTimeout(() => (m.state = 'running'), 1500)
+    return m.uuid
+  }), 202)
 }
 
 // ---- History --------------------------------------------------------------------------------
