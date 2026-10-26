@@ -19,7 +19,8 @@
   import Radio from '@lucide/svelte/icons/radio'
   import SdnTopologyDiagram from '../components/SdnTopologyDiagram.svelte'
   import PcapSnifferModal from '../components/PcapSnifferModal.svelte'
-  import { ent } from '../enterprise'
+  import { ent, type HostInterface } from '../enterprise'
+  import { clash, freeV4, parseV4 } from '../netcalc'
 
   let nets = $state<VNetwork[] | null>(null)
   let error = $state('')
@@ -39,20 +40,31 @@
     void load()
   })
 
-  async function toggle(n: VNetwork) {
-    open = open === n.name ? null : n.name
-    if (open && n.active) {
-      try {
-        leases[n.name] = await api.leases(n.name)
-      } catch (e) {
-        leases[n.name] = errorText(e)
-      }
+  async function loadLeases(name: string) {
+    try {
+      leases[name] = await api.leases(name)
+    } catch (e) {
+      leases[name] = errorText(e)
     }
   }
+  function toggle(n: VNetwork) {
+    open = open === n.name ? null : n.name
+  }
+  // Leases of the expanded network stay fresh while it is open.
+  $effect(() => {
+    const name = open
+    if (!name || !nets?.find((x) => x.name === name)?.active) return
+    void loadLeases(name)
+    const iv = setInterval(() => void loadLeases(name), 10_000)
+    return () => clearInterval(iv)
+  })
 
   async function act(n: VNetwork, action: 'start' | 'stop') {
     try {
       await api.networkAction(n.name, action)
+      if (action === 'stop') {
+        toasts.push({ kind: 'warn', title: t('{name} stopped', { name: n.name }), detail: t('Machines on it have no network until it is started again.') })
+      }
       await load()
     } catch (e) {
       toasts.push({ kind: 'error', title: t('Could not {action} {name}', { action: action, name: n.name }), detail: errorText(e) })
@@ -105,26 +117,34 @@
     const h = (i: number) => b[i].toString(16).padStart(2, '0')
     return `fd${h(0)}:${h(1)}${h(2)}:${h(3)}${h(4)}:1::/64`.replace(/:0+([0-9a-f])/g, ':$1')
   }
+  // Addresses the host already uses (its LAN, other networks): a new subnet must not overlap them.
+  let hostIfs = $state<HostInterface[]>([])
+  $effect(() => {
+    ent
+      .interfaces()
+      .then((ifs) => (hostIfs = ifs))
+      .catch(() => (hostIfs = []))
+  })
+  let usedNets = $derived([
+    ...(nets ?? []).filter((n) => n.subnet).map((n) => ({ cidr: n.subnet!, label: t('network {name}', { name: n.name }) })),
+    ...hostIfs.flatMap((i) => (i.addresses ?? []).filter((a) => a.includes('.') && !a.startsWith('127.')).map((a) => ({ cidr: a, label: t('host interface {name}', { name: i.name }) }))),
+  ])
+  let subnetClash = $derived(withV4 && dlg && spec.mode !== 'bridge' ? clash(spec.subnet ?? '', usedNets) : null)
+  let subnetBad = $derived(withV4 && dlg && spec.mode !== 'bridge' && !!spec.subnet && !parseV4(spec.subnet))
+  let noIP = $derived(spec.mode !== 'bridge' && spec.mode !== 'vxlan' && !withV4 && !withV6)
+
   function openNew() {
-    // Suggest a free 192.168.X.0/24.
-    const used = new Set((nets ?? []).map((n) => n.subnet?.split('.').slice(0, 3).join('.')))
-    let x = 100
-    while (used.has(`192.168.${x}`) && x < 250) x++
-    spec = { name: '', mode: 'nat', subnet: `192.168.${x}.0/24`, dhcp: true, bridge: '', subnet6: randomULA(), dhcp6: false, vni: 100 }
+    // Suggest a free 192.168.X.0/24 that clashes with nothing on the host.
+    const free = freeV4(usedNets.map((u) => u.cidr)) ?? '10.200.0.0/24'
+    spec = { name: '', mode: 'nat', subnet: free, dhcp: true, bridge: '', subnet6: randomULA(), dhcp6: false, vni: 100 }
     peersText = ''
     withV4 = true
     withV6 = false
     formErr = ''
     dlg = true
-    ent
-      .interfaces()
-      .then((ifs) => {
-        hostBridges = ifs.filter((i) => i.kind === 'bridge' && !i.name.startsWith('virbr')).map((i) => i.name)
-        if (!spec.bridge && hostBridges[0]) spec.bridge = hostBridges[0]
-      })
-      .catch(() => (hostBridges = []))
+    if (!spec.bridge && hostBridges[0]) spec.bridge = hostBridges[0]
   }
-  let hostBridges = $state<string[]>([])
+  let hostBridges = $derived(hostIfs.filter((i) => i.kind === 'bridge' && !i.name.startsWith('virbr')).map((i) => i.name))
   let everywhere = $state(true)
   async function create(e: SubmitEvent) {
     e.preventDefault()
@@ -199,7 +219,7 @@
     resErr = ''
     try {
       await api.addDHCPHost(resNet.name, { mac: resMAC.trim(), ip: resIP.trim(), name: resName.trim() || undefined })
-      toasts.push({ kind: 'info', title: `${resIP} reserved`, detail: t('The machine gets it the next time it renews its lease (or reboots).') })
+      toasts.push({ kind: 'info', title: t('{ip} reserved', { ip: resIP }), detail: t('The machine gets it the next time it renews its lease (or reboots).') })
       resNet = null
       await load()
     } catch (err) {
@@ -212,7 +232,7 @@
 
   const expires = (s: number) => {
     const m = Math.round((s * 1000 - Date.now()) / 60000)
-    return m <= 0 ? 'expired' : m < 60 ? `${m} min` : `${Math.round(m / 60)} h`
+    return m <= 0 ? t('expired') : m < 60 ? t('{m} min', { m }) : t('{h} h', { h: Math.round(m / 60) })
   }
 </script>
 
@@ -262,7 +282,7 @@
             <span class="name">{n.name} <span class="mode" title={MODE[n.mode]?.hint}>{modeLabel(n.mode)}</span></span>
             <span class="sub mono">{netLine(n)}</span>
           </span>
-          <span class="state" class:on={n.active}>{n.active ? 'active' : 'stopped'}</span>
+          <span class="state" class:on={n.active}>{n.active ? t('active') : t('stopped')}</span>
           <span class="users">{n.usedBy.length ? `${n.usedBy.length} machine${n.usedBy.length > 1 ? 's' : ''}` : 'unused'}</span>
           <span class="chev"><ChevronDown size={16} /></span>
         </button>
@@ -407,7 +427,7 @@
   </form>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={() => (resNet = null)}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="res-form" disabled={resBusy}>{resBusy ? 'Saving…' : 'Reserve'}</button>
+    <button class="ui-btn primary" form="res-form" disabled={resBusy}>{resBusy ? t('Saving…') : t('Reserve')}</button>
   {/snippet}
 </Dialog>
 
@@ -493,7 +513,9 @@
         </label>
         <label class="ui-switch"><input type="checkbox" bind:checked={spec.dhcp6} /> {t('Also hand out addresses with DHCPv6 (::100 – ::ffff)')}</label>
       {/if}
-      {#if !withV4 && !withV6}<div class="ui-error-box">{t('Choose IPv4, IPv6 or both.')}</div>{/if}
+      {#if noIP}<div class="ui-error-box">{t('Choose IPv4, IPv6 or both.')}</div>{/if}
+      {#if subnetBad}<div class="ui-error-box">{t('Write the subnet as an address and a prefix length, e.g. 192.168.100.0/24.')}</div>{/if}
+      {#if subnetClash}<div class="ui-error-box">{t('{subnet} overlaps {what} ({cidr}): machines could not reach those addresses. Pick another subnet.', { subnet: spec.subnet ?? '', what: subnetClash.label, cidr: subnetClash.cidr })}</div>{/if}
     {/if}
     {#if cluster.clustered}
       <label class="ui-switch"><input type="checkbox" bind:checked={everywhere} /> {t('Create it on every host of the cluster (machines keep their network when they move)')}</label>
@@ -502,7 +524,7 @@
   </form>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={() => (dlg = false)}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="net-form" disabled={busy}>{busy ? 'Creating…' : t('Create network')}</button>
+    <button class="ui-btn primary" form="net-form" disabled={busy || noIP || subnetBad}>{busy ? t('Creating…') : t('Create network')}</button>
   {/snippet}
 </Dialog>
 

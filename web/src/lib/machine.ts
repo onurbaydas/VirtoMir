@@ -2,14 +2,10 @@
 
 import Play from '@lucide/svelte/icons/play'
 import Power from '@lucide/svelte/icons/power'
-import RotateCw from '@lucide/svelte/icons/rotate-cw'
-import Pause from '@lucide/svelte/icons/pause'
-import Zap from '@lucide/svelte/icons/zap'
 import Copy from '@lucide/svelte/icons/copy'
 import type { Action, Domain } from './api'
-import { isActive, live } from './live.svelte'
 import { toasts } from './toast.svelte'
-import { session } from './session.svelte'
+import { t } from './i18n.svelte'
 import type { MenuItem } from './components/ActionMenu.svelte'
 
 export interface Primary {
@@ -36,34 +32,16 @@ export function primaryAction(d: Domain): Primary | null {
   }
 }
 
-/** Secondary actions for the "more" menu. */
+/** Secondary actions for the "more" menu. Power actions live in the power button's own menu only. */
 export function menuItems(d: Domain): MenuItem[] {
-  const items: MenuItem[] = []
-  const act = (a: Action) => () => live.act(d, a)
-  const disabled = session.why('operator') || undefined
-  if (d.state === 'running' || d.state === 'blocked') {
-    items.push({ label: 'Reboot', icon: RotateCw, run: act('reboot'), disabled })
-    items.push({ label: 'Pause', icon: Pause, run: act('pause'), disabled })
-  }
-  if (isActive(d.state) || d.state === 'paused') {
-    items.push({
-      label: 'Force off',
-      icon: Zap,
-      run: act('force-off'),
-      danger: { confirm: 'Click again to force off' },
-      disabled,
-      hint: 'Cuts power immediately (virsh destroy). Unsaved data in the guest is lost.',
-    })
-  }
-  items.push({ label: 'Copy UUID', icon: Copy, run: () => copy(d.uuid, 'UUID') })
-  return items
+  return [{ label: t('Copy UUID'), icon: Copy, run: () => copy(d.uuid, 'UUID') }]
 }
 
 export async function copy(text: string, what: string) {
   try {
     await navigator.clipboard.writeText(text)
-    toasts.push({ kind: 'info', title: `${what} copied`, detail: text.length > 80 ? undefined : text })
+    toasts.push({ kind: 'info', title: t('{what} copied', { what }), detail: text.length > 80 ? undefined : text })
   } catch {
-    toasts.push({ kind: 'error', title: `Could not copy ${what}`, detail: text.length > 80 ? undefined : text })
+    toasts.push({ kind: 'error', title: t('Could not copy {what}', { what }), detail: text.length > 80 ? undefined : text })
   }
 }

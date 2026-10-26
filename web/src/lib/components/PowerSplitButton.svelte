@@ -198,10 +198,20 @@
         <button class="menu-item" onclick={handlePrimary}>
           <Play size={13} />
           <div class="item-text">
-            <strong>{paused ? 'Resume' : 'Start'}</strong>
-            <span class="sub">{paused ? 'Continue where it was frozen' : t('Boot (or resume a machine saved to disk)')}</span>
+            <strong>{paused ? t('Resume') : t('Start')}</strong>
+            <span class="sub">{paused ? t('Continue where it was frozen') : t('Boot (or resume a machine saved to disk)')}</span>
           </div>
         </button>
+        {#if paused}
+          <div class="menu-divider"></div>
+          <button class="menu-item danger-item" class:armed={armed === 'force-off'} onclick={() => handleAction('force-off')}>
+            <Zap size={13} />
+            <div class="item-text">
+              <strong>{armed === 'force-off' ? t('Click again to force off {name}', { name: d.name }) : t('Force off')}</strong>
+              <span class="sub">{t('Like pulling the plug: unsaved data is lost')}</span>
+            </div>
+          </button>
+        {/if}
       {/if}
     </div>
   {/if}
