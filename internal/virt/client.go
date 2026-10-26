@@ -24,9 +24,11 @@ type Client struct {
 	uri    libvirt.ConnectURI
 	log    *slog.Logger
 
-	mu sync.Mutex
-	l  *libvirt.Libvirt
-	lx lxcConn // system containers (lxc.go)
+	mu      sync.Mutex
+	l       *libvirt.Libvirt
+	dialing chan struct{} // closed when the dial in progress is done
+	dialErr error         // result of the last dial, for callers that waited on it
+	lx      lxcConn       // system containers (lxc.go)
 
 	// ContainerDir holds the containers' root file systems and the downloaded images
 	// ("" = /var/lib/virtomir/containers).
@@ -45,31 +47,80 @@ func NewClient(socket string, log *slog.Logger) *Client {
 	return &Client{socket: socket, uri: libvirt.QEMUSystem, log: log}
 }
 
-// conn returns a live connection, (re)connecting if needed.
+// conn returns a live connection, (re)connecting if needed. Only one caller dials at a
+// time, without holding c.mu, so a slow dial does not block callers that only need to see
+// that libvirt is down; they wait for that one dial and share its result.
 func (c *Client) conn() (*libvirt.Libvirt, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.l != nil {
-		select {
-		case <-c.l.Disconnected():
-			c.log.Warn("libvirt connection lost, reconnecting")
-			c.l = nil
-		default:
-			return c.l, nil
+	for {
+		c.mu.Lock()
+		if c.l != nil {
+			select {
+			case <-c.l.Disconnected():
+				c.log.Warn("libvirt connection lost, reconnecting")
+				c.l = nil
+			default:
+				l := c.l
+				c.mu.Unlock()
+				return l, nil
+			}
 		}
-	}
+		if wait := c.dialing; wait != nil {
+			c.mu.Unlock()
+			<-wait
+			c.mu.Lock()
+			l, err := c.l, c.dialErr
+			c.mu.Unlock()
+			if l != nil || err != nil {
+				if err != nil {
+					return nil, err
+				}
+				return l, nil
+			}
+			continue
+		}
+		ready := make(chan struct{})
+		c.dialing = ready
+		c.mu.Unlock()
 
-	l := libvirt.NewWithDialer(dialers.NewLocal(
+		l, err := c.dial()
+
+		c.mu.Lock()
+		c.l, c.dialErr, c.dialing = l, err, nil
+		c.mu.Unlock()
+		close(ready)
+		return l, err
+	}
+}
+
+func (c *Client) dial() (*libvirt.Libvirt, error) {
+	k := &keepConn{Dialer: dialers.NewLocal(
 		dialers.WithSocket(c.socket),
 		dialers.WithLocalTimeout(5*time.Second),
-	))
-	if err := l.ConnectToURI(c.uri); err != nil {
+	)}
+	l := libvirt.NewWithDialer(k)
+	if err := connectTimeout(l, c.uri, k); err != nil {
 		return nil, fmt.Errorf("connect to libvirt at %s: %w", c.socket, err)
 	}
 	c.log.Info("connected to libvirt", "socket", c.socket, "uri", c.uri)
-	c.l = l
+	go watch(l.Disconnected(), func() error { _, err := l.ConnectGetLibVersion(); return err }, func() {
+		c.log.Warn("libvirt stopped answering; dropping the connection", "socket", c.socket, "after", watchTimeout)
+		k.close()
+	})
 	return l, nil
+}
+
+// connectTimeout is ConnectToURI with a deadline: a libvirtd that accepts the socket but
+// never answers the handshake must not hang the dial for ever.
+func connectTimeout(l *libvirt.Libvirt, uri libvirt.ConnectURI, k *keepConn) error {
+	done := make(chan error, 1)
+	go func() { done <- l.ConnectToURI(uri) }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(watchTimeout):
+		k.close()
+		return fmt.Errorf("libvirt accepted the connection but did not answer within %s", watchTimeout)
+	}
 }
 
 // Conn returns a live connection, (re)connecting if needed.
