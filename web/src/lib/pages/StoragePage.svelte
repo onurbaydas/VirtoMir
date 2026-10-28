@@ -17,6 +17,7 @@
   import { api, errorText, poolFills, type Pool, type PoolSource, type PoolSpec, type Volume } from '../api'
   import { track } from '../jobs'
   import NetworkStorageFinder from '../components/NetworkStorageFinder.svelte'
+  import DatastoreBrowser from '../components/DatastoreBrowser.svelte'
   import { cluster } from '../cluster.svelte'
   import { formatBytes, plural } from '../format'
   import { router } from '../router.svelte'
@@ -295,6 +296,9 @@
     { label: t('NVMe/TCP'), icon: Cable, hint: t('Connect NVMe/TCP storage targets'), run: () => (nvmeOpen = true) },
   ]
 
+  // A started pool of files (directory, NFS, SMB, carved) can be browsed folder by folder.
+  let view = $state<'volumes' | 'files'>('volumes')
+  const browsable = (p: Pool) => p.active && ['dir', 'fs', 'netfs'].includes(p.type)
   const usedPct = (p: Pool) => (p.capacityBytes ? (p.allocationBytes / p.capacityBytes) * 100 : 0)
   const fmtLabel = (v: Volume) => (v.format === 'iso' ? 'ISO image' : v.format ? v.format.toUpperCase() : v.type)
 </script>
@@ -428,7 +432,16 @@
       </header>
       <PoolEfficiency pool={current} tier={tiers[current.name]} ontier={loadTiers} />
 
-      {#if volError}
+      {#if browsable(current)}
+        <div class="seg view" role="tablist" aria-label={t('View')}>
+          <button role="tab" aria-selected={view === 'volumes'} class:on={view === 'volumes'} onclick={() => (view = 'volumes')}>{t('Volumes')}</button>
+          <button role="tab" aria-selected={view === 'files'} class:on={view === 'files'} onclick={() => (view = 'files')}>{t('Files and folders')}</button>
+        </div>
+      {/if}
+
+      {#if view === 'files' && browsable(current)}
+        {#key current.name}<DatastoreBrowser pool={current} pools={pools ?? []} onchange={refresh} />{/key}
+      {:else if volError}
         <div class="ui-error-box">{volError}</div>
       {:else if !current.active}
         <p class="muted">{t('Start the pool to see its volumes.')}</p>
@@ -718,6 +731,10 @@
     outline: 1px solid var(--border-strong);
     color: var(--text);
     box-shadow: var(--bevel);
+  }
+  .seg.view {
+    max-width: 360px;
+    margin: 6px 0 10px;
   }
   .size {
     display: flex;

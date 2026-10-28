@@ -36,3 +36,12 @@ func diskConflict(src, self string, users map[string][]string) error {
 	}
 	return refusedf("%s is already used by %s. Two machines writing one disk image destroy it: copy the image first, or detach it there.", src, strings.Join(others, ", "))
 }
+
+// DiskUsers maps every disk image path to the machines that use it (also as a backing image).
+func (c *Client) DiskUsers() (map[string][]string, error) {
+	l, err := c.conn()
+	if err != nil {
+		return nil, err
+	}
+	return c.diskUsers(l)
+}

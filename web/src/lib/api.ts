@@ -827,6 +827,19 @@ export interface PoolSpec {
 /** Whether a pool can run out of space: iSCSI, SCSI and multipath pools are their LUNs, always all allocated. */
 export const poolFills = (p: Pool) => !['iscsi', 'iscsi-direct', 'scsi', 'mpath'].includes(p.type)
 
+/** A file or folder of a file-based pool (the datastore browser). */
+export interface FileEntry {
+  name: string
+  dir?: boolean
+  sizeBytes: number
+  /** On disk: less than sizeBytes for a thin image. */
+  allocatedBytes: number
+  modified: string
+  format?: string
+  /** Machines with this disk (or one inside a folder). */
+  usedBy?: string[]
+}
+
 /** Network or SAN storage VirtoMir found by itself. */
 export interface FoundStorage {
   kind: 'iscsi' | 'nfs' | 'smb' | 'fc' | 'lun'
@@ -1754,6 +1767,18 @@ export const api = {
   /** Makes found storage a pool (on every cluster member with everywhere). */
   connectStorage: (req: { kind: string; server?: string; host?: string; name: string; everywhere?: boolean } & StorageLogin) =>
     request<{ pool: string; results?: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/storage/connect', req),
+  files: async (pool: string, path: string) =>
+    (await request<{ entries: FileEntry[] }>('GET', `${poolPath(pool)}/files?path=${enc(path)}`)).entries,
+  /** A link that downloads a file (resumable). */
+  fileDownloadURL: (pool: string, path: string) => scoped(`${poolPath(pool)}/files/download?path=${enc(path)}`),
+  uploadFile: (pool: string, path: string, file: File, onProgress: (fraction: number) => void, signal?: AbortSignal) =>
+    sendFile<{ sizeBytes: number }>(scoped(`${poolPath(pool)}/files/upload?path=${enc(path)}`), file, onProgress, signal),
+  makeFolder: (pool: string, path: string) => request<void>('POST', `${poolPath(pool)}/files/folder`, { path }),
+  renameFile: (pool: string, from: string, to: string) => request<void>('POST', `${poolPath(pool)}/files/rename`, { from, to }),
+  /** Copies or moves a file to a folder of another (or the same) pool: a job. */
+  copyFile: (pool: string, req: { path: string; toPool: string; toPath: string; move: boolean }) =>
+    request<Job>('POST', `${poolPath(pool)}/files/copy`, req),
+  deleteFile: (pool: string, path: string) => request<void>('DELETE', `${poolPath(pool)}/files?path=${enc(path)}`),
   poolSources: async () => (await request<{ sources: PoolSource[] }>('GET', '/api/v1/storage/sources')).sources,
   /** A pool of the asked size made from a source's free space (a job). */
   carvePool: (req: CarveRequest) => request<Job>('POST', '/api/v1/storage/pools/carve', req),

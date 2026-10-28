@@ -131,6 +131,7 @@ func requiredRole(method, path string) auth.Role {
 		strings.HasPrefix(path, "/api/v1/twofactor/"),
 		path == "/api/v1/host/capture", // other people's network traffic
 		strings.HasPrefix(path, "/api/v1/vmware"),
+		strings.HasSuffix(path, "/files/download"),                                        // the contents of disk images
 		strings.HasPrefix(path, "/api/v1/k8s/") && strings.HasSuffix(path, "/kubeconfig"): // cluster-admin of a Kubernetes cluster
 		return auth.Admin // who may sign in and who may create what is the admins' business
 	case strings.Contains(path, "/console/"):
