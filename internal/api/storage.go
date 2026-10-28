@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/onurbaydas/virtomir/internal/storconn"
 	"github.com/onurbaydas/virtomir/internal/virt"
@@ -87,6 +89,8 @@ func (s *Server) deletePool(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// The mount point VirtoMir made for an NFS pool; libvirt unmounted it but leaves it.
+	_ = os.Remove(filepath.Join(storconn.Base, name)) // only when empty
 	w.WriteHeader(http.StatusNoContent)
 }
 
