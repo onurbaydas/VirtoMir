@@ -27,7 +27,7 @@ type lxcConn struct {
 }
 
 func errNoLXC(err error) error {
-	return refusedf("System containers need libvirt's LXC driver on this host (Debian, Ubuntu: apt install libvirt-daemon-driver-lxc, then restart libvirtd): %v", err)
+	return refusedf("System containers need libvirt's LXC driver on this host (Debian, Ubuntu: apt install libvirt-daemon-driver-lxc, then restart libvirtd; Fedora, RHEL: dnf install libvirt-daemon-driver-lxc, then systemctl enable --now virtlxcd.socket): %v", err)
 }
 
 // lxc returns a live connection to the LXC driver, or an error that says how to get one.

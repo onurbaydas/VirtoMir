@@ -29,15 +29,15 @@ var driverSockets = map[string]string{
 }
 
 // socketFor is the socket for a libvirt driver: the one given with -libvirt-socket, else
-// the driver's own daemon when this host runs modular daemons, else libvirtd's.
+// the driver's own daemon when this host runs modular daemons (virtqemud's socket exists),
+// else libvirtd's. A modular host without a driver's socket lacks that driver; its socket is
+// still returned so the dial fails at once instead of asking virtproxyd every minute.
 func (c *Client) socketFor(driver string) string {
 	if c.socket != DefaultSocket {
 		return c.socket
 	}
-	if s := driverSockets[driver]; s != "" {
-		if _, err := os.Stat(s); err == nil {
-			return s
-		}
+	if _, err := os.Stat(driverSockets["qemu"]); err == nil {
+		return driverSockets[driver]
 	}
 	return c.socket
 }
