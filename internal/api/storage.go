@@ -17,6 +17,8 @@ func (s *Server) storageRoutes(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/storage/pools/{pool}/volumes", s.createVolume)
 	mux.HandleFunc("DELETE /api/v1/storage/pools/{pool}/volumes/{vol}", s.deleteVolume)
 	mux.HandleFunc("POST /api/v1/storage/pools/{pool}/upload", s.upload)
+	mux.HandleFunc("GET /api/v1/storage/sources", s.carveSources)
+	mux.HandleFunc("POST /api/v1/storage/pools/carve", s.carvePool)
 
 	mux.HandleFunc("GET /api/v1/storage/zfs/replications", s.listZFSReplications)
 	mux.HandleFunc("POST /api/v1/storage/zfs/replications", s.createZFSReplication)

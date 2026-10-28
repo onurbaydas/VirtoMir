@@ -822,6 +822,22 @@ export interface PoolSpec {
   devices?: string[]
 }
 
+/** Free space a pool can be carved from: an empty disk, a volume group or a ZFS pool. */
+export interface PoolSource {
+  kind: 'disk' | 'vg' | 'zfs'
+  id: string
+  sizeBytes: number
+  freeBytes: number
+  detail?: string
+}
+
+export interface CarveRequest {
+  name: string
+  kind: PoolSource['kind']
+  source: string
+  sizeBytes: number
+}
+
 // VMware migration (ADR-0061)
 export interface VMwareConnection {
   url?: string
@@ -1702,6 +1718,9 @@ export const api = {
   // Storage
   pools: async () => (await request<{ pools: Pool[] }>('GET', '/api/v1/storage/pools')).pools,
   createPool: (spec: PoolSpec) => request<void>('POST', '/api/v1/storage/pools', spec),
+  poolSources: async () => (await request<{ sources: PoolSource[] }>('GET', '/api/v1/storage/sources')).sources,
+  /** A pool of the asked size made from a source's free space (a job). */
+  carvePool: (req: CarveRequest) => request<Job>('POST', '/api/v1/storage/pools/carve', req),
   /** The same pool on every cluster member; each host reports its own result. */
   createClusterNetwork: async (spec: NetworkSpec) =>
     (await request<{ results: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/cluster/networks', spec)).results,

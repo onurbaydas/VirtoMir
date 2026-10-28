@@ -31,3 +31,7 @@
 ; "<dir>(/.*)?" && restorecon -R <dir>).
 (optional virtomir_backups
 	(filecon "/var/lib/virtomir/backups(/.*)?" any (system_u object_r virt_image_t ((s0) (s0)))))
+
+; Pools carved from free space (internal/carve) are mounted below /srv/virtomir.
+(optional virtomir_carved
+	(filecon "/srv/virtomir(/.*)?" any (system_u object_r virt_image_t ((s0) (s0)))))

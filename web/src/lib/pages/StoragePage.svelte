@@ -14,7 +14,8 @@
   import Trash from '@lucide/svelte/icons/trash'
   import Disc from '@lucide/svelte/icons/disc'
   import Maximize2 from '@lucide/svelte/icons/maximize-2'
-  import { api, errorText, type Pool, type PoolSpec, type Volume } from '../api'
+  import { api, errorText, type Pool, type PoolSource, type PoolSpec, type Volume } from '../api'
+  import { track } from '../jobs'
   import { cluster } from '../cluster.svelte'
   import { formatBytes, plural } from '../format'
   import { router } from '../router.svelte'
@@ -170,7 +171,7 @@
   let poolDlg = $state(false)
   let pName = $state('')
   let pPath = $state('')
-  let pType = $state<'dir' | 'netfs' | 'iscsi' | 'rbd' | 'logical' | 'zfs'>('dir')
+  let pType = $state<'carve' | 'dir' | 'netfs' | 'iscsi' | 'rbd' | 'logical' | 'zfs'>('dir')
   let pSource = $state('')
   let pNewVG = $state(false)
   let pDevices = $state('')
@@ -183,13 +184,66 @@
   let pExport = $state('')
   let pEverywhere = $state(true)
   // Disks named by path are this host's own; never offer to format the same path everywhere.
-  let localDisks = $derived(pType === 'logical' && pNewVG)
+  let localDisks = $derived((pType === 'logical' && pNewVG) || pType === 'carve')
+  // From free space: a pool of a chosen size out of an empty disk, a volume group or a zpool.
+  let sources = $state<PoolSource[] | null>(null)
+  let pSourceKey = $state('')
+  let pSizeGiB = $state(1)
+  const sourceKey = (s: PoolSource) => `${s.kind}:${s.id}`
+  let carveSrc = $derived(sources?.find((s) => sourceKey(s) === pSourceKey))
+  let maxGiB = $derived(carveSrc ? Math.floor(carveSrc.freeBytes / 2 ** 30) : 1)
+  function sourceLabel(s: PoolSource): string {
+    const v = { id: s.id, detail: s.detail ?? '', size: formatBytes(s.sizeBytes), free: formatBytes(s.freeBytes) }
+    if (s.kind === 'disk') return t('Empty disk {id} ({detail}, {size})', v)
+    if (s.kind === 'vg') return t('LVM volume group {id}: {free} free of {size}', v)
+    return t('ZFS pool {id}: {free} free of {size}', v)
+  }
+  function pickSource(key: string) {
+    pSourceKey = key
+    pSizeGiB = maxGiB
+  }
+  async function openPoolDlg() {
+    pName = ''
+    pPath = ''
+    pErr = ''
+    sources = null
+    poolDlg = true
+    try {
+      sources = await api.poolSources()
+    } catch {
+      sources = []
+    }
+    if (sources.length) {
+      pType = 'carve'
+      pickSource(sourceKey(sources[0]))
+    }
+  }
+  async function carvePool() {
+    if (!carveSrc) return
+    const name = pName
+    const job = await api.carvePool({ name, kind: carveSrc.kind, source: carveSrc.id, sizeBytes: pSizeGiB * 2 ** 30 })
+    poolDlg = false
+    track(job, {
+      success: t('{pName} created', { pName: name }),
+      onSuccess: () => void loadPools().then(() => router.navigate(`/storage#${encodeURIComponent(name)}`, { replace: true })),
+    })
+  }
   let pBusy = $state(false)
   let pErr = $state('')
   async function createPool(e: SubmitEvent) {
     e.preventDefault()
     pBusy = true
     pErr = ''
+    if (pType === 'carve') {
+      try {
+        await carvePool()
+      } catch (err) {
+        pErr = errorText(err)
+      } finally {
+        pBusy = false
+      }
+      return
+    }
     const spec: PoolSpec =
       pType === 'netfs'
         ? { name: pName, path: pPath, type: 'netfs', host: pHost.trim(), export: pExport.trim() }
@@ -271,7 +325,7 @@
     <button class="ui-btn" onclick={() => addImage('url')} title={t('Upload an image from this computer, or let the host download one from a URL')}>
       <Download size={15} /> {t('Add image')}
     </button>
-    <button class="ui-btn primary" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((pName = ''), (pPath = ''), (pErr = ''), (poolDlg = true))}>
+    <button class="ui-btn primary" disabled={!session.can('admin')} title={session.why('admin')} onclick={openPoolDlg}>
       <FolderPlus size={15} /> {t('New pool')}
     </button>
   </div>
@@ -459,6 +513,7 @@
 <Dialog open={poolDlg} title={t('New storage pool')} subtitle={t('Where disk images and ISOs live')} onclose={() => (poolDlg = false)}>
   <form id="pool-form" class="form" onsubmit={createPool}>
     <div class="seg" role="radiogroup" aria-label={t('Kind of storage')}>
+      <button type="button" role="radio" aria-checked={pType === 'carve'} class:on={pType === 'carve'} onclick={() => (pType = 'carve')}>{t('From free space')}</button>
       <button type="button" role="radio" aria-checked={pType === 'dir'} class:on={pType === 'dir'} onclick={() => (pType = 'dir')}>{t('Directory on the host')}</button>
       <button type="button" role="radio" aria-checked={pType === 'netfs'} class:on={pType === 'netfs'} onclick={() => (pType = 'netfs')}>{t('NFS share')}</button>
       <button type="button" role="radio" aria-checked={pType === 'iscsi'} class:on={pType === 'iscsi'} onclick={() => (pType = 'iscsi')}>{t('iSCSI')}</button>
@@ -468,8 +523,41 @@
     </div>
     <label class="ui-field">
       <span class="label">{t('Name')}</span>
-      <input class="ui-input" bind:value={pName} placeholder={pType === 'netfs' ? 'shared' : 'fast-ssd'} required pattern="[A-Za-z0-9][A-Za-z0-9._+-]*" />
+      <input class="ui-input" bind:value={pName} placeholder={pType === 'netfs' ? 'shared' : 'fast-ssd'} required pattern={pType === 'carve' ? '[A-Za-z0-9][A-Za-z0-9_.\\-]*' : '[A-Za-z0-9][A-Za-z0-9._+\\-]*'} />
     </label>
+    {#if pType === 'carve'}
+      {#if sources === null}
+        <span class="hint">{t('Looking for free space…')}</span>
+      {:else if !sources.length}
+        <div class="warn">{t('No free space to make a pool from: this host has no empty disk, no LVM volume group with free space and no ZFS pool. Add a disk, or pick another kind of storage above.')}</div>
+      {:else}
+        <label class="ui-field">
+          <span class="label">{t('Take the space from')}</span>
+          <select class="ui-input" value={pSourceKey} onchange={(e) => pickSource((e.currentTarget as HTMLSelectElement).value)}>
+            {#each sources as s (sourceKey(s))}<option value={sourceKey(s)}>{sourceLabel(s)}</option>{/each}
+          </select>
+        </label>
+        <label class="ui-field">
+          <span class="label">{t('Size')}</span>
+          <div class="size">
+            <input type="range" min="1" max={maxGiB} step="1" bind:value={pSizeGiB} aria-label={t('Size')} />
+            <input class="ui-input mono" type="number" min="1" max={maxGiB} step="1" bind:value={pSizeGiB} required />
+            <span>GiB</span>
+          </div>
+          <span class="hint">{t('{size} of {free} free', { size: formatBytes(pSizeGiB * 2 ** 30), free: formatBytes(carveSrc?.freeBytes ?? 0) })}</span>
+        </label>
+        <span class="hint">
+          {#if carveSrc?.kind === 'disk'}
+            {t('The disk becomes an LVM volume group. The pool gets a logical volume of this size with an XFS file system, mounted at /srv/virtomir/{name} on every boot; the rest of the disk stays free for more pools.', { name: pName || '…' })}
+          {:else if carveSrc?.kind === 'vg'}
+            {t('A logical volume of this size with an XFS file system, mounted at /srv/virtomir/{name} on every boot.', { name: pName || '…' })}
+          {:else}
+            {t('A dataset with a quota of this size, mounted at /srv/virtomir/{name}.', { name: pName || '…' })}
+          {/if}
+          {t('Machine disks on it are qcow2 images: thin, with snapshots.')}
+        </span>
+      {/if}
+    {/if}
     {#if pType === 'netfs'}
       <div class="row2">
         <label class="ui-field">
@@ -556,7 +644,7 @@
   </form>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={() => (poolDlg = false)}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="pool-form" disabled={pBusy}>{pBusy ? t('Creating…') : t('Create pool')}</button>
+    <button class="ui-btn primary" form="pool-form" disabled={pBusy || (pType === 'carve' && !carveSrc)}>{pBusy ? t('Creating…') : t('Create pool')}</button>
   {/snippet}
 </Dialog>
 
@@ -580,6 +668,7 @@
 <style>
   .seg {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
     padding: 3px;
     border-radius: var(--radius-sm);
@@ -603,6 +692,17 @@
     outline: 1px solid var(--border-strong);
     color: var(--text);
     box-shadow: var(--bevel);
+  }
+  .size {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .size input[type='range'] {
+    flex: 1;
+  }
+  .size .ui-input {
+    width: 96px;
   }
   .row2 {
     display: grid;
