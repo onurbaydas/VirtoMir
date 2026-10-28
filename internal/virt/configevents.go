@@ -23,8 +23,12 @@ type ConfigEvent struct {
 // (hot-plug, e.g. virsh attach-device --live). The channel closes when ctx ends or the
 // connection to libvirt drops; callers subscribe again after reconnecting. Device events
 // are optional: an old libvirt without them still delivers the lifecycle events.
+//
+// It subscribes on a connection of its own: libvirt 12 refuses a second callback for the
+// same event on one connection ("event callback already tracked"), and the live view
+// (LifecycleEvents) subscribes on the shared one.
 func (c *Client) ConfigEvents(ctx context.Context) (<-chan ConfigEvent, error) {
-	l, err := c.conn()
+	l, err := c.dial()
 	if err != nil {
 		return nil, err
 	}
@@ -32,6 +36,7 @@ func (c *Client) ConfigEvents(ctx context.Context) (<-chan ConfigEvent, error) {
 	lifecycle, err := l.LifecycleEvents(subCtx)
 	if err != nil {
 		cancel()
+		l.Disconnect()
 		return nil, fmt.Errorf("subscribe to lifecycle events: %w", err)
 	}
 	var device []<-chan any
@@ -90,6 +95,7 @@ func (c *Client) ConfigEvents(ctx context.Context) (<-chan ConfigEvent, error) {
 	go func() {
 		wg.Wait()
 		close(out)
+		l.Disconnect()
 	}()
 	return out, nil
 }
