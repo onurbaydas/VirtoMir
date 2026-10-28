@@ -790,7 +790,18 @@ func (c *Client) DeletePool(name string) error {
 	if a, err := l.StoragePoolIsActive(p); err == nil && a == 1 {
 		return refusedf("Stop pool %s before removing it.", name)
 	}
-	return classify(l.StoragePoolUndefine(p))
+	if err := l.StoragePoolUndefine(p); err != nil {
+		return classify(err)
+	}
+	// Its Ceph key or CHAP password (poolSecret) goes with it.
+	for _, t := range []libvirt.SecretUsageType{libvirt.SecretUsageTypeCeph, libvirt.SecretUsageTypeIscsi} {
+		if sec, err := l.SecretLookupByUsage(int32(t), "virtomir/"+name); err == nil {
+			if err := l.SecretUndefine(sec); err != nil {
+				c.log.Warn("remove the pool's secret", "pool", name, "err", err)
+			}
+		}
+	}
+	return nil
 }
 
 // DeleteStorageVol removes a storage volume from libvirt.
