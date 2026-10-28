@@ -81,7 +81,7 @@ func (s *Server) checkCarved(name string) error {
 	}
 	for _, p := range pools {
 		if p.Name == name {
-			if p.Path != filepath.Join(carve.Base, name) {
+			if p.Path != filepath.Join(carve.Base, name) || !carve.Carved(context.Background(), s.cephRunner, name) {
 				return carve.ErrNotCarved
 			}
 			return carve.CheckRemove(name)

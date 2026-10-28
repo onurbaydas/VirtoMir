@@ -335,3 +335,16 @@ func Remove(ctx context.Context, r Runner, name string, report func(string)) err
 	}
 	return nil
 }
+
+// Carved reports whether VirtoMir carved the pool name (its mount unit says so).
+func Carved(ctx context.Context, r Runner, name string) bool {
+	if !nameRE.MatchString(name) {
+		return false
+	}
+	b, err := r.Run(ctx, "systemd-escape", "-p", "--suffix=mount", filepath.Join(Base, name))
+	if err != nil {
+		return false
+	}
+	text, err := os.ReadFile(filepath.Join(UnitDir, strings.TrimSpace(string(b))))
+	return err == nil && carvedFromRE.Match(text)
+}

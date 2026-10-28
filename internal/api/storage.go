@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/onurbaydas/virtomir/internal/storconn"
 	"github.com/onurbaydas/virtomir/internal/virt"
 	"github.com/onurbaydas/virtomir/internal/zfsrep"
 )
@@ -27,13 +28,23 @@ func (s *Server) storageRoutes(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/storage/zfs/replications/{id}/sync", s.syncZFSReplication)
 }
 
-func (s *Server) listPools(w http.ResponseWriter, _ *http.Request) {
+// poolView is a pool with how VirtoMir made it ("carved", "smb"; see poolOrigin).
+type poolView struct {
+	virt.Pool
+	Origin string `json:"origin,omitempty"`
+}
+
+func (s *Server) listPools(w http.ResponseWriter, r *http.Request) {
 	pools, err := s.backend.ListPools()
 	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, map[string]any{"pools": pools})
+	out := make([]poolView, len(pools))
+	for i, p := range pools {
+		out[i] = poolView{Pool: p, Origin: s.poolOrigin(r.Context(), p)}
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"pools": out})
 }
 
 func (s *Server) createPool(w http.ResponseWriter, r *http.Request) {
@@ -48,8 +59,8 @@ func (s *Server) createPool(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusCreated, map[string]string{"name": spec.Name})
 }
 
-// deletePool forgets a pool; ?storage=remove also gives back the space VirtoMir carved
-// for it (see carve.go).
+// deletePool forgets a pool and disconnects a share VirtoMir mounted for it; ?storage=remove
+// also gives back the space VirtoMir carved for it (see carve.go).
 func (s *Server) deletePool(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("pool")
 	free := r.URL.Query().Get("storage") == "remove"
@@ -59,9 +70,16 @@ func (s *Server) deletePool(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	smb := storconn.SMBShare(r.Context(), s.cephRunner, name) != ""
 	if err := s.backend.DeletePool(name); err != nil {
 		s.writeError(w, err)
 		return
+	}
+	if smb { // a share is mounted only for its pool; its files stay on the server
+		if err := storconn.UnmountSMB(r.Context(), s.cephRunner, name); err != nil {
+			s.writeError(w, err)
+			return
+		}
 	}
 	if free {
 		if err := s.removeCarved(r.Context(), name); err != nil {
