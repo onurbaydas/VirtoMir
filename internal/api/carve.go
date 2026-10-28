@@ -2,12 +2,15 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/onurbaydas/virtomir/internal/carve"
 	"github.com/onurbaydas/virtomir/internal/ceph"
+	"github.com/onurbaydas/virtomir/internal/storconn"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
@@ -23,6 +26,15 @@ func (s *Server) sources(ctx context.Context) ([]carve.Source, error) {
 	for _, d := range disks {
 		if d.Empty {
 			empty = append(empty, carve.Disk{Path: d.Path, Type: d.DeviceType, SizeBytes: d.SizeBytes})
+		}
+	}
+	// A LUN on several paths is one multipath device (its paths are not empty disks).
+	used := s.diskUser()
+	if luns, err := storconn.LUNs(ctx, s.cephRunner); err == nil {
+		for _, l := range luns {
+			if l.Empty && l.Paths > 1 && used(l.Path) == "" {
+				empty = append(empty, carve.Disk{Path: l.Path, Type: fmt.Sprintf("multipath, %d paths", l.Paths), SizeBytes: l.SizeBytes})
+			}
 		}
 	}
 	return carve.Sources(ctx, s.cephRunner, empty), nil
@@ -57,7 +69,7 @@ func (s *Server) carvePool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job := s.jobs.Start("carve-pool", "Create pool "+req.Name, func(ctx context.Context, report func(string)) (string, error) {
-		if req.Kind == carve.KindDisk {
+		if req.Kind == carve.KindDisk && !strings.HasPrefix(req.Source, "/dev/mapper/") { // a multipath LUN was checked by sources
 			if err := ceph.EnsureDiskEmpty(ctx, s.cephRunner, req.Source); err != nil {
 				return "", err
 			}

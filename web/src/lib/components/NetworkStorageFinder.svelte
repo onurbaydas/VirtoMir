@@ -24,7 +24,7 @@
   const key = (f: FoundStorage) => `${f.kind}|${f.server}|${f.name}`
   const serverKey = (f: FoundStorage) => `${f.kind}|${f.server}|`
   const login = (f: FoundStorage) => logins[key(f)] ?? logins[serverKey(f)]
-  const kindLabel: Record<FoundStorage['kind'], string> = { iscsi: 'iSCSI', nfs: 'NFS', smb: 'SMB', fc: 'FC' }
+  const kindLabel: Record<FoundStorage['kind'], string> = { iscsi: 'iSCSI', nfs: 'NFS', smb: 'SMB', fc: 'FC', lun: 'LUN' }
 
   async function scan() {
     scanning = true
@@ -94,11 +94,17 @@
         <li>
           <span class="kind mono">{kindLabel[f.kind]}</span>
           <span class="what">
-            <strong class="mono">{f.name || t('Shares')}</strong>
-            <span class="where">{f.host ? `${f.host} · ${f.server}` : f.server}{f.sizeBytes ? ` · ${formatBytes(f.sizeBytes)}` : ''}{f.portals && f.portals.length > 1 ? ` · ${t('{n} paths', { n: f.portals.length })}` : ''}</span>
+            <strong class="mono">{f.adapter ? t('FC port {wwpn}', { wwpn: f.name }) : f.name || t('Shares')}</strong>
+            <span class="where">
+              {[f.host ? `${f.host} · ${f.server}` : f.server, f.sizeBytes ? formatBytes(f.sizeBytes) : '', f.detail && !f.server ? f.detail : '',
+                f.portals && f.portals.length > 1 ? t('{n} paths', { n: f.portals.length }) : ''].filter(Boolean).join(' · ')}
+            </span>
+            {#if f.adapter && !f.error}<span class="where">{t('Your storage team zones LUNs to this WWPN; VirtoMir finds them by itself.')}</span>{/if}
             {#if f.error}<span class="err">{f.error}</span>{/if}
           </span>
-          {#if f.pool}
+          {#if f.adapter}
+            <!-- an FC port: nothing to connect -->
+          {:else if f.pool}
             <a class="ui-btn sm ghost" href={`/storage#${encodeURIComponent(f.pool)}`}>{t('In use as {pool}', { pool: f.pool })}</a>
           {:else if !f.error}
             {@const k = key(f)}

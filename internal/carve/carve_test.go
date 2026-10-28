@@ -113,9 +113,33 @@ func TestCarveDiskMakesAVolumeGroup(t *testing.T) {
 	if _, err := Carve(context.Background(), r, Request{Name: "fast", Kind: KindDisk, Source: "/dev/sdb", SizeBytes: 2 << 30}, func(string) {}); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.calls) < 3 || r.calls[0] != "pvcreate -y /dev/sdb" || r.calls[1] != "vgcreate virtomir-fast /dev/sdb" ||
-		r.calls[2] != "lvcreate -y -W y -n fast -L 2147483648b virtomir-fast" {
+	if len(r.calls) < 4 || r.calls[0] != "pvcreate -y /dev/sdb" || r.calls[1] != "vgcreate virtomir-fast /dev/sdb" ||
+		r.calls[3] != "lvcreate -y -W y -n fast -L 2147483648b virtomir-fast" {
 		t.Errorf("calls = %q", r.calls)
+	}
+}
+
+func TestCarveAllOfADisk(t *testing.T) {
+	useTempDirs(t)
+	// A 4 GiB disk: its volume group keeps one extent for metadata.
+	r := &fakeRunner{out: map[string]string{"blkid": "u", "systemd-escape": "x.mount", "vgs": "  4290772992\n"}}
+	if _, err := Carve(context.Background(), r, Request{Name: "all", Kind: KindDisk, Source: "/dev/sdb", SizeBytes: 4 << 30}, func(string) {}); err != nil {
+		t.Fatal(err)
+	}
+	if r.calls[3] != "lvcreate -y -W y -n all -L 4290772992b virtomir-all" {
+		t.Errorf("calls = %q", r.calls)
+	}
+}
+
+func TestCarveTakesBackWhatItMadeOnFailure(t *testing.T) {
+	useTempDirs(t)
+	r := &fakeRunner{fail: map[string]bool{"mkfs.xfs": true}}
+	if _, err := Carve(context.Background(), r, Request{Name: "fast", Kind: KindDisk, Source: "/dev/sdb", SizeBytes: 2 << 30}, func(string) {}); err == nil {
+		t.Fatal("no error")
+	}
+	n := len(r.calls)
+	if got := strings.Join(r.calls[n-3:], "\n"); got != "lvremove -y /dev/virtomir-fast/fast\nvgremove -y virtomir-fast\npvremove -y /dev/sdb" {
+		t.Errorf("undo:\n%s", got)
 	}
 }
 
@@ -138,8 +162,10 @@ func TestCarveStopsAtTheFirstFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "mkfs.xfs failed") {
 		t.Fatalf("err = %v", err)
 	}
-	if last := r.calls[len(r.calls)-1]; !strings.HasPrefix(last, "mkfs.xfs") {
-		t.Errorf("went on after the failure: %q", r.calls)
+	for _, c := range r.calls {
+		if strings.HasPrefix(c, "blkid") || strings.HasPrefix(c, "systemctl") {
+			t.Errorf("went on after the failure: %q", r.calls)
+		}
 	}
 }
 

@@ -169,45 +169,71 @@ func Carve(ctx context.Context, r Runner, req Request, report func(string)) (str
 		return dir, nil
 	}
 
+	// What was made is taken back, newest first, when a later step fails: no half-made
+	// volume group or logical volume is left on the disk.
+	var undo []func()
+	fail := func(err error) (string, error) {
+		for i := len(undo) - 1; i >= 0; i-- {
+			undo[i]()
+		}
+		return "", err
+	}
 	vg := req.Source
 	if req.Kind == KindDisk {
 		vg = "virtomir-" + req.Name
 		if err := run("Preparing "+req.Source+" for LVM", "pvcreate", "-y", req.Source); err != nil {
 			return "", err
 		}
+		undo = append(undo, func() { _, _ = r.Run(ctx, "pvremove", "-y", req.Source) })
 		if err := run("Creating volume group "+vg, "vgcreate", vg, req.Source); err != nil {
-			return "", err
+			return fail(err)
+		}
+		undo = append(undo, func() { _, _ = r.Run(ctx, "vgremove", "-y", vg) })
+		// The volume group keeps a little of the disk for its metadata: "all of the disk"
+		// is all the group has.
+		if b, err := r.Run(ctx, "vgs", "--noheadings", "--units", "b", "--nosuffix", "-o", "vg_free", vg); err == nil {
+			if free, err := strconv.ParseUint(strings.TrimSpace(string(b)), 10, 64); err == nil && free < size {
+				size = free / extent * extent
+			}
 		}
 	}
 	dev := "/dev/" + vg + "/" + req.Name
 	if err := run("Creating logical volume "+dev, "lvcreate", "-y", "-W", "y", "-n", req.Name,
 		"-L", strconv.FormatUint(size, 10)+"b", vg); err != nil {
-		return "", err
+		return fail(err)
 	}
+	undo = append(undo, func() { _, _ = r.Run(ctx, "lvremove", "-y", dev) })
 	if err := run("Making an XFS file system on "+dev, "mkfs.xfs", "-q", dev); err != nil {
-		return "", err
+		return fail(err)
 	}
 	b, err := r.Run(ctx, "blkid", "-s", "UUID", "-o", "value", dev)
 	uuid := strings.TrimSpace(string(b))
 	if err != nil || uuid == "" {
-		return "", fmt.Errorf("read the file system UUID of %s: %v", dev, err)
+		return fail(fmt.Errorf("read the file system UUID of %s: %v", dev, err))
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
+		return fail(err)
 	}
+	undo = append(undo, func() { _ = os.Remove(dir) })
 	b, err = r.Run(ctx, "systemd-escape", "-p", "--suffix=mount", dir)
 	unit := strings.TrimSpace(string(b))
 	if err != nil || unit == "" {
-		return "", fmt.Errorf("name the mount unit for %s: %v", dir, err)
+		return fail(fmt.Errorf("name the mount unit for %s: %v", dir, err))
 	}
-	if err := os.WriteFile(filepath.Join(UnitDir, unit), []byte(mountUnit(uuid, dir, dev)), 0o644); err != nil {
-		return "", err
+	unitFile := filepath.Join(UnitDir, unit)
+	if err := os.WriteFile(unitFile, []byte(mountUnit(uuid, dir, dev)), 0o644); err != nil {
+		return fail(err)
 	}
+	undo = append(undo, func() {
+		_, _ = r.Run(ctx, "systemctl", "disable", "--now", unit)
+		_ = os.Remove(unitFile)
+		_, _ = r.Run(ctx, "systemctl", "daemon-reload")
+	})
 	if err := run("Reloading systemd", "systemctl", "daemon-reload"); err != nil {
-		return "", err
+		return fail(err)
 	}
 	if err := run("Mounting it at "+dir, "systemctl", "enable", "--now", unit); err != nil {
-		return "", err
+		return fail(err)
 	}
 	relabel(ctx, r, dir)
 	return dir, nil

@@ -58,6 +58,9 @@ func PoolName(f Found, taken func(string) bool) string {
 		server, _, _ = strings.Cut(f.Host, ".") // the host part of its DNS name
 	}
 	what := f.Name
+	if f.Kind == KindFC || f.Kind == KindLUN { // a device: fc-mpatha, lun-sdd
+		return uniqueName(strings.ToLower(f.Kind+"-"+nameJunk.ReplaceAllString(filepath.Base(what), "-")), taken)
+	}
 	if f.Kind == KindISCSI {
 		if _, after, ok := strings.Cut(what, ":"); ok {
 			what = after // the target's own part of the IQN
@@ -67,6 +70,10 @@ func PoolName(f Found, taken func(string) bool) string {
 	if len(base) > 48 {
 		base = strings.TrimRight(base[:48], "-")
 	}
+	return uniqueName(base, taken)
+}
+
+func uniqueName(base string, taken func(string) bool) string {
 	name := base
 	for i := 2; taken(name); i++ {
 		name = fmt.Sprintf("%s-%d", base, i)

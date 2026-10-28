@@ -2,6 +2,7 @@ package storconn
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"slices"
@@ -28,6 +29,42 @@ type Found struct {
 	Error string `json:"error,omitempty"`
 	// Pool: the pool it already is on this host.
 	Pool string `json:"pool,omitempty"`
+	// Adapter: an FC port of this host (Name is its WWPN, to zone LUNs to), not storage.
+	Adapter bool `json:"adapter,omitempty"`
+}
+
+// SANFound lists this host's FC ports and the empty SAN LUNs (used: paths a pool already
+// has). LUNs mapped since boot are found first, and multipath is turned on when a LUN shows
+// on more than one path.
+func SANFound(ctx context.Context, r Runner, used func(path string) bool) []Found {
+	Rescan(ctx, r)
+	out := []Found{}
+	if _, err := EnableMultipath(ctx, r); err != nil {
+		out = append(out, Found{Kind: KindLUN, Error: err.Error()})
+	}
+	for _, a := range Adapters() {
+		f := Found{Kind: KindFC, Name: a.WWPN, Detail: strings.TrimSpace(a.Host + " · " + a.State + " · " + a.Speed), Adapter: true}
+		if a.State != "Online" {
+			f.Error = "the port is " + a.State + ": check its cable and the switch port"
+		}
+		out = append(out, f)
+	}
+	luns, _ := LUNs(ctx, r)
+	for _, l := range luns {
+		if !l.Empty || used(l.Path) {
+			continue
+		}
+		kind := KindLUN
+		if l.Tran == "fc" {
+			kind = KindFC
+		}
+		f := Found{Kind: kind, Name: l.Path, SizeBytes: l.SizeBytes}
+		if l.Paths > 1 {
+			f.Detail = fmt.Sprintf("%d paths", l.Paths)
+		}
+		out = append(out, f)
+	}
+	return out
 }
 
 // Credentials for a server that asks for them.

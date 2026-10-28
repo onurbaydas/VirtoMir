@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ var (
 	serverRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.:-]*$`)
 	shareRE  = regexp.MustCompile(`^[^/\\\x00-\x1f-][^/\\\x00-\x1f]*$`)
 	exportRE = regexp.MustCompile(`^/[^\x00-\x1f]*$`)
+	devRE    = regexp.MustCompile(`^/dev/[A-Za-z0-9][A-Za-z0-9/_.:+-]*$`)
 	iqnRE    = regexp.MustCompile(`^(iqn\.[0-9]{4}-[0-9]{2}\.[a-z0-9.-]+(:[^\s]+)?|eui\.[0-9A-Fa-f]{16})$`)
 	userRE   = regexp.MustCompile(`^[^\x00-\x1f,=]*$`)
 )
@@ -56,6 +58,10 @@ func (s *Server) discoverStorage(w http.ResponseWriter, r *http.Request) {
 		servers = storconn.Probe(ctx, storconn.Networks())
 	}
 	found := storconn.Discover(ctx, s.cephRunner, servers, creds)
+	if req.Server == "" {
+		used := s.diskUser()
+		found = append(found, storconn.SANFound(ctx, s.cephRunner, func(p string) bool { return used(p) != "" })...)
+	}
 	s.markConnected(ctx, found)
 	s.writeJSON(w, http.StatusOK, map[string]any{"found": found})
 }
@@ -94,6 +100,8 @@ type connectRequest struct {
 func (req connectRequest) check() error {
 	ok := serverRE.MatchString(req.Server) && userRE.MatchString(req.Username) && !strings.ContainsAny(req.Password, "\n\r")
 	switch req.Kind {
+	case storconn.KindFC, storconn.KindLUN:
+		ok = req.Server == "" && devRE.MatchString(req.Name) && !strings.Contains(req.Name, "..")
 	case storconn.KindNFS:
 		ok = ok && exportRE.MatchString(req.Name)
 	case storconn.KindSMB:
@@ -141,6 +149,10 @@ func (s *Server) connectStorage(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		return s.connectHere(ctx, req)
 	}
+	if req.Kind == storconn.KindFC || req.Kind == storconn.KindLUN {
+		// A file system on a LUN is this host's: on several hosts at once it would be ruined.
+		req.Everywhere = false
+	}
 	if req.Everywhere && s.cluster != nil && s.cluster.Clustered() {
 		peer := req
 		peer.Everywhere = false
@@ -155,6 +167,9 @@ func (s *Server) connectStorage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) connectHere(ctx context.Context, req connectRequest) error {
+	if req.Kind == storconn.KindFC || req.Kind == storconn.KindLUN {
+		return s.connectLUN(ctx, req)
+	}
 	if err := storconn.Prepare(ctx, s.cephRunner, req.Kind); err != nil {
 		return err
 	}
@@ -190,4 +205,23 @@ func (s *Server) poolOrigin(ctx context.Context, p virt.Pool) string {
 		return "smb"
 	}
 	return ""
+}
+
+// connectLUN makes a whole empty SAN LUN a pool of this host (carved like an empty disk).
+func (s *Server) connectLUN(ctx context.Context, req connectRequest) error {
+	luns, err := storconn.LUNs(ctx, s.cephRunner)
+	if err != nil {
+		return err
+	}
+	used := s.diskUser()
+	i := slices.IndexFunc(luns, func(l storconn.LUN) bool { return l.Path == req.Name })
+	if i < 0 || !luns[i].Empty || used(req.Name) != "" {
+		return fmt.Errorf("%w: %s is not an empty LUN of this host", storconn.ErrInvalid, req.Name)
+	}
+	dir, err := carve.Carve(ctx, s.cephRunner, carve.Request{Name: req.Pool, Kind: carve.KindDisk, Source: req.Name, SizeBytes: luns[i].SizeBytes},
+		func(step string) { s.log.Info("connect LUN", "lun", req.Name, "step", step) })
+	if err != nil {
+		return err
+	}
+	return s.backend.CreatePool(virt.PoolSpec{Name: req.Pool, Path: dir})
 }

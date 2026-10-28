@@ -829,7 +829,7 @@ export const poolFills = (p: Pool) => !['iscsi', 'iscsi-direct', 'scsi', 'mpath'
 
 /** Network or SAN storage VirtoMir found by itself. */
 export interface FoundStorage {
-  kind: 'iscsi' | 'nfs' | 'smb' | 'fc'
+  kind: 'iscsi' | 'nfs' | 'smb' | 'fc' | 'lun'
   server?: string
   /** The server's DNS name, when it has one. */
   host?: string
@@ -843,6 +843,8 @@ export interface FoundStorage {
   error?: string
   /** The pool it already is on this host. */
   pool?: string
+  /** An FC port of this host (name: its WWPN), not storage. */
+  adapter?: boolean
 }
 
 export interface StorageLogin {

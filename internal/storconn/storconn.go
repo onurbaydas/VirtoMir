@@ -23,6 +23,7 @@ const (
 	KindNFS   = "nfs"
 	KindSMB   = "smb"
 	KindFC    = "fc"
+	KindLUN   = "lun" // a multipath SAN disk that is not Fibre Channel (SAS, iSCSI outside libvirt)
 )
 
 // ErrInvalid marks a request that cannot be done as asked.
