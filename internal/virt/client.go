@@ -6,6 +6,7 @@ package virt
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,29 @@ import (
 
 // DefaultSocket is the system libvirtd (or virtproxyd) UNIX socket.
 const DefaultSocket = "/var/run/libvirt/libvirt-sock"
+
+// driverSockets are the modular daemons' sockets (Fedora, RHEL, newer Debian). With the
+// default socket VirtoMir talks to them directly rather than through virtproxyd: SELinux
+// on Fedora/RHEL does not let virtproxyd look up a service started from /usr/local/bin
+// ("Cannot find start time for pid"), so every call through it failed.
+var driverSockets = map[string]string{
+	"qemu": "/var/run/libvirt/virtqemud-sock",
+	"lxc":  "/var/run/libvirt/virtlxcd-sock",
+}
+
+// socketFor is the socket for a libvirt driver: the one given with -libvirt-socket, else
+// the driver's own daemon when this host runs modular daemons, else libvirtd's.
+func (c *Client) socketFor(driver string) string {
+	if c.socket != DefaultSocket {
+		return c.socket
+	}
+	if s := driverSockets[driver]; s != "" {
+		if _, err := os.Stat(s); err == nil {
+			return s
+		}
+	}
+	return c.socket
+}
 
 // Client is safe for concurrent use; go-libvirt multiplexes calls over one connection.
 type Client struct {
@@ -97,17 +121,18 @@ func (c *Client) conn() (*libvirt.Libvirt, error) {
 }
 
 func (c *Client) dial() (*libvirt.Libvirt, error) {
+	socket := c.socketFor("qemu")
 	k := &keepConn{Dialer: dialers.NewLocal(
-		dialers.WithSocket(c.socket),
+		dialers.WithSocket(socket),
 		dialers.WithLocalTimeout(5*time.Second),
 	)}
 	l := libvirt.NewWithDialer(k)
 	if err := connectTimeout(l, c.uri, k); err != nil {
-		return nil, fmt.Errorf("connect to libvirt at %s: %w", c.socket, err)
+		return nil, fmt.Errorf("connect to libvirt at %s: %w", socket, err)
 	}
-	c.log.Info("connected to libvirt", "socket", c.socket, "uri", c.uri)
+	c.log.Info("connected to libvirt", "socket", socket, "uri", c.uri)
 	go watch(l.Disconnected(), func() error { _, err := l.ConnectGetLibVersion(); return err }, func() {
-		c.log.Warn("libvirt stopped answering; dropping the connection", "socket", c.socket, "after", watchTimeout)
+		c.log.Warn("libvirt stopped answering; dropping the connection", "socket", socket, "after", watchTimeout)
 		k.close()
 	})
 	return l, nil

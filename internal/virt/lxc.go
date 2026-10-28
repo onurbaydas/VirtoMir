@@ -46,12 +46,13 @@ func (c *Client) lxc() (*libvirt.Libvirt, error) {
 	if time.Now().Before(x.retryAt) {
 		return nil, x.err
 	}
-	l := libvirt.NewWithDialer(dialers.NewLocal(dialers.WithSocket(c.socket), dialers.WithLocalTimeout(5*time.Second)))
+	socket := c.socketFor("lxc")
+	l := libvirt.NewWithDialer(dialers.NewLocal(dialers.WithSocket(socket), dialers.WithLocalTimeout(5*time.Second)))
 	if err := l.ConnectToURI(lxcURI); err != nil {
 		x.retryAt, x.err = time.Now().Add(lxcRetry), errNoLXC(err)
 		return nil, x.err
 	}
-	c.log.Info("connected to libvirt", "socket", c.socket, "uri", lxcURI)
+	c.log.Info("connected to libvirt", "socket", socket, "uri", lxcURI)
 	x.l, x.err = l, nil
 	return l, nil
 }

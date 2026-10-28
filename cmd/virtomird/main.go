@@ -80,7 +80,7 @@ type config struct {
 func main() {
 	var c config
 	flag.StringVar(&c.listen, "listen", "127.0.0.1:8420", "HTTP(S) listen address")
-	flag.StringVar(&c.socket, "libvirt-socket", virt.DefaultSocket, "libvirt UNIX socket")
+	flag.StringVar(&c.socket, "libvirt-socket", virt.DefaultSocket, "libvirt UNIX socket; left at this default, modular libvirt daemons are reached on their own sockets")
 	flag.StringVar(&c.authMode, "auth", "pam", `sign-in: "pam" (Linux accounts) or "none" (development only)`)
 	// The host's own administrators (wheel on Fedora/RHEL, sudo on Debian/Ubuntu) can already
 	// become root, so they sign in as admins without being added to libvirt first.
