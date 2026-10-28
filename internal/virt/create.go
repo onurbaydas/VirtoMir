@@ -234,9 +234,12 @@ func buildDomain(s CreateSpec, diskPath, diskFormat, seedPath string, diskVolume
 		}
 		driver := &libvirtxml.DomainDiskDriver{Name: "qemu", Type: orDefault(diskFormat, "raw"), Cache: "none", Discard: "unmap"}
 		src := &libvirtxml.DomainDiskSource{}
-		if diskVol != nil {
+		switch {
+		case diskVol != nil:
 			src.Volume = diskVol
-		} else {
+		case strings.HasPrefix(diskPath, "/dev/"): // a LUN, disk or logical volume given as is
+			src.Block = &libvirtxml.DomainDiskSourceBlock{Dev: diskPath}
+		default:
 			src.File = &libvirtxml.DomainDiskSourceFile{File: diskPath}
 		}
 		dev.Disks = append(dev.Disks, libvirtxml.DomainDisk{

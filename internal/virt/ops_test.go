@@ -361,6 +361,22 @@ func TestBuildDomainLinux(t *testing.T) {
 	}
 }
 
+func TestBuildDomainOnABlockDevice(t *testing.T) {
+	s := CreateSpec{Name: "db", VCPUs: 1, MemoryMiB: 1024, DiskPath: "/dev/disk/by-path/ip-10.0.0.5:3260-iscsi-iqn.2026-01.lab:vms-lun-0"}
+	if err := s.normalize(); err != nil {
+		t.Fatal(err)
+	}
+	var x libvirtxml.Domain
+	doc, _ := buildDomain(s, s.DiskPath, "", "").Marshal()
+	if err := x.Unmarshal(doc); err != nil {
+		t.Fatal(err)
+	}
+	d := x.Devices.Disks[0]
+	if d.Source == nil || d.Source.Block == nil || d.Source.Block.Dev != s.DiskPath || d.Source.File != nil || d.Driver.Type != "raw" {
+		t.Errorf("an iSCSI LUN must be a block disk, not a file: %s", doc)
+	}
+}
+
 func TestBuildDomainWindows(t *testing.T) {
 	s := CreateSpec{Name: "win11", OS: "windows", VCPUs: 4, MemoryMiB: 8192, DiskGiB: 64, SecureBoot: true, TPM: true, Network: &NICSpec{Network: "default"}}
 	if err := s.normalize(); err != nil {
