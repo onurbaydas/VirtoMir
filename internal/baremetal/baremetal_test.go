@@ -300,12 +300,12 @@ func TestProxy(t *testing.T) {
 	if err := ApplyProxy(context.Background(), r, s, "10.0.0.0", []string{"52:54:00:aa:bb:01"}, dir); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.calls) != 2 || !strings.HasPrefix(r.calls[1], "systemd-run --unit="+Unit) {
+	if len(r.calls) != 2 || !strings.HasPrefix(r.calls[1], "systemd-run --no-ask-password --unit="+Unit) {
 		t.Errorf("calls %v", r.calls)
 	}
 	r.calls = nil
 	_ = ApplyProxy(context.Background(), r, s, "10.0.0.0", nil, dir)
-	if len(r.calls) != 1 || r.calls[0] != "systemctl stop "+Unit {
+	if len(r.calls) != 1 || r.calls[0] != "systemctl --no-ask-password stop "+Unit {
 		t.Errorf("nothing to install still runs dnsmasq: %v", r.calls)
 	}
 }

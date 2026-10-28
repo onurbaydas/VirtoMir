@@ -63,9 +63,10 @@ pxe-service=tag:virtomir,tag:!ipxe,BC_EFI,"VirtoMir install",ipxe.efi
 }
 
 // ApplyProxy runs dnsmasq for the machines being installed, or stops it when there are
-// none (or the mode is external).
+// none (or the mode is external). It runs at every start; --no-ask-password keeps a daemon
+// without root from popping up a polkit password dialog on the host's desktop.
 func ApplyProxy(ctx context.Context, r Runner, s Settings, network string, macs []string, dir string) error {
-	_, _ = r.Run(ctx, "systemctl", "stop", Unit)
+	_, _ = r.Run(ctx, "systemctl", "--no-ask-password", "stop", Unit)
 	if !s.Enabled || s.Mode != ModeProxy || len(macs) == 0 {
 		return nil
 	}
@@ -85,7 +86,7 @@ func ApplyProxy(ctx context.Context, r Runner, s Settings, network string, macs 
 	if err := os.WriteFile(conf, []byte(DnsmasqConfig(s, network, macs, tftp)), 0o644); err != nil {
 		return err
 	}
-	_, err := r.Run(ctx, "systemd-run", "--unit="+Unit, "--property=Restart=on-failure", "--collect",
+	_, err := r.Run(ctx, "systemd-run", "--no-ask-password", "--unit="+Unit, "--property=Restart=on-failure", "--collect",
 		"dnsmasq", "--keep-in-foreground", "--conf-file="+conf)
 	return err
 }
