@@ -14,8 +14,9 @@
   import Trash from '@lucide/svelte/icons/trash'
   import Disc from '@lucide/svelte/icons/disc'
   import Maximize2 from '@lucide/svelte/icons/maximize-2'
-  import { api, errorText, type Pool, type PoolSource, type PoolSpec, type Volume } from '../api'
+  import { api, errorText, poolFills, type Pool, type PoolSource, type PoolSpec, type Volume } from '../api'
   import { track } from '../jobs'
+  import NetworkStorageFinder from '../components/NetworkStorageFinder.svelte'
   import { cluster } from '../cluster.svelte'
   import { formatBytes, plural } from '../format'
   import { router } from '../router.svelte'
@@ -331,6 +332,15 @@
   </div>
 </header>
 
+{#if session.can('admin')}
+  <NetworkStorageFinder
+    onconnected={async (pool) => {
+      await loadPools()
+      router.navigate(`/storage#${encodeURIComponent(pool)}`, { replace: true })
+    }}
+  />
+{/if}
+
 {#if poolsError}
   <div class="ui-error-box">{poolsError}</div>
 {:else if pools === null}
@@ -357,9 +367,11 @@
           <span class="state" class:on={p.active}>{p.active ? 'active' : 'stopped'}</span>
         </span>
         <span class="p-path mono">{p.path ?? p.type}</span>
-        {#if p.active}
+        {#if p.active && poolFills(p)}
           <span class="bar"><span style:width="{usedPct(p)}%" class:full={usedPct(p) > 90}></span></span>
           <span class="p-sub num">{t('{free} free of {size}', { free: formatBytes(p.availableBytes), size: formatBytes(p.capacityBytes) })} · {plural(p.volumes, 'volume')}</span>
+        {:else if p.active}
+          <span class="p-sub num">{formatBytes(p.capacityBytes)} · {plural(p.volumes, 'LUN')}</span>
         {/if}
       </button>
     {/each}
@@ -383,8 +395,10 @@
               <RefreshCw size={14} /> {t('Rescan')}
             </button>
             <ConfirmButton label={t('Stop')} confirm={t('Stop the pool?')} icon={Square} run={() => poolAction(current!, 'stop')} />
-            <button class="ui-btn sm" onclick={() => addImage('file')}><Upload size={14} /> {t('Upload image')}</button>
-            <button class="ui-btn sm primary" onclick={openVolume}><Plus size={14} /> {t('New volume')}</button>
+            {#if poolFills(current)}
+              <button class="ui-btn sm" onclick={() => addImage('file')}><Upload size={14} /> {t('Upload image')}</button>
+              <button class="ui-btn sm primary" onclick={openVolume}><Plus size={14} /> {t('New volume')}</button>
+            {/if}
           {:else}
             <ConfirmButton
               label={t('Remove pool')}
@@ -396,7 +410,7 @@
                 await loadPools()
               }}
             />
-            {#if current.path === `/srv/virtomir/${current.name}`}
+            {#if current.origin === 'carved'}
               <ConfirmButton
                 label={t('Remove and free the space')}
                 confirm={t('Delete its volume and give the space back? This cannot be undone.')}
@@ -448,10 +462,10 @@
                 {#if v.usedBy.length}{v.usedBy.join(', ')}{:else if v.writing}<span class="muted">{t('being written')}</span>{:else}<span class="muted">—</span>{/if}
               </span>
               <span role="cell" class="act" inert={!session.can('admin')}>
-                {#if v.format !== 'iso' && v.usedBy.length === 0 && !v.writing}
+                {#if v.format !== 'iso' && v.usedBy.length === 0 && !v.writing && poolFills(current)}
                   <button class="ui-btn sm ghost" onclick={() => openGrow(v)} title={t('Make this volume bigger')}><Maximize2 size={14} /> {t('Grow')}</button>
                 {/if}
-                {#if !v.writing}<ConfirmButton
+                {#if !v.writing && poolFills(current)}<ConfirmButton
                   label={t('Delete')}
                   confirm={t('Delete for good?')}
                   icon={Trash}

@@ -731,8 +731,10 @@ export interface Pool {
   uuid: string
   type: string
   path?: string
-  /** The Ceph pool (rbd), volume group (logical) or zpool (zfs) it is made of. */
+  /** The Ceph pool (rbd), volume group (logical), zpool (zfs), host:export (netfs) or target IQN (iscsi). */
   source?: string
+  /** How VirtoMir made it: carved from free space, or a mounted SMB share. */
+  origin?: 'carved' | 'smb'
   active: boolean
   autostart: boolean
   capacityBytes: number
@@ -820,6 +822,32 @@ export interface PoolSpec {
   cephKey?: string
   source?: string
   devices?: string[]
+}
+
+/** Whether a pool can run out of space: iSCSI, SCSI and multipath pools are their LUNs, always all allocated. */
+export const poolFills = (p: Pool) => !['iscsi', 'iscsi-direct', 'scsi', 'mpath'].includes(p.type)
+
+/** Network or SAN storage VirtoMir found by itself. */
+export interface FoundStorage {
+  kind: 'iscsi' | 'nfs' | 'smb' | 'fc'
+  server?: string
+  /** The server's DNS name, when it has one. */
+  host?: string
+  /** Target IQN, export path or share; empty when the server lists its shares only after a sign-in. */
+  name: string
+  /** Every address an iSCSI target answers on (more than one: multipath). */
+  portals?: string[]
+  sizeBytes?: number
+  detail?: string
+  needsAuth?: boolean
+  error?: string
+  /** The pool it already is on this host. */
+  pool?: string
+}
+
+export interface StorageLogin {
+  username?: string
+  password?: string
 }
 
 /** Free space a pool can be carved from: an empty disk, a volume group or a ZFS pool. */
@@ -1718,6 +1746,12 @@ export const api = {
   // Storage
   pools: async () => (await request<{ pools: Pool[] }>('GET', '/api/v1/storage/pools')).pools,
   createPool: (spec: PoolSpec) => request<void>('POST', '/api/v1/storage/pools', spec),
+  /** Scans this host's networks for storage (or asks one server again, e.g. after a sign-in). */
+  discoverStorage: async (req?: { server: string } & StorageLogin) =>
+    (await request<{ found: FoundStorage[] }>('POST', '/api/v1/storage/discover', req ?? {})).found,
+  /** Makes found storage a pool (on every cluster member with everywhere). */
+  connectStorage: (req: { kind: string; server?: string; host?: string; name: string; everywhere?: boolean } & StorageLogin) =>
+    request<{ pool: string; results?: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/storage/connect', req),
   poolSources: async () => (await request<{ sources: PoolSource[] }>('GET', '/api/v1/storage/sources')).sources,
   /** A pool of the asked size made from a source's free space (a job). */
   carvePool: (req: CarveRequest) => request<Job>('POST', '/api/v1/storage/pools/carve', req),
