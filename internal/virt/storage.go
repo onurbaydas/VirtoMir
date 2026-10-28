@@ -22,7 +22,7 @@ type Pool struct {
 	UUID            string `json:"uuid"`
 	Type            string `json:"type"` // dir, logical, netfs, iscsi, …
 	Path            string `json:"path,omitempty"`
-	Source          string `json:"source,omitempty"` // the Ceph pool (rbd), volume group (logical) or zpool (zfs)
+	Source          string `json:"source,omitempty"` // Ceph pool (rbd), volume group (logical), zpool (zfs), host:export (netfs) or target IQN (iscsi)
 	Active          bool   `json:"active"`
 	Autostart       bool   `json:"autostart"`
 	CapacityBytes   uint64 `json:"capacityBytes"`
@@ -85,8 +85,15 @@ func poolInfo(l *libvirt.Libvirt, p libvirt.StoragePool) (Pool, error) {
 			if x.Target != nil {
 				info.Path = x.Target.Path
 			}
-			if x.Source != nil && x.Source.Name != "" {
-				info.Source = x.Source.Name
+			if src := x.Source; src != nil {
+				switch {
+				case src.Name != "":
+					info.Source = src.Name
+				case x.Type == "netfs" && len(src.Host) > 0 && src.Dir != nil:
+					info.Source = src.Host[0].Name + ":" + src.Dir.Path
+				case x.Type == "iscsi" && len(src.Device) > 0:
+					info.Source = src.Device[0].Path
+				}
 			}
 		}
 	}
@@ -249,13 +256,23 @@ func cephSecret(l *libvirt.Libvirt, pool, key string) (string, error) {
 	if err != nil || len(raw) == 0 {
 		return "", invalidf("The Ceph key is the base64 string from 'ceph auth get-key client.<user>'.")
 	}
+	return poolSecret(l, libvirt.SecretUsageTypeCeph, "ceph", pool, "Ceph key", raw)
+}
+
+// poolSecret keeps a pool's key or password in a private libvirt secret, never in the pool
+// definition, and returns its UUID.
+func poolSecret(l *libvirt.Libvirt, usageType libvirt.SecretUsageType, typ, pool, what string, value []byte) (string, error) {
 	usage := "virtomir/" + pool
 	// A secret from an earlier attempt (the pool itself was refused) is reused: libvirt
 	// refuses a second secret for the same usage.
-	sec, err := l.SecretLookupByUsage(int32(libvirt.SecretUsageTypeCeph), usage)
+	sec, err := l.SecretLookupByUsage(int32(usageType), usage)
 	if err != nil {
-		s := libvirtxml.Secret{Ephemeral: "no", Private: "yes", Description: "Ceph key for VirtoMir pool " + pool,
-			Usage: &libvirtxml.SecretUsage{Type: "ceph", Name: usage}}
+		s := libvirtxml.Secret{Ephemeral: "no", Private: "yes", Description: what + " for VirtoMir pool " + pool}
+		if typ == "iscsi" {
+			s.Usage = &libvirtxml.SecretUsage{Type: typ, Target: usage}
+		} else {
+			s.Usage = &libvirtxml.SecretUsage{Type: typ, Name: usage}
+		}
 		doc, err := s.Marshal()
 		if err != nil {
 			return "", err
@@ -264,7 +281,7 @@ func cephSecret(l *libvirt.Libvirt, pool, key string) (string, error) {
 			return "", classify(err)
 		}
 	}
-	if err := l.SecretSetValue(sec, raw, 0); err != nil {
+	if err := l.SecretSetValue(sec, value, 0); err != nil {
 		return "", classify(err)
 	}
 	return formatUUID(sec.UUID), nil
@@ -519,8 +536,11 @@ type PoolSpec struct {
 	Type   string `json:"type,omitempty"`
 	Host   string `json:"host,omitempty"`
 	Export string `json:"export,omitempty"`
-	// iscsi: Host is the portal, Target the IQN; the LUNs become volumes.
-	Target string `json:"target,omitempty"`
+	// iscsi: Host is the portal, Target the IQN; the LUNs become volumes. ChapUser and
+	// ChapPassword sign in to a target that asks (the password goes to a libvirt secret).
+	Target       string `json:"target,omitempty"`
+	ChapUser     string `json:"chapUser,omitempty"`
+	ChapPassword string `json:"chapPassword,omitempty"`
 	// rbd (Ceph): Monitors (host or host:port), the Ceph pool name, and the cephx user and
 	// key; the key is kept in a libvirt secret, never in the pool definition.
 	Monitors []string `json:"monitors,omitempty"`
@@ -700,6 +720,14 @@ func (c *Client) CreatePool(spec PoolSpec) error {
 			return err
 		}
 		x.Source.Auth = &libvirtxml.StoragePoolSourceAuth{Type: "ceph", Username: spec.CephUser,
+			Secret: &libvirtxml.StoragePoolSourceAuthSecret{UUID: uuid}}
+	}
+	if spec.Type == "iscsi" && spec.ChapUser != "" {
+		uuid, err := poolSecret(l, libvirt.SecretUsageTypeIscsi, "iscsi", spec.Name, "iSCSI CHAP password", []byte(spec.ChapPassword))
+		if err != nil {
+			return err
+		}
+		x.Source.Auth = &libvirtxml.StoragePoolSourceAuth{Type: "chap", Username: spec.ChapUser,
 			Secret: &libvirtxml.StoragePoolSourceAuthSecret{UUID: uuid}}
 	}
 	doc, err := x.Marshal()
