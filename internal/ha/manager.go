@@ -296,6 +296,9 @@ func (m *Manager) Tick(ctx context.Context) {
 	self := m.transport.SelfID()
 	members := m.transport.Members()
 	clustered := len(members) > 1
+	if !clustered && !protectsAny(cfg) {
+		return // a lone host with nothing protected: idle until a second member joins
+	}
 
 	doms, domErr := m.hv.ListDomains()
 	m.mu.Lock()
@@ -627,6 +630,16 @@ func (m *Manager) Accept(reps []Replica) {
 	if changed {
 		m.persist("replicas.json", m.replicas)
 	}
+}
+
+// protectsAny reports whether any machine has HA protection turned on.
+func protectsAny(cfg Config) bool {
+	for _, p := range cfg.VMPolicies {
+		if p.Enabled {
+			return true
+		}
+	}
+	return false
 }
 
 // resumeAfterBoot starts, once per daemon start, the protected machines this member owns

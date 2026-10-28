@@ -130,7 +130,7 @@
 
 {#if cluster.clustered}<CapacitySimulator />{/if}
 
-<DrsRecommendationDeck />
+{#if cluster.clustered}<DrsRecommendationDeck />{/if}
 
 <section class="ui-panel history">
   <header class="h-head">

@@ -229,11 +229,13 @@ type fakeHV struct {
 	doms    []virt.Domain
 	actions []string
 	adopt   bool // AdoptDomain defines the machine (else this host cannot take machines)
+	lists   int  // ListDomains calls
 }
 
 func (h *fakeHV) ListDomains() ([]virt.Domain, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.lists++
 	return append([]virt.Domain{}, h.doms...), nil
 }
 func (h *fakeHV) DomainXML(uuid string, _ bool) (string, error) {
@@ -553,6 +555,29 @@ func TestResumeAfterBoot(t *testing.T) {
 	}
 	if hv.doms[0].State != virt.StateRunning {
 		t.Fatalf("protected machine not started after boot: %v", hv.actions)
+	}
+}
+
+func TestAloneWithNothingProtectedIdles(t *testing.T) {
+	hv := &fakeHV{doms: []virt.Domain{{UUID: "v1", Name: "db", State: virt.StateShutoff, Persistent: true}}}
+	m, fc, _, st := newTestManager(t, "a", hv)
+	fc.nodes = fc.nodes[:1]
+	st.SetPolicy(VMPolicy{UUID: "v1", Name: "db"}) // a policy, but not protected
+	m.Tick(context.Background())
+	if hv.lists != 0 {
+		t.Fatalf("a lone host with nothing protected listed machines %d times", hv.lists)
+	}
+	st.SetPolicy(VMPolicy{UUID: "v1", Name: "db", Enabled: true})
+	m.Tick(context.Background())
+	if hv.lists == 0 {
+		t.Fatal("a protected machine on a lone host is not looked after (start after reboot)")
+	}
+	st.SetPolicy(VMPolicy{UUID: "v1", Name: "db"})
+	hv.lists = 0
+	fc.nodes = []Node{{"a", "alpha"}, {"b", "bravo"}}
+	m.Tick(context.Background())
+	if hv.lists == 0 {
+		t.Fatal("HA stayed idle after a second member joined")
 	}
 }
 

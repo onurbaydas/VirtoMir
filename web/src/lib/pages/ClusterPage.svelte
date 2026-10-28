@@ -122,9 +122,11 @@
     <button class="c-tab" class:active={currentTab === 'members'} onclick={() => currentTab = 'members'}>
       {t('Members')}
     </button>
-    <button class="c-tab" class:active={currentTab === 'ha'} onclick={() => currentTab = 'ha'}>
-      {t('High availability')}
-    </button>
+    {#if cluster.clustered}
+      <button class="c-tab" class:active={currentTab === 'ha'} onclick={() => currentTab = 'ha'}>
+        {t('High availability')}
+      </button>
+    {/if}
     <button class="c-tab" class:active={currentTab === 'pools'} onclick={() => currentTab = 'pools'}>
       {t('Resource pools')}
     </button>
@@ -150,7 +152,7 @@
     </div>
   {/if}
 
-  {#if currentTab === 'ha'}
+  {#if currentTab === 'ha' && cluster.clustered}
     <HaClusterPanel />
   {:else if currentTab === 'pools'}
     <ResourcePoolsPanel />
