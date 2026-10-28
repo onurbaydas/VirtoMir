@@ -237,3 +237,101 @@ func relabel(ctx context.Context, r Runner, dir string) {
 	_, _ = r.Run(ctx, "restorecon", filepath.Dir(dir))
 	_, _ = r.Run(ctx, "restorecon", "-R", dir)
 }
+
+// ErrNotCarved: the pool was not made from free space by VirtoMir.
+var ErrNotCarved = fmt.Errorf("%w: this pool was not made from free space by VirtoMir; only its definition can be removed", ErrInvalid)
+
+var carvedFromRE = regexp.MustCompile(`(?m)^# Storage pool carved by VirtoMir from (\S+)\.$`)
+
+// CheckRemove refuses to give back the space of a pool that still holds files.
+func CheckRemove(name string) error {
+	dir := filepath.Join(Base, name)
+	if entries, err := os.ReadDir(dir); err == nil && len(entries) > 0 {
+		return invalidf("%s still holds %d files; delete the disks in the pool first", dir, len(entries))
+	}
+	return nil
+}
+
+// Remove gives the space of a carved pool back: it unmounts and deletes its logical volume
+// (and the volume group and LVM label of a disk that held only this pool) or its ZFS
+// dataset. The pool must be empty; its libvirt definition is removed first by the caller.
+func Remove(ctx context.Context, r Runner, name string, report func(string)) error {
+	if !nameRE.MatchString(name) {
+		return ErrNotCarved
+	}
+	if err := CheckRemove(name); err != nil {
+		return err
+	}
+	dir := filepath.Join(Base, name)
+	run := func(step string, name string, args ...string) ([]byte, error) {
+		report(step)
+		out, err := r.Run(ctx, name, args...)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", step, err)
+		}
+		return out, nil
+	}
+
+	b, err := r.Run(ctx, "systemd-escape", "-p", "--suffix=mount", dir)
+	unit := strings.TrimSpace(string(b))
+	if err != nil || unit == "" {
+		return fmt.Errorf("name the mount unit for %s: %v", dir, err)
+	}
+	unitFile := filepath.Join(UnitDir, unit)
+	text, err := os.ReadFile(unitFile)
+	if err != nil {
+		// No mount unit: a ZFS dataset mounts itself.
+		out, err := r.Run(ctx, "zfs", "list", "-H", "-o", "name,mountpoint")
+		if err != nil {
+			return ErrNotCarved
+		}
+		for _, line := range strings.Split(string(out), "\n") {
+			if f := strings.Split(line, "\t"); len(f) == 2 && f[1] == dir {
+				_, err := run("Destroying ZFS dataset "+f[0], "zfs", "destroy", f[0])
+				return err
+			}
+		}
+		return ErrNotCarved
+	}
+	m := carvedFromRE.FindSubmatch(text)
+	if m == nil {
+		return ErrNotCarved
+	}
+	dev := string(m[1])
+	if _, err := run("Unmounting "+dir, "systemctl", "disable", "--now", unit); err != nil {
+		return err
+	}
+	if err := os.Remove(unitFile); err != nil {
+		return err
+	}
+	if _, err := run("Reloading systemd", "systemctl", "daemon-reload"); err != nil {
+		return err
+	}
+	_ = os.Remove(dir)
+	if _, err := run("Deleting logical volume "+dev, "lvremove", "-y", dev); err != nil {
+		return err
+	}
+	// A disk VirtoMir made into a volume group goes back to being an empty disk once its
+	// last pool is gone.
+	vg := filepath.Base(filepath.Dir(dev))
+	if !strings.HasPrefix(vg, "virtomir-") {
+		return nil
+	}
+	out, err := r.Run(ctx, "vgs", "--noheadings", "-o", "lv_count", vg)
+	if err != nil || strings.TrimSpace(string(out)) != "0" {
+		return nil
+	}
+	pvs, err := r.Run(ctx, "pvs", "--noheadings", "-o", "pv_name", "-S", "vg_name="+vg)
+	if err != nil {
+		return nil
+	}
+	if _, err := run("Deleting volume group "+vg, "vgremove", "-y", vg); err != nil {
+		return err
+	}
+	for _, pv := range strings.Fields(string(pvs)) {
+		if _, err := run("Clearing the LVM label of "+pv, "pvremove", "-y", pv); err != nil {
+			return err
+		}
+	}
+	return nil
+}

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/onurbaydas/virtomir/internal/carve"
@@ -69,4 +70,28 @@ func (s *Server) carvePool(w http.ResponseWriter, r *http.Request) {
 		return req.Name, s.backend.CreatePool(virt.PoolSpec{Name: req.Name, Path: dir})
 	})
 	s.writeJSON(w, http.StatusAccepted, job)
+}
+
+// checkCarved refuses ?storage=remove for a pool VirtoMir did not carve or that still holds
+// files, before its definition is gone.
+func (s *Server) checkCarved(name string) error {
+	pools, err := s.backend.ListPools()
+	if err != nil {
+		return err
+	}
+	for _, p := range pools {
+		if p.Name == name {
+			if p.Path != filepath.Join(carve.Base, name) {
+				return carve.ErrNotCarved
+			}
+			return carve.CheckRemove(name)
+		}
+	}
+	return nil // unknown pool: DeletePool says so
+}
+
+func (s *Server) removeCarved(ctx context.Context, name string) error {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	return carve.Remove(ctx, s.cephRunner, name, func(step string) { s.log.Info("give back pool space", "pool", name, "step", step) })
 }

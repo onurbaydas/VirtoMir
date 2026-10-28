@@ -396,6 +396,18 @@
                 await loadPools()
               }}
             />
+            {#if current.path === `/srv/virtomir/${current.name}`}
+              <ConfirmButton
+                label={t('Remove and free the space')}
+                confirm={t('Delete its volume and give the space back? This cannot be undone.')}
+                icon={Trash}
+                run={async () => {
+                  await api.deletePool(current!.name, true)
+                  router.navigate('/storage', { replace: true })
+                  await loadPools()
+                }}
+              />
+            {/if}
             <button class="ui-btn sm primary" onclick={() => poolAction(current!, 'start')}><Play size={14} /> {t('Start')}</button>
           {/if}
         </div>

@@ -48,10 +48,26 @@ func (s *Server) createPool(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusCreated, map[string]string{"name": spec.Name})
 }
 
+// deletePool forgets a pool; ?storage=remove also gives back the space VirtoMir carved
+// for it (see carve.go).
 func (s *Server) deletePool(w http.ResponseWriter, r *http.Request) {
-	if err := s.backend.DeletePool(r.PathValue("pool")); err != nil {
+	name := r.PathValue("pool")
+	free := r.URL.Query().Get("storage") == "remove"
+	if free {
+		if err := s.checkCarved(name); err != nil {
+			s.writeError(w, err)
+			return
+		}
+	}
+	if err := s.backend.DeletePool(name); err != nil {
 		s.writeError(w, err)
 		return
+	}
+	if free {
+		if err := s.removeCarved(r.Context(), name); err != nil {
+			s.writeError(w, err)
+			return
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

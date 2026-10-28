@@ -1726,7 +1726,8 @@ export const api = {
     (await request<{ results: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/cluster/networks', spec)).results,
   createClusterPool: async (spec: PoolSpec) =>
     (await request<{ results: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/cluster/pools', spec)).results,
-  deletePool: (name: string) => request<void>('DELETE', poolPath(name)),
+  /** freeSpace: also give back the space VirtoMir carved for the pool (its logical volume or dataset). */
+  deletePool: (name: string, freeSpace = false) => request<void>('DELETE', poolPath(name) + (freeSpace ? '?storage=remove' : '')),
   poolXML: async (name: string) => (await send('GET', `${poolPath(name)}/xml`, { accept: 'application/xml' })).text(),
   savePoolXML: async (name: string, xml: string): Promise<{ restartNeeded: boolean }> =>
     (await send('PUT', `${poolPath(name)}/xml`, { body: xml, contentType: 'application/xml' })).json(),

@@ -10,7 +10,13 @@ import (
 	"github.com/onurbaydas/virtomir/internal/carve"
 	"github.com/onurbaydas/virtomir/internal/ceph"
 	"github.com/onurbaydas/virtomir/internal/jobs"
+	"github.com/onurbaydas/virtomir/internal/virt"
 )
+
+func (f *fakeBackend) DeletePool(name string) error {
+	f.call("delete pool " + name)
+	return f.err
+}
 
 func TestCarvePool(t *testing.T) {
 	oldBusy, oldBase, oldUnit := ceph.Busy, carve.Base, carve.UnitDir
@@ -62,6 +68,19 @@ func TestCarvePool(t *testing.T) {
 	}
 	if !rec.called("lvcreate -y -W y -n fast -L 10737418240b data") || !rec.called("mkfs.xfs -q /dev/data/fast") ||
 		!strings.Contains(strings.Join(a.backend.calls, " "), "pool fast ") {
+		t.Errorf("runner %q, backend %q", rec.calls, a.backend.calls)
+	}
+
+	// Giving the space back: only for a pool VirtoMir carved, and only an empty one.
+	a.backend.pools = []virt.Pool{{Name: "fast", Path: filepath.Join(carve.Base, "fast")}, {Name: "default", Path: "/var/lib/libvirt/images"}}
+	if resp, body := admin.req("DELETE", "/api/v1/storage/pools/default?storage=remove", ""); resp.StatusCode != http.StatusUnprocessableEntity ||
+		strings.Contains(strings.Join(a.backend.calls, " "), "delete pool default") {
+		t.Errorf("not carved: %d %s %q", resp.StatusCode, body, a.backend.calls)
+	}
+	if resp, body := admin.req("DELETE", "/api/v1/storage/pools/fast?storage=remove", ""); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("give back: %d %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(strings.Join(a.backend.calls, " "), "delete pool fast") || !rec.called("lvremove -y /dev/data/fast") {
 		t.Errorf("runner %q, backend %q", rec.calls, a.backend.calls)
 	}
 }

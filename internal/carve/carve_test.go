@@ -153,3 +153,80 @@ func TestCarveRefusesAnExistingDirectory(t *testing.T) {
 		t.Errorf("err = %v, calls = %q", err, r.calls)
 	}
 }
+
+func carvedUnit(t *testing.T, unit, dev string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(UnitDir, unit), []byte(mountUnit("u", filepath.Join(Base, "fast"), dev)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRemoveGivesADiskBack(t *testing.T) {
+	useTempDirs(t)
+	carvedUnit(t, "srv-virtomir-fast.mount", "/dev/virtomir-fast/fast")
+	if err := os.MkdirAll(filepath.Join(Base, "fast"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r := &fakeRunner{out: map[string]string{"systemd-escape": "srv-virtomir-fast.mount\n", "vgs": "  0\n", "pvs": "  /dev/sdb\n"}}
+	if err := Remove(context.Background(), r, "fast", func(string) {}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"systemd-escape -p --suffix=mount " + filepath.Join(Base, "fast"),
+		"systemctl disable --now srv-virtomir-fast.mount",
+		"systemctl daemon-reload",
+		"lvremove -y /dev/virtomir-fast/fast",
+		"vgs --noheadings -o lv_count virtomir-fast",
+		"pvs --noheadings -o pv_name -S vg_name=virtomir-fast",
+		"vgremove -y virtomir-fast",
+		"pvremove -y /dev/sdb",
+	}
+	if strings.Join(r.calls, "\n") != strings.Join(want, "\n") {
+		t.Errorf("calls:\n%s\nwant:\n%s", strings.Join(r.calls, "\n"), strings.Join(want, "\n"))
+	}
+	if _, err := os.Stat(filepath.Join(UnitDir, "srv-virtomir-fast.mount")); !os.IsNotExist(err) {
+		t.Error("mount unit left behind")
+	}
+}
+
+func TestRemoveKeepsAVolumeGroupItDidNotMake(t *testing.T) {
+	useTempDirs(t)
+	carvedUnit(t, "x.mount", "/dev/data/fast")
+	r := &fakeRunner{out: map[string]string{"systemd-escape": "x.mount", "vgs": "  0\n"}}
+	if err := Remove(context.Background(), r, "fast", func(string) {}); err != nil {
+		t.Fatal(err)
+	}
+	if last := r.calls[len(r.calls)-1]; last != "lvremove -y /dev/data/fast" {
+		t.Errorf("touched the volume group: %q", r.calls)
+	}
+}
+
+func TestRemoveZFS(t *testing.T) {
+	useTempDirs(t)
+	r := &fakeRunner{out: map[string]string{"systemd-escape": "x.mount", "zfs": "tank\t/tank\ntank/fast\t" + filepath.Join(Base, "fast") + "\n"}}
+	if err := Remove(context.Background(), r, "fast", func(string) {}); err != nil {
+		t.Fatal(err)
+	}
+	if last := r.calls[len(r.calls)-1]; last != "zfs destroy tank/fast" {
+		t.Errorf("calls = %q", r.calls)
+	}
+}
+
+func TestRemoveRefuses(t *testing.T) {
+	useTempDirs(t)
+	r := &fakeRunner{out: map[string]string{"systemd-escape": "x.mount", "zfs": "tank\t/tank\n"}}
+	if err := Remove(context.Background(), r, "fast", func(string) {}); !errors.Is(err, ErrNotCarved) {
+		t.Errorf("a pool VirtoMir did not carve: %v", err)
+	}
+	carvedUnit(t, "x.mount", "/dev/data/fast")
+	if err := os.MkdirAll(filepath.Join(Base, "fast"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(Base, "fast", "web.qcow2"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r.calls = nil
+	if err := Remove(context.Background(), r, "fast", func(string) {}); !errors.Is(err, ErrInvalid) || len(r.calls) != 0 {
+		t.Errorf("a pool with disks in it: %v, calls %q", err, r.calls)
+	}
+}
