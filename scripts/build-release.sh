@@ -21,7 +21,7 @@ mkdir -p "$STAGE"
 	-ldflags "-s -w -X main.version=$VERSION" -o "$STAGE/virtomird" ./cmd/virtomird)
 
 echo "==> package"
-cp "$ROOT/packaging/virtomird.service" "$ROOT/packaging/virtomir.pam" "$STAGE/"
+cp "$ROOT/packaging/virtomird.service" "$ROOT/packaging/virtomir.pam" "$ROOT/packaging/virtomir.cil" "$STAGE/"
 cp "$ROOT/scripts/install.sh" "$STAGE/"
 cp "$ROOT/README.md" "$STAGE/"
 [ -f "$ROOT/LICENSE" ] && cp "$ROOT/LICENSE" "$STAGE/"

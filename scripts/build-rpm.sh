@@ -45,7 +45,7 @@ cat >"$SRC/virtomird.sysconfig" <<'EOF'
 # Flags for virtomird (see "virtomird -h"). Restart after changing: systemctl restart virtomird
 VIRTOMIRD_ARGS="-listen 0.0.0.0:8420"
 EOF
-cp "$ROOT/README.md" "$ROOT/LICENSE" "$SRC/"
+cp "$ROOT/README.md" "$ROOT/LICENSE" "$ROOT/packaging/virtomir.cil" "$SRC/"
 
 cat >"$TOP/virtomir.spec" <<EOF
 Name:           virtomir
@@ -55,6 +55,7 @@ Summary:        Detailed web control deck for KVM/QEMU virtual machines (experim
 License:        AGPL-3.0-or-later
 URL:            https://github.com/onurbaydas/VirtoMir
 Requires:       pam, libvirt-daemon-kvm, libvirt-daemon-config-network, qemu-kvm, qemu-img, systemd
+Requires(post): policycoreutils
 Recommends:     edk2-ovmf, swtpm, swtpm-tools, tcpdump, virtiofsd, restic
 %global debug_package %{nil}
 %global __strip /bin/true
@@ -71,6 +72,7 @@ install -Dm0644 $SRC/virtomir.pam %{buildroot}/etc/pam.d/virtomir
 install -Dm0644 $SRC/virtomird.sysconfig %{buildroot}/etc/sysconfig/virtomird
 install -Dm0644 $SRC/README.md %{buildroot}/usr/share/doc/virtomir/README.md
 install -Dm0644 $SRC/LICENSE %{buildroot}/usr/share/licenses/virtomir/LICENSE
+install -Dm0644 $SRC/virtomir.cil %{buildroot}/usr/share/virtomir/virtomir.cil
 
 %files
 /usr/bin/virtomird
@@ -79,12 +81,19 @@ install -Dm0644 $SRC/LICENSE %{buildroot}/usr/share/licenses/virtomir/LICENSE
 %config(noreplace) /etc/sysconfig/virtomird
 /usr/share/doc/virtomir/README.md
 /usr/share/licenses/virtomir/LICENSE
+/usr/share/virtomir/virtomir.cil
 
 %post
 for g in virtomir-operator virtomir-viewer; do getent group \$g >/dev/null || groupadd -r \$g; done
+# SELinux: libvirt's daemons must see virtomird's /proc entry, and QEMU relabels backups.
+if selinuxenabled >/dev/null 2>&1; then
+  semodule -i /usr/share/virtomir/virtomir.cil >/dev/null 2>&1 || echo "VirtoMir: the SELinux module did not load" >&2
+  install -d -m 0750 /var/lib/virtomir/backups
+  restorecon -R /var/lib/virtomir/backups >/dev/null 2>&1 || :
+fi
 systemctl daemon-reload >/dev/null 2>&1 || :
 if [ \$1 -eq 1 ]; then
-  # libvirt: Fedora and RHEL use the modular daemons; virtproxyd gives the classic socket VirtoMir uses.
+  # libvirt: Fedora and RHEL use the modular daemons; VirtoMir talks to virtqemud and friends directly.
   if systemctl cat virtqemud.socket >/dev/null 2>&1; then
     for u in virtqemud virtnetworkd virtstoraged virtnodedevd virtinterfaced virtsecretd virtnwfilterd virtproxyd; do
       systemctl enable --now \$u.socket >/dev/null 2>&1 || :
@@ -108,6 +117,7 @@ if [ \$1 -eq 0 ]; then systemctl disable --now virtomird.service >/dev/null 2>&1
 
 %postun
 systemctl daemon-reload >/dev/null 2>&1 || :
+if [ \$1 -eq 0 ]; then semodule -r virtomir >/dev/null 2>&1 || :; fi
 if [ \$1 -ge 1 ]; then systemctl try-restart virtomird.service >/dev/null 2>&1 || :; fi
 EOF
 

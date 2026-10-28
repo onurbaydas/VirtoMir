@@ -1,0 +1,33 @@
+; SELinux policy module for VirtoMir (Fedora, RHEL and other SELinux hosts).
+;   semodule -i virtomir.cil      (install.sh and the RPM do this; semodule -r virtomir removes it)
+;
+; virtomird runs as unconfined_service_t. libvirt's daemons identify every client by reading
+; its /proc entry ("Cannot find start time for pid" when they may not), and QEMU relabels the
+; backup files it writes. Fedora 44 ships virtqemud_t permissive, so only virtproxyd_t failed
+; there; enforcing domains (RHEL, later Fedora) need all of it.
+;
+; Each daemon type sits in its own optional block: a host without it (monolithic libvirtd,
+; no LXC driver) skips that block instead of refusing the whole module.
+
+(typeattribute virtomir_libvirt_daemon)
+
+(optional virtomir_virtd (typeattributeset virtomir_libvirt_daemon (virtd_t)))
+(optional virtomir_virtproxyd (typeattributeset virtomir_libvirt_daemon (virtproxyd_t)))
+(optional virtomir_virtqemud (typeattributeset virtomir_libvirt_daemon (virtqemud_t)))
+(optional virtomir_virtlxcd (typeattributeset virtomir_libvirt_daemon (virtlxcd_t)))
+(optional virtomir_virtstoraged (typeattributeset virtomir_libvirt_daemon (virtstoraged_t)))
+(optional virtomir_virtnetworkd (typeattributeset virtomir_libvirt_daemon (virtnetworkd_t)))
+(optional virtomir_virtnodedevd (typeattributeset virtomir_libvirt_daemon (virtnodedevd_t)))
+(optional virtomir_virtsecretd (typeattributeset virtomir_libvirt_daemon (virtsecretd_t)))
+(optional virtomir_virtinterfaced (typeattributeset virtomir_libvirt_daemon (virtinterfaced_t)))
+(optional virtomir_virtnwfilterd (typeattributeset virtomir_libvirt_daemon (virtnwfilterd_t)))
+
+(optional virtomir_client
+	(allow virtomir_libvirt_daemon unconfined_service_t (dir (search getattr)))
+	(allow virtomir_libvirt_daemon unconfined_service_t (file (open read getattr)))
+	(allow virtomir_libvirt_daemon unconfined_service_t (lnk_file (read))))
+
+; Backups (the default location; another one needs: semanage fcontext -a -t virt_image_t
+; "<dir>(/.*)?" && restorecon -R <dir>).
+(optional virtomir_backups
+	(filecon "/var/lib/virtomir/backups(/.*)?" any (system_u object_r virt_image_t ((s0) (s0)))))

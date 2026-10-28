@@ -219,7 +219,7 @@ Every package does the host setup itself: it pulls in libvirt and QEMU/KVM, star
 sudo dnf install ./virtomir-1.1.1-1.x86_64.rpm   # or .aarch64.rpm; Fedora 40+ / RHEL 10
 ```
 
-Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf`, not from the UI. Built with `scripts/build-rpm.sh <version>`.
+Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf`, not from the UI. Built with `scripts/build-rpm.sh <version>`. With SELinux on, the package (and `install.sh`) loads a small policy module, `virtomir`: without it libvirt refuses virtomird ("Cannot find start time for pid") and QEMU cannot write backups. A backup location other than `/var/lib/virtomir/backups` needs `semanage fcontext -a -t virt_image_t "<dir>(/.*)?"` and `restorecon -R <dir>`.
 
 ### Tarball
 

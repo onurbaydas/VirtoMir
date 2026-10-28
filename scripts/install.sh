@@ -49,6 +49,9 @@ if [ "$UNINSTALL" = 1 ]; then
 	systemctl disable --now virtomird.service 2>/dev/null || true
 	rm -f "$UNIT" "$BIN" "$PAMFILE"
 	systemctl daemon-reload
+	if command -v semodule >/dev/null && semodule -l 2>/dev/null | grep -qx virtomir; then
+		semodule -r virtomir >/dev/null 2>&1 || true
+	fi
 	if [ "$PURGE" = 1 ]; then
 		rm -rf "$STATE"
 		say "Removed $STATE (certificate, metric history)"
@@ -168,6 +171,16 @@ say "Installing systemd unit (listening on $LISTEN)"
 sed "s|-listen 0.0.0.0:8420|-listen $LISTEN|" "$SRC/virtomird.service" >"$UNIT"
 chmod 0644 "$UNIT"
 install -d -m 0750 "$STATE"
+# SELinux: libvirt's daemons must see virtomird's /proc entry, and QEMU relabels backups.
+if command -v selinuxenabled >/dev/null && selinuxenabled && [ -f "$SRC/virtomir.cil" ]; then
+	say "Installing SELinux module virtomir"
+	if semodule -i "$SRC/virtomir.cil"; then
+		install -d -m 0750 "$STATE/backups"
+		restorecon -R "$STATE/backups" || true
+	else
+		warn "the SELinux module did not load: libvirt may refuse virtomird (\"Cannot find start time for pid\")"
+	fi
+fi
 systemctl daemon-reload
 if [ "$UPGRADE" = 1 ]; then
 	systemctl restart virtomird.service
