@@ -178,6 +178,7 @@ type Manager struct {
 	atBoot  map[string]int
 	started time.Time
 	wdErr   string
+	listErr string // the last "list machines" failure logged at Warn; repeats go to Debug
 	tick    int
 }
 
@@ -390,7 +391,13 @@ func (m *Manager) Tick(ctx context.Context) {
 	}
 	m.mu.Unlock()
 
-	if domErr != nil {
+	switch {
+	case domErr == nil:
+		m.listErr = ""
+	case domErr.Error() == m.listErr:
+		m.log.Debug("ha: list machines", "err", domErr)
+	default:
+		m.listErr = domErr.Error()
 		m.log.Warn("ha: list machines", "err", domErr)
 	}
 
