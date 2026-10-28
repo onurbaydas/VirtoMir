@@ -31,6 +31,16 @@ type Pool struct {
 	Volumes         int    `json:"volumes"`
 }
 
+// Fills reports whether a pool can run out of space. iSCSI, SCSI and multipath pools are
+// their LUNs, always all allocated: no new volume goes there, so they are never "full".
+func (p Pool) Fills() bool {
+	switch p.Type {
+	case "iscsi", "iscsi-direct", "scsi", "mpath":
+		return false
+	}
+	return true
+}
+
 // Volume is one image in a pool.
 type Volume struct {
 	Name            string   `json:"name"`

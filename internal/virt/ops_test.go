@@ -444,3 +444,11 @@ func TestRootfsSum(t *testing.T) {
 		t.Error("a list without rootfs.tar.xz was accepted")
 	}
 }
+
+func TestPoolFills(t *testing.T) {
+	for typ, fills := range map[string]bool{"dir": true, "netfs": true, "logical": true, "zfs": true, "rbd": true, "iscsi": false, "scsi": false, "mpath": false} {
+		if (Pool{Type: typ}).Fills() != fills {
+			t.Errorf("%s pool fills = %v", typ, !fills)
+		}
+	}
+}

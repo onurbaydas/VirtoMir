@@ -59,7 +59,7 @@ func (s *Server) getInsights(w http.ResponseWriter, _ *http.Request) {
 
 	if pools, err := s.backend.ListPools(); err == nil {
 		for _, p := range pools {
-			if !p.Active || p.CapacityBytes == 0 {
+			if !p.Active || p.CapacityBytes == 0 || !p.Fills() {
 				continue
 			}
 			f, _ := s.insights.PoolForecast(insights.Pool{Name: p.Name, CapacityBytes: p.CapacityBytes}, now)

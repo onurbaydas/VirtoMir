@@ -7,7 +7,7 @@
   import { cluster } from '../cluster.svelte'
   import { alerts } from '../alerts.svelte'
   import { session } from '../session.svelte'
-  import { api, type Job } from '../api'
+  import { api, poolFills, type Job } from '../api'
   import { ent } from '../enterprise'
   import Search from '@lucide/svelte/icons/search'
   import Plus from '@lucide/svelte/icons/plus'
@@ -29,7 +29,7 @@
       try {
         const pools = await api.pools()
         const stopped = pools.filter((p) => !p.active)
-        const full = pools.find((p) => p.active && p.capacityBytes > 0 && p.allocationBytes / p.capacityBytes > 0.9)
+        const full = pools.find((p) => p.active && poolFills(p) && p.capacityBytes > 0 && p.allocationBytes / p.capacityBytes > 0.9)
         storageIssue = stopped.length ? t('Stopped storage pools: {n}', { n: stopped.length }) : full ? t('{name} is {pct}% full', { name: full.name, pct: Math.round((full.allocationBytes / full.capacityBytes) * 100) }) : ''
       } catch {
         storageIssue = ''
