@@ -35,3 +35,23 @@
 ; Pools carved from free space (internal/carve) are mounted below /srv/virtomir.
 (optional virtomir_carved
 	(filecon "/srv/virtomir(/.*)?" any (system_u object_r virt_image_t ((s0) (s0)))))
+
+; libvirt's storage daemon. Fedora ships virtstoraged_t permissive with these accesses still
+; missing; where it is enforcing, libvirt's own iSCSI pools (iscsiadm, iscsid) and disks on
+; NFS or SMB pools (qemu-img writing, NFS deletes done as the file's owner) would fail.
+(optional virtomir_storaged_iscsi
+	(allow virtstoraged_t iscsid_exec_t (file (execute execute_no_trans map read open getattr)))
+	(allow virtstoraged_t iscsid_t (unix_stream_socket (connectto)))
+	(allow virtstoraged_t iscsi_var_lib_t (dir (search getattr read open write add_name remove_name create rmdir)))
+	(allow virtstoraged_t iscsi_var_lib_t (file (create open read write getattr setattr unlink lock)))
+	(allow virtstoraged_t iscsi_var_lib_t (lnk_file (create read getattr unlink)))
+	(allow virtstoraged_t iscsi_lock_t (dir (search getattr write add_name remove_name)))
+	(allow virtstoraged_t iscsi_lock_t (file (create open read write getattr link unlink lock)))
+	(allow virtstoraged_t self (capability (sys_resource setuid setgid fowner))))
+(optional virtomir_storaged_nfs
+	(allow virtstoraged_t nfs_t (dir (search getattr read open write add_name remove_name)))
+	(allow virtstoraged_t nfs_t (file (create open read write getattr setattr unlink))))
+(optional virtomir_storaged_smb
+	(allow virtstoraged_t cifs_t (dir (search getattr read open write add_name remove_name)))
+	(allow virtstoraged_t cifs_t (file (create open read write getattr setattr unlink)))
+	(allow virtqemud_t cifs_t (file (getattr setattr write))))
