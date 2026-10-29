@@ -521,12 +521,16 @@ func (c *Checker) InitConfig(stateDir string) {
 			if loaded.IntervalHours < 1 {
 				loaded.IntervalHours = 6
 			}
+			if loaded.Channel != ChannelReleases { // settings saved before channels: main
+				loaded.Channel = ChannelMain
+			}
 			c.autoCfg = loaded
 			return
 		}
 	}
 	c.autoCfg = AutoConfig{
 		Enabled:       true,
+		Channel:       ChannelMain,
 		AutoInstall:   false,
 		IntervalHours: 6,
 		LastResult:    "Auto-updater active (checking every 6h)",
