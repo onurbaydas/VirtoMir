@@ -65,6 +65,9 @@ type WaveConverter struct {
 	mu            sync.Mutex
 	cachedInv     *Inventory
 	reservedBytes uint64
+	// listMu lets one worker of a wave list the inventory while the others wait for it,
+	// instead of each asking vCenter.
+	listMu sync.Mutex
 }
 
 // NewWaveConverter returns a OneConverter that lists inventory, preflights and converts with virt-v2v.
@@ -94,6 +97,7 @@ func (c *WaveConverter) poolFree() uint64 {
 
 // ConvertOne resolves the VM by ID or Name from inventory, runs Preflight, and executes Convert.
 func (c *WaveConverter) ConvertOne(ctx context.Context, conn Connection, vmID string, report func(string)) error {
+	c.listMu.Lock()
 	c.mu.Lock()
 	inv := c.cachedInv
 	c.mu.Unlock()
@@ -105,15 +109,15 @@ func (c *WaveConverter) ConvertOne(ctx context.Context, conn Connection, vmID st
 		}
 		listed, err := lister.List(ctx, conn)
 		if err != nil {
+			c.listMu.Unlock()
 			return err
 		}
 		c.mu.Lock()
-		if c.cachedInv == nil {
-			c.cachedInv = &listed
-		}
+		c.cachedInv = &listed
 		inv = c.cachedInv
 		c.mu.Unlock()
 	}
+	c.listMu.Unlock()
 
 	var target *VM
 	for i := range inv.VMs {
