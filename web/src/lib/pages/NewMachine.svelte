@@ -63,7 +63,18 @@
   let ciPassword = $state('')
   let ciKeys = $state('')
   let netChoice = $state('network:default') // "network:<name>" | "sdn:<subnet>" | "bridge" | "none"
-  let bridge = $state('br0')
+  let bridge = $state('')
+  // The host's own bridges (libvirt's virbrN belong to its networks, chosen above as networks).
+  let hostBridges = $state<string[]>([])
+  $effect(() => {
+    ent
+      .interfaces()
+      .then((ifs) => {
+        hostBridges = ifs.filter((i) => i.kind === 'bridge' && !i.name.startsWith('virbr')).map((i) => i.name)
+        if (!hostBridges.includes(bridge)) bridge = hostBridges[0] ?? ''
+      })
+      .catch(() => (hostBridges = []))
+  })
   let firmware = $state<'uefi' | 'bios'>('uefi')
   let secureBoot = $state(false)
   let tpm = $state(false)
@@ -685,7 +696,7 @@
               <option value="sdn:{sn.id}">{t('SDN: {vpc} / {subnet} ({cidr})', { vpc: vpcLabel(sn.vpcId), subnet: sn.name, cidr: sn.cidr })}</option>
             {/each}
           {/if}
-          <option value="bridge">{t('A host bridge (machine appears on your LAN)')}</option>
+          {#if hostBridges.length}<option value="bridge">{t('A host bridge (machine appears on your LAN)')}</option>{/if}
           <option value="none">{t('No network')}</option>
         </select>
       </label>
@@ -706,7 +717,9 @@
       {#if netChoice === 'bridge'}
         <label class="ui-field">
           <span class="label">{t('Bridge')}</span>
-          <input class="ui-input mono" bind:value={bridge} placeholder="br0" />
+          <select class="ui-input mono" bind:value={bridge}>
+            {#each hostBridges as b (b)}<option value={b}>{b}</option>{/each}
+          </select>
         </label>
       {/if}
       {#if source === 'cloud' && netName && poolsHere.length}

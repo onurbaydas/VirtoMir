@@ -318,6 +318,9 @@ func (c *Client) CheckCreate(spec CreateSpec) error {
 	if c.nameTaken(l, spec.Name) {
 		return refusedf("A machine named %s already exists.", spec.Name)
 	}
+	if n := spec.Network; n != nil && n.Bridge != "" && !hostIfExists(n.Bridge) {
+		return invalidf("This host has no bridge %s: a machine on it would not start. Pick one of its bridges or networks.", n.Bridge)
+	}
 	if spec.Pool != "" && !poolKeepsFiles(l, spec.Pool) && (spec.BaseImage != "" || spec.CloudInit != nil) {
 		return invalidf("Pool %s holds block volumes, not files. Cloud images and cloud-init require a directory or NFS pool.", spec.Pool)
 	}

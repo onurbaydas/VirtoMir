@@ -3,6 +3,8 @@ package virt
 import (
 	"fmt"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -461,6 +463,9 @@ func (c *Client) CreateNetwork(spec NetworkSpec) error {
 	if err != nil {
 		return err
 	}
+	if spec.Mode == "bridge" && !hostIfExists(spec.Bridge) {
+		return invalidf("This host has no bridge %s. Pick one of its interfaces: VirtoMir makes the bridge for a wired port.", spec.Bridge)
+	}
 	doc, err := x.Marshal()
 	if err != nil {
 		return err
@@ -539,4 +544,14 @@ func (c *Client) DeleteNetwork(name string) error {
 	}
 	c.log.Info("network deleted", "network", name)
 	return nil
+}
+
+// hostIfExists reports whether the host has a network interface (bridge, OVS bridge, port)
+// of that name; tests replace it.
+var hostIfExists = func(name string) bool {
+	if name == "" || strings.ContainsRune(name, '/') {
+		return false
+	}
+	_, err := os.Stat(filepath.Join("/sys/class/net", name))
+	return err == nil
 }
