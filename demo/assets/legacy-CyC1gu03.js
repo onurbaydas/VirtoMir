@@ -1,0 +1,1 @@
+import{bt as e}from"./i18n.svelte-C123FNKD.js";e();
