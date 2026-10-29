@@ -134,7 +134,16 @@
   let subnetBad = $derived(withV4 && dlg && spec.mode !== 'bridge' && !!spec.subnet && !parseV4(spec.subnet))
   let noIP = $derived(spec.mode !== 'bridge' && spec.mode !== 'vxlan' && !withV4 && !withV6)
 
-  function openNew() {
+  // The networks and interfaces as they are now: one made a moment ago must not be offered
+  // its subnet again ("Network is already in use by interface virbr1").
+  async function refreshHost() {
+    const [ifs, ns] = await Promise.all([ent.interfaces().catch(() => hostIfs), api.networks().catch(() => nets)])
+    hostIfs = ifs
+    nets = ns
+  }
+
+  async function openNew() {
+    await refreshHost()
     // Suggest a free 192.168.X.0/24 that clashes with nothing on the host.
     const free = freeV4(usedNets.map((u) => u.cidr)) ?? '10.200.0.0/24'
     spec = { name: '', mode: 'nat', subnet: free, dhcp: true, bridge: '', subnet6: randomULA(), dhcp6: false, vni: 100 }
@@ -191,6 +200,7 @@
     try {
       const how = spec.mode === 'bridge' && !spec.ovs ? chosen?.how : undefined
       if (how === 'make') spec.bridge = await makeBridge(chosen!)
+      if (how === 'nat') await refreshHost()
       const body: NetworkSpec =
         how === 'nat'
           ? { name: spec.name, mode: 'nat', subnet: freeV4(usedNets.map((u) => u.cidr)) ?? '10.200.0.0/24', dhcp: true }

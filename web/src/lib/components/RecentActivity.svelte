@@ -44,6 +44,7 @@
           <span class="who">{e.user || t('someone')}</span>
           <span class="what">{d.before}{#if d.machineName}<strong>{d.machineName}</strong>{/if}{d.after}</span>
           <span class="when">{ago(now - Date.parse(e.time))}</span>
+          {#if e.status >= 400 && e.error}<span class="why">{t('Failed: {error}', { error: e.error })}</span>{/if}
         </li>
       {/each}
     </ul>
@@ -88,8 +89,14 @@
     border-bottom: 1px solid var(--border);
     font-size: 13px;
   }
-  li.failed .what {
+  li.failed .what,
+  .why {
     color: var(--danger);
+  }
+  .why {
+    grid-column: 2 / -1;
+    font-size: 12px;
+    overflow-wrap: anywhere;
   }
   .who {
     font-weight: 600;

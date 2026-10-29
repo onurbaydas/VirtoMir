@@ -220,10 +220,12 @@
       <fieldset class="ports">
         <legend class="label">{spec.kind === 'bond' ? 'Members' : 'Ports'} <span class="opt">{spec.kind === 'bridge' ? '(optional: a bridge without ports only connects machines with each other)' : ''}</span></legend>
         {#each candidates as c (c.name)}
-          <label class="check">
-            <input type="checkbox" checked={spec.ports?.includes(c.name)} onchange={(e) => togglePort(c.name, e.currentTarget.checked)} />
+          {@const wifi = !!c.wireless && spec.kind === 'bridge'}
+          <label class="check" class:off={wifi}>
+            <input type="checkbox" disabled={wifi} checked={spec.ports?.includes(c.name)} onchange={(e) => togglePort(c.name, e.currentTarget.checked)} />
             <span class="mono">{c.name}</span>
-            <span class="muted">{c.kind}{c.speedMbps ? ` · ${c.speedMbps >= 1000 ? c.speedMbps / 1000 + 'G' : c.speedMbps + 'M'}` : ''}{hasAddress(c) ? ` · ${c.addresses?.filter((a) => !a.startsWith('fe80:')).join(', ')}` : ''}</span>
+            <span class="muted">{c.wireless ? t('Wi-Fi') : c.kind}{c.speedMbps ? ` · ${c.speedMbps >= 1000 ? c.speedMbps / 1000 + 'G' : c.speedMbps + 'M'}` : ''}{hasAddress(c) ? ` · ${c.addresses?.filter((a) => !a.startsWith('fe80:')).join(', ')}` : ''}</span>
+            {#if wifi}<span class="muted small">{t('Wi-Fi cannot be a bridge port: make a NAT network through it instead (Networks → New network → Bridged → this card).')}</span>{/if}
           </label>
         {:else}
           <span class="muted small">{t('No free ports.')}</span>
@@ -294,5 +296,8 @@
   @media (max-width: 560px) {
     .pending { flex-wrap: wrap; }
     .row2 { grid-template-columns: 1fr; }
+  }
+  .check.off {
+    opacity: 0.65;
   }
 </style>
