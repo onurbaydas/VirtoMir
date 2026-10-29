@@ -9,8 +9,10 @@
 # /var/lib/virtomir and survive upgrades; "apt purge virtomir" deletes them.
 set -eu
 
-VERSION=${1:-$(git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo 0.0.0)}
-VERSION=$(printf %s "$VERSION" | sed 's/^v//; s/-/~/g') # Debian: "~" sorts before the release
+VERSION=${1:-$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null | sed 's/^v//' || echo 0.0.0)}
+# Debian: "~" sorts a candidate before its release; a build from main (1.1.1-19-gabc1234)
+# comes after its tag, so its commits are added with "+" (1.1.1+19.gabc1234).
+VERSION=$(printf %s "$VERSION" | sed -E 's/^v//; s/-([0-9]+)-(g[0-9a-f]+)(-dirty)?$/+\1.\2/; s/-/~/g')
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 ARCH=$(dpkg --print-architecture)
 NAME="virtomir_${VERSION}_${ARCH}"

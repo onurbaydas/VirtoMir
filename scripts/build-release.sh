@@ -4,7 +4,7 @@
 # Needs: go, node/npm, gcc, libpam0g-dev (Debian/Ubuntu) or pam-devel (Fedora/RHEL).
 set -eu
 
-VERSION=${1:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}
+VERSION=${1:-$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo dev)}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 ARCH=$(go env GOARCH)
 NAME="virtomir_${VERSION}_linux_${ARCH}"

@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -52,6 +53,13 @@ type Release struct {
 func (r *Release) pick(method string) {
 	name := assetFor(method, r)
 	r.Package, r.pkgURL, r.shaURL, r.sigURL = "", "", "", ""
+	if _, ok := r.assets[name]; !ok {
+		// GitHub renames some characters of uploaded files: a build of main's .deb
+		// (virtomir_1.1.1+19.gabc1234_amd64.deb) may be listed with "." for "+".
+		if alt := strings.ReplaceAll(name, "+", "."); r.assets[alt] != "" {
+			name = alt
+		}
+	}
 	if u, ok := r.assets[name]; ok {
 		r.Package, r.pkgURL = name, u
 	}
@@ -62,6 +70,7 @@ func (r *Release) pick(method string) {
 // AutoConfig defines automatic background update behavior (ADR-0036).
 type AutoConfig struct {
 	Enabled       bool      `json:"enabled"`       // periodic background check enabled
+	Channel       string    `json:"channel"`       // ChannelMain (default) or ChannelReleases
 	AutoInstall   bool      `json:"autoInstall"`   // automatically install newer release
 	IntervalHours int       `json:"intervalHours"` // interval between checks in hours (default 6)
 	LastCheckedAt time.Time `json:"lastCheckedAt,omitempty"`
@@ -145,6 +154,7 @@ func New(repo, current, token string) *Checker {
 		RunRPMInstaller: defaultRunRPMInstaller,
 		autoCfg: AutoConfig{
 			Enabled:       true,
+			Channel:       ChannelMain,
 			AutoInstall:   false,
 			IntervalHours: 6,
 			LastResult:    "Auto-updater active (checking every 6h)",
@@ -240,7 +250,7 @@ func (c *Checker) getWith(ctx context.Context, client *http.Client, url, accept 
 		resp.Body.Close()
 		switch resp.StatusCode {
 		case http.StatusNotFound:
-			return nil, errors.New("no published release found (a private repository needs VIRTOMIR_GITHUB_TOKEN in /etc/default/virtomird)")
+			return nil, errNoRelease
 		case http.StatusForbidden, http.StatusTooManyRequests:
 			return nil, errors.New("GitHub refused the request (rate limit); try again later")
 		}
@@ -249,8 +259,30 @@ func (c *Checker) getWith(ctx context.Context, client *http.Client, url, accept 
 	return resp, nil
 }
 
+var errNoRelease = errors.New("no published release found (a private repository needs VIRTOMIR_GITHUB_TOKEN in /etc/default/virtomird)")
+
+// Update channels.
+const (
+	ChannelMain     = "main"     // every change merged to main (the rolling "edge" release CI publishes)
+	ChannelReleases = "releases" // tagged releases only
+	// EdgeTag is the release CI replaces with a build of every push to main.
+	EdgeTag = "edge"
+)
+
+// latest is the newest build of the configured channel. Before CI has published a build of
+// main, the main channel gets the latest release.
 func (c *Checker) latest(ctx context.Context) (*Release, error) {
-	resp, err := c.get(ctx, fmt.Sprintf("%s/repos/%s/releases/latest", strings.TrimRight(c.API, "/"), c.Repo), "application/vnd.github+json")
+	if c.GetAutoConfig().Channel != ChannelReleases {
+		rel, err := c.release(ctx, "tags/"+EdgeTag)
+		if !errors.Is(err, errNoRelease) {
+			return rel, err
+		}
+	}
+	return c.release(ctx, "latest")
+}
+
+func (c *Checker) release(ctx context.Context, which string) (*Release, error) {
+	resp, err := c.get(ctx, fmt.Sprintf("%s/repos/%s/releases/%s", strings.TrimRight(c.API, "/"), c.Repo, which), "application/vnd.github+json")
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +302,11 @@ func (c *Checker) latest(ctx context.Context) (*Release, error) {
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&r); err != nil {
 		return nil, fmt.Errorf("unexpected answer from GitHub: %w", err)
 	}
-	rel := &Release{Tag: r.TagName, Version: DebVersion(r.TagName), Name: r.Name, Notes: r.Body, URL: r.HTMLURL, Published: r.PublishedAt,
+	tag := r.TagName
+	if tag == EdgeTag { // the build of main names its version: "VirtoMir v1.1.1-19-gabc1234"
+		tag = strings.TrimSpace(strings.TrimPrefix(r.Name, "VirtoMir"))
+	}
+	rel := &Release{Tag: tag, Version: DebVersion(tag), Name: r.Name, Notes: r.Body, URL: r.HTMLURL, Published: r.PublishedAt,
 		assets: map[string]string{}}
 	for _, a := range r.Assets {
 		u := a.Web
@@ -283,9 +319,20 @@ func (c *Checker) latest(ctx context.Context) (*Release, error) {
 	return rel, nil
 }
 
-// DebVersion turns a tag (v0.2.0-rc1) into the package version (0.2.0~rc1).
+// describeRE is the end of a build from main ("git describe"): N commits after the tag
+// (-19-gabc1234), or its Debian spelling (+19.gabc1234).
+var describeRE = regexp.MustCompile(`[-+](\d+)[-.](g[0-9a-f]+)(-dirty)?$`)
+
+// DebVersion turns a tag (v0.2.0-rc1) into the package version (0.2.0~rc1): "~" sorts a
+// candidate before its release. A build from main (v1.1.1-19-gabc1234) comes after its tag,
+// so its commits are added with "+" (1.1.1+19.gabc1234).
 func DebVersion(tag string) string {
-	return strings.ReplaceAll(strings.TrimPrefix(tag, "v"), "-", "~")
+	v, post := strings.TrimPrefix(tag, "v"), ""
+	if m := describeRE.FindStringSubmatchIndex(v); m != nil {
+		post = "+" + v[m[2]:m[3]] + "." + v[m[4]:m[5]]
+		v = v[:m[0]]
+	}
+	return strings.ReplaceAll(v, "-", "~") + post
 }
 
 func debArch() string {
@@ -311,25 +358,31 @@ func Newer(a, b string) bool {
 			return pa.n[i] > pb.n[i]
 		}
 	}
-	switch {
-	case pa.pre == pb.pre:
-		return false
-	case pa.pre == "":
-		return true // release after its candidates
-	case pb.pre == "":
-		return false
+	if pa.pre != pb.pre {
+		switch {
+		case pa.pre == "":
+			return true // release after its candidates
+		case pb.pre == "":
+			return false
+		}
+		return pa.pre > pb.pre
 	}
-	return pa.pre > pb.pre
+	return pa.post > pb.post // more commits after the same tag
 }
 
 type ver struct {
-	n   [3]int
-	pre string
+	n    [3]int
+	pre  string
+	post int // commits after the tag (a build from main)
 }
 
 func parse(s string) (ver, bool) {
 	s = strings.TrimPrefix(strings.TrimSpace(s), "v")
 	var v ver
+	if m := describeRE.FindStringSubmatchIndex(s); m != nil {
+		v.post, _ = strconv.Atoi(s[m[2]:m[3]])
+		s = s[:m[0]]
+	}
 	main, pre, _ := strings.Cut(strings.ReplaceAll(s, "-", "~"), "~")
 	v.pre = pre
 	parts := strings.Split(main, ".")
@@ -494,6 +547,15 @@ func (c *Checker) SetAutoConfig(cfg AutoConfig) error {
 		cfg.IntervalHours = 1
 	}
 	c.autoCfg.Enabled = cfg.Enabled
+	if cfg.Channel != ChannelReleases {
+		cfg.Channel = ChannelMain
+	}
+	if cfg.Channel != c.autoCfg.Channel {
+		c.mu.Lock()
+		c.cached = Status{} // the next check asks the other channel
+		c.mu.Unlock()
+	}
+	c.autoCfg.Channel = cfg.Channel
 	c.autoCfg.AutoInstall = cfg.AutoInstall
 	c.autoCfg.IntervalHours = cfg.IntervalHours
 	cur := c.autoCfg

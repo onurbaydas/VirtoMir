@@ -1,0 +1,115 @@
+name: Edge
+
+# Every push to main is built and replaces the "edge" pre-release: a tarball and a .deb for
+# amd64 and arm64, with signed checksums like a release. Hosts on the main update channel
+# install from it (internal/update, ChannelMain); "releases/latest" ignores pre-releases, so
+# hosts on the releases channel never see it.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: edge
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libpam0g-dev
+
+      # v1.1.1-19-gabc1234: the last release and the commits since. Only v* tags: the edge
+      # tag itself must never be the base.
+      - name: Version
+        run: echo "VERSION=$(git describe --tags --match 'v[0-9]*')" >>"$GITHUB_ENV"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Tarball with PAM
+        run: sh scripts/build-release.sh "$VERSION"
+
+      - name: Debian package
+        run: SKIP_WEB=1 sh scripts/build-deb.sh "$VERSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edge-${{ matrix.runner }}
+          path: |
+            out/*.tar.gz
+            out/*.deb
+            out/*.sha256
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Version
+        run: echo "VERSION=$(git describe --tags --match 'v[0-9]*')" >>"$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      # Updates install only a package whose .sha256 is signed with the repository key.
+      - name: Sign the checksums
+        env:
+          SIGNING_KEY: ${{ secrets.REPO_SIGNING_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.REPO_SIGNING_PASSPHRASE }}
+        run: |
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "::error::REPO_SIGNING_KEY is not set: the checksums cannot be signed, and VirtoMir refuses to update to unsigned builds"
+            exit 1
+          fi
+          export GNUPGHOME=$(mktemp -d)
+          key=$(mktemp)
+          printf '%s\n' "$SIGNING_KEY" | tr -d '\r' >"$key"
+          if ! grep -q -- '-----BEGIN PGP PRIVATE KEY BLOCK-----' "$key"; then
+            base64 -d "$key" >"$key.dec" && mv "$key.dec" "$key" # stored base64-encoded
+          fi
+          gpg --batch --import "$key"
+          rm -f "$key"
+          id=$(gpg --batch --with-colons --list-secret-keys | awk -F: '/^fpr/ {print $10; exit}')
+          for f in out/*.sha256; do
+            if [ -n "$GPG_PASSPHRASE" ]; then
+              printf %s "$GPG_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --local-user "$id" --armor --detach-sign -o "$f.asc" "$f"
+            else
+              gpg --batch --yes --local-user "$id" --armor --detach-sign -o "$f.asc" "$f"
+            fi
+            gpg --batch --verify "$f.asc" "$f"
+          done
+
+      # The updater reads the version from the title ("VirtoMir v1.1.1-19-gabc1234").
+      - name: Replace the edge release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete edge --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+          gh release create edge out/* --repo "$GITHUB_REPOSITORY" --prerelease --target "$GITHUB_SHA" \
+            --title "VirtoMir $VERSION" \
+            --notes "Build of main at $GITHUB_SHA. Hosts on the main update channel install it; it is replaced by every push to main."

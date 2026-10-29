@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -26,10 +27,22 @@ func TestNewer(t *testing.T) {
 		{"0.10.0", "0.9.0", true},
 		{"0.2.0", "dev", true},
 		{"dev", "0.2.0", false},
+		// Builds from main (git describe): commits after a tag come after it, never before.
+		{"v1.1.1", "v1.1.1-18-g753ec74", false}, // was offered as an "update": a downgrade
+		{"v1.1.1-18-g753ec74", "v1.1.1", true},
+		{"v1.1.1-19-gabc1234", "v1.1.1-18-g753ec74", true},
+		{"v1.1.1-18-g753ec74", "v1.1.1-18-g753ec74-dirty", false},
+		{"v1.2.0", "v1.1.1-40-gabc1234", true},
+		{"v1.2.0-rc1-3-gabc1234", "v1.2.0-rc1", true},
+		{"v1.2.0", "v1.2.0-rc1-3-gabc1234", true},
+		{"1.1.1+19.gabc1234", "1.1.1", true}, // the Debian spelling
 	} {
 		if got := Newer(c.a, c.b); got != c.want {
 			t.Errorf("Newer(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
 		}
+	}
+	if v := DebVersion("v1.1.1-19-gabc1234"); v != "1.1.1+19.gabc1234" {
+		t.Errorf("a build from main: %s (dpkg must sort it after 1.1.1)", v)
 	}
 	if DebVersion("v0.3.0-rc1") != "0.3.0~rc1" {
 		t.Error(DebVersion("v0.3.0-rc1"))
@@ -246,5 +259,41 @@ func TestAutoInstallDoesNotDeadlock(t *testing.T) {
 	}
 	if got := c.GetAutoConfig(); !ran || got.LastUpdatedAt.IsZero() || got.LastError != "" {
 		t.Errorf("ran = %v, config = %+v", ran, got)
+	}
+}
+
+func TestChannels(t *testing.T) {
+	edgePublished = true
+	t.Cleanup(func() { edgePublished = false })
+	signer := newTestSigner(t)
+	var srv *httptest.Server
+	srv = httptest.NewServer(signer.wrap(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repos/o/v/releases/tags/edge":
+			fmt.Fprintf(w, `{"tag_name":"edge","name":"VirtoMir v1.1.1-19-gabc1234","assets":[
+				{"name":"virtomir_v1.1.1-19-gabc1234_linux_%[1]s.tar.gz","browser_download_url":"%[2]s/tar"}]}`, runtime.GOARCH, srv.URL)
+		case "/repos/o/v/releases/latest":
+			fmt.Fprintf(w, `{"tag_name":"v1.1.1","name":"VirtoMir v1.1.1","assets":[
+				{"name":"virtomir_v1.1.1_linux_%[1]s.tar.gz","browser_download_url":"%[2]s/tar"}]}`, runtime.GOARCH, srv.URL)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	c := New("o/v", "v1.1.1-18-g753ec74", "")
+	c.API = srv.URL
+	c.Installed = func() (bool, string) { return true, "" }
+	c.Method = func() string { return MethodBinary }
+	c.InitConfig(t.TempDir())
+
+	st := c.Check(context.Background(), true)
+	if !st.Available || st.Latest.Tag != "v1.1.1-19-gabc1234" || st.Latest.Package == "" {
+		t.Fatalf("main channel: %+v %+v", st, st.Latest)
+	}
+	if err := c.SetAutoConfig(AutoConfig{Enabled: true, Channel: ChannelReleases, IntervalHours: 6}); err != nil {
+		t.Fatal(err)
+	}
+	if st := c.Check(context.Background(), false); st.Available || st.Latest.Tag != "v1.1.1" {
+		t.Errorf("releases channel offered v1.1.1 to a newer build of main: %+v", st)
 	}
 }

@@ -22,8 +22,8 @@
   let running = $state(0)
 
   $effect(() => {
-    void api.get<{ available: boolean; latest?: { version: string } }>('/api/v1/update')
-      .then((u) => (newer = u.available ? (u.latest?.version ?? '') : ''))
+    void api.get<{ available: boolean; latest?: { tag: string; version: string } }>('/api/v1/update')
+      .then((u) => (newer = u.available ? (u.latest?.tag ?? u.latest?.version ?? '') : ''))
       .catch(() => {})
     const poll = async () => {
       try {
@@ -87,7 +87,7 @@
 
   <div class="right">
     {#if newer}
-      <a class="signal accent" href="/account" onclick={router.link} title={t('A newer VirtoMir release is available')}><ArrowUpCircle size={14} /> {newer}</a>
+      <a class="signal accent" href="/settings" onclick={router.link} title={t('A newer VirtoMir release is available')}><ArrowUpCircle size={14} /> {newer}</a>
     {/if}
     {#if quorum && !quorum.ok}
       <a class="signal danger" href="/cluster" onclick={router.link} title={t('High availability: this host sees {votes} of {total} votes', { votes: quorum.votes, total: quorum.total })}><TriangleAlert size={14} /> {t('No quorum')}</a>

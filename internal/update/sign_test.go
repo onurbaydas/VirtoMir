@@ -40,8 +40,15 @@ func newTestSigner(t *testing.T) *testSigner {
 }
 
 // wrap serves /sig: the signature of whatever h serves at /sha.
+// edgePublished: the fake GitHub has a build of main (tests of the main channel set it).
+var edgePublished bool
+
 func (s *testSigner) wrap(t *testing.T, h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/releases/tags/"+EdgeTag) && !edgePublished {
+			http.NotFound(w, r) // like GitHub before CI published a build of main
+			return
+		}
 		if r.URL.Path != "/sig" {
 			h(w, r)
 			return
@@ -85,6 +92,8 @@ func TestInstallRefusesUnsignedOrForeignChecksum(t *testing.T) {
 					w.Write([]byte(tc.sig(s)))
 				case "/deb":
 					t.Error("the package was downloaded before its checksum was proven signed")
+				default:
+					http.NotFound(w, r)
 				}
 			}))
 			defer srv.Close()

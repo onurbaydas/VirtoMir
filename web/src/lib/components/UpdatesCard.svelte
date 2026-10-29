@@ -11,6 +11,8 @@
 
   interface AutoConfig {
     enabled: boolean
+    /** main: every change merged to main (the edge build); releases: tagged releases only. */
+    channel?: 'main' | 'releases'
     autoInstall: boolean
     intervalHours: number
     lastCheckedAt?: string
@@ -68,6 +70,13 @@
     }
   }
 
+  async function setChannel(c: 'main' | 'releases') {
+    if (!st?.auto) return
+    st.auto.channel = c
+    await saveAutoConfig()
+    await check(true)
+  }
+
   async function install() {
     installing = true
     try {
@@ -84,13 +93,38 @@
 <section class="ui-panel card">
   <header>
     <h2>{t('Updates')}</h2>
-    <button class="ui-btn sm ghost" disabled={checking} onclick={() => check(true)}><RefreshCw size={13} /> {checking ? t('Checking…') : t('Check now')}</button>
+    <span class="head-acts">
+      <button class="ui-btn sm ghost" disabled={checking} onclick={() => check(true)}><RefreshCw size={13} /> {checking ? t('Checking…') : t('Check for updates')}</button>
+      <!-- Lit only when there is something newer; the reason shows when this host cannot install. -->
+      <button
+        class="ui-btn sm"
+        class:primary={st?.available}
+        class:lit={st?.available && st.installable}
+        disabled={installing || !st?.available || !st.installable || !session.can('admin')}
+        title={st && !st.available ? t('Up to date.') : st && !st.installable ? t('Cannot install from here: {reason}', { reason: st.reason }) : session.why('admin')}
+        onclick={install}
+      ><Download size={13} /> {installing ? t('Starting…') : st?.available ? t('Update to {v}', { v: st.latest?.tag ?? '' }) : t('Update')}</button>
+    </span>
   </header>
+  {#if st?.auto && session.can('admin')}
+    <div class="channel" role="radiogroup" aria-label={t('Update from')}>
+      <label class:on={st.auto.channel !== 'releases'}>
+        <input type="radio" name="channel" value="main" checked={st.auto.channel !== 'releases'} onchange={() => setChannel('main')} disabled={savingAuto} />
+        <strong>{t('Every change on main')}</strong>
+        <span>{t('Built and signed by GitHub for every push to main.')}</span>
+      </label>
+      <label class:on={st.auto.channel === 'releases'}>
+        <input type="radio" name="channel" value="releases" checked={st.auto.channel === 'releases'} onchange={() => setChannel('releases')} disabled={savingAuto} />
+        <strong>{t('Releases only')}</strong>
+        <span>{t('Only tagged versions (v1.2.0, …).')}</span>
+      </label>
+    </div>
+  {/if}
   {#if error}<div class="ui-error-box">{error}</div>{/if}
   {#if st}
     <p class="line">{t('This host runs')} <b class="mono">{st.current}</b>.
       {#if st.latest}
-        {t('Newest release{v}:', { v: st.repo ? ` on ${st.repo}` : '' })} <b class="mono">{st.latest.version}</b>{st.latest.published ? ` (${new Date(st.latest.published).toLocaleDateString()})` : ''}.
+        {st.auto?.channel === 'releases' ? t('Newest release{v}:', { v: st.repo ? ` on ${st.repo}` : '' }) : t('Newest build of main:')} <b class="mono">{st.latest.tag}</b>{st.latest.published ? ` (${new Date(st.latest.published).toLocaleString()})` : ''}.
       {/if}
     </p>
     {#if st.error}
@@ -99,16 +133,7 @@
       <div class="avail">
         <strong>{st.latest?.name || st.latest?.tag} is available.</strong>
         {#if st.latest?.notes}<pre class="notes">{st.latest.notes.slice(0, 1500)}</pre>{/if}
-        <div class="acts">
-          <!-- Always show the button: disabled with the reason when this host cannot install, so it never just "disappears". -->
-          <button
-            class="ui-btn primary"
-            disabled={installing || !st.installable || !session.can('admin')}
-            title={!st.installable ? t('Cannot install from here: {reason}', { reason: st.reason }) : session.why('admin')}
-            onclick={install}
-          ><Download size={14} /> {installing ? t('Starting…') : t('Install {v}', { v: st.latest?.version ?? '' })}</button>
-          {#if st.latest?.url}<a class="ui-btn ghost" href={st.latest.url} target="_blank" rel="noopener"><ExternalLink size={13} /> {t('Release notes')}</a>{/if}
-        </div>
+        {#if st.latest?.url}<div class="acts"><a class="ui-btn ghost" href={st.latest.url} target="_blank" rel="noopener"><ExternalLink size={13} /> {t('Release notes')}</a></div>{/if}
         {#if !st.installable}<div class="ui-error-box">{t('Cannot install from here: {reason}', { reason: st.reason })}</div>{/if}
         <p class="muted small">{t('In a cluster, update every host (switch host in the sidebar). The download is checked against the release\'s SHA-256; settings and machines are kept.')}</p>
       </div>
@@ -135,7 +160,7 @@
           <div class="auto-details">
             <label class="check-row">
               <input type="checkbox" bind:checked={st.auto.autoInstall} onchange={saveAutoConfig} disabled={savingAuto} />
-              <span>{t('Automatically install new releases and restart daemon')}</span>
+              <span>{t('Install updates by themselves and restart VirtoMir (waits for running jobs)')}</span>
             </label>
 
             <div class="freq-row">
@@ -169,7 +194,16 @@
 
 <style>
   .card { padding: 16px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-  header { display: flex; justify-content: space-between; align-items: center; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; }
+  .head-acts { display: flex; gap: 6px; }
+  .lit { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); animation: lit 1.6s ease-in-out infinite; }
+  @keyframes lit { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 15%, transparent); } }
+  @media (prefers-reduced-motion: reduce) { .lit { animation: none; } }
+  .channel { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+  .channel label { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; font-size: 12.5px; color: var(--text-2); }
+  .channel label.on { border-color: var(--accent); background: var(--surface-2); }
+  .channel input { position: absolute; opacity: 0; pointer-events: none; }
+  .channel strong { color: var(--text); font-size: 13px; }
   h2 { margin: 0; font-size: 15px; }
   .line { margin: 0; }
   .avail { border-left: 3px solid var(--accent); padding-left: 12px; display: flex; flex-direction: column; gap: 8px; }

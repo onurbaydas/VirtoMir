@@ -8,8 +8,9 @@
 # (Fedora 40+, RHEL 10). In-app updates only install .deb packages; update RPM hosts with dnf.
 set -eu
 
-VERSION=${1:-$(git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo 0.0.0)}
-VERSION=$(printf %s "$VERSION" | sed 's/^v//; s/-/~/g') # RPM: "~" sorts before the release
+VERSION=${1:-$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null | sed 's/^v//' || echo 0.0.0)}
+# RPM: "~" sorts a candidate before its release, "^" a build from main after its tag.
+VERSION=$(printf %s "$VERSION" | sed -E 's/^v//; s/-([0-9]+)-(g[0-9a-f]+)(-dirty)?$/^\1.\2/; s/-/~/g')
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-$ROOT/out}
 case $(go env GOARCH) in
