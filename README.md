@@ -18,6 +18,8 @@
   <a href="https://github.com/onurbaydas/VirtoMir/discussions">Discussions</a>
 </p>
 
+<p align="center"><b>Want to help?</b> No server needed: <code>cd web && npm install && npm run dev:demo</code> runs the whole UI against a pretend cluster. Pick a <a href="https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22">good first issue</a> (translations, alert channels, tests, docs) and see <a href="CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>
+
 VirtoMir is a modern web control panel for **KVM / QEMU / libvirt** that tries to be two things at once:
 
 - **Effortless** — create and run a VM without knowing much about virtualization.
