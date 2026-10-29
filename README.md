@@ -97,6 +97,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 ### Storage & networks
 
 - Storage pools and volumes, **ISO / cloud image upload** with progress, grow volumes
+- **Bridged networks on any host interface** (wired, Wi-Fi, bonds, VLANs, internal bridges): a wired port gets a bridge made for it; on **Wi-Fi** machines are bridged the way VirtualBox and VMware Workstation do it: they get their address from the LAN's own DHCP server and are seen on the LAN by it, while their frames go out with the host's MAC address (IPv4 only; the host watches its gateway and removes the bridge if it ever loses it)
 - Virtual networks (NAT, isolated, routed, bridged) with **IPv4 and IPv6** (SLAAC, DHCPv6, NAT66), DHCP leases with machine names, **reserved addresses**
 - **Cross-Host VXLAN Overlay (SDN)**: one layer-2 network spanning several hosts, tunnelled over their existing network (UDP 4789) without switch changes; created cluster-wide, every member gets the others as peers and one host is the gateway (NAT, DHCP); VirtoMir keeps the tunnel devices in place, also after a reboot
 - **Software-defined networking on OVN** *(experimental, not yet run on a real OVN cluster)*: per-project **VPCs** with subnets, OVN-native DHCP and a distributed router, static routes, an **external gateway** with SNAT, **floating IPs**, **security groups** (stateful rules, default deny, rules between groups), **load balancers** with TCP/UDP health checks and **IPsec** for the Geneve tunnels; a machine's adapter can be put on a VPC subnet when it is created or later
@@ -106,6 +107,9 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 - **Packet capture** on any host interface (tcpdump): watch it live or download a `.pcap` for Wireshark
 - **Download images from a URL** straight into a pool, verified against a SHA-256; find **unused disk images**
 - **NFS, iSCSI and Ceph RBD storage**, and one pool on every host of a cluster in a single step
+- **Network storage found by itself**: NFS exports, SMB shares and iSCSI targets on the LAN, Fibre Channel ports and SAN LUNs (multipath switched on when a LUN has several paths) are listed; one click connects them (iSCSI CHAP, SMB sign-in, mounts that survive a reboot) and makes a pool
+- **Pools of a chosen size from free space**: carved from an empty disk, a volume group's free extents or a zpool (a dataset with a quota), formatted and mounted below `/srv/virtomir`; removing the pool gives the space back
+- **Datastore browser** for every pool of files: browse, upload, download, copy, move, rename and delete, never outside the pool, and never a file a machine uses
 - **Content library**: ISO images, cloud images and templates kept in versions, synced to the other hosts and deployed as new machines from there
 - **LVM and ZFS**: use an existing volume group or zpool, or build a new volume group from empty disks (a disk with data on it is refused, never overwritten)
 - **VLANs** on Open vSwitch bridges (per network or per adapter), and one network on every host in a single step
@@ -151,7 +155,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 - **API tokens** for scripts and automation, limited to their owner's role
 - HTTPS by default (self-signed certificate created on first start, or your own)
 - Session timeouts, lockout after failed sign-ins, CSRF protection, **activity log** of every change (CSV export)
-- **Updates** from the GitHub releases in the UI (Host settings → Updates): downloaded, checked against the published SHA-256 and its OpenPGP signature, and installed with apt
+- **Updates** in the UI (Host settings → Updates): from the GitHub releases, or from `main` (the rolling `edge` build of every push); downloaded, checked against the published SHA-256 and its OpenPGP signature, and installed with apt or dnf. Automatic updates can be switched off; "Check for updates" asks now, and the Update button lights up when there is one
 
 ### Automation
 
@@ -219,7 +223,7 @@ Every package does the host setup itself: it pulls in libvirt and QEMU/KVM, star
 sudo dnf install ./virtomir-1.1.1-1.x86_64.rpm   # or .aarch64.rpm; Fedora 40+ / RHEL 10
 ```
 
-Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf`, not from the UI. Built with `scripts/build-rpm.sh <version>`. With SELinux on, the package (and `install.sh`) loads a small policy module, `virtomir`: without it libvirt refuses virtomird ("Cannot find start time for pid") and QEMU cannot write backups. A backup location other than `/var/lib/virtomir/backups` needs `semanage fcontext -a -t virt_image_t "<dir>(/.*)?"` and `restorecon -R <dir>`.
+Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf` or from the UI. Built with `scripts/build-rpm.sh <version>`. With SELinux on, the package (and `install.sh`) loads a small policy module, `virtomir`: without it libvirt refuses virtomird ("Cannot find start time for pid") and QEMU cannot write backups; it also labels carved pools and lets libvirt's storage daemon use iSCSI, NFS and SMB where that daemon is enforcing. A backup location other than `/var/lib/virtomir/backups` needs `semanage fcontext -a -t virt_image_t "<dir>(/.*)?"` and `restorecon -R <dir>`.
 
 ### Tarball
 
