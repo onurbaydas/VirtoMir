@@ -40,6 +40,14 @@ func Prepare(ctx context.Context, r Runner, kind string) error {
 	return nil
 }
 
+// PrepareBase makes Base with its SELinux label (virtomir.cil) before libvirt or a mount
+// puts a pool below it; made by libvirt it would be var_t, which its daemons may not use.
+func PrepareBase(ctx context.Context, r Runner) {
+	if err := os.MkdirAll(Base, 0o755); err == nil {
+		_, _ = r.Run(ctx, "restorecon", Base)
+	}
+}
+
 // selinuxBool turns on an SELinux boolean for good; without SELinux there is none.
 func selinuxBool(ctx context.Context, r Runner, name string) {
 	if _, err := r.Run(ctx, "selinuxenabled"); err != nil {

@@ -173,6 +173,7 @@ func (s *Server) connectHere(ctx context.Context, req connectRequest) error {
 	if err := storconn.Prepare(ctx, s.cephRunner, req.Kind); err != nil {
 		return err
 	}
+	storconn.PrepareBase(ctx, s.cephRunner)
 	switch req.Kind {
 	case storconn.KindNFS:
 		return s.backend.CreatePool(virt.PoolSpec{Name: req.Pool, Type: "netfs", Host: req.Server, Export: req.Name,
