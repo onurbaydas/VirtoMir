@@ -282,6 +282,9 @@ func (s *Server) guard(next http.Handler) http.Handler {
 		s.captureConfig(path, "")
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
+		if rec.Header().Get("Idempotent-Replayed") != "" {
+			return // the answer of a write already done and recorded (replay.go)
+		}
 		if rec.status < 400 {
 			s.captureConfig(path, id.Name)
 		}

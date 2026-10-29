@@ -263,13 +263,24 @@ async function send(method: string, path: string, opts: SendOpts = {}): Promise<
     headers['Content-Type'] = 'application/json'
     body = JSON.stringify(opts.json)
   } else if (opts.contentType) headers['Content-Type'] = opts.contentType
-  let res: Response
+  // The browser drops a request under way when the host's network changes (Chrome:
+  // ERR_NETWORK_CHANGED), and creating a network or starting a machine changes it. Such a
+  // request is sent again; a write carries an Idempotency-Key, so VirtoMir answers it with
+  // the first answer instead of doing the work twice.
+  if (method !== 'GET' && method !== 'HEAD') headers['Idempotency-Key'] = crypto.randomUUID()
+  let res: Response | undefined
   const started = performance.now()
-  try {
-    res = await fetch(path, { method, headers, body })
-  } catch {
-    apiLog.add({ time: Date.now(), method, path, status: 0, ms: Math.round(performance.now() - started) })
-    throw new ApiError('VirtoMir is not reachable', 0)
+  for (let attempt = 0; !res; attempt++) {
+    try {
+      res = await fetch(path, { method, headers, body })
+    } catch {
+      if (attempt < 3 && !(body instanceof ReadableStream)) {
+        await new Promise((r) => setTimeout(r, 700 * (attempt + 1)))
+        continue
+      }
+      apiLog.add({ time: Date.now(), method, path, status: 0, ms: Math.round(performance.now() - started) })
+      throw new ApiError('VirtoMir is not reachable', 0)
+    }
   }
   apiLog.add({ time: Date.now(), method, path, status: res.status, ms: Math.round(performance.now() - started) })
   if (!res.ok) {
