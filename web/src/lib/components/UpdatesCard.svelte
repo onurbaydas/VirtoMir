@@ -176,7 +176,7 @@
             {#if st.auto.lastResult}
               <p class="muted small">{t('Status: {res}', { res: st.auto.lastResult })}</p>
             {/if}
-            {#if st.auto.lastUpdatedAt}
+            {#if st.auto.lastUpdatedAt && !st.auto.lastUpdatedAt.startsWith('0001')}<!-- Go's zero time: never -->
               <p class="muted small">{t('Last auto-upgrade: {time}', { time: new Date(st.auto.lastUpdatedAt).toLocaleString() })}</p>
             {/if}
             {#if st.auto.lastError}
