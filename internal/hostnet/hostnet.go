@@ -269,6 +269,9 @@ func (m *Manager) validate(s *Spec) (map[string]hostinfo.Interface, error) {
 		if it.Master != "" {
 			return refusedf("%s is already part of %s.", p, it.Master)
 		}
+		if it.Wireless && s.Kind == "bridge" {
+			return refusedf("%s is Wi-Fi: an access point drops frames from other machines' MAC addresses, so it cannot be a bridge port. Give machines NAT through it instead.", p)
+		}
 		return nil
 	}
 	switch s.Kind {

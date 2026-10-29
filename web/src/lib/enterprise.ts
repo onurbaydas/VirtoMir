@@ -381,6 +381,8 @@ export interface GPUCandidate {
 export interface HostInterface {
   name: string
   kind: 'physical' | 'bond' | 'bridge' | 'vlan' | 'tap' | 'veth' | 'loopback' | 'virtual'
+  /** A Wi-Fi card: an uplink for NAT, never a bridge port. */
+  wireless?: boolean
   mac?: string
   mtu?: number
   state: string

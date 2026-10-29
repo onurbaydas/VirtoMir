@@ -13,7 +13,10 @@ import (
 type Interface struct {
 	Name string `json:"name"`
 	// Kind: physical, bond, bridge, vlan, tap (a machine's NIC), veth, loopback, virtual.
-	Kind      string   `json:"kind"`
+	Kind string `json:"kind"`
+	// Wireless: a Wi-Fi card (physical). Wi-Fi cannot carry other machines' MAC addresses,
+	// so it can be an uplink for NAT but not a bridge port.
+	Wireless  bool     `json:"wireless,omitempty"`
 	MAC       string   `json:"mac,omitempty"`
 	MTU       int      `json:"mtu,omitempty"`
 	State     string   `json:"state"`               // up, down, unknown, lowerlayerdown, …
@@ -77,6 +80,7 @@ func (r *Reader) Interfaces(addrs func(name string) []string) []Interface {
 			it.Kind = "tap"
 		case hasDevice == nil:
 			it.Kind = "physical"
+			it.Wireless = exists(filepath.Join(d, "wireless")) || exists(filepath.Join(d, "phy80211"))
 		case r.read(rel+"/iflink") != r.read(rel+"/ifindex"):
 			it.Kind = "veth"
 		default:

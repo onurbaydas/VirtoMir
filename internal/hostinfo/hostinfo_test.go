@@ -169,6 +169,9 @@ func TestInterfaces(t *testing.T) {
 		"sys/class/net/eno1/speed":               "10000",
 		"sys/class/net/eno1/statistics/rx_bytes": "1000",
 		"sys/class/net/eno1/device/vendor":       "0x8086",
+		"sys/class/net/wlp2s0/operstate":         "up",
+		"sys/class/net/wlp2s0/device/vendor":     "0x8086",
+		"sys/class/net/wlp2s0/phy80211/name":     "phy0",
 		"sys/class/net/bond0/operstate":          "up",
 		"sys/class/net/bond0/bonding/slaves":     "eno2 eno1",
 		"sys/class/net/bond0/bonding/mode":       "802.3ad 4",
@@ -196,8 +199,11 @@ func TestInterfaces(t *testing.T) {
 	}
 	check("lo", "loopback")
 	e := check("eno1", "physical")
-	if e.MTU != 9000 || e.SpeedMbps != 10000 || e.RxBytes != 1000 || e.MAC != "aa:bb:cc:00:00:01" {
+	if e.MTU != 9000 || e.SpeedMbps != 10000 || e.RxBytes != 1000 || e.MAC != "aa:bb:cc:00:00:01" || e.Wireless {
 		t.Errorf("eno1 = %+v", e)
+	}
+	if w := check("wlp2s0", "physical"); !w.Wireless {
+		t.Errorf("Wi-Fi not recognized: %+v", w)
 	}
 	b := check("bond0", "bond")
 	if b.BondMode != "802.3ad" || len(b.Members) != 2 || b.Members[0] != "eno1" {

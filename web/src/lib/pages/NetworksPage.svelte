@@ -143,17 +143,58 @@
     withV6 = false
     formErr = ''
     dlg = true
-    if (!spec.bridge && hostBridges[0]) spec.bridge = hostBridges[0]
+    const pick = uplinks.find((u) => u.how === 'use' && !/^(virbr|docker)/.test(u.name)) ?? uplinks.find((u) => u.how === 'make') ?? uplinks[0]
+    spec.bridge = pick?.name ?? ''
   }
-  let hostBridges = $derived(hostIfs.filter((i) => i.kind === 'bridge' && !i.name.startsWith('virbr')).map((i) => i.name))
+  // Where a bridged network goes out: any interface of the host. A bridge is used as it is; a
+  // wired port, bond or VLAN goes into a bridge VirtoMir makes (taking over its address); Wi-Fi
+  // cannot be bridged, so machines reach the network through it with NAT.
+  type Uplink = { name: string; how: 'use' | 'make' | 'nat'; kind: string; detail: string; port: HostInterface }
+  let uplinks = $derived<Uplink[]>(
+    hostIfs.flatMap((i): Uplink[] => {
+      const addr = (i.addresses ?? []).filter((a) => !a.startsWith('fe80')).join(', ')
+      const state = i.state === 'up' ? (i.speedMbps ? `${i.speedMbps} Mbit/s` : t('connected')) : t('no link')
+      const detail = [state, addr].filter(Boolean).join(' · ')
+      if (i.kind === 'bridge') return [{ name: i.name, how: 'use', kind: t('Bridge'), detail: [addr, i.members?.length ? t('ports: {list}', { list: i.members.join(', ') }) : ''].filter(Boolean).join(' · '), port: i }]
+      if (i.master) return []
+      if (i.kind === 'physical') return [{ name: i.name, how: i.wireless ? 'nat' : 'make', kind: i.wireless ? t('Wi-Fi') : t('Wired port'), detail, port: i }]
+      if (i.kind === 'bond') return [{ name: i.name, how: 'make', kind: t('Bond'), detail, port: i }]
+      if (i.kind === 'vlan') return [{ name: i.name, how: 'make', kind: t('VLAN {id}', { id: i.vlanId ?? '' }), detail, port: i }]
+      return []
+    }),
+  )
+  let chosen = $derived(uplinks.find((u) => u.name === spec.bridge))
+  const bridgeName = (port: string) => `br-${port}`.slice(0, 15)
+
+  // Puts a port into a new bridge. Its address moves to the bridge, so the host may not answer
+  // for a moment: the change is confirmed once it answers again, else it rolls back by itself.
+  async function makeBridge(u: Uplink): Promise<string> {
+    const name = bridgeName(u.name)
+    const hasAddr = (u.port.addresses ?? []).some((a) => !a.startsWith('fe80'))
+    const p = await ent.createHostIf({ kind: 'bridge', name, ports: [u.name], takeAddressFrom: hasAddr ? u.name : undefined })
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 1500))
+      try {
+        await ent.confirmHostNet(p.id)
+        return name
+      } catch {
+        /* not answering yet */
+      }
+    }
+    throw new Error(t('The host did not answer after the change, so it is being undone by itself.'))
+  }
   let everywhere = $state(true)
   async function create(e: SubmitEvent) {
     e.preventDefault()
     busy = true
     formErr = ''
     try {
+      const how = spec.mode === 'bridge' && !spec.ovs ? chosen?.how : undefined
+      if (how === 'make') spec.bridge = await makeBridge(chosen!)
       const body: NetworkSpec =
-        spec.mode === 'bridge'
+        how === 'nat'
+          ? { name: spec.name, mode: 'nat', subnet: freeV4(usedNets.map((u) => u.cidr)) ?? '10.200.0.0/24', dhcp: true }
+          : spec.mode === 'bridge'
           ? { name: spec.name, mode: 'bridge', bridge: spec.bridge, dhcp: false, ovs: spec.ovs, vlan: spec.ovs && spec.vlan ? Number(spec.vlan) : undefined }
           : spec.mode === 'vxlan'
             ? {
@@ -177,7 +218,7 @@
                 dhcp6: withV6 && spec.dhcp6,
               }
 
-      if (cluster.clustered && everywhere) {
+      if (cluster.clustered && everywhere && how !== 'make') {
         const res = await api.createClusterNetwork(body)
         const failed = res.filter((r) => !r.ok)
         if (failed.length === res.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
@@ -448,18 +489,34 @@
       {/each}
     </div>
     {#if spec.mode === 'bridge'}
-      <label class="ui-field">
-        <span class="label">{t('Host bridge')}</span>
-        <input class="ui-input mono" bind:value={spec.bridge} placeholder={hostBridges[0] ?? 'br0'} list="host-bridges" required />
-        <datalist id="host-bridges">{#each hostBridges as b (b)}<option value={b}></option>{/each}</datalist>
-        <span class="hint">
-          {#if hostBridges.length}
-            {t('Bridges on this host: {list}.', { list: hostBridges.join(', ') })}
-          {:else}
-            {t('This host has no bridge yet. Create one from a network port under "Host wiring" below.')}
-          {/if}
-        </span>
-      </label>
+      {#if spec.ovs}
+        <label class="ui-field">
+          <span class="label">{t('Open vSwitch bridge')}</span>
+          <input class="ui-input mono" bind:value={spec.bridge} placeholder="ovsbr0" required />
+        </label>
+      {:else}
+        <div class="ui-field">
+          <span class="label">{t('Connect the machines through')}</span>
+          <div class="uplinks" role="radiogroup" aria-label={t('Connect the machines through')}>
+            {#each uplinks as u (u.name)}
+              <label class="mode-opt" class:on={spec.bridge === u.name}>
+                <input type="radio" name="uplink" value={u.name} bind:group={spec.bridge} />
+                <strong><span class="mono">{u.name}</span> · {u.kind}</strong>
+                {#if u.detail}<span>{u.detail}</span>{/if}
+              </label>
+            {/each}
+          </div>
+          <span class="hint">
+            {#if chosen?.how === 'use'}
+              {t('Machines join this bridge and appear on its network like real computers.')}
+            {:else if chosen?.how === 'make'}
+              {t('VirtoMir puts {port} into a new bridge {bridge} and moves its address there. If the host stops answering, the change undoes itself.', { port: chosen.name, bridge: bridgeName(chosen.name) })}
+            {:else if chosen?.how === 'nat'}
+              {t("Wi-Fi cannot carry other machines' own addresses (the access point drops them), so the machines reach the network through {port} with NAT, on a free subnet.", { port: chosen.name })}
+            {/if}
+          </span>
+        </div>
+      {/if}
       <label class="ui-switch"><input type="checkbox" bind:checked={spec.ovs} /> {t('It is an Open vSwitch bridge')}</label>
       {#if spec.ovs}
         <label class="ui-field">
@@ -722,6 +779,11 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
+  }
+  .uplinks {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
   }
   .modes {
     display: grid;

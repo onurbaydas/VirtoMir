@@ -83,6 +83,7 @@ func newTestManager(t *testing.T, f *fakeHost, look ...string) *Manager {
 				{Name: "eth0", Kind: "physical", MAC: "00:15:5d:01:68:00", Addresses: []string{"192.168.77.10/24", "fe80::1/64"}},
 				{Name: "eth1", Kind: "physical", Addresses: []string{"fe80::2/64"}},
 				{Name: "eth2", Kind: "physical", Master: "br9"},
+				{Name: "wlan0", Kind: "physical", Wireless: true},
 				{Name: "virbr0", Kind: "bridge"},
 				{Name: "vnet3", Kind: "tap"},
 			}
@@ -120,6 +121,7 @@ func TestValidate(t *testing.T) {
 		{Kind: "bridge", Name: "br0", Ports: []string{"virbr0"}},                        // libvirt's
 		{Kind: "bridge", Name: "br0", Ports: []string{"eth1"}, TakeAddressFrom: "eth0"}, // not a port
 		{Kind: "bridge", Name: "br0", Ports: []string{"eth1", "eth1"}},
+		{Kind: "bridge", Name: "br0", Ports: []string{"wlan0"}}, // Wi-Fi cannot be a bridge port
 		{Kind: "bond", Name: "bond0"},
 		{Kind: "bond", Name: "bond0", Ports: []string{"eth1"}, BondMode: "fastest"},
 		{Kind: "vlan", Name: "eth1.5000", Parent: "eth1", VLAN: 5000},
