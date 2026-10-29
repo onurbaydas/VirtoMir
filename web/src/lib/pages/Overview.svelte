@@ -18,6 +18,7 @@
   import NoisyNeighborsPanel from '../components/NoisyNeighborsPanel.svelte'
   import CapacitySimulator from '../components/CapacitySimulator.svelte'
   import DrsRecommendationDeck from '../components/DrsRecommendationDeck.svelte'
+  import RecentActivity from '../components/RecentActivity.svelte'
   import { cluster } from '../cluster.svelte'
 
   let histRange = $state<Range>('24h')
@@ -63,6 +64,9 @@
   </div>
 </header>
 
+<!-- Wide screens: host and history on the left, what moves (busy machines, changes, DRS) on the right. -->
+<div class="ov">
+<div class="ov-main">
 <HostChassisCard hostname={host?.hostname ?? ''} />
 
 <section class="stats">
@@ -126,12 +130,6 @@
   </section>
 {/if}
 
-<NoisyNeighborsPanel />
-
-{#if cluster.clustered}<CapacitySimulator />{/if}
-
-{#if cluster.clustered}<DrsRecommendationDeck />{/if}
-
 <section class="ui-panel history">
   <header class="h-head">
     <h2>{t('Host history')}</h2>
@@ -167,8 +165,40 @@
     />
   </div>
 </section>
+</div>
+
+<aside class="ov-side">
+  <NoisyNeighborsPanel />
+  <RecentActivity />
+  {#if cluster.clustered}<CapacitySimulator />{/if}
+  {#if cluster.clustered}<DrsRecommendationDeck />{/if}
+</aside>
+</div>
 
 <style>
+  .ov {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0 24px;
+    align-items: start;
+  }
+  .ov-side {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 20px;
+    min-width: 0;
+  }
+  @media (min-width: 1700px) {
+    .ov {
+      grid-template-columns: minmax(0, 1.7fr) minmax(400px, 1fr);
+    }
+    .ov-side {
+      position: sticky;
+      top: 16px;
+      margin-top: 0;
+    }
+  }
   .head-right {
     display: flex;
     align-items: center;

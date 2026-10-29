@@ -198,6 +198,34 @@
           <span class="count alert" class:crit={alerts.critical} title={t('{open} unacknowledged', { open: alerts.open })}>{alerts.open}</span>
         {/if}
       </a>
+      {#if n.name === 'machines'}
+        <!-- The machines themselves, right under "Machines". -->
+        {#if domains.length > 6}
+          <input class="filter" type="search" bind:value={vmFilter} placeholder={t('Filter')} spellcheck="false" aria-label={t('Filter machines')} />
+        {/if}
+        <div class="machines" aria-label={t('Machines')}>
+          {#each filteredDomains as d (d.uuid)}
+            <a
+              class="item machine"
+              class:active={current === d.uuid}
+              href={machineHref(d.uuid)}
+              aria-current={current === d.uuid ? 'page' : undefined}
+              onclick={router.link}
+              title="{d.name}: {d.state}"
+            >
+              <span class="mdot" class:on={isActive(d.state)} class:paused={d.state === 'paused'} class:crashed={d.state === 'crashed'}></span>
+              <span class="mname">{d.name}</span>
+              {#if d.template}<span class="tag">{t('template')}</span>{/if}
+            </a>
+          {/each}
+          {#if session.canCreate}
+            <a class="item machine add" class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link}>
+              <Plus size={13} />
+              <span class="mname">{t('New machine')}</span>
+            </a>
+          {/if}
+        </div>
+      {/if}
     {/each}
     {#each GROUPS as g (g.id)}
       {@const open = isOpen(g.id) || holdsRoute(g)}
@@ -225,35 +253,6 @@
     {/each}
   </nav>
 
-  <div class="section">
-    <span>{t('Machines')}</span>
-    {#if session.canCreate}
-      <a class="add" class:active={router.route.name === 'new'} href="/machines/new" onclick={router.link} title={t('New machine')} aria-label={t('New machine')}>
-        <Plus size={14} />
-      </a>
-    {/if}
-  </div>
-  {#if domains.length > 6}
-    <input class="filter" type="search" bind:value={vmFilter} placeholder={t('Filter')} spellcheck="false" aria-label={t('Filter machines')} />
-  {/if}
-  <div class="machines">
-    {#each filteredDomains as d (d.uuid)}
-      <a
-        class="item machine"
-        class:active={current === d.uuid}
-        href={machineHref(d.uuid)}
-        aria-current={current === d.uuid ? 'page' : undefined}
-        onclick={router.link}
-        title="{d.name}: {d.state}"
-      >
-        <span class="mdot" class:on={isActive(d.state)} class:paused={d.state === 'paused'} class:crashed={d.state === 'crashed'}></span>
-        <span class="mname">{d.name}</span>
-        {#if d.template}<span class="tag">{t('template')}</span>{/if}
-      </a>
-    {:else}
-      <span class="empty">{t('No machines yet')}</span>
-    {/each}
-  </div>
 
   <footer>
     {#if session.info}
@@ -384,9 +383,9 @@
   }
   aside nav {
     display: flex;
-    flex: none;
+    flex: 1;
     flex-direction: column;
-    max-height: 62vh;
+    min-height: 0;
     padding: 2px 10px;
     overflow-y: auto;
   }
@@ -490,35 +489,8 @@
     background: var(--invert-bg);
     color: var(--invert-fg);
   }
-  .section {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin: 16px 10px 4px;
-    padding: 0 8px 3px;
-    border-bottom: var(--frame) solid var(--ink);
-    font-family: var(--font-display);
-    font-size: 13px;
-    font-stretch: 75%;
-    font-weight: 800;
-  }
-  .add {
-    display: grid;
-    place-items: center;
-    width: 20px;
-    height: 20px;
-    border: 1px solid var(--ink);
-    background: var(--surface);
-    box-shadow: var(--bevel);
-    color: var(--text);
-  }
-  .add:hover,
-  .add.active {
-    background: var(--invert-bg);
-    color: var(--invert-fg);
-  }
   .filter {
-    margin: 4px 10px 6px;
+    margin: 2px 0 4px 22px;
     height: 28px;
     padding: 0 8px;
     border: var(--frame) solid var(--ink);
@@ -530,11 +502,14 @@
   }
   .machines {
     display: flex;
-    flex: 1;
+    flex: none;
     flex-direction: column;
-    min-height: 0;
-    padding: 2px 10px;
+    max-height: 40vh;
+    padding-left: 22px;
     overflow-y: auto;
+  }
+  .machine.add {
+    color: var(--text-2);
   }
   .machine {
     min-height: 26px;
@@ -569,11 +544,6 @@
     padding: 0 4px;
     border: 1px solid currentColor;
     font-size: 10px;
-  }
-  .empty {
-    padding: 4px 8px;
-    color: var(--text-3);
-    font-size: 12.5px;
   }
   footer {
     display: flex;

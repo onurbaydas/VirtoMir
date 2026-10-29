@@ -215,7 +215,6 @@
   main {
     flex: 1;
     min-width: 0;
-    max-width: 1440px;
     padding: 34px 36px 72px;
   }
   .splash {
