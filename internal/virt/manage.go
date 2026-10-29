@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path"
 	"slices"
 	"strings"
@@ -178,8 +179,16 @@ func (c *Client) Delete(uuid string, removeStorage bool) (DeleteResult, error) {
 			continue
 		}
 		if err := l.StorageVolDelete(vol, libvirt.StorageVolDeleteNormal); err != nil {
-			res.KeptVolumes = append(res.KeptVolumes, KeptVolume{p, classify(err).Error()})
-			continue
+			// On NFS libvirt deletes as the file's owner; when that is still QEMU's user,
+			// who may not write the export's directory, virtomird (root) deletes it itself.
+			// With root_squash that fails too and the disk is kept, as before.
+			if !strings.Contains(err.Error(), "Permission denied") || os.Remove(p) != nil {
+				res.KeptVolumes = append(res.KeptVolumes, KeptVolume{p, classify(err).Error()})
+				continue
+			}
+			if pool, err := l.StoragePoolLookupByVolume(vol); err == nil {
+				_ = l.StoragePoolRefresh(pool, 0)
+			}
 		}
 		res.RemovedVolumes = append(res.RemovedVolumes, p)
 	}
