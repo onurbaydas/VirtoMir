@@ -1,1 +1,0 @@
-import{bt as e}from"./i18n.svelte-BamIfmZJ.js";e();
