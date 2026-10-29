@@ -156,9 +156,9 @@
     spec.bridge = pick?.name ?? ''
   }
   // Where a bridged network goes out: any interface of the host. A bridge is used as it is; a
-  // wired port, bond or VLAN goes into a bridge VirtoMir makes (taking over its address); Wi-Fi
-  // cannot be bridged, so machines reach the network through it with NAT.
-  type Uplink = { name: string; how: 'use' | 'make' | 'nat'; kind: string; detail: string; port: HostInterface }
+  // wired port, bond or VLAN goes into a bridge VirtoMir makes (taking over its address); a
+  // Wi-Fi card is bridged like VirtualBox does it (the machines' frames go out with its MAC).
+  type Uplink = { name: string; how: 'use' | 'make' | 'wifi'; kind: string; detail: string; port: HostInterface }
   let uplinks = $derived<Uplink[]>(
     hostIfs.flatMap((i): Uplink[] => {
       const addr = (i.addresses ?? []).filter((a) => !a.startsWith('fe80')).join(', ')
@@ -166,7 +166,7 @@
       const detail = [state, addr].filter(Boolean).join(' · ')
       if (i.kind === 'bridge') return [{ name: i.name, how: 'use', kind: t('Bridge'), detail: [addr, i.members?.length ? t('ports: {list}', { list: i.members.join(', ') }) : ''].filter(Boolean).join(' · '), port: i }]
       if (i.master) return []
-      if (i.kind === 'physical') return [{ name: i.name, how: i.wireless ? 'nat' : 'make', kind: i.wireless ? t('Wi-Fi') : t('Wired port'), detail, port: i }]
+      if (i.kind === 'physical') return [{ name: i.name, how: i.wireless ? 'wifi' : 'make', kind: i.wireless ? t('Wi-Fi') : t('Wired port'), detail, port: i }]
       if (i.kind === 'bond') return [{ name: i.name, how: 'make', kind: t('Bond'), detail, port: i }]
       if (i.kind === 'vlan') return [{ name: i.name, how: 'make', kind: t('VLAN {id}', { id: i.vlanId ?? '' }), detail, port: i }]
       return []
@@ -200,11 +200,15 @@
     try {
       const how = spec.mode === 'bridge' && !spec.ovs ? chosen?.how : undefined
       if (how === 'make') spec.bridge = await makeBridge(chosen!)
-      if (how === 'nat') await refreshHost()
+      if (how === 'wifi') {
+        await api.wifiNetwork(spec.name, chosen!.name)
+        toasts.push({ kind: 'info', title: t('Network {name} created', { name: spec.name }) })
+        dlg = false
+        await load()
+        return
+      }
       const body: NetworkSpec =
-        how === 'nat'
-          ? { name: spec.name, mode: 'nat', subnet: freeV4(usedNets.map((u) => u.cidr)) ?? '10.200.0.0/24', dhcp: true }
-          : spec.mode === 'bridge'
+        spec.mode === 'bridge'
           ? { name: spec.name, mode: 'bridge', bridge: spec.bridge, dhcp: false, ovs: spec.ovs, vlan: spec.ovs && spec.vlan ? Number(spec.vlan) : undefined }
           : spec.mode === 'vxlan'
             ? {
@@ -521,8 +525,8 @@
               {t('Machines join this bridge and appear on its network like real computers.')}
             {:else if chosen?.how === 'make'}
               {t('VirtoMir puts {port} into a new bridge {bridge} and moves its address there. If the host stops answering, the change undoes itself.', { port: chosen.name, bridge: bridgeName(chosen.name) })}
-            {:else if chosen?.how === 'nat'}
-              {t("Wi-Fi cannot carry other machines' own addresses (the access point drops them), so the machines reach the network through {port} with NAT, on a free subnet.", { port: chosen.name })}
+            {:else if chosen?.how === 'wifi'}
+              {t('Machines get their addresses from your router and show on your LAN, like with VirtualBox or VMware. Over Wi-Fi they appear with the MAC address of {port}.', { port: chosen.name })}
             {/if}
           </span>
         </div>

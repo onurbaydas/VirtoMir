@@ -1825,6 +1825,8 @@ export const api = {
 
   // Networks
   networks: async () => (await request<{ networks: VNetwork[] }>('GET', '/api/v1/networks')).networks,
+  /** A network bridged to a Wi-Fi card like VirtualBox does: the router's DHCP gives the machines their addresses. */
+  wifiNetwork: (name: string, uplink: string) => request<{ name: string; bridge: string }>('POST', '/api/v1/networks/wifi', { name, uplink }),
   createNetwork: (spec: NetworkSpec) => request<void>('POST', '/api/v1/networks', spec),
   deleteNetwork: (name: string) => request<void>('DELETE', netPath(name)),
   networkAction: (name: string, action: 'start' | 'stop') => request<void>('POST', `${netPath(name)}/actions/${action}`),

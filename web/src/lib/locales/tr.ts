@@ -1650,6 +1650,7 @@ export const tr: Record<string, string> = {
   "Machine sections": "Makine bölümleri",
   "Machine type": "Makine tipi",
   "Machines": "Makineler",
+  "Machines get their addresses from your router and show on your LAN, like with VirtualBox or VMware. Over Wi-Fi they appear with the MAC address of {port}.": "Makineler IP'lerini modeminizden alır ve LAN'ınızda görünür, VirtualBox ya da VMware'deki gibi. Wi-Fi üzerinden {port} kartının MAC adresiyle görünürler.",
   "Machines get their own subnet, routed by the host (needs a route on your router).": "Makineler hostun yönlendirdiği kendi alt ağlarını alır (yönlendiricinizde bir rota gerekir).",
   "Machines join": "Makinelerin katıldığı ağ",
   "Machines join the physical LAN through a host bridge, like real computers.": "Makineler gerçek bilgisayarlar gibi bir host köprüsü üzerinden fiziksel yerel ağa katılır.",

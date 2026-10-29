@@ -389,6 +389,7 @@ func run(c config, log *slog.Logger) error {
 	apiServer.RunLCM(ctx)
 	apiServer.RunK8s(ctx)
 	apiServer.RunBaremetal(ctx)
+	safeGo(ctx, log, "wifi bridges", apiServer.RunWifiBridges)
 	safeGo(ctx, log, "tunnels", func(ctx context.Context) { keepTunnels(ctx, client, log) })
 	if opts.Updater != nil {
 		opts.Updater.InitConfig(c.stateDir)

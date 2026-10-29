@@ -41,6 +41,7 @@ func (s *Server) deleteNetwork(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
+	s.wifiBridges().Remove(r.Context(), r.PathValue("name")) // its Wi-Fi bridge, if it had one
 	w.WriteHeader(http.StatusNoContent)
 }
 

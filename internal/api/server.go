@@ -49,6 +49,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/update"
 	"github.com/onurbaydas/virtomir/internal/virt"
 	"github.com/onurbaydas/virtomir/internal/vmware"
+	"github.com/onurbaydas/virtomir/internal/wifibridge"
 	"github.com/onurbaydas/virtomir/internal/zfsrep"
 )
 
@@ -226,6 +227,8 @@ type Options struct {
 
 type Server struct {
 	replays           replayCache // writes sent again after a dropped connection (replay.go)
+	wifi              *wifibridge.Manager
+	wifiOnce          sync.Once
 	backend           Backend
 	live              Live
 	jobs              *jobs.Manager
@@ -409,6 +412,7 @@ func (s *Server) Handler() http.Handler {
 	s.storageRoutes(mux)
 	s.storconnRoutes(mux)
 	s.fileRoutes(mux)
+	s.wifiRoutes(mux)
 	s.networkRoutes(mux)
 	s.extraRoutes(mux)
 	s.accessRoutes(mux)
