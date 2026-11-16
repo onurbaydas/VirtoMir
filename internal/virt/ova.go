@@ -143,6 +143,77 @@ func toMiB(q uint64, units string) uint64 {
 	return q
 }
 
+// importSpace is the free and total bytes of the file system of a pool (a variable for tests).
+var importSpace = diskSpace
+
+// importRoom refuses to write need more bytes into the pool at dir when that leaves less
+// than a reserve (2 % of the pool, 2 GiB at most). An import must not fill the pool: every
+// running machine with a thin disk there pauses when its disk cannot grow. A pool whose
+// room cannot be read is not refused.
+func importRoom(dir string, need uint64, what string) error {
+	free, total, ok := importSpace(dir)
+	if !ok {
+		return nil
+	}
+	keep := min(total/50, 2<<30)
+	if free < keep || free-keep < need {
+		return refusedf("Not enough space in the pool for %s: it needs %s, %s is free, and %s stays free for the disks of running machines.",
+			what, humanBytes(need), humanBytes(free), humanBytes(keep))
+	}
+	return nil
+}
+
+// unpackOVA writes the files of an OVA (a tar archive) into dir and returns its OVF
+// descriptor. The archive comes from elsewhere: only plain files are taken, under their
+// base names (never a path, never a hidden file), and none that does not fit in the pool
+// with room to spare. A tar entry says how large it is before its data comes, also when
+// most of it is holes, so an archive made to fill the disk is refused before a byte of it
+// is written.
+func unpackOVA(ctx context.Context, r io.Reader, dir string) ([]byte, error) {
+	var ovfData []byte
+	tr := tar.NewReader(r)
+	for {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, invalidf("This is not a valid OVA file (a tar archive): %v", err)
+		}
+		if h.Typeflag != tar.TypeReg {
+			continue
+		}
+		base := path.Base(h.Name)
+		if base == "." || base == "/" || strings.HasPrefix(base, ".") {
+			continue
+		}
+		if strings.HasSuffix(strings.ToLower(base), ".ovf") {
+			if ovfData, err = io.ReadAll(io.LimitReader(tr, 4<<20)); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if h.Size < 0 {
+			return nil, invalidf("This is not a valid OVA file: %s has no size.", base)
+		}
+		if err := importRoom(dir, uint64(h.Size), "unpacking "+base); err != nil {
+			return nil, err
+		}
+		f, err := os.OpenFile(filepath.Join(dir, base), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+		if err != nil {
+			return nil, err
+		}
+		_, err = io.Copy(f, &ctxReader{ctx: ctx, r: tr})
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ovfData, nil
+}
+
 // ImportOVA reads an OVA (a tar of an OVF descriptor and disk images) from r, converts its
 // disks to qcow2 in a directory pool and creates the machine (not started). name overrides
 // the name from the OVF.
@@ -171,38 +242,9 @@ func (c *Client) ImportOVA(ctx context.Context, pool, name string, r io.Reader, 
 
 	// Unpack: the descriptor and every file (disks are large, so straight to disk).
 	report("Unpacking…")
-	var ovfData []byte
-	tr := tar.NewReader(r)
-	for {
-		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return CreateResult{}, invalidf("This is not a valid OVA file (a tar archive): %v", err)
-		}
-		if h.Typeflag != tar.TypeReg {
-			continue
-		}
-		base := path.Base(h.Name)
-		if base == "." || base == "/" || strings.HasPrefix(base, ".") {
-			continue
-		}
-		if strings.HasSuffix(strings.ToLower(base), ".ovf") {
-			if ovfData, err = io.ReadAll(io.LimitReader(tr, 4<<20)); err != nil {
-				return CreateResult{}, err
-			}
-			continue
-		}
-		f, err := os.OpenFile(filepath.Join(tmp, base), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-		if err != nil {
-			return CreateResult{}, err
-		}
-		_, err = io.Copy(f, &ctxReader{ctx: ctx, r: tr})
-		f.Close()
-		if err != nil {
-			return CreateResult{}, err
-		}
+	ovfData, err := unpackOVA(ctx, r, tmp)
+	if err != nil {
+		return CreateResult{}, err
 	}
 	if ovfData == nil {
 		return CreateResult{}, invalidf("The OVA has no .ovf descriptor.")
@@ -251,6 +293,13 @@ func (c *Client) ImportOVA(ctx context.Context, pool, name string, r io.Reader, 
 		if _, err := checkedImage(ctx, src, format, false); err != nil {
 			cleanup()
 			return CreateResult{}, err
+		}
+		// The converted disk takes at least what the packed one does.
+		if st, err := os.Stat(src); err == nil {
+			if err := importRoom(px.Target.Path, uint64(st.Size()), "converting "+path.Base(d)); err != nil {
+				cleanup()
+				return CreateResult{}, err
+			}
 		}
 		out, err := exec.CommandContext(ctx, "qemu-img", convertArgs(format, src, dst, false)...).CombinedOutput()
 		if err != nil {
