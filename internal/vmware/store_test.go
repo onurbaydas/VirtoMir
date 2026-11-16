@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 func open(t *testing.T) (*Store, string) {
@@ -168,16 +170,25 @@ func TestStringRedactsPassword(t *testing.T) {
 	}
 }
 
+// An unreadable file is moved aside (it may hold the vCenter password) and the store starts
+// empty and usable: the next save writes a new file, not over the old one.
 func TestOpenCorruptedJSON(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "corrupt.json")
 	if err := os.WriteFile(path, []byte("{not-valid-json"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	store, err := Open(path)
-	if err == nil {
-		t.Fatal("expected error opening corrupted JSON, got nil")
+	var ce *atomicfile.CorruptError
+	if !errors.As(err, &ce) {
+		t.Fatalf("expected a CorruptError opening corrupted JSON, got %v", err)
 	}
-	if store != nil {
-		t.Fatalf("expected nil Store on error, got %+v", store)
+	if store == nil || store.Config().URL != "" {
+		t.Fatalf("expected an empty, usable Store, got %+v", store)
+	}
+	if b, err := os.ReadFile(ce.Backup); err != nil || string(b) != "{not-valid-json" {
+		t.Errorf("the unreadable file was not kept: %q %v", b, err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("the unreadable file is still in place: %v", err)
 	}
 }
