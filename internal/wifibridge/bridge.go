@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // Runner runs a command on the host (ceph.Exec does).
@@ -417,5 +419,5 @@ func (m *Manager) save() error {
 	if err := os.MkdirAll(filepath.Dir(m.File), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(m.File, b, 0o600)
+	return atomicfile.Write(m.File, b, 0o600)
 }

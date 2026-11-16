@@ -23,7 +23,7 @@ func (s *Server) updateAutoConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req update.AutoConfig
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&req); err != nil {
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json: " + err.Error()})
 		return
 	}

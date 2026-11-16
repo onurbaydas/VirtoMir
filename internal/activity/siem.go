@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // SIEMConfig configures remote syslog / SIEM log forwarding.
@@ -84,11 +86,7 @@ func SaveSIEMConfig(path string, cfg SIEMConfig) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return atomicfile.Write(path, raw, 0o600)
 }
 
 // Forwarder streams audit logs to a remote syslog / SIEM receiver.

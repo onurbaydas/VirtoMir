@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 	"github.com/onurbaydas/virtomir/internal/hostinfo"
 )
 
@@ -614,11 +615,7 @@ func (m *Manager) savePending(p *Pending) error {
 	if err := os.MkdirAll(m.StateDir, 0o755); err != nil {
 		return err
 	}
-	tmp := m.pendingFile() + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, m.pendingFile())
+	return atomicfile.Write(m.pendingFile(), b, 0o600)
 }
 
 type backend interface {

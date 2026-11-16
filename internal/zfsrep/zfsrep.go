@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // SnapPrefix marks the snapshots replication makes; pruning only ever touches these.
@@ -150,11 +152,7 @@ func (m *Manager) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	tmp := m.path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, m.path)
+	return atomicfile.Write(m.path, raw, 0o600)
 }
 
 // List returns every replication.

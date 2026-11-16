@@ -14,6 +14,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // StepKind is what one step of a plan does.
@@ -130,11 +132,7 @@ func (s *Store) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return atomicfile.Write(s.path, b, 0o600)
 }
 
 func (s *Store) notifyLocked() {

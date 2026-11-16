@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
@@ -241,9 +242,7 @@ func (m *Manager) persist(name string, v any) {
 		return
 	}
 	p := filepath.Join(m.dir, name)
-	if err := os.WriteFile(p+".tmp", b, 0o600); err == nil {
-		_ = os.Rename(p+".tmp", p)
-	}
+	_ = atomicfile.Write(p, b, 0o600)
 }
 
 // event records something HA did (caller holds m.mu).

@@ -23,6 +23,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // Config is the cluster-wide HA configuration. Every member keeps a copy; the highest
@@ -137,11 +139,7 @@ func (s *Store) save() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil { // holds BMC passwords
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return atomicfile.Write(s.path, b, 0o600) // holds BMC passwords
 }
 
 // Config returns a full copy (passwords included: for fencing and for peers).

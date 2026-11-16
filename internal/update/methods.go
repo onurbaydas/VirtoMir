@@ -167,6 +167,10 @@ func swapBinary(tarPath, exe string) error {
 		os.Remove(tmp)
 		return fmt.Errorf("replace %s: %w", exe, err)
 	}
+	if d, err := os.Open(filepath.Dir(exe)); err == nil { // the rename itself, on disk
+		_ = d.Sync()
+		d.Close()
+	}
 	return nil
 }
 
@@ -220,11 +224,22 @@ func extractBinary(tarPath, dst string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := io.Copy(out, io.LimitReader(tr, 512<<20)); err != nil {
-			out.Close()
+		n, err := io.Copy(out, io.LimitReader(tr, 512<<20))
+		if err == nil && n != h.Size {
+			err = fmt.Errorf("%d of %d bytes", n, h.Size)
+		}
+		// On disk before it replaces the running binary: after a power loss a renamed but
+		// unwritten file would be an empty virtomird, and a host without its panel.
+		if err == nil {
+			err = out.Sync()
+		}
+		if cerr := out.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
 			return fmt.Errorf("extract virtomird: %w", err)
 		}
-		return out.Close()
+		return nil
 	}
 }
 

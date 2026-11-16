@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // ClientUser is the cephx user VirtoMir creates for libvirt: RBD rights only, not admin.
@@ -211,11 +213,7 @@ func AuthorizePeerKey(pubKey string) error {
 		text += "\n"
 	}
 	text += pubKey + "\n"
-	tmp := AuthorizedKeysFile + ".virtomir.tmp"
-	if err := os.WriteFile(tmp, []byte(text), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, AuthorizedKeysFile)
+	return atomicfile.Write(AuthorizedKeysFile, []byte(text), 0o600) // root's keys: never half a file
 }
 
 // CephHost is a host of the Ceph cluster as the orchestrator sees it.

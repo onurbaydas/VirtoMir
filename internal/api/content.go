@@ -874,7 +874,7 @@ func (s *Server) syncContentItem(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		VersionID string `json:"versionId"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&b)
+	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&b) // the body is optional
 
 	var targetVer content.ItemVersion
 	if b.VersionID != "" {

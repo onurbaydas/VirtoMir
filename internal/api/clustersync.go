@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 	"github.com/onurbaydas/virtomir/internal/ceph"
 	"github.com/onurbaydas/virtomir/internal/cluster"
 	"github.com/onurbaydas/virtomir/internal/drs"
@@ -247,7 +248,7 @@ func (s *Server) saveSeenOverlays(seen map[string]uint) {
 	if old, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(old)) == string(raw) {
 		return
 	}
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
+	if err := atomicfile.Write(path, raw, 0o600); err != nil {
 		s.log.Warn("save overlays.json", "err", err)
 	}
 }

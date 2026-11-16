@@ -17,6 +17,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 )
 
 // Kind defines the type of placement constraint.
@@ -214,11 +216,7 @@ func (s *Store) saveLocked() error {
 	if dir := filepath.Dir(s.path); dir != "" {
 		_ = os.MkdirAll(dir, 0o755)
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return atomicfile.Write(s.path, b, 0o600)
 }
 
 // Rules returns a copy of all configured placement rules.

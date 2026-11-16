@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 	"github.com/onurbaydas/virtomir/internal/compliance"
 )
 
@@ -242,10 +243,7 @@ func (s *Store) write(name string, v any) error {
 		return err
 	}
 	p := filepath.Join(s.dir, name)
-	if err := os.WriteFile(p+".tmp", b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(p+".tmp", p)
+	return atomicfile.Write(p, b, 0o600)
 }
 
 // List is every stored report, newest first.
@@ -327,7 +325,7 @@ func (s *Store) Generate(kind Kind, format Format, f Facts, by, scheduleID strin
 	m.SizeBytes = int64(len(body))
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := os.WriteFile(s.file(m), body, 0o600); err != nil {
+	if err := atomicfile.Write(s.file(m), body, 0o600); err != nil {
 		return Meta{}, err
 	}
 	s.meta = append([]Meta{m}, s.meta...)

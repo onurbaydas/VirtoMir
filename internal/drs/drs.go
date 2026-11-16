@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 	"github.com/onurbaydas/virtomir/internal/placement"
 )
 
@@ -170,11 +171,7 @@ func (e *Engine) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	tmp := e.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, e.path)
+	return atomicfile.Write(e.path, b, 0o600)
 }
 
 // GetConfig returns current DRS configuration.
