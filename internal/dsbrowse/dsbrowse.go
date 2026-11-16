@@ -2,7 +2,9 @@
 // pool (a directory, NFS, SMB or carved pool), with downloading, uploading, folders,
 // renaming, copying and moving between pools, and deleting. Every operation goes through
 // os.Root, so neither ".." nor a symbolic link leads out of the pool's directory, and files a
-// machine uses are never renamed, moved or deleted.
+// machine uses are never renamed, moved or deleted: also not when the machine reaches them
+// through a symbolic link. Uploads and copies leave room for the disks of running machines:
+// a thin disk that cannot grow pauses its machine.
 package dsbrowse
 
 import (
@@ -25,6 +27,7 @@ var (
 	ErrInvalid  = errors.New("invalid request")
 	ErrNotFound = errors.New("not found")
 	ErrInUse    = errors.New("in use")
+	ErrNoSpace  = errors.New("not enough space")
 )
 
 // Entry is a file or folder of a pool.
@@ -70,11 +73,40 @@ func notFound(err error, rel string) error {
 	return err
 }
 
-// usersOf lists the machines using the file at abs, or anything below it for a folder.
+// resolve follows the symbolic links of a path; a path that does not exist stays as it is.
+func resolve(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return p
+}
+
+// realPath is where the entry at abs really is: the links of its folder followed, not the
+// entry's own. Deleting or renaming a link only touches the link.
+func realPath(abs string) string {
+	return filepath.Join(resolve(filepath.Dir(abs)), filepath.Base(abs))
+}
+
+// withReal adds, for every disk a machine reaches through a symbolic link, the file the link
+// leads to: that file is as much in use as the link.
+func withReal(users map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(users))
+	for p, us := range users {
+		out[p] = append(out[p], us...)
+		if r := resolve(p); r != p {
+			out[r] = append(out[r], us...)
+		}
+	}
+	return out
+}
+
+// usersOf lists the machines using the file at abs, or anything below it for a folder. users
+// went through withReal.
 func usersOf(abs string, users map[string][]string) []string {
+	real := realPath(abs)
 	var out []string
 	for p, us := range users {
-		if p == abs || strings.HasPrefix(p, abs+"/") {
+		if p == abs || strings.HasPrefix(p, abs+"/") || p == real || strings.HasPrefix(p, real+"/") {
 			for _, u := range us {
 				if !slices.Contains(out, u) {
 					out = append(out, u)
@@ -84,6 +116,54 @@ func usersOf(abs string, users map[string][]string) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// freeSpace is the room on the file system of dir, and its size, in bytes.
+var freeSpace = func(dir string) (free, total uint64, err error) {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(dir, &st); err != nil {
+		return 0, 0, err
+	}
+	return st.Bavail * uint64(st.Bsize), st.Blocks * uint64(st.Bsize), nil
+}
+
+// reserve is the room an upload or a copy leaves in a pool: 2 % of it, 2 GiB at most.
+func reserve(total uint64) uint64 {
+	return min(total/50, 2<<30)
+}
+
+// room refuses a file of need bytes (0: unknown, only the reserve is checked) that would not
+// fit in the pool at root with the reserve left. A pool whose room cannot be read is not
+// refused: the write itself fails when it is full.
+func room(root string, need int64) error {
+	free, total, err := freeSpace(root)
+	if err != nil {
+		return nil
+	}
+	keep := reserve(total)
+	if need < 0 {
+		need = 0
+	}
+	if free < keep || free-keep < uint64(need) {
+		if need == 0 {
+			return fmt.Errorf("%w: the pool has %s free, and %s stays free for the disks of running machines", ErrNoSpace, human(free), human(keep))
+		}
+		return fmt.Errorf("%w: the file needs %s, the pool has %s free, and %s stays free for the disks of running machines", ErrNoSpace, human(uint64(need)), human(free), human(keep))
+	}
+	return nil
+}
+
+func human(b uint64) string {
+	units := []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}
+	f, i := float64(b), 0
+	for f >= 1024 && i < len(units)-1 {
+		f /= 1024
+		i++
+	}
+	if i == 0 {
+		return fmt.Sprintf("%d B", b)
+	}
+	return fmt.Sprintf("%.1f %s", f, units[i])
 }
 
 // List lists a folder of the pool at root: folders first, then files by name.
@@ -106,6 +186,7 @@ func List(root, rel string, users map[string][]string) ([]Entry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s is not a folder", ErrInvalid, rel)
 	}
+	users = withReal(users)
 	out := []Entry{}
 	for _, de := range des {
 		info, err := de.Info()
@@ -178,7 +259,7 @@ func Mkdir(root, rel string) error {
 }
 
 func checkFree(root, rel string, users map[string][]string) error {
-	if us := usersOf(filepath.Join(root, rel), users); len(us) > 0 {
+	if us := usersOf(filepath.Join(root, rel), withReal(users)); len(us) > 0 {
 		return fmt.Errorf("%w: %s is a disk of %s; detach it or delete the machine first", ErrInUse, rel, strings.Join(us, ", "))
 	}
 	return nil
@@ -262,8 +343,10 @@ func Open(root, rel string) (*os.File, error) {
 }
 
 // Upload writes a new file from src: into a hidden part file first, renamed when complete,
-// so a broken upload never looks like an image. An existing file is never replaced.
-func Upload(root, rel string, src io.Reader) (int64, error) {
+// so a broken upload never looks like an image. An existing file is never replaced. size is
+// what the sender announced (-1: unknown); an upload that would fill the pool is refused
+// before it starts, or stopped when the pool runs low.
+func Upload(root, rel string, src io.Reader, size int64) (int64, error) {
 	rel, err := Clean(rel)
 	if err != nil || rel == "." {
 		return 0, fmt.Errorf("%w: the file needs a name", ErrInvalid)
@@ -276,12 +359,15 @@ func Upload(root, rel string, src io.Reader) (int64, error) {
 	if _, err := r.Lstat(rel); err == nil {
 		return 0, fmt.Errorf("%w: %s already exists", ErrInvalid, rel)
 	}
+	if err := room(root, size); err != nil {
+		return 0, err
+	}
 	part := path.Join(path.Dir(rel), "."+path.Base(rel)+".part")
 	f, err := r.OpenFile(part, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return 0, notFound(err, path.Dir(rel))
 	}
-	n, err := sparseCopy(context.Background(), f, src, -1, nil)
+	n, err := sparseCopy(context.Background(), f, src, -1, nil, func() error { return room(root, 0) })
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
@@ -333,12 +419,19 @@ func Copy(ctx context.Context, srcRoot, src, dstRoot, dst string, move bool, use
 	if _, err := dr.Lstat(dst); err == nil {
 		return fmt.Errorf("%w: %s already exists there", ErrInvalid, dst)
 	}
+	need := st.Size()
+	if sys, ok := st.Sys().(*syscall.Stat_t); ok && sys.Blocks*512 < need {
+		need = sys.Blocks * 512 // a thin image stays thin
+	}
+	if err := room(dstRoot, need); err != nil {
+		return err
+	}
 	part := path.Join(path.Dir(dst), "."+path.Base(dst)+".part")
 	out, err := dr.OpenFile(part, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return notFound(err, path.Dir(dst))
 	}
-	_, err = sparseCopy(ctx, out, in, st.Size(), report)
+	_, err = sparseCopy(ctx, out, in, st.Size(), report, func() error { return room(dstRoot, 0) })
 	if cerr := out.Close(); err == nil {
 		err = cerr
 	}
@@ -355,14 +448,19 @@ func Copy(ctx context.Context, srcRoot, src, dstRoot, dst string, move bool, use
 	return nil
 }
 
-const chunk = 1 << 20
+const (
+	chunk      = 1 << 20
+	guardEvery = 64 // chunks written between two looks at the pool's room
+)
 
 // sparseCopy copies src to dst, seeking over all-zero chunks so they stay holes. size (-1:
-// unknown) gives report a percentage.
-func sparseCopy(ctx context.Context, dst *os.File, src io.Reader, size int64, report func(string)) (int64, error) {
+// unknown) gives report a percentage. guard (nil: none) is asked every 64 MiB written and
+// stops the copy with its error.
+func sparseCopy(ctx context.Context, dst *os.File, src io.Reader, size int64, report func(string), guard func() error) (int64, error) {
 	buf := make([]byte, chunk)
 	var n int64
 	last := -1
+	written := 0
 	for {
 		if err := ctx.Err(); err != nil {
 			return n, err
@@ -373,8 +471,15 @@ func sparseCopy(ctx context.Context, dst *os.File, src io.Reader, size int64, re
 				if _, err := dst.Seek(int64(m), io.SeekCurrent); err != nil {
 					return n, err
 				}
-			} else if _, err := dst.Write(buf[:m]); err != nil {
-				return n, err
+			} else {
+				if _, err := dst.Write(buf[:m]); err != nil {
+					return n, err
+				}
+				if written++; guard != nil && written%guardEvery == 0 {
+					if err := guard(); err != nil {
+						return n, err
+					}
+				}
 			}
 			n += int64(m)
 			if report != nil && size > 0 {

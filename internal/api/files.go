@@ -113,7 +113,7 @@ func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	n, err := dsbrowse.Upload(root, r.URL.Query().Get("path"), r.Body)
+	n, err := dsbrowse.Upload(root, r.URL.Query().Get("path"), r.Body, r.ContentLength)
 	if err != nil {
 		s.writeError(w, err)
 		return

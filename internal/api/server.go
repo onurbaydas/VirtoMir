@@ -639,6 +639,8 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 		errors.Is(err, physnet.ErrExists), errors.Is(err, physnet.ErrBusy), errors.Is(err, physnet.ErrConflict),
 		errors.Is(err, k8s.ErrExists), errors.Is(err, k8s.ErrBusy), errors.Is(err, baremetal.ErrExists), errors.Is(err, baremetal.ErrBusy):
 		status = http.StatusConflict
+	case errors.Is(err, dsbrowse.ErrNoSpace):
+		status = http.StatusInsufficientStorage
 	case errors.Is(err, auth.ErrBadCredentials), errors.Is(err, auth.ErrNotAllowed):
 		status = http.StatusUnauthorized
 	case errors.Is(err, auth.ErrTooManyAttempts):
