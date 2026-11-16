@@ -201,3 +201,59 @@ func TestForgottenAddressesAndSessionsDoNotPileUp(t *testing.T) {
 		t.Error("the new session went with the old ones")
 	}
 }
+
+// A session follows its account: taken out of the admin group it loses the role within a
+// minute, and with the account gone the session is gone too. Before, it stayed an
+// administrator for up to a day.
+func TestSessionFollowsTheAccountsRole(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	role := Admin
+	asked := 0
+	m := New(fakeAuthn{"onur": "secret"}, func(string) Role { asked++; return role })
+	m.now = func() time.Time { return now }
+	tok, err := m.Login(context.Background(), "10.0.0.5:1", "onur", "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked = 0
+	for range 50 { // a busy page: the groups are not read on every request
+		if u, ok := m.User(tok); !ok || u.Role != Admin {
+			t.Fatalf("user = %+v %v", u, ok)
+		}
+	}
+	if asked != 0 {
+		t.Errorf("the role was read %d times within the first minute", asked)
+	}
+
+	role = Viewer // taken out of the admin group
+	now = now.Add(roleCheckEvery)
+	if u, ok := m.User(tok); !ok || u.Role != Viewer {
+		t.Errorf("after the demotion: %+v %v", u, ok)
+	}
+	role = Operator // and a role given is there without signing in again
+	now = now.Add(roleCheckEvery)
+	if u, ok := m.User(tok); !ok || u.Role != Operator {
+		t.Errorf("after the promotion: %+v %v", u, ok)
+	}
+	role = NoAccess // the account is gone
+	now = now.Add(roleCheckEvery)
+	if u, ok := m.User(tok); ok {
+		t.Errorf("a session of an account without a role: %+v", u)
+	}
+	if m.Valid(tok) {
+		t.Error("the session is still there")
+	}
+}
+
+// Directory and SSO users keep the role of their sign-in; it is not read from Linux groups.
+func TestExternalSessionKeepsItsSignInRole(t *testing.T) {
+	m, now := newTestManager() // knows no role for anyone but onur
+	tok, err := m.NewSession(Identity{Name: "ada" + SuffixSSO, Role: Operator})
+	if err != nil {
+		t.Fatal(err)
+	}
+	*now = now.Add(10 * roleCheckEvery)
+	if u, ok := m.User(tok); !ok || u.Role != Operator {
+		t.Errorf("user = %+v %v", u, ok)
+	}
+}

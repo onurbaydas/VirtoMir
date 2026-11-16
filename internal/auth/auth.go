@@ -40,6 +40,8 @@ type session struct {
 	role     Role
 	created  time.Time
 	lastSeen time.Time
+	// roleChecked is when role was last read from the account (see User).
+	roleChecked time.Time
 }
 
 // Manager owns sessions and the login rate limit. The zero value is not usable; use New.
@@ -203,26 +205,56 @@ func (m *Manager) NewSession(id Identity) (string, error) {
 	if len(m.sessions) >= sweepAbove {
 		m.sweepSessions(now)
 	}
-	m.sessions[token] = &session{user: id.Name, role: id.Role, created: now, lastSeen: now}
+	m.sessions[token] = &session{user: id.Name, role: id.Role, created: now, lastSeen: now, roleChecked: now}
 	m.mu.Unlock()
 	return token, nil
 }
 
-// User returns the session's identity and refreshes its idle timer.
+// roleCheckEvery is how often a session's role is read again from the account.
+const roleCheckEvery = time.Minute
+
+// User returns the session's identity and refreshes its idle timer. The
+// role of a local account is its role now, read again every minute: someone taken out of
+// the admin group, or whose account is gone, does not stay an administrator until the
+// session runs out a day later (API tokens follow their owner's role in the same way).
 func (m *Manager) User(token string) (Identity, bool) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	s, ok := m.sessions[token]
 	if !ok {
+		m.mu.Unlock()
 		return Identity{}, false
 	}
 	now := m.now()
 	if now.Sub(s.lastSeen) > IdleTimeout || now.Sub(s.created) > MaxAge {
 		delete(m.sessions, token)
+		m.mu.Unlock()
 		return Identity{}, false
 	}
 	s.lastSeen = now
-	return Identity{Name: s.user, Role: s.role}, true
+	id := Identity{Name: s.user, Role: s.role}
+	// Directory and SSO users keep the role of their sign-in (see RoleOf); what a project
+	// gives them is decided per request elsewhere.
+	recheck := !IsExternal(s.user) && now.Sub(s.roleChecked) >= roleCheckEvery
+	if recheck {
+		s.roleChecked = now // one request asks, the others go on with the role known
+	}
+	m.mu.Unlock()
+	if !recheck {
+		return id, true
+	}
+	// Outside the lock: reading groups may ask a directory.
+	role := m.RoleOf(id.Name)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if role == NoAccess {
+		delete(m.sessions, token)
+		return Identity{}, false
+	}
+	if cur, ok := m.sessions[token]; ok {
+		cur.role = role
+	}
+	id.Role = role
+	return id, true
 }
 
 // RoleOf is the user's current role: Linux groups are re-read; LDAP/SSO users keep the role
