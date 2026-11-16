@@ -332,3 +332,14 @@ func TestMounted(t *testing.T) {
 		t.Error("a plain directory is seen as mounted")
 	}
 }
+
+// Carve itself refuses a name that is a path, whoever calls it.
+func TestCarveRefusesNamesThatArePaths(t *testing.T) {
+	useTempDirs(t)
+	for _, name := range []string{"../x", "..", "a/b", "", "-n", "a b", "a\nb"} {
+		r := &fakeRunner{}
+		if _, err := Carve(context.Background(), r, Request{Name: name, Kind: KindDisk, Source: "/dev/sdb", SizeBytes: 2 << 30}, func(string) {}); !errors.Is(err, ErrInvalid) || len(r.calls) != 0 {
+			t.Errorf("%q: %v, calls %q", name, err, r.calls)
+		}
+	}
+}

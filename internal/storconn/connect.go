@@ -91,9 +91,23 @@ func uniqueName(base string, taken func(string) bool) string {
 
 var smbFromRE = regexp.MustCompile(`(?m)^# Storage pool connected by VirtoMir to (.+)\.$`)
 
+// poolRE is what a pool mounted below Base may be called: its name becomes a directory, a
+// credentials file and a mount unit, so it is one plain path element.
+var poolRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.+-]{0,63}$`)
+
+// unitValue writes s as the value of a unit file setting: systemd expands % there.
+func unitValue(s string) string { return strings.ReplaceAll(s, "%", "%%") }
+
 // MountSMB mounts a share below Base on every boot and returns the directory. The password
-// sits in a root-only file under CredDir, never in the unit.
-func MountSMB(ctx context.Context, r Runner, pool, server, share string, c Credentials) (string, error) {
+// sits in a root-only file under CredDir, never in the unit. A mount that fails leaves
+// nothing behind: no directory, unit or password file, so it can be tried again.
+func MountSMB(ctx context.Context, r Runner, pool, server, share string, c Credentials) (_ string, err error) {
+	if !poolRE.MatchString(pool) {
+		return "", invalidf("%q cannot name a pool: use letters, digits, '.', '_', '+' and '-'", pool)
+	}
+	if strings.ContainsAny(server+share+c.Username+c.Password, "\n\r\x00") {
+		return "", invalidf("the server, share, user name and password cannot hold line breaks")
+	}
 	dir := filepath.Join(Base, pool)
 	if _, err := os.Stat(dir); err == nil {
 		return "", invalidf("%s already exists", dir)
@@ -101,12 +115,21 @@ func MountSMB(ctx context.Context, r Runner, pool, server, share string, c Crede
 	if err := checkSMBLogin(ctx, r, server, share, c); err != nil {
 		return "", err
 	}
+	var undo []func()
+	defer func() {
+		if err != nil {
+			for i := len(undo) - 1; i >= 0; i-- {
+				undo[i]()
+			}
+		}
+	}()
 	auth := "guest" // no user: an anonymous session
 	if c.Username != "" {
 		if err := os.MkdirAll(CredDir, 0o700); err != nil {
 			return "", err
 		}
 		cred := filepath.Join(CredDir, pool)
+		undo = append(undo, func() { _ = os.Remove(cred) })
 		if err := os.WriteFile(cred, []byte(credText(c)), 0o600); err != nil {
 			return "", err
 		}
@@ -116,6 +139,7 @@ func MountSMB(ctx context.Context, r Runner, pool, server, share string, c Crede
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
+	undo = append(undo, func() { _ = os.Remove(dir) })
 	b, err := r.Run(ctx, "systemd-escape", "-p", "--suffix=mount", dir)
 	unit := strings.TrimSpace(string(b))
 	if err != nil || unit == "" {
@@ -136,15 +160,20 @@ Options=%s,uid=%s,gid=%s,file_mode=0660,dir_mode=0770,nofail,_netdev
 
 [Install]
 WantedBy=remote-fs.target
-`, what, pool, what, dir, auth, uid, gid)
-	if err := os.WriteFile(filepath.Join(UnitDir, unit), []byte(text), 0o644); err != nil {
+`, what, unitValue(pool), unitValue(what), unitValue(dir), unitValue(auth), uid, gid)
+	unitFile := filepath.Join(UnitDir, unit)
+	undo = append(undo, func() {
+		_, _ = r.Run(ctx, "systemctl", "disable", "--now", unit)
+		_ = os.Remove(unitFile)
+		_, _ = r.Run(ctx, "systemctl", "daemon-reload")
+	})
+	if err := os.WriteFile(unitFile, []byte(text), 0o644); err != nil {
 		return "", err
 	}
 	if _, err := r.Run(ctx, "systemctl", "daemon-reload"); err != nil {
 		return "", err
 	}
 	if _, err := r.Run(ctx, "systemctl", "enable", "--now", unit); err != nil {
-		_ = UnmountSMB(ctx, r, pool)
 		return "", fmt.Errorf("mount %s: %w", what, err)
 	}
 	return dir, nil
@@ -197,6 +226,9 @@ func qemuIDs() (string, string) {
 
 // UnmountSMB undoes MountSMB; a pool that is no SMB share VirtoMir mounted is ErrNotSMB.
 func UnmountSMB(ctx context.Context, r Runner, pool string) error {
+	if !poolRE.MatchString(pool) {
+		return ErrNotSMB
+	}
 	dir := filepath.Join(Base, pool)
 	b, err := r.Run(ctx, "systemd-escape", "-p", "--suffix=mount", dir)
 	unit := strings.TrimSpace(string(b))
@@ -225,6 +257,9 @@ var ErrNotSMB = fmt.Errorf("%w: this pool is no SMB share VirtoMir connected", E
 
 // SMBShare is the share ("//server/share") the pool is, when VirtoMir mounted it; else "".
 func SMBShare(ctx context.Context, r Runner, pool string) string {
+	if !poolRE.MatchString(pool) {
+		return ""
+	}
 	b, err := r.Run(ctx, "systemd-escape", "-p", "--suffix=mount", filepath.Join(Base, pool))
 	if err != nil {
 		return ""

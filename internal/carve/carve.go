@@ -147,6 +147,10 @@ func Check(req Request, sources []Source) error {
 // Carve makes the file system for the pool and mounts it below Base; it returns the
 // directory for the pool. report gets each step.
 func Carve(ctx context.Context, r Runner, req Request, report func(string)) (string, error) {
+	// Not only in Check: the name becomes a directory, a logical volume and a mount unit.
+	if !nameRE.MatchString(req.Name) || len(req.Name) > 64 {
+		return "", invalidf("%q cannot name a carved pool: use letters, digits, dot, dash and underscore", req.Name)
+	}
 	dir := filepath.Join(Base, req.Name)
 	if _, err := os.Stat(dir); err == nil {
 		return "", invalidf("%s already exists", dir)

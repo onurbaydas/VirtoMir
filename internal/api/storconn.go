@@ -114,6 +114,11 @@ func (req connectRequest) check() error {
 	if !ok {
 		return fmt.Errorf("%w: cannot connect %s %q on %q", storconn.ErrInvalid, req.Kind, req.Name, req.Server)
 	}
+	// The pool's name becomes a directory below /srv/virtomir, a password file and a mount
+	// unit: never a path. (Empty: connectStorage names the pool itself.)
+	if req.Pool != "" {
+		return virt.CheckName("Pool", req.Pool)
+	}
 	return nil
 }
 

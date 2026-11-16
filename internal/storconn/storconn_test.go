@@ -246,3 +246,73 @@ func TestMountSMBAsGuestAndWithAWrongPassword(t *testing.T) {
 		t.Error("mounted after a refused sign-in")
 	}
 }
+
+// A pool's name becomes a directory, a password file and a mount unit: it is never a path.
+func TestSMBPoolNamesAreNotPaths(t *testing.T) {
+	oldBase, oldUnit, oldCred := Base, UnitDir, CredDir
+	top := t.TempDir()
+	Base, UnitDir, CredDir = filepath.Join(top, "srv"), filepath.Join(top, "units"), filepath.Join(top, "cred")
+	t.Cleanup(func() { Base, UnitDir, CredDir = oldBase, oldUnit, oldCred })
+	victim := filepath.Join(top, "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := Credentials{Username: "onur", Password: "s3cret"}
+	for _, pool := range []string{"../victim", "..", ".", "", "a/b", "a\nOptions=x", "-rf", strings.Repeat("a", 65)} {
+		r := &fakeRunner{out: map[string]string{"systemd-escape": "x.mount\n"}}
+		if _, err := MountSMB(context.Background(), r, pool, "10.0.0.7", "vms", c); !errors.Is(err, ErrInvalid) || len(r.calls) != 0 {
+			t.Errorf("mount as %q: %v, calls %q", pool, err, r.calls)
+		}
+		if err := UnmountSMB(context.Background(), r, pool); !errors.Is(err, ErrNotSMB) || len(r.calls) != 0 {
+			t.Errorf("unmount %q: %v, calls %q", pool, err, r.calls)
+		}
+		if s := SMBShare(context.Background(), r, pool); s != "" || len(r.calls) != 0 {
+			t.Errorf("share of %q: %q, calls %q", pool, s, r.calls)
+		}
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "keep" {
+		t.Errorf("a file outside the credentials directory was written: %q", b)
+	}
+	r := &fakeRunner{}
+	if _, err := MountSMB(context.Background(), r, "smb", "10.0.0.7", "vms\n[Install]", c); !errors.Is(err, ErrInvalid) || len(r.calls) != 0 {
+		t.Errorf("a share with a line break: %v, calls %q", err, r.calls)
+	}
+}
+
+// systemd expands % in unit files: a share named with one is mounted by its name.
+func TestMountSMBShareWithAPercentSign(t *testing.T) {
+	oldBase, oldUnit, oldCred := Base, UnitDir, CredDir
+	Base, UnitDir, CredDir = filepath.Join(t.TempDir(), "srv"), t.TempDir(), filepath.Join(t.TempDir(), "cred")
+	t.Cleanup(func() { Base, UnitDir, CredDir = oldBase, oldUnit, oldCred })
+	r := &fakeRunner{out: map[string]string{"systemd-escape": "x.mount\n"}}
+	if _, err := MountSMB(context.Background(), r, "smb", "10.0.0.7", "100%vms", Credentials{}); err != nil {
+		t.Fatal(err)
+	}
+	unit, _ := os.ReadFile(filepath.Join(UnitDir, "x.mount"))
+	if !strings.Contains(string(unit), "What=//10.0.0.7/100%%vms\n") {
+		t.Errorf("unit:\n%s", unit)
+	}
+	if got := SMBShare(context.Background(), r, "smb"); got != "//10.0.0.7/100%vms" {
+		t.Errorf("share = %q", got)
+	}
+}
+
+// A mount that fails at any step leaves nothing that would be in the way of the next try,
+// and no password on disk.
+func TestMountSMBLeavesNothingBehindOnFailure(t *testing.T) {
+	oldBase, oldUnit, oldCred := Base, UnitDir, CredDir
+	t.Cleanup(func() { Base, UnitDir, CredDir = oldBase, oldUnit, oldCred })
+	c := Credentials{Username: "onur", Password: "s3cret"}
+	for _, failing := range []string{"systemd-escape", "systemctl"} {
+		Base, UnitDir, CredDir = filepath.Join(t.TempDir(), "srv"), t.TempDir(), filepath.Join(t.TempDir(), "cred")
+		r := &fakeRunner{out: map[string]string{"systemd-escape": "x.mount\n"}, fail: map[string]string{failing: "exit status 1"}}
+		if _, err := MountSMB(context.Background(), r, "smb", "10.0.0.7", "vms", c); err == nil {
+			t.Fatalf("%s failing: no error", failing)
+		}
+		for _, p := range []string{filepath.Join(Base, "smb"), filepath.Join(CredDir, "smb"), filepath.Join(UnitDir, "x.mount")} {
+			if _, err := os.Stat(p); !os.IsNotExist(err) {
+				t.Errorf("%s failing: %s left behind", failing, p)
+			}
+		}
+	}
+}
