@@ -16,7 +16,7 @@ func TestTheHostIsNeverAMachine(t *testing.T) {
 	hostIP := netip.MustParseAddr("192.168.1.210")
 	var learned []netip.Addr
 	tab := &table{m: map[netip.Addr]MAC{}, learn: func(ip netip.Addr) { learned = append(learned, ip) },
-		local: func(ip netip.Addr) bool { return ip == hostIP }}
+		never: func(ip netip.Addr) bool { return ip == hostIP }}
 	bridgeMAC := MAC{0xe2, 0xe3, 0xcc, 0xa7, 0xb3, 0x96}
 
 	ask := eth(bcast, bridgeMAC, etherARP, arp(1, bridgeMAC, hostIP, MAC{}, vmIP))
@@ -68,5 +68,57 @@ func TestWatchNoticesTheHostCutOff(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("did not notice the host lost its gateway")
+	}
+}
+
+// What a machine claims does not decide everything: the gateway's address and addresses
+// outside the LAN are never a machine's, and a machine that makes up senders does not fill
+// the table.
+func TestTableRefusesWhatIsNotAMachines(t *testing.T) {
+	lan := []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24")}
+	var learned []netip.Addr
+	tab := &table{m: map[netip.Addr]MAC{}, learn: func(ip netip.Addr) { learned = append(learned, ip) },
+		never: func(ip netip.Addr) bool { return ip == gwIP || !onLAN(ip, lan) }}
+	for _, ip := range []string{"192.168.1.1", "8.8.8.8", "10.0.0.5", "192.168.1.0", "192.168.1.255", "169.254.7.7", "224.0.0.251", "127.0.0.1", "255.255.255.255"} {
+		tab.Learn(netip.MustParseAddr(ip), vm)
+	}
+	if len(learned) != 0 {
+		t.Fatalf("learned %v", learned)
+	}
+	if _, ok := tab.Lookup(gwIP); ok {
+		t.Error("the gateway's address is a machine's: the host would route it into the bridge")
+	}
+	tab.Learn(vmIP, vm)
+	other := MAC{0x52, 0x54, 0x00, 0xaa, 0xbb, 0xcc}
+	tab.Learn(vmIP, other) // the address moved to another machine: known, not announced again
+	if got, _ := tab.Lookup(vmIP); got != other || len(learned) != 1 {
+		t.Errorf("moved address: %v, announced %v", got, learned)
+	}
+
+	big := &table{m: map[netip.Addr]MAC{}, learn: func(netip.Addr) {}}
+	for i := 0; i < maxAddresses+500; i++ {
+		big.Learn(netip.AddrFrom4([4]byte{10, byte(i >> 16), byte(i >> 8), byte(i)}), vm)
+		big.Seen(MAC{2, 0, byte(i >> 16), byte(i >> 8), byte(i), 1})
+	}
+	if len(big.m) != maxAddresses || len(big.macs) != maxMachines {
+		t.Errorf("%d addresses, %d machines remembered", len(big.m), len(big.macs))
+	}
+	if !big.Machine(MAC{2, 0, 0, 0, 0, 1}) || big.Machine(MAC{2, 0, 9, 9, 9, 1}) {
+		t.Error("which MACs are machines")
+	}
+}
+
+func TestOnLAN(t *testing.T) {
+	nets := []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24"), netip.MustParsePrefix("10.8.0.0/31")}
+	for ip, want := range map[string]bool{
+		"192.168.1.57": true, "192.168.1.254": true, "192.168.1.0": false, "192.168.1.255": false,
+		"192.168.2.1": false, "10.8.0.0": true, "10.8.0.1": true, "10.8.0.2": false,
+	} {
+		if got := onLAN(netip.MustParseAddr(ip), nets); got != want {
+			t.Errorf("onLAN(%s) = %v", ip, got)
+		}
+	}
+	if !onLAN(netip.MustParseAddr("203.0.113.9"), nil) {
+		t.Error("a card without an address says nothing about the LAN")
 	}
 }

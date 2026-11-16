@@ -98,11 +98,20 @@ func Teardown(ctx context.Context, r Runner, c Config) {
 type table struct {
 	mu    sync.Mutex
 	m     map[netip.Addr]MAC
+	macs  map[MAC]struct{} // the machines: who was seen sending on the bridge
 	learn func(netip.Addr)
-	// local reports the host's own addresses: never a machine's. Learning one would drop the
-	// host's own traffic on the card and route its address into the bridge.
-	local func(netip.Addr) bool
+	// never reports the addresses that are not a machine's, whoever claims them: the host's
+	// own, its gateway, and anything outside the LAN. Learning one drops traffic for it on
+	// the card and routes it into the bridge: the host's own connection, for the first two.
+	never func(netip.Addr) bool
 }
+
+// How much one bridge remembers. What a machine sends decides both, so both have an end: a
+// machine that makes up senders does not fill the memory, the firewall set and the routes.
+const (
+	maxMachines  = 1024
+	maxAddresses = 1024
+)
 
 func (t *table) Lookup(ip netip.Addr) (MAC, bool) {
 	t.mu.Lock()
@@ -111,23 +120,87 @@ func (t *table) Lookup(ip netip.Addr) (MAC, bool) {
 	return m, ok
 }
 
+func (t *table) Seen(mac MAC) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, ok := t.macs[mac]; ok || len(t.macs) >= maxMachines {
+		return
+	}
+	if t.macs == nil {
+		t.macs = map[MAC]struct{}{}
+	}
+	t.macs[mac] = struct{}{}
+}
+
+func (t *table) Machine(mac MAC) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	_, ok := t.macs[mac]
+	return ok
+}
+
 func (t *table) Learn(ip netip.Addr, mac MAC) {
 	if !ip.Is4() || ip.IsMulticast() || ip.IsLoopback() || ip == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
 		return
 	}
 	t.mu.Lock()
 	old, ok := t.m[ip]
+	full := !ok && len(t.m) >= maxAddresses
 	t.mu.Unlock()
-	if ok && old == mac {
+	if (ok && old == mac) || full {
 		return
 	}
-	if t.local != nil && t.local(ip) {
+	if t.never != nil && t.never(ip) {
 		return
 	}
 	t.mu.Lock()
 	t.m[ip] = mac
 	t.mu.Unlock()
-	t.learn(ip)
+	if !ok { // a known address that moved to another machine is already in the set and routed
+		t.learn(ip)
+	}
+}
+
+// onLAN reports whether ip can be a machine's address on one of the card's networks: inside
+// it, and neither its network nor its broadcast address. A card without an IPv4 address
+// says nothing about the LAN, so everything passes.
+func onLAN(ip netip.Addr, nets []netip.Prefix) bool {
+	if len(nets) == 0 {
+		return true
+	}
+	for _, n := range nets {
+		if !n.Contains(ip) {
+			continue
+		}
+		if n.Bits() >= 31 {
+			return true
+		}
+		last := n.Masked().Addr().As4()
+		for i, m := range net.CIDRMask(n.Bits(), 32) {
+			last[i] |= ^m
+		}
+		return ip != n.Masked().Addr() && ip != netip.AddrFrom4(last)
+	}
+	return false
+}
+
+// lanOf is the IPv4 networks of an interface.
+func lanOf(name string) []netip.Prefix {
+	ifc, err := net.InterfaceByName(name)
+	if err != nil {
+		return nil
+	}
+	addrs, _ := ifc.Addrs()
+	var out []netip.Prefix
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok {
+			if ip, ok := netip.AddrFromSlice(n.IP.To4()); ok {
+				ones, _ := n.Mask.Size()
+				out = append(out, netip.PrefixFrom(ip, ones).Masked())
+			}
+		}
+	}
+	return out
 }
 
 // hostAddr reports whether an interface of this host has the address.
@@ -185,7 +258,9 @@ func Relay(ctx context.Context, r Runner, c Config, log *slog.Logger) error {
 			own = append(own, MAC(ifc.HardwareAddr))
 		}
 	}
-	tab := &table{m: map[netip.Addr]MAC{}, local: hostAddr, learn: func(ip netip.Addr) {
+	gw := gateway(ctx, r, c.Uplink)
+	never := func(ip netip.Addr) bool { return hostAddr(ip) || ip == gw || !onLAN(ip, lanOf(c.Uplink)) }
+	tab := &table{m: map[netip.Addr]MAC{}, never: never, learn: func(ip netip.Addr) {
 		_, _ = r.Run(context.Background(), "nft", "add", "element", "inet", nftTable, "vms_"+c.Bridge, "{", ip.String(), "}")
 		_, _ = r.Run(context.Background(), "ip", "route", "replace", ip.String()+"/32", "dev", c.Bridge)
 		log.Info("wifi bridge: machine on the LAN", "bridge", c.Bridge, "ip", ip)
@@ -201,7 +276,6 @@ func Relay(ctx context.Context, r Runner, c Config, log *slog.Logger) error {
 			return Outbound(f, host, tab)
 		})
 	}()
-	gw := gateway(ctx, r, c.Uplink)
 	guard := make(chan struct{})
 	if gw.IsValid() && reaches(ctx, r, c.Uplink, gw) {
 		go func() { watch(ctx, r, c.Uplink, gw, 5*time.Second, 3); close(guard) }()
@@ -277,7 +351,14 @@ func htons(v uint16) uint16 { return v<<8 | v>>8 }
 
 // pump reads frames from one socket, translates them and writes them to the other. Frames
 // the socket itself sent (the other pump's) are skipped.
-func pump(from, to int, translate func([]byte) ([]byte, bool)) error {
+func pump(from, to int, translate func([]byte) ([]byte, bool)) (err error) {
+	// The frames are whatever the LAN and the machines send. Should one ever trip the
+	// translation, that ends this bridge with an error, not the whole daemon.
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("frame translation failed: %v", r)
+		}
+	}()
 	buf := make([]byte, 65536)
 	for {
 		n, sa, err := unix.Recvfrom(from, buf, 0)

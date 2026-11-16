@@ -6,10 +6,16 @@ import (
 	"testing"
 )
 
+// mapTable is a table that learns everything. The machines are the MACs seen sending, kept
+// in seenMACs for all tables of a test run (tests that care start with it empty).
 type mapTable map[netip.Addr]MAC
+
+var seenMACs = map[MAC]bool{}
 
 func (m mapTable) Lookup(ip netip.Addr) (MAC, bool) { v, ok := m[ip]; return v, ok }
 func (m mapTable) Learn(ip netip.Addr, mac MAC)     { m[ip] = mac }
+func (m mapTable) Seen(mac MAC)                     { seenMACs[mac] = true }
+func (m mapTable) Machine(mac MAC) bool             { return seenMACs[mac] }
 
 var (
 	host   = MAC{0xda, 0x2d, 0xb5, 0xa8, 0x9c, 0x79}
@@ -154,5 +160,83 @@ func TestAccessPointQuirks(t *testing.T) {
 	in, ok := Inbound(eth(host, router, etherIPv4, ipv4(gwIP, mdns, 17, udp(5353, 5353, nil))), host, tab)
 	if !ok || MAC(in[0:6]) != bcast {
 		t.Errorf("multicast to the station's MAC: %v %x", ok, in)
+	}
+}
+
+// The card hears the DHCP answers for everyone on the LAN when the server broadcasts them.
+// Only an answer for one of the machines teaches an address; before, a phone's lease made
+// its address a "machine" and the host could not reach the phone any more.
+func TestDHCPAnswersForOthersTeachNothing(t *testing.T) {
+	seenMACs = map[MAC]bool{}
+	tab := mapTable{}
+	phone, phoneIP := MAC{0x3c, 0x22, 0xfb, 0x01, 0x02, 0x03}, netip.MustParseAddr("192.168.1.80")
+	all := netip.MustParseAddr("255.255.255.255")
+
+	ack := eth(bcast, router, etherIPv4, ipv4(gwIP, all, 17, udp(67, 68, dhcp(2, phoneIP, phone))))
+	if in, ok := Inbound(ack, host, tab); !ok || MAC(in[0:6]) != bcast {
+		t.Errorf("a broadcast still reaches the machines: %v", ok)
+	}
+	if len(tab) != 0 {
+		t.Fatalf("a phone's lease was learned as a machine: %v", tab)
+	}
+	// The host's own lease, answered to its MAC: it stays with the host.
+	hostIP := netip.MustParseAddr("192.168.1.210")
+	own := eth(host, router, etherIPv4, ipv4(gwIP, hostIP, 17, udp(67, 68, dhcp(2, hostIP, host))))
+	if _, ok := Inbound(own, host, tab); ok || len(tab) != 0 {
+		t.Errorf("the host's own lease went to the machines (learned %v)", tab)
+	}
+	// A machine that asked is known by then, and its answer is learned.
+	zero := netip.MustParseAddr("0.0.0.0")
+	Outbound(eth(bcast, vm, etherIPv4, ipv4(zero, all, 17, udp(68, 67, dhcp(1, zero, vm)))), host, tab)
+	Inbound(eth(bcast, router, etherIPv4, ipv4(gwIP, all, 17, udp(67, 68, dhcp(2, vmIP, vm)))), host, tab)
+	if len(tab) != 1 || tab[vmIP] != vm {
+		t.Errorf("the machine's lease: %v", tab)
+	}
+}
+
+// The data of a later fragment is not a UDP header, whatever its first bytes look like.
+func TestFragmentsAreNotDHCP(t *testing.T) {
+	seenMACs = map[MAC]bool{vm: true}
+	tab := mapTable{}
+	p := ipv4(gwIP, netip.MustParseAddr("255.255.255.255"), 17, udp(67, 68, dhcp(2, vmIP, vm)))
+	binary.BigEndian.PutUint16(p[6:], 185) // fragment offset
+	if _, ok := Inbound(eth(bcast, router, etherIPv4, p), host, tab); !ok {
+		t.Error("a broadcast fragment did not pass")
+	}
+	if len(tab) != 0 {
+		t.Errorf("an address was learned from a fragment: %v", tab)
+	}
+	q := ipv4(netip.MustParseAddr("0.0.0.0"), netip.MustParseAddr("255.255.255.255"), 17, udp(68, 67, dhcp(1, vmIP, vm)))
+	binary.BigEndian.PutUint16(q[6:], 185)
+	out, ok := Outbound(eth(bcast, vm, etherIPv4, q), host, tab)
+	if !ok || binary.BigEndian.Uint16(out[ethLen+20+6:]) != 0xbeef {
+		t.Error("a fragment's data was rewritten as a DHCP request")
+	}
+}
+
+// Frames from the network are whatever someone sends: no length makes the translation fail.
+func TestTruncatedFramesNeverPanic(t *testing.T) {
+	seenMACs = map[MAC]bool{vm: true}
+	tab := mapTable{vmIP: vm}
+	all := netip.MustParseAddr("255.255.255.255")
+	frames := [][]byte{
+		eth(bcast, vm, etherARP, arp(1, vm, vmIP, MAC{}, gwIP)),
+		eth(host, router, etherARP, arp(2, router, gwIP, host, vmIP)),
+		eth(bcast, router, etherIPv4, ipv4(gwIP, all, 17, udp(67, 68, dhcp(2, vmIP, vm)))),
+		eth(host, router, etherIPv4, ipv4(gwIP, vmIP, 17, udp(67, 68, dhcp(2, vmIP, vm)))),
+		eth(bcast, vm, etherIPv4, ipv4(netip.MustParseAddr("0.0.0.0"), all, 17, udp(68, 67, dhcp(1, vmIP, vm)))),
+	}
+	for _, f := range frames {
+		for n := 0; n <= len(f); n++ {
+			cut := append([]byte(nil), f[:n]...)
+			Inbound(cut, host, tab)
+			Outbound(cut, host, tab)
+			if n > ethLen { // a header that claims more than the frame has
+				long := append([]byte(nil), cut...)
+				long[ethLen] = 0x4f
+				Inbound(long, host, tab)
+				Outbound(long, host, tab)
+			}
+		}
 	}
 }

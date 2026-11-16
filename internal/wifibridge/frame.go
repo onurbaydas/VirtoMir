@@ -20,10 +20,13 @@ const (
 // MAC is an Ethernet address.
 type MAC [6]byte
 
-// Table knows which machine has which IPv4 address (learned from what they send).
+// Table knows which machine has which IPv4 address (learned from what they send), and which
+// MAC addresses are machines at all: the ones seen sending on the machines' bridge.
 type Table interface {
 	Lookup(ip netip.Addr) (MAC, bool)
 	Learn(ip netip.Addr, mac MAC)
+	Seen(mac MAC)
+	Machine(mac MAC) bool
 }
 
 func etherType(f []byte) uint16 { return binary.BigEndian.Uint16(f[12:14]) }
@@ -39,6 +42,7 @@ func Outbound(f []byte, host MAC, t Table) (out []byte, ok bool) {
 	}
 	var vm MAC
 	copy(vm[:], f[6:12])
+	t.Seen(vm)
 	switch etherType(f) {
 	case etherARP:
 		if len(f) < ethLen+28 {
@@ -113,7 +117,17 @@ func Inbound(f []byte, host MAC, t Table) (out []byte, ok bool) {
 		if udp, ok := udpPorts(f, ihl, 67, 68); ok && len(udp) >= 8+44 {
 			dhcp := udp[8:]
 			var vm MAC
-			copy(vm[:], dhcp[28:34]) // chaddr: the machine the answer is for
+			copy(vm[:], dhcp[28:34]) // chaddr: who the answer is for
+			// Many DHCP servers broadcast their answers, so the card hears the ones for
+			// every phone and laptop on the LAN. Only an answer for one of the machines
+			// teaches an address: learning the others would route their addresses into the
+			// machines' bridge and cut the host off from them.
+			if !t.Machine(vm) {
+				if broadcast {
+					return append([]byte(nil), f...), true
+				}
+				return nil, false // the host's own lease
+			}
 			if yi := addr4(dhcp[16:20]); !yi.IsUnspecified() {
 				t.Learn(yi, vm)
 			}
@@ -156,6 +170,9 @@ func ipv4Header(f []byte) (int, bool) {
 func udpPorts(f []byte, ihl int, src, dst uint16) ([]byte, bool) {
 	if f[ethLen+9] != 17 || len(f) < ethLen+ihl+8 {
 		return nil, false
+	}
+	if binary.BigEndian.Uint16(f[ethLen+6:])&0x1fff != 0 {
+		return nil, false // a later fragment: what follows the IP header is data, not a UDP header
 	}
 	udp := f[ethLen+ihl:]
 	return udp, binary.BigEndian.Uint16(udp[0:2]) == src && binary.BigEndian.Uint16(udp[2:4]) == dst
