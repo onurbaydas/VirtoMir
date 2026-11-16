@@ -196,9 +196,7 @@ func run(c config, log *slog.Logger) error {
 		hostName, _ = os.Hostname()
 	}
 	offsiteStore, err := offsite.Open(filepath.Join(c.stateDir, "offsite.json"), filepath.Join(c.stateDir, "restic-cache"), hostName)
-	if err != nil {
-		log.Warn("off-site copies", "err", err)
-	}
+	logStoreErr(log, "off-site copies", err)
 	scheduler, err := schedule.Open(filepath.Join(c.stateDir, "schedules.json"), filepath.Join(c.stateDir, "backups"),
 		scheduleRunner{client, offsiteStore}, jobStarter(jobManager), log)
 	logStoreErr(log, "schedules", err)
@@ -253,9 +251,8 @@ func run(c config, log *slog.Logger) error {
 		opts.Quotas = q
 	}
 	haStore, err := ha.Open(filepath.Join(c.stateDir, "ha.json"))
-	if err != nil {
-		log.Warn("high availability", "err", err)
-	} else {
+	logStoreErr(log, "high availability", err)
+	if haStore != nil {
 		opts.HA = haStore
 	}
 	opts.HostInfo = hostinfo.New()
@@ -263,9 +260,10 @@ func run(c config, log *slog.Logger) error {
 		opts.HostNet = hostnet.New(c.stateDir, log, opts.HostInfo)
 	}
 	opts.Offsite = offsiteStore
-	if vmwareStore, err := vmware.Open(filepath.Join(c.stateDir, "vmware.json")); err != nil {
+	if vmwareStore, err := vmware.Open(filepath.Join(c.stateDir, "vmware.json")); vmwareStore == nil {
 		log.Warn("vmware store", "err", err)
 	} else {
+		logStoreErr(log, "vmware store", err)
 		opts.VMwareStore = vmwareStore
 	}
 	opts.VMwareWaves = vmware.NewRegistry()
@@ -283,17 +281,19 @@ func run(c config, log *slog.Logger) error {
 	} else {
 		opts.Reports = repStore
 	}
-	if rpStore, err := respool.Open(filepath.Join(c.stateDir, "respools.json")); err != nil {
+	if rpStore, err := respool.Open(filepath.Join(c.stateDir, "respools.json")); rpStore == nil {
 		log.Warn("respools store", "err", err)
 	} else {
+		logStoreErr(log, "respools store", err)
 		opts.Respools = rpStore
 	}
 	if pjStore != nil {
 		opts.Projects = pjStore
 	}
-	if zr, err := zfsrep.Open(filepath.Join(c.stateDir, "zfs-replication.json"), zfsrep.Exec{}, log); err != nil {
+	if zr, err := zfsrep.Open(filepath.Join(c.stateDir, "zfs-replication.json"), zfsrep.Exec{}, log); zr == nil {
 		log.Warn("zfs replication", "err", err)
 	} else {
+		logStoreErr(log, "zfs replication", err)
 		opts.ZFSRep = zr
 		safeGo(ctx, log, "zfs replication", zr.Run)
 	}
@@ -314,9 +314,10 @@ func run(c config, log *slog.Logger) error {
 		opts.ContentSync = syncManager
 		safeGo(ctx, log, "content sync", syncManager.Start)
 	}
-	if plStore, err := placement.Open(filepath.Join(c.stateDir, "placement.json")); err != nil {
+	if plStore, err := placement.Open(filepath.Join(c.stateDir, "placement.json")); plStore == nil {
 		log.Warn("placement store", "err", err)
 	} else {
+		logStoreErr(log, "placement store", err)
 		opts.Placement = plStore
 	}
 	// Self-service catalog (ADR-0065): blueprints, requests and showback in
@@ -337,9 +338,10 @@ func run(c config, log *slog.Logger) error {
 		opts.LeaseMgr = mgr
 		safeGo(ctx, log, "catalog leases", mgr.Run)
 	}
-	if st, err := lcm.Open(filepath.Join(c.stateDir, "lcm.json")); err != nil {
+	if st, err := lcm.Open(filepath.Join(c.stateDir, "lcm.json")); st == nil {
 		log.Warn("rolling upgrades", "err", err)
 	} else {
+		logStoreErr(log, "rolling upgrades", err)
 		opts.LCM = st
 	}
 	opts.Upgrader = &systemd.Upgrader{Log: log}

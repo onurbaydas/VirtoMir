@@ -134,7 +134,13 @@ func Open(path, cacheDir, host string) (*Store, error) {
 	if err != nil {
 		return s, err
 	}
-	return s, json.Unmarshal(b, &s.cfg)
+	if err := json.Unmarshal(b, &s.cfg); err != nil {
+		// The file holds the repository password, without which no off-site copy can be
+		// read: it is moved aside, never written over by the next save.
+		s.cfg = Config{}
+		return s, atomicfile.Quarantine(path, err)
+	}
+	return s, nil
 }
 
 // Config returns the configuration with secrets replaced by Secret.

@@ -118,7 +118,8 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("read lcm store: %w", err)
 	}
 	if err := json.Unmarshal(raw, &s.plans); err != nil {
-		return nil, fmt.Errorf("read lcm store: %w", err)
+		s.plans = nil
+		return s, atomicfile.Quarantine(path, err) // the file is kept; no plans
 	}
 	return s, nil
 }

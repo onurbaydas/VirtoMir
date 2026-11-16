@@ -134,7 +134,8 @@ func Open(path string, r Runner, log *slog.Logger) (*Manager, error) {
 		return nil, err
 	}
 	if err := json.Unmarshal(raw, &m.tasks); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		m.tasks = nil
+		return m, atomicfile.Quarantine(path, err) // the file is kept; no replications until they are made again
 	}
 	for _, t := range m.tasks {
 		if t.State == "syncing" { // interrupted by a restart

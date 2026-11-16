@@ -107,7 +107,11 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	if err := json.Unmarshal(raw, &s.cfg); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		// Keep the unreadable file (it holds the BMC passwords) and start with HA off: it
+		// can be set up again, and the page says so, instead of HA being gone without a word.
+		s.cfg = Config{}
+		s.cfg.normalize()
+		return s, atomicfile.Quarantine(path, err)
 	}
 	s.cfg.normalize()
 	return s, nil

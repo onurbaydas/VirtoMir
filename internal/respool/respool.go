@@ -78,7 +78,7 @@ func Open(path string) (*Store, error) {
 	}
 	var list []ResourcePool
 	if err := json.Unmarshal(raw, &list); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return s, atomicfile.Quarantine(path, err) // the file is kept; no pools until they are made again
 	}
 	for i := range list {
 		p := list[i]

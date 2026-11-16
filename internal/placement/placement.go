@@ -122,7 +122,7 @@ func Open(path string) (*Store, error) {
 	if err == nil {
 		var data storeData
 		if err := json.Unmarshal(raw, &data); err != nil {
-			return nil, fmt.Errorf("read placement store: %w", err)
+			return s, atomicfile.Quarantine(path, err) // the file is kept; no rules until they are made again
 		}
 		s.version = data.Version
 		if data.Rules != nil {

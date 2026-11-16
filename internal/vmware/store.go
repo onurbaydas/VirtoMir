@@ -118,7 +118,8 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	if err := json.Unmarshal(b, &s.cfg); err != nil {
-		return nil, err
+		s.cfg = Connection{}
+		return s, atomicfile.Quarantine(path, err) // the file (with the password) is kept
 	}
 	return s, nil
 }
