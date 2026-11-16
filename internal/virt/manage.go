@@ -18,6 +18,8 @@ import (
 type DefineResult struct {
 	// The machine is running: the new definition is used from its next boot on.
 	AppliesOnNextBoot bool `json:"appliesOnNextBoot"`
+	// Disks of a restored version (RestoreXML) that are not on the host any more.
+	MissingDisks []string `json:"missingDisks,omitempty"`
 }
 
 // DefineXML replaces the persistent definition of an existing machine with the given XML,

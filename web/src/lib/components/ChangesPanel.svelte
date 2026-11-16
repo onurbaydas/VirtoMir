@@ -64,8 +64,17 @@
     toasts.push({
       kind: 'info',
       title: t('Earlier version restored'),
-      detail: r.appliesOnNextBoot ? 'The machine is running: it uses the restored definition from its next start.' : undefined,
+      detail: r.appliesOnNextBoot ? t('The machine is running: it uses the restored definition from its next start.') : undefined,
     })
+    // The version is restored as it was; what it needs and is gone has to be said now, not
+    // when the machine refuses to start.
+    if (r.missingDisks?.length) {
+      toasts.push({
+        kind: 'warn',
+        title: t('Disks of this version are no longer on the host'),
+        detail: t('{disks} — the machine does not start until they are back or taken out on the Hardware tab.', { disks: r.missingDisks.join(', ') }),
+      })
+    }
     onchange()
     await load()
   }

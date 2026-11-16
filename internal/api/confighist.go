@@ -1,11 +1,11 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/onurbaydas/virtomir/internal/confighist"
+	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
 // Configuration history of a machine (ADR-0021): every saved definition, compare, revert.
@@ -86,6 +86,12 @@ func (s *Server) getConfigVersion(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, map[string]string{"xml": doc})
 }
 
+// restoreBackend restores an earlier definition under the machine's present name and says
+// which of its disks are gone (virt.Client).
+type restoreBackend interface {
+	RestoreXML(uuid, xml string) (virt.DefineResult, error)
+}
+
 // revertConfigVersion makes an old version the machine's definition again (validated by
 // libvirt like any XML edit; a running machine picks it up on its next start).
 func (s *Server) revertConfigVersion(w http.ResponseWriter, r *http.Request) {
@@ -98,11 +104,15 @@ func (s *Server) revertConfigVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	doc, err := s.confighist.Get(uuid, r.PathValue("id"))
-	if errors.Is(err, confighist.ErrNoVersion) {
+	if err != nil {
 		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
-	res, err := s.backend.DefineXML(uuid, doc)
+	define := s.backend.DefineXML
+	if b, ok := s.backend.(restoreBackend); ok {
+		define = b.RestoreXML
+	}
+	res, err := define(uuid, doc)
 	if err != nil {
 		s.writeError(w, err)
 		return

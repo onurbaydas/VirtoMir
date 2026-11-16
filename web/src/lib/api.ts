@@ -1716,7 +1716,7 @@ export const api = {
   configVersion: async (uuid: string, id: string) =>
     (await request<{ xml: string }>('GET', `${domainPath(uuid)}/config-history/${enc(id)}`)).xml,
   revertConfig: (uuid: string, id: string) =>
-    request<{ appliesOnNextBoot: boolean }>('POST', `${domainPath(uuid)}/config-history/${enc(id)}/revert`),
+    request<{ appliesOnNextBoot: boolean; missingDisks?: string[] }>('POST', `${domainPath(uuid)}/config-history/${enc(id)}/revert`),
   clone: (uuid: string, name: string) => request<Job>('POST', `${domainPath(uuid)}/clone`, { name }),
   /** Moves a machine to another cluster member: copied when stopped, live-migrated when running. */
   move: (uuid: string, host: string, pool: string) => request<Job>('POST', `${domainPath(uuid)}/move`, { host, pool }),
