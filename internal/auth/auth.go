@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -199,6 +200,9 @@ func (m *Manager) NewSession(id Identity) (string, error) {
 	token := newToken()
 	now := m.now()
 	m.mu.Lock()
+	if len(m.sessions) >= sweepAbove {
+		m.sweepSessions(now)
+	}
 	m.sessions[token] = &session{user: id.Name, role: id.Role, created: now, lastSeen: now}
 	m.mu.Unlock()
 	return token, nil
@@ -262,6 +266,23 @@ func (m *Manager) fail(ip string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.failures[ip] = append(m.recentFailures(ip), m.now())
+	// Addresses that never come back are only forgotten here: many of them trying once
+	// each must not fill the memory.
+	if len(m.failures) > sweepAbove {
+		for other := range m.failures {
+			m.recentFailures(other)
+		}
+	}
+}
+
+// sweepSessions drops the sessions that have run out (caller holds m.mu). A session is
+// otherwise only dropped when its token is used again, and a closed browser never does.
+func (m *Manager) sweepSessions(now time.Time) {
+	for token, s := range m.sessions {
+		if now.Sub(s.lastSeen) > IdleTimeout || now.Sub(s.created) > MaxAge {
+			delete(m.sessions, token)
+		}
+	}
 }
 
 func (m *Manager) recentFailures(ip string) []time.Time {
@@ -307,11 +328,25 @@ func isHTTPS(r *http.Request) bool {
 	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 }
 
+// remoteIP is what failed sign-ins are counted by: the address, or for IPv6 its /64. One
+// IPv6 customer has at least a /64 to pick addresses from, so counting single addresses
+// would give them as many guesses as they like.
 func remoteIP(addr string) string {
-	if h, _, err := net.SplitHostPort(addr); err == nil {
+	h := addr
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		h = host
+	}
+	if i := strings.IndexByte(h, '%'); i >= 0 {
+		h = h[:i] // the zone of a link-local address
+	}
+	ip := net.ParseIP(h)
+	if ip == nil {
 		return h
 	}
-	return addr
+	if v4 := ip.To4(); v4 != nil {
+		return v4.String()
+	}
+	return ip.Mask(net.CIDRMask(64, 128)).String() + "/64"
 }
 
 func newToken() string {
