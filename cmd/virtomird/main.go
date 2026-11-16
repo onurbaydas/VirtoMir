@@ -52,6 +52,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/sdn"
 	"github.com/onurbaydas/virtomir/internal/storageeff"
 	"github.com/onurbaydas/virtomir/internal/systemd"
+	"github.com/onurbaydas/virtomir/internal/timeline"
 	"github.com/onurbaydas/virtomir/internal/update"
 	"github.com/onurbaydas/virtomir/internal/virt"
 	"github.com/onurbaydas/virtomir/internal/vmware"
@@ -235,11 +236,18 @@ func run(c config, log *slog.Logger) error {
 	if err := setupCluster(c, tlsConf, &opts); err != nil {
 		log.Warn("cluster", "err", err)
 	}
+	// What libvirt reports about each machine's life, for its timeline.
+	tl, err := timeline.Open(filepath.Join(c.stateDir, "timeline"))
+	if err != nil {
+		log.Warn("machine timelines: starts, stops and crashes are not kept", "err", err)
+	} else {
+		opts.Timeline = tl
+	}
 	if ch, err := confighist.Open(filepath.Join(c.stateDir, "config-history"), client, log); err != nil {
 		log.Warn("configuration history", "err", err)
 	} else {
 		opts.ConfigHistory = ch
-		safeGo(ctx, log, "configuration history", func(ctx context.Context) { watchConfig(ctx, client, ch, log) })
+		safeGo(ctx, log, "configuration history", func(ctx context.Context) { watchConfig(ctx, client, ch, tl, log) })
 		drift := confighist.NewDriftWatcher(confighist.DefaultXMLDir, client, log)
 		opts.ConfigDrift = drift
 		safeGo(ctx, log, "definition files", drift.Run)
@@ -730,7 +738,7 @@ func (a leaseAlerts) Notice(domain, title, message string) {
 // watchConfig keeps the configuration history (ADR-0021) current from libvirt's events, a
 // moment after each change. Events are lost while the connection is down, so every
 // (re)subscription starts with a full comparison, and a slow scan runs as a safety net.
-func watchConfig(ctx context.Context, client *virt.Client, ch *confighist.Store, log *slog.Logger) {
+func watchConfig(ctx context.Context, client *virt.Client, ch *confighist.Store, tl *timeline.Store, log *slog.Logger) {
 	deb := confighist.NewDebouncer(time.Second, ch.Changed)
 	defer deb.Stop()
 	go func() {
@@ -759,11 +767,19 @@ func watchConfig(ctx context.Context, client *virt.Client, ch *confighist.Store,
 			last = ""
 			ch.Sweep() // catch up on what happened before or between subscriptions
 			for ev := range events {
+				// The machine's timeline: started, stopped, crashed, paused, and why.
+				if tl != nil && ev.Lifecycle != "" {
+					if err := tl.Record(ev.UUID, ev.Lifecycle, ev.Detail); err != nil {
+						log.Debug("machine timeline", "domain", ev.UUID, "err", err)
+					}
+				}
 				if ev.Stopped {
 					ch.Forget(ev.UUID)
 					continue
 				}
-				deb.Add(ev.UUID, ev.Persistent, ev.Live)
+				if ev.Persistent || ev.Live {
+					deb.Add(ev.UUID, ev.Persistent, ev.Live)
+				}
 			}
 		}
 		select {

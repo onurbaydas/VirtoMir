@@ -662,6 +662,8 @@ function domainRoute(host: w.DemoHost, method: string, rest: string[], q: URLSea
     }
     case op === 'GET config-history':
       return json({ versions: w.configVersions(m) })
+    case op === 'GET timeline':
+      return json({ events: w.machineTimeline(m), missing: [] })
     case method === 'GET' && rest[1] === 'config-history':
       return json({ xml: w.configVersionXML(m, rest[2]) })
     case method === 'POST' && rest[1] === 'config-history':

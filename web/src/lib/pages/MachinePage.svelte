@@ -34,6 +34,7 @@
   import Dialog from '../components/Dialog.svelte'
   import ManageDialogs, { type ManageDialog } from '../components/ManageDialogs.svelte'
   import ChangesPanel from '../components/ChangesPanel.svelte'
+  import MachineTimeline from '../components/MachineTimeline.svelte'
   import QemuArgsCard from '../components/QemuArgsCard.svelte'
   import FirewallPanel from '../components/FirewallPanel.svelte'
   import type { MenuItem } from '../components/ActionMenu.svelte'
@@ -113,9 +114,9 @@
   // Six everyday tabs; firewall, change history and raw XML live one level deeper under
   // "Advanced". Their old links (#firewall, #changes, #xml) still open them there.
   type Tab = 'overview' | 'console' | 'settings' | 'hardware' | 'snapshots' | 'backups' | 'advanced'
-  type Sub = 'firewall' | 'changes' | 'xml'
+  type Sub = 'firewall' | 'changes' | 'timeline' | 'xml'
   const TABS: Tab[] = ['overview', 'console', 'settings', 'hardware', 'snapshots', 'backups', 'advanced']
-  const SUBS: Sub[] = ['changes', 'firewall', 'xml']
+  const SUBS: Sub[] = ['changes', 'timeline', 'firewall', 'xml']
   // A system container (ADR-0055) has no VM settings, firewall, snapshots or backups.
   const VM_ONLY: Tab[] = ['settings', 'snapshots', 'backups']
   let container = $derived(detail?.kind === 'container')
@@ -252,6 +253,8 @@
   }
   const setTab = (to: Tab) => go(to)
   const setSub = (to: Sub) => go(to)
+  // The version the timeline's "See what changed" opens in the change history.
+  let pickVersion = $state('')
 
   // ---- Overview cards -------------------------------------------------------------
 
@@ -652,6 +655,7 @@
     <div role="tabpanel">
       <div class="subtabs" role="tablist" aria-label={t('Advanced sections')}>
         <button role="tab" aria-selected={sub === 'changes'} class:on={sub === 'changes'} onclick={() => setSub('changes')}>{t('Change history')}</button>
+        <button role="tab" aria-selected={sub === 'timeline'} class:on={sub === 'timeline'} onclick={() => setSub('timeline')}>{t('Timeline')}</button>
         {#if !container}
           <button role="tab" aria-selected={sub === 'firewall'} class:on={sub === 'firewall'} onclick={() => setSub('firewall')}>{t('Firewall')}</button>
         {/if}
@@ -661,8 +665,18 @@
         <FirewallPanel {uuid} name={dom.name} {active} />
       {:else if sub === 'xml'}
         <XmlView {uuid} name={dom.name} {active} persistent={dom.persistent} version={stateKey} onsaved={load} />
+      {:else if sub === 'timeline'}
+        <MachineTimeline
+          {uuid}
+          name={dom.name}
+          version={stateKey}
+          onversion={(id) => {
+            pickVersion = id
+            setSub('changes')
+          }}
+        />
       {:else}
-        <ChangesPanel {uuid} {active} version={stateKey} onchange={load} />
+        <ChangesPanel {uuid} {active} version={stateKey} onchange={load} pick={pickVersion} />
       {/if}
     </div>
   {/if}

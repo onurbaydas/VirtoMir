@@ -24,16 +24,17 @@ import type {
   HostCompliance,
   HostHardware,
   HostInfo,
-  Lease,
   LCMPlan,
   LCMStep,
   LCMStepKind,
+  Lease,
   Pool,
   PricingConfig,
   Project,
   ScheduleInfo,
   SettingsView,
   SnapshotInfo,
+  TimelineEvent,
   VNetwork,
   Volume,
 } from '../api'
@@ -186,6 +187,7 @@ function machine(m: Partial<DemoMachine> & Pick<DemoMachine, 'uuid' | 'host' | '
 
 const now = () => Date.now()
 const ago = (ms: number) => new Date(now() - ms).toISOString()
+const MIN = 60_000
 const H = 3600_000
 const D = 24 * H
 
@@ -665,6 +667,29 @@ export function configVersions(m: DemoMachine): ConfigVersion[] {
     { id: 'v3', time: ago(6 * D), source: 'outside', size: 2288 },
     { id: 'v2', time: ago(13 * D), user: 'onur', source: 'virtomir', size: 2264 },
     { id: 'v1', time: ago(40 * D + m.vcpus * H), source: 'first seen', size: 2190 },
+  ]
+}
+
+/** A machine's timeline in the demo: a few weeks of an ordinary life, with one bad night. */
+export function machineTimeline(m: DemoMachine): TimelineEvent[] {
+  const path = `/api/v1/domains/${m.uuid}`
+  const act = (t: number, user: string, method: string, suffix: string, extra: Partial<TimelineEvent> = {}): TimelineEvent => ({ time: ago(t), kind: 'action', user, method, path: path + suffix, status: 204, ...extra })
+  return [
+    { time: ago(3 * H), kind: 'backup', automatic: true, ref: `${m.name}/auto`, sizeBytes: 6.4e9 },
+    act(2 * D, 'onur', 'PUT', '/settings', { status: 200, version: 'v4' }),
+    act(2 * D + 4 * MIN, 'onur', 'POST', '/actions/resume'),
+    { time: ago(2 * D + 4 * MIN), kind: 'lifecycle', what: 'resumed', detail: 'unpaused' },
+    { time: ago(2 * D + 31 * MIN), kind: 'alert', what: 'critical', detail: `${m.name} is paused: its disk cannot be written`, ref: 'a-demo', until: ago(2 * D + 4 * MIN) },
+    { time: ago(2 * D + 32 * MIN), kind: 'lifecycle', what: 'paused', detail: 'ioerror' },
+    { time: ago(3 * D), kind: 'snapshot', user: 'onur', ref: 'before-upgrade', detail: 'before-upgrade' },
+    act(5 * D, 'ayse', 'POST', '/disks/vdb/resize', { status: 409, error: 'The disk can only grow: it is already 80 GiB.' }),
+    { time: ago(6 * D), kind: 'definition', what: 'outside', version: 'v3' },
+    { time: ago(9 * D), kind: 'lifecycle', what: 'started', detail: 'booted' },
+    act(9 * D, 'onur', 'POST', '/actions/start'),
+    { time: ago(9 * D + 2 * MIN), kind: 'lifecycle', what: 'stopped', detail: 'crashed' },
+    { time: ago(9 * D + 2 * MIN), kind: 'lifecycle', what: 'crashed', detail: 'panicked' },
+    act(13 * D, 'onur', 'POST', '/disks', { status: 201, version: 'v2' }),
+    { time: ago(40 * D + m.vcpus * H), kind: 'definition', what: 'first seen', version: 'v1' },
   ]
 }
 

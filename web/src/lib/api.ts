@@ -1349,6 +1349,31 @@ export interface ConfigDrift {
   modified: string
 }
 
+/** One thing that happened to a machine (internal/timeline). */
+export interface TimelineEvent {
+  time: string
+  kind: 'action' | 'definition' | 'running' | 'lifecycle' | 'snapshot' | 'backup' | 'alert'
+  /** lifecycle: started, stopped, paused, resumed, crashed, shutdown; definition and running: virtomir, outside, first seen; alert: its severity. */
+  what?: string
+  /** lifecycle: why; snapshot: its name; alert: its message; backup: its note. */
+  detail?: string
+  user?: string
+  method?: string
+  path?: string
+  status?: number
+  error?: string
+  token?: string
+  /** The configuration version this is, or that this action made. */
+  version?: string
+  /** The snapshot, backup or alert. */
+  ref?: string
+  /** When an alert ended. */
+  until?: string
+  sizeBytes?: number
+  automatic?: boolean
+  checkError?: string
+}
+
 export interface ConfigHistory {
   /** Saved definitions, newest first. */
   versions: ConfigVersion[]
@@ -1710,6 +1735,8 @@ export const api = {
   attachHostdev: (uuid: string, spec: { type: 'pci' | 'usb'; address?: string; vendorId?: string; productId?: string }) =>
     request<{ liveError: string }>('POST', `${domainPath(uuid)}/hostdevs`, spec),
   configHistory: (uuid: string) => request<ConfigHistory>('GET', `${domainPath(uuid)}/config-history`),
+  /** What happened to the machine, newest first; missing names the sources that could not be read. */
+  machineTimeline: (uuid: string) => request<{ events: TimelineEvent[]; missing?: string[] }>('GET', `${domainPath(uuid)}/timeline`),
   /** Defines the machine from its hand-edited definition file (admin). */
   loadDefinitionFile: (uuid: string) =>
     request<{ appliesOnNextBoot: boolean }>('POST', `${domainPath(uuid)}/config-history/load-file`),

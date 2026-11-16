@@ -44,6 +44,8 @@ internal/api/        ← HTTP/JSON API (/api/v1), sign-in guard, SSE stream, ser
 internal/auth/       ← PAM (build tag `pam`), sessions, lockout, self-signed TLS (ADR-0010), roles + API tokens (ADR-0015),
                        external.go: LDAP + OIDC users and signin.json (ADR-0023; OIDC flow in internal/api/oidc.go)
 internal/confighist/ ← every version of each machine's definition, diff + revert (ADR-0021)
+internal/timeline/   ← what happened to a machine, one list: libvirt's lifecycle reports kept per machine (Store), and
+                       the activity log, configuration history, snapshots, backups and alerts folded into one story (Fold)
 internal/quota/      ← per-user/group quotas, machine ownership, operator self-service (ADR-0022)
 internal/activity/   ← who did what: -state-dir/activity.jsonl (ADR-0015)
 internal/alerts/     ← alert rules on live snapshots, webhook/e-mail channels (ADR-0017)
@@ -63,7 +65,7 @@ web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embed
                        Turkish to tr.ts; an untranslated key falls back to English
   src/lib/           ← api client, live/session stores, router, components (Dialog, ConfirmButton, …)
   src/lib/pages/     ← Overview, MachinePage (#console|#settings|#hardware|#snapshots|#backups, and #advanced with
-                       #changes|#firewall|#xml), NewMachine, Import, Storage, Networks, Hardware (host PCI/USB), Backups,
+                       #changes|#timeline|#firewall|#xml), NewMachine, Import, Storage, Networks, Hardware (host PCI/USB), Backups,
                        Alerts, Account (own role, 2FA, API tokens), HostSettings (/settings: updates, sign-in, quotas,
                        integrations, setup), Setup, Console (full-screen /console/<uuid>), Login; the grouped pages
                        (Operations, Datacenter, Self-service in components/Sidebar.svelte) are the rest

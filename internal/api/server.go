@@ -46,6 +46,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/sdn"
 	"github.com/onurbaydas/virtomir/internal/storageeff"
 	"github.com/onurbaydas/virtomir/internal/storconn"
+	"github.com/onurbaydas/virtomir/internal/timeline"
 	"github.com/onurbaydas/virtomir/internal/update"
 	"github.com/onurbaydas/virtomir/internal/virt"
 	"github.com/onurbaydas/virtomir/internal/vmware"
@@ -138,6 +139,9 @@ type Options struct {
 	ConfigHistory *confighist.Store
 	// ConfigDrift nil: definition files edited by hand are not noticed.
 	ConfigDrift *confighist.DriftWatcher
+	// Timeline nil: what libvirt reports about a machine's life (started, crashed, paused)
+	// is not kept; its timeline still has everything else.
+	Timeline    *timeline.Store
 	Cluster     *cluster.Store
 	Fingerprint string
 	HostName    string
@@ -251,6 +255,7 @@ type Server struct {
 
 	confighist   *confighist.Store
 	configDrift  *confighist.DriftWatcher
+	timeline     *timeline.Store
 	quotas       *quota.Store
 	oidc         oidcFlows
 	oidcClient   *http.Client // nil: default (tests use a client trusting their provider)
@@ -352,7 +357,7 @@ func NewServer(o Options) *Server {
 		history: o.History, tokens: o.Tokens, activity: o.Activity, alerts: o.Alerts, schedules: o.Schedules, fipsInfo: o.FIPSInfo,
 		complianceScanner: cs,
 		cluster:           o.Cluster, fingerprint: o.Fingerprint, hostName: o.HostName, listenPort: o.ListenPort,
-		confighist: o.ConfigHistory, configDrift: o.ConfigDrift, quotas: o.Quotas, groupsOf: o.GroupsOf,
+		confighist: o.ConfigHistory, configDrift: o.ConfigDrift, timeline: o.Timeline, quotas: o.Quotas, groupsOf: o.GroupsOf,
 		ha: o.HA, reports: o.Reports, respools: o.Respools, hostinfo: o.HostInfo, updater: o.Updater, stateDir: o.StateDir, hostnet: o.HostNet, offsite: o.Offsite,
 		vmwareStore: o.VMwareStore, vmwareWaves: o.VMwareWaves, vmwareLister: vl, vmwarePreflight: vp, vmwareConverter: vc,
 		drs: o.DRS, placement: o.Placement, projects: o.Projects, rateLimiter: rl, zfsRep: o.ZFSRep,
@@ -425,6 +430,7 @@ func (s *Server) Handler() http.Handler {
 	s.moveRoutes(mux)
 	s.migrateRoutes(mux)
 	s.configHistoryRoutes(mux)
+	s.timelineRoutes(mux)
 	s.importRoutes(mux)
 	s.vmwareRoutes(mux)
 	s.hostdevRoutes(mux)

@@ -48,7 +48,7 @@ VirtoMir sits in the middle: as straightforward as Cockpit, as thorough as raw l
 What you use every day on one host is always in front: **Overview, Machines, Storage, Networks, Backups, Alerts and Hardware**. Everything else is one click deeper, never gone:
 
 - The sidebar's **Operations** group (insights, reports, compliance, content library, activity), **Datacenter** group (cluster, Ceph, SDN, physical network, Kubernetes, bare metal; open by default once hosts are joined) and **Self-service** group (projects, catalog) fold open on demand. Experimental pages are marked *beta*. The command palette (Ctrl+K) reaches every page.
-- A machine has six tabs: **Overview, Console, Settings, Hardware, Snapshots, Backups**. Its firewall, change history and XML are under **Advanced**.
+- A machine has six tabs: **Overview, Console, Settings, Hardware, Snapshots, Backups**. Its firewall, change history, timeline and XML are under **Advanced**.
 - The new-machine wizard asks only what every machine needs. Projects, resource pools, GPU pools, SDN subnets, IP pools and storage policies appear when they are set up.
 - Host-wide settings (updates, sign-in with LDAP/OIDC, quotas, integrations, the host setup) are on **Host settings**, the gear in the sidebar footer (admins only). Your own role, two-step sign-in and API tokens are on **Account**.
 
@@ -66,6 +66,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 - **Tuning**: CPU and emulator pinning, huge pages, NUMA memory policy
 - **XML editor** for everything else, validated by libvirt
 - **Configuration history**: every version of a machine's definition, recorded from libvirt's events — also changes made with `virsh`, live-only changes on running machines, and a warning when `/etc/libvirt/qemu/*.xml` was edited but not loaded — with a diff and one-click restore
+- **Timeline**: everything that happened to a machine in one list — what was done through VirtoMir and by whom, changes made outside it, when it started, stopped, crashed or was paused and why (a full pool, a kernel panic, a shutdown from inside the guest), its snapshots, backups and alerts — with a jump to the exact change. The answer to "it worked yesterday: what changed?"
 - **Hardware**: add/remove disks and network adapters (hot-plug), insert/eject ISOs, **grow disks**
 - **Storage QoS & SLAs**: guarantee and cap I/O bandwidth (`read_bytes_sec`, `write_bytes_sec`) and IOPS (`read_iops_sec`, `write_iops_sec`, burst ceilings) per virtual disk using QEMU `<iotune>`, applied live without guest downtime
 - **Confidential Computing**: machines with encrypted memory (**AMD SEV / SEV-SNP**, **Intel TDX**) on hosts whose CPU and firmware offer it; VirtoMir reads what the host supports from libvirt and only offers that
@@ -255,7 +256,7 @@ The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pa
 | `-operator-group` | `virtomir-operator` | members may run machines but not change them |
 | `-viewer-group` | `virtomir-viewer` | members may look but change nothing |
 | `-tls` | `auto` | `auto` (self-signed in `-state-dir`), `files` (`-tls-cert`, `-tls-key`), `off` (behind a TLS proxy) |
-| `-state-dir` | `/var/lib/virtomir` | certificate, metric history, alerts, schedules, activity log, tokens, cluster membership, configuration history, quotas, LDAP/OIDC settings; default backup location (`backups/`) |
+| `-state-dir` | `/var/lib/virtomir` | certificate, metric history, alerts, schedules, activity log, tokens, cluster membership, configuration history, machine timelines, quotas, LDAP/OIDC settings; default backup location (`backups/`) |
 | `-name` | hostname | how this host is called in a cluster |
 | `-libvirt-socket` | `/var/run/libvirt/libvirt-sock` | |
 

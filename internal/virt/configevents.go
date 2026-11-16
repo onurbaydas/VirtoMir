@@ -16,6 +16,10 @@ type ConfigEvent struct {
 	Persistent bool
 	Live       bool
 	Stopped    bool
+	// What happened to the machine, for its timeline ("" for a change of the definition
+	// only): started, stopped, paused, resumed, crashed or shutdown, and why (Detail).
+	Lifecycle string
+	Detail    string
 }
 
 // ConfigEvents streams the libvirt events that change machine configurations: defined and
@@ -102,6 +106,7 @@ func (c *Client) ConfigEvents(ctx context.Context) (<-chan ConfigEvent, error) {
 
 func lifecycleConfigEvent(m libvirt.DomainEventLifecycleMsg) (ConfigEvent, bool) {
 	ev := ConfigEvent{UUID: formatUUID(m.Dom.UUID)}
+	ev.Lifecycle, ev.Detail = lifecycleOf(m.Event, m.Detail)
 	switch libvirt.DomainEventType(m.Event) {
 	case libvirt.DomainEventDefined:
 		ev.Persistent = true
@@ -110,9 +115,42 @@ func lifecycleConfigEvent(m libvirt.DomainEventLifecycleMsg) (ConfigEvent, bool)
 	case libvirt.DomainEventStopped:
 		ev.Stopped = true
 	default:
-		return ev, false // undefined (nothing left to capture), paused, resumed, …
+		// Undefined (nothing left to capture), paused, resumed, …: no configuration to
+		// look at, but the timeline wants to know what happened.
+		return ev, ev.Lifecycle != ""
 	}
 	return ev, true
+}
+
+// lifecycleOf names a libvirt lifecycle event and its reason in the words of a machine's
+// timeline. The reasons are libvirt's own; the ones people look for afterwards are a
+// machine that stopped by itself (crashed, failed, shut down from inside) and one that was
+// paused because its disk could not be written (ioerror: a full pool).
+func lifecycleOf(event, detail int32) (what, why string) {
+	pick := func(names ...string) string {
+		if detail >= 0 && int(detail) < len(names) {
+			return names[detail]
+		}
+		return ""
+	}
+	switch libvirt.DomainEventType(event) {
+	case libvirt.DomainEventStarted:
+		return "started", pick("booted", "migrated", "restored", "from-snapshot", "wakeup", "recreated")
+	case libvirt.DomainEventSuspended:
+		return "paused", pick("paused", "migrated", "ioerror", "watchdog", "restored", "from-snapshot", "api-error", "postcopy", "postcopy-failed")
+	case libvirt.DomainEventResumed:
+		return "resumed", pick("unpaused", "migrated", "from-snapshot", "postcopy", "postcopy-failed")
+	case libvirt.DomainEventStopped:
+		return "stopped", pick("shutdown", "destroyed", "crashed", "migrated", "saved", "failed", "from-snapshot", "recreated")
+	case libvirt.DomainEventShutdown:
+		// Who asked for it; "finished" (0) says nothing the stop that follows does not.
+		if why = pick("", "guest", "host"); why != "" {
+			return "shutdown", why
+		}
+	case libvirt.DomainEventCrashed:
+		return "crashed", pick("panicked", "crashloaded")
+	}
+	return "", ""
 }
 
 func deviceEventUUID(msg any) string {

@@ -12,7 +12,8 @@
   import { toasts } from '../toast.svelte'
   import ConfirmButton from './ConfirmButton.svelte'
 
-  let { uuid, active, version, onchange }: { uuid: string; active: boolean; version: unknown; onchange: () => void } = $props()
+  // pick: a version to show first (the timeline's "See what changed").
+  let { uuid, active, version, onchange, pick = '' }: { uuid: string; active: boolean; version: unknown; onchange: () => void; pick?: string } = $props()
 
   let history = $state<ConfigHistory | null>(null)
   // Saved definitions and running configurations in one timeline, newest first.
@@ -20,6 +21,7 @@
   let saved = $derived(history?.versions ?? [])
   let error = $state('')
   let selected = $state<string | null>(null)
+  let picked = '' // the pick already shown: choosing another version afterwards stays chosen
   let diff = $state<(DiffLine | null)[] | null>(null)
   let diffErr = $state('')
 
@@ -27,6 +29,7 @@
     try {
       history = await api.configHistory(uuid)
       error = ''
+      if (pick && picked !== pick && versions?.some((v) => v.id === pick)) selected = picked = pick
       if (!selected || !versions?.some((v) => v.id === selected)) selected = versions?.[0]?.id ?? null
     } catch (e) {
       error = errorText(e)
