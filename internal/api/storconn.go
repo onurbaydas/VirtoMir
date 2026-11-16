@@ -224,5 +224,5 @@ func (s *Server) connectLUN(ctx context.Context, req connectRequest) error {
 	if err != nil {
 		return err
 	}
-	return s.backend.CreatePool(virt.PoolSpec{Name: req.Pool, Path: dir})
+	return s.poolOnCarved(req.Pool, dir)
 }

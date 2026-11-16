@@ -27,7 +27,17 @@ func useTempDirs(t *testing.T) {
 	t.Helper()
 	oldBase, oldUnit := Base, UnitDir
 	Base, UnitDir = filepath.Join(t.TempDir(), "srv"), t.TempDir()
-	t.Cleanup(func() { Base, UnitDir = oldBase, oldUnit })
+	// A pool's directory in these tests stands for its mounted file system.
+	oldMounted := Mounted
+	Mounted = func(dir string) bool { _, err := os.Stat(dir); return err == nil }
+	t.Cleanup(func() { Base, UnitDir, Mounted = oldBase, oldUnit, oldMounted })
+}
+
+func poolDir(t *testing.T) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(Base, "fast"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestSources(t *testing.T) {
@@ -200,8 +210,8 @@ func TestRemoveGivesADiskBack(t *testing.T) {
 	want := []string{
 		"systemd-escape -p --suffix=mount " + filepath.Join(Base, "fast"),
 		"systemctl disable --now srv-virtomir-fast.mount",
-		"systemctl daemon-reload",
 		"lvremove -y /dev/virtomir-fast/fast",
+		"systemctl daemon-reload",
 		"vgs --noheadings -o lv_count virtomir-fast",
 		"pvs --noheadings -o pv_name -S vg_name=virtomir-fast",
 		"vgremove -y virtomir-fast",
@@ -218,17 +228,19 @@ func TestRemoveGivesADiskBack(t *testing.T) {
 func TestRemoveKeepsAVolumeGroupItDidNotMake(t *testing.T) {
 	useTempDirs(t)
 	carvedUnit(t, "x.mount", "/dev/data/fast")
+	poolDir(t)
 	r := &fakeRunner{out: map[string]string{"systemd-escape": "x.mount", "vgs": "  0\n"}}
 	if err := Remove(context.Background(), r, "fast", func(string) {}); err != nil {
 		t.Fatal(err)
 	}
-	if last := r.calls[len(r.calls)-1]; last != "lvremove -y /dev/data/fast" {
+	if last := r.calls[len(r.calls)-1]; last != "systemctl daemon-reload" || strings.Contains(strings.Join(r.calls, "\n"), "vg") {
 		t.Errorf("touched the volume group: %q", r.calls)
 	}
 }
 
 func TestRemoveZFS(t *testing.T) {
 	useTempDirs(t)
+	poolDir(t)
 	r := &fakeRunner{out: map[string]string{"systemd-escape": "x.mount", "zfs": "tank\t/tank\ntank/fast\t" + filepath.Join(Base, "fast") + "\n"}}
 	if err := Remove(context.Background(), r, "fast", func(string) {}); err != nil {
 		t.Fatal(err)
@@ -240,19 +252,83 @@ func TestRemoveZFS(t *testing.T) {
 
 func TestRemoveRefuses(t *testing.T) {
 	useTempDirs(t)
+	poolDir(t)
 	r := &fakeRunner{out: map[string]string{"systemd-escape": "x.mount", "zfs": "tank\t/tank\n"}}
 	if err := Remove(context.Background(), r, "fast", func(string) {}); !errors.Is(err, ErrNotCarved) {
 		t.Errorf("a pool VirtoMir did not carve: %v", err)
 	}
 	carvedUnit(t, "x.mount", "/dev/data/fast")
-	if err := os.MkdirAll(filepath.Join(Base, "fast"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.WriteFile(filepath.Join(Base, "fast", "web.qcow2"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	r.calls = nil
 	if err := Remove(context.Background(), r, "fast", func(string) {}); !errors.Is(err, ErrInvalid) || len(r.calls) != 0 {
 		t.Errorf("a pool with disks in it: %v, calls %q", err, r.calls)
+	}
+}
+
+// The mount point of a pool that is not mounted is an empty directory whatever the pool
+// holds: its space is never given back on that evidence.
+func TestRemoveRefusesAPoolThatIsNotMounted(t *testing.T) {
+	useTempDirs(t)
+	poolDir(t)
+	Mounted = func(string) bool { return false }
+	carvedUnit(t, "x.mount", "/dev/data/fast")
+	lvm := &fakeRunner{out: map[string]string{"systemd-escape": "x.mount"}}
+	zfs := &fakeRunner{out: map[string]string{"systemd-escape": "none.mount", "zfs": "tank/fast\t" + filepath.Join(Base, "fast") + "\n"}}
+	for name, r := range map[string]*fakeRunner{"lvm": lvm, "zfs": zfs} {
+		if err := Remove(context.Background(), r, "fast", func(string) {}); !errors.Is(err, ErrInvalid) || errors.Is(err, ErrNotCarved) {
+			t.Errorf("%s: %v", name, err)
+		}
+		if len(r.calls) != 0 {
+			t.Errorf("%s: ran %q", name, r.calls)
+		}
+	}
+	if err := CheckRemove("fast"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("check: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(UnitDir, "x.mount")); err != nil {
+		t.Error("the mount unit is gone")
+	}
+}
+
+// A volume that cannot be deleted leaves the pool as it was: mounted, with its mount unit.
+func TestRemoveMountsAgainWhenTheVolumeStays(t *testing.T) {
+	useTempDirs(t)
+	poolDir(t)
+	carvedUnit(t, "x.mount", "/dev/data/fast")
+	r := &fakeRunner{out: map[string]string{"systemd-escape": "x.mount"}, fail: map[string]bool{"lvremove": true}}
+	if err := Remove(context.Background(), r, "fast", func(string) {}); err == nil {
+		t.Fatal("no error")
+	}
+	if last := r.calls[len(r.calls)-1]; last != "systemctl enable --now x.mount" {
+		t.Errorf("calls = %q", r.calls)
+	}
+	for _, p := range []string{filepath.Join(UnitDir, "x.mount"), filepath.Join(Base, "fast")} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("%s is gone", p)
+		}
+	}
+}
+
+// The volume to delete is the pool's own, whatever the mount unit says.
+func TestRemoveRefusesAnotherVolume(t *testing.T) {
+	useTempDirs(t)
+	poolDir(t)
+	for _, dev := range []string{"/dev/data/root", "/dev/sda", "/dev/a/b/fast"} {
+		carvedUnit(t, "x.mount", dev)
+		r := &fakeRunner{out: map[string]string{"systemd-escape": "x.mount"}}
+		if err := Remove(context.Background(), r, "fast", func(string) {}); !errors.Is(err, ErrInvalid) || len(r.calls) != 1 {
+			t.Errorf("%s: %v, calls %q", dev, err, r.calls)
+		}
+	}
+}
+
+func TestMounted(t *testing.T) {
+	if !Mounted("/proc") {
+		t.Error("/proc is not seen as mounted")
+	}
+	if Mounted(t.TempDir()) {
+		t.Error("a plain directory is seen as mounted")
 	}
 }

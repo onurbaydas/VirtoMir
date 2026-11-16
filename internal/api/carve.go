@@ -79,9 +79,24 @@ func (s *Server) carvePool(w http.ResponseWriter, r *http.Request) {
 			return "", err
 		}
 		report("Creating storage pool " + req.Name)
-		return req.Name, s.backend.CreatePool(virt.PoolSpec{Name: req.Name, Path: dir})
+		return req.Name, s.poolOnCarved(req.Name, dir)
 	})
 	s.writeJSON(w, http.StatusAccepted, job)
+}
+
+// poolOnCarved makes the pool on the file system carved for it. When the pool cannot be made
+// the space is given back: a mounted file system without a pool is seen nowhere in VirtoMir,
+// and its disk or volume group space would be lost until someone cleaned up by hand.
+func (s *Server) poolOnCarved(name, dir string) error {
+	err := s.backend.CreatePool(virt.PoolSpec{Name: name, Path: dir})
+	if err == nil {
+		return nil
+	}
+	if rerr := s.removeCarved(context.Background(), name); rerr != nil {
+		s.log.Warn("carved space kept after its pool could not be made", "pool", name, "dir", dir, "err", rerr)
+		return fmt.Errorf("%w (the file system made for it is still mounted at %s: %v)", err, dir, rerr)
+	}
+	return err
 }
 
 // checkCarved refuses ?storage=remove for a pool VirtoMir did not carve or that still holds

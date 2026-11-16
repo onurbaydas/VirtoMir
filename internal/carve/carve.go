@@ -269,10 +269,34 @@ var ErrNotCarved = fmt.Errorf("%w: this pool was not made from free space by Vir
 
 var carvedFromRE = regexp.MustCompile(`(?m)^# Storage pool carved by VirtoMir from (\S+)\.$`)
 
-// CheckRemove refuses to give back the space of a pool that still holds files.
+// Mounted reports whether a file system is mounted at dir (a variable: tests mount nothing).
+var Mounted = func(dir string) bool {
+	b, err := os.ReadFile("/proc/self/mountinfo")
+	if err != nil {
+		return false
+	}
+	unescape := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
+	for _, line := range strings.Split(string(b), "\n") {
+		if f := strings.Fields(line); len(f) > 4 && unescape.Replace(f[4]) == dir {
+			return true
+		}
+	}
+	return false
+}
+
+// CheckRemove refuses to give back the space of a pool that still holds files, or whose
+// file system is not mounted: its mount point is then an empty directory whatever the pool
+// holds, and "empty" would delete a pool full of disks.
 func CheckRemove(name string) error {
 	dir := filepath.Join(Base, name)
-	if entries, err := os.ReadDir(dir); err == nil && len(entries) > 0 {
+	if !Mounted(dir) {
+		return invalidf("the file system of %s is not mounted at %s, so VirtoMir cannot see whether the pool is empty; its space was kept. Mount it first", name, dir)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return invalidf("%s cannot be read (%v), so VirtoMir cannot see whether the pool is empty; its space was kept", dir, err)
+	}
+	if len(entries) > 0 {
 		return invalidf("%s still holds %d files; delete the disks in the pool first", dir, len(entries))
 	}
 	return nil
@@ -324,7 +348,16 @@ func Remove(ctx context.Context, r Runner, name string, report func(string)) err
 		return ErrNotCarved
 	}
 	dev := string(m[1])
+	if filepath.Base(dev) != name || filepath.Dir(filepath.Dir(dev)) != "/dev" {
+		return invalidf("the mount unit %s names %s, which is not the logical volume of pool %s; nothing was deleted", unitFile, dev, name)
+	}
 	if _, err := run("Unmounting "+dir, "systemctl", "disable", "--now", unit); err != nil {
+		return err
+	}
+	// The mount unit goes after the volume: when the volume cannot be deleted the pool is
+	// mounted again, as it was, and removing it can be tried again.
+	if _, err := run("Deleting logical volume "+dev, "lvremove", "-y", dev); err != nil {
+		_, _ = r.Run(ctx, "systemctl", "enable", "--now", unit)
 		return err
 	}
 	if err := os.Remove(unitFile); err != nil {
@@ -334,9 +367,6 @@ func Remove(ctx context.Context, r Runner, name string, report func(string)) err
 		return err
 	}
 	_ = os.Remove(dir)
-	if _, err := run("Deleting logical volume "+dev, "lvremove", "-y", dev); err != nil {
-		return err
-	}
 	// A disk VirtoMir made into a volume group goes back to being an empty disk once its
 	// last pool is gone.
 	vg := filepath.Base(filepath.Dir(dev))

@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,10 +21,11 @@ func (f *fakeBackend) DeletePool(name string) error {
 }
 
 func TestCarvePool(t *testing.T) {
-	oldBusy, oldBase, oldUnit := ceph.Busy, carve.Base, carve.UnitDir
+	oldBusy, oldBase, oldUnit, oldMounted := ceph.Busy, carve.Base, carve.UnitDir, carve.Mounted
+	carve.Mounted = func(dir string) bool { _, err := os.Stat(dir); return err == nil } // nothing is mounted in tests
 	ceph.Busy = func(string) bool { return false }
 	carve.Base, carve.UnitDir = filepath.Join(t.TempDir(), "srv"), t.TempDir()
-	t.Cleanup(func() { ceph.Busy, carve.Base, carve.UnitDir = oldBusy, oldBase, oldUnit })
+	t.Cleanup(func() { ceph.Busy, carve.Base, carve.UnitDir, carve.Mounted = oldBusy, oldBase, oldUnit, oldMounted })
 
 	a := newTestNode(t, "alpha", nil)
 	sdb := `{"name":"sdb","path":"/dev/sdb","size":107374182400,"rota":false,"type":"disk","mountpoint":null,"fstype":null,"pttype":null}`
@@ -82,5 +85,24 @@ func TestCarvePool(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(a.backend.calls, " "), "delete pool fast") || !rec.called("lvremove -y /dev/data/fast") {
 		t.Errorf("runner %q, backend %q", rec.calls, a.backend.calls)
+	}
+
+	// A pool libvirt refuses leaves no mounted file system behind: its space is given back.
+	a.backend.pools = nil
+	a.backend.err = errors.New("libvirt says no")
+	resp, body = admin.req("POST", "/api/v1/storage/pools/carve", `{"name":"slow","kind":"vg","source":"data","sizeBytes":10737418240}`)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("carve: %d %s", resp.StatusCode, body)
+	}
+	j := waitJobDone(t, admin, body)
+	a.backend.err = nil
+	if j.State != jobs.Failed || !strings.Contains(j.Message, "libvirt says no") {
+		t.Fatalf("job %+v", j)
+	}
+	if !rec.called("lvcreate -y -W y -n slow") || !rec.called("lvremove -y /dev/data/slow") {
+		t.Errorf("runner %q", rec.calls)
+	}
+	if _, err := os.Stat(filepath.Join(carve.Base, "slow")); !os.IsNotExist(err) {
+		t.Error("the mount point of the refused pool is still there")
 	}
 }
