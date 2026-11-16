@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -38,7 +39,15 @@ type oidcFlows struct {
 	m  map[string]oidcPending
 }
 
-func (f *oidcFlows) put(state string, p oidcPending) {
+// oidcMaxFlows is how many sign-ins may be in progress at once. Starting one needs no
+// sign-in, so without an end anyone could fill the memory with them.
+const oidcMaxFlows = 4096
+
+// oidcCookie ties a sign-in to the browser that started it (see oidcStart).
+const oidcCookie = "virtomir_oidc"
+
+// put remembers a sign-in in progress; false when there are too many.
+func (f *oidcFlows) put(state string, p oidcPending) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.m == nil {
@@ -50,7 +59,11 @@ func (f *oidcFlows) put(state string, p oidcPending) {
 			delete(f.m, k)
 		}
 	}
+	if len(f.m) >= oidcMaxFlows {
+		return false
+	}
 	f.m[state] = p
+	return true
 }
 
 func (f *oidcFlows) take(state string) (oidcPending, bool) {
@@ -118,13 +131,31 @@ func signinError(w http.ResponseWriter, r *http.Request, msg string) {
 }
 
 func (s *Server) oidcStart(w http.ResponseWriter, r *http.Request) {
+	// Anyone can ask for this, and each time the provider is asked too: limited like the
+	// other sign-in requests.
+	if s.rateLimiter != nil {
+		if allowed, _ := s.rateLimiter.Allow(r.RemoteAddr); !allowed {
+			signinError(w, r, "too many sign-in attempts from this address; wait a minute and try again")
+			return
+		}
+	}
 	_, conf, _, err := s.oidcSetup(r.Context(), r)
 	if err != nil {
 		signinError(w, r, err.Error())
 		return
 	}
 	state, nonce, verifier := randHex(16), randHex(16), oauth2.GenerateVerifier()
-	s.oidc.put(state, oidcPending{verifier: verifier, nonce: nonce, expires: time.Now().Add(10 * time.Minute)})
+	if !s.oidc.put(state, oidcPending{verifier: verifier, nonce: nonce, expires: time.Now().Add(10 * time.Minute)}) {
+		signinError(w, r, "too many sign-ins are in progress; try again in a few minutes")
+		return
+	}
+	// The state goes to the provider and comes back in the address, which can be handed to
+	// someone else. The cookie stays in this browser: only the browser that started a
+	// sign-in can finish it. Without it, an attacker could finish their own sign-in in a
+	// victim's browser, who would then work in the attacker's account without knowing.
+	// Lax, not Strict: the way back from the provider is a navigation from another site.
+	http.SetCookie(w, &http.Cookie{Name: oidcCookie, Value: state, Path: "/api/v1/auth/oidc/", HttpOnly: true,
+		Secure: true, SameSite: http.SameSiteLaxMode, MaxAge: 600})
 	http.Redirect(w, r, conf.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier)), http.StatusFound)
 }
 
@@ -136,7 +167,14 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		signinError(w, r, "the identity provider refused: "+e+" "+q.Get("error_description"))
 		return
 	}
-	pending, ok := s.oidc.take(q.Get("state"))
+	state := q.Get("state")
+	if c, err := r.Cookie(oidcCookie); err != nil || state == "" || subtle.ConstantTimeCompare([]byte(c.Value), []byte(state)) != 1 {
+		signinError(w, r, "this sign-in was not started in this browser, or it expired; try again")
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: oidcCookie, Value: "", Path: "/api/v1/auth/oidc/", HttpOnly: true,
+		Secure: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	pending, ok := s.oidc.take(state)
 	if !ok {
 		signinError(w, r, "this sign-in link expired; try again")
 		return

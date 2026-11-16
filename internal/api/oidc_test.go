@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -116,17 +117,67 @@ func TestOIDCSignIn(t *testing.T) {
 		h.ServeHTTP(rec, start)
 		state, code := idp.authorize(t, rec.Header().Get("Location"))
 		cb := httptest.NewRequest("GET", "https://virtomir.test/api/v1/auth/oidc/callback?state="+state+"&code="+code, nil)
+		for _, c := range rec.Result().Cookies() { // the browser that started the sign-in
+			cb.AddCookie(c)
+		}
 		rec = httptest.NewRecorder()
 		h.ServeHTTP(rec, cb)
 		return rec
 	}
+	sessionOf := func(rec *httptest.ResponseRecorder) *http.Cookie {
+		for _, c := range rec.Result().Cookies() {
+			if c.Name == auth.CookieName && c.Value != "" {
+				return c
+			}
+		}
+		return nil
+	}
 
 	rec := signIn()
-	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/" || len(rec.Result().Cookies()) == 0 {
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/" || sessionOf(rec) == nil {
 		t.Fatalf("callback: %d %s", rec.Code, rec.Header().Get("Location"))
 	}
-	if r := do(h, "GET", "/api/v1/auth/session", "", rec.Result().Cookies()[0]); !strings.Contains(r.Body.String(), `"user":"alice@sso"`) || !strings.Contains(r.Body.String(), `"role":"operator"`) {
+	if r := do(h, "GET", "/api/v1/auth/session", "", sessionOf(rec)); !strings.Contains(r.Body.String(), `"user":"alice@sso"`) || !strings.Contains(r.Body.String(), `"role":"operator"`) {
 		t.Errorf("session: %s", r.Body)
+	}
+
+	// A sign-in is finished by the browser that started it. An attacker who signs in at the
+	// provider themselves and hands the way back (state and code) to someone else gets
+	// nowhere: that browser has no cookie for it, and is not signed in as the attacker.
+	{
+		start := httptest.NewRequest("GET", "https://virtomir.test/api/v1/auth/oidc/start", nil)
+		started := httptest.NewRecorder()
+		h.ServeHTTP(started, start)
+		var flow *http.Cookie
+		for _, c := range started.Result().Cookies() {
+			if c.Name == oidcCookie {
+				flow = c
+			}
+		}
+		if flow == nil || !flow.HttpOnly || !flow.Secure || flow.SameSite != http.SameSiteLaxMode {
+			t.Fatalf("the sign-in cookie: %+v", flow)
+		}
+		state, code := idp.authorize(t, started.Header().Get("Location"))
+		link := "https://virtomir.test/api/v1/auth/oidc/callback?state=" + state + "&code=" + code
+		for name, cookie := range map[string]*http.Cookie{"no cookie": nil, "another sign-in's cookie": {Name: oidcCookie, Value: "0123456789abcdef0123456789abcdef"}} {
+			victim := httptest.NewRequest("GET", link, nil)
+			if cookie != nil {
+				victim.AddCookie(cookie)
+			}
+			got := httptest.NewRecorder()
+			h.ServeHTTP(got, victim)
+			if sessionOf(got) != nil || !strings.Contains(got.Header().Get("Location"), "signin_error=") {
+				t.Errorf("%s: finished someone else's sign-in: %s", name, got.Header().Get("Location"))
+			}
+		}
+		// It was not used up by those tries: the browser that started it still finishes it.
+		own := httptest.NewRequest("GET", link, nil)
+		own.AddCookie(flow)
+		got := httptest.NewRecorder()
+		h.ServeHTTP(got, own)
+		if sessionOf(got) == nil {
+			t.Errorf("the browser that started the sign-in could not finish it: %s", got.Header().Get("Location"))
+		}
 	}
 
 	// A user whose groups map to no role is turned away with a reason.
@@ -149,4 +200,31 @@ func TestOIDCSignIn(t *testing.T) {
 		t.Errorf("methods: %s", r.Body)
 	}
 	_ = context.Background()
+}
+
+// Sign-ins in progress are kept for ten minutes, and there is an end to how many.
+func TestOIDCFlowsAreBounded(t *testing.T) {
+	var f oidcFlows
+	soon := time.Now().Add(10 * time.Minute)
+	for i := 0; i < oidcMaxFlows; i++ {
+		if !f.put(fmt.Sprintf("s%d", i), oidcPending{expires: soon}) {
+			t.Fatalf("refused sign-in %d", i)
+		}
+	}
+	if f.put("one-too-many", oidcPending{expires: soon}) || len(f.m) != oidcMaxFlows {
+		t.Errorf("%d sign-ins in progress", len(f.m))
+	}
+	if _, ok := f.take("s7"); !ok {
+		t.Error("a sign-in in progress was lost")
+	}
+	if !f.put("after-one-finished", oidcPending{expires: soon}) {
+		t.Error("no room after one finished")
+	}
+	for k, p := range f.m { // they all run out
+		p.expires = time.Now().Add(-time.Second)
+		f.m[k] = p
+	}
+	if !f.put("fresh", oidcPending{expires: soon}) || len(f.m) != 1 {
+		t.Errorf("%d kept after they ran out", len(f.m))
+	}
 }
