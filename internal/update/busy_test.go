@@ -29,7 +29,7 @@ func autoChecker(t *testing.T) (*Checker, *atomic.Int32, string) {
 				{"name":"virtomir_9.0.0_%[1]s.deb.sha256","browser_download_url":"%[2]s/sha"},
 				{"name":"virtomir_9.0.0_%[1]s.deb.sha256.asc","browser_download_url":"%[2]s/sig"}]}`, debArch(), srv.URL)
 		case "/sha":
-			fmt.Fprint(w, hex.EncodeToString(sum[:])+"  virtomir.deb\n")
+			fmt.Fprint(w, hex.EncodeToString(sum[:])+"  virtomir_9.0.0_"+debArch()+".deb\n")
 		case "/deb":
 			fmt.Fprint(w, pkg)
 		}

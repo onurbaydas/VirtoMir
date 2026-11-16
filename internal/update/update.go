@@ -447,9 +447,15 @@ func (c *Checker) install(ctx context.Context, dir string, report func(string), 
 	if err != nil {
 		return "", fmt.Errorf("%w; nothing was installed", err)
 	}
-	want := strings.ToLower(strings.Fields(string(sumLine) + " ")[0])
+	want, named := sumFields(string(sumLine))
 	if len(want) != 64 {
 		return "", errors.New("the published checksum file is not a SHA-256 sum")
+	}
+	// The signature covers the checksum and the file name next to it, and the name holds the
+	// version. Without this, the signed checksum of an older release, offered with its old
+	// package as a newer version, would pass: an update back to a build with known holes.
+	if !sameAsset(named, rel.Package) {
+		return "", fmt.Errorf("the signed checksum is for %q, not for %s: this is not the package of %s; nothing was installed", named, rel.Package, rel.Version)
 	}
 	dl := c.Download
 	if dl == nil {
@@ -506,6 +512,26 @@ func (c *Checker) install(ctx context.Context, dir string, report func(string), 
 		return "", err
 	}
 	return fmt.Sprintf("Installing %s (unit %s); VirtoMir restarts in a few seconds — reload the page then", rel.Version, unit), nil
+}
+
+// sumFields reads a line of sha256sum: the checksum and the file it is of ("" when the line
+// names none).
+func sumFields(line string) (sum, name string) {
+	f := strings.Fields(line)
+	if len(f) == 0 {
+		return "", ""
+	}
+	if len(f) > 1 {
+		name = filepath.Base(strings.TrimPrefix(f[1], "*")) // "*": sha256sum's binary mode
+	}
+	return strings.ToLower(f[0]), name
+}
+
+// sameAsset compares two names of a release file. GitHub lists some uploaded files with "."
+// for "+" (see pick), the checksum file keeps the name the build gave.
+func sameAsset(a, b string) bool {
+	norm := func(s string) string { return strings.ReplaceAll(s, "+", ".") }
+	return a != "" && norm(a) == norm(b)
 }
 
 // InitConfig loads the persisted AutoConfig from stateDir or initializes defaults.

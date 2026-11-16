@@ -156,7 +156,7 @@ func TestBinaryChecksumMismatchInstallsNothing(t *testing.T) {
 		case "/tar":
 			w.Write(tarball)
 		case "/sha":
-			fmt.Fprint(w, strings.Repeat("0", 64)+"  x\n")
+			fmt.Fprint(w, strings.Repeat("0", 64)+"  "+name+"\n")
 		}
 	}))
 	defer srv.Close()

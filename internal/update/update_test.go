@@ -92,7 +92,7 @@ func TestInstallRefusesBadChecksum(t *testing.T) {
 				{"name":"virtomir_9.0.0_%[1]s.deb.sha256","browser_download_url":"%[2]s/sha"},
 				{"name":"virtomir_9.0.0_%[1]s.deb.sha256.asc","browser_download_url":"%[2]s/sig"}]}`, debArch(), srv.URL)
 		case "/sha":
-			fmt.Fprint(w, strings.Repeat("0", 64)+"  virtomir.deb\n")
+			fmt.Fprint(w, strings.Repeat("0", 64)+"  virtomir_9.0.0_"+debArch()+".deb\n")
 		case "/deb":
 			fmt.Fprint(w, "not the package")
 		}
@@ -231,7 +231,7 @@ func TestAutoInstallDoesNotDeadlock(t *testing.T) {
 				{"name":"virtomir_9.0.0_%[1]s.deb.sha256","browser_download_url":"%[2]s/sha"},
 				{"name":"virtomir_9.0.0_%[1]s.deb.sha256.asc","browser_download_url":"%[2]s/sig"}]}`, debArch(), srv.URL)
 		case "/sha":
-			fmt.Fprint(w, hex.EncodeToString(sum[:])+"  virtomir.deb\n")
+			fmt.Fprint(w, hex.EncodeToString(sum[:])+"  virtomir_9.0.0_"+debArch()+".deb\n")
 		case "/deb":
 			fmt.Fprint(w, pkg)
 		}
