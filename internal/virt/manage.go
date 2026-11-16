@@ -255,10 +255,8 @@ func (c *Client) diskUsers(l *libvirt.Libvirt) (map[string][]string, error) {
 			if src, _ := diskSource(v.Source); src != "" {
 				out[src] = append(out[src], d.Name)
 			}
-			if v.BackingStore != nil {
-				if src, _ := diskSource(v.BackingStore.Source); src != "" {
-					out[src] = append(out[src], d.Name+" (as backing image)")
-				}
+			for _, src := range backingImages(v) {
+				out[src] = appendUnique(out[src], d.Name+" (as backing image)")
 			}
 		}
 	}
