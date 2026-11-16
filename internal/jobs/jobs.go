@@ -44,7 +44,8 @@ type Manager struct {
 	Log *slog.Logger
 
 	mu   sync.Mutex
-	jobs []*Job // oldest first
+	jobs []*Job         // oldest first
+	wg   sync.WaitGroup // the jobs that have not returned yet
 }
 
 // New returns a manager whose jobs are cancelled when ctx ends (daemon shutdown).
@@ -57,9 +58,11 @@ func (m *Manager) Start(kind, title string, fn Func) Job {
 	m.jobs = append(m.jobs, j)
 	m.trim()
 	snap := *j
+	m.wg.Add(1)
 	m.mu.Unlock()
 
 	go func() {
+		defer m.wg.Done()
 		res, err := m.run(j, fn)
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -92,6 +95,24 @@ func (m *Manager) run(j *Job, fn Func) (res string, err error) {
 		j.Message = msg
 		m.mu.Unlock()
 	})
+}
+
+// Wait waits until every job has returned, at most for timeout, and reports whether they
+// all have. At shutdown the jobs are cancelled through their context; what they do then
+// (remove a half-written copy, put a definition back) is part of the job and has to finish
+// before the process ends.
+func (m *Manager) Wait(timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		m.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 // Running counts the jobs that have not finished yet.

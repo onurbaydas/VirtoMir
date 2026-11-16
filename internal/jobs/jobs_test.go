@@ -65,3 +65,38 @@ func TestTrimKeepsRunning(t *testing.T) {
 		t.Errorf("kept %d jobs", n)
 	}
 }
+
+// At shutdown the jobs are cancelled, and the daemon waits for what they do then.
+func TestWaitLetsCancelledJobsCleanUp(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	m := New(ctx)
+	if !m.Wait(time.Second) {
+		t.Fatal("waited for no job")
+	}
+	cleaned := false
+	j := m.Start("copy", "Copy disk", func(ctx context.Context, _ func(string)) (string, error) {
+		<-ctx.Done()
+		time.Sleep(30 * time.Millisecond) // removing the half-written copy
+		cleaned = true
+		return "", ctx.Err()
+	})
+	stuck := make(chan struct{})
+	m.Start("stuck", "Never ends", func(context.Context, func(string)) (string, error) {
+		<-stuck
+		return "", nil
+	})
+	cancel()
+	if m.Wait(100 * time.Millisecond) {
+		t.Error("did not wait for the job that is stuck")
+	}
+	close(stuck)
+	if !m.Wait(2 * time.Second) {
+		t.Fatal("jobs did not end")
+	}
+	if got, _ := m.Get(j.ID); !cleaned || got.State != Failed || got.Finished == nil {
+		t.Errorf("cleaned=%v job=%+v", cleaned, got)
+	}
+	if m.Running() != 0 {
+		t.Errorf("%d jobs still running", m.Running())
+	}
+}

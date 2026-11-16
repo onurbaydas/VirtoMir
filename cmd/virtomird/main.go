@@ -488,11 +488,27 @@ func run(c config, log *slog.Logger) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
+			// Requests still open after the grace time (a download, an upload, a console)
+			// are closed. That is a normal stop, not a failure: the unit must not end
+			// "failed" because a browser tab was open.
+			log.Info("closing the connections still open", "reason", err)
+			_ = srv.Close()
+		}
+		// Jobs were cancelled with ctx. They get the time to clean up after themselves (a
+		// half-written copy, a partial backup) before the process ends.
+		if n := jobManager.Running(); n > 0 {
+			log.Info("waiting for cancelled jobs to clean up", "jobs", n)
+			if !jobManager.Wait(jobGrace) {
+				log.Warn("jobs still running at exit; what they left half-done is cleaned up at the next start where possible", "jobs", jobManager.Running())
+			}
 		}
 		return nil
 	}
 }
+
+// jobGrace is how long a stopping daemon waits for cancelled jobs. With the 10 s for open
+// requests it stays well below systemd's 90 s stop timeout.
+const jobGrace = 30 * time.Second
 
 // restartBackoff is the first pause before runSafe restarts a loop that panicked.
 var restartBackoff = 5 * time.Second

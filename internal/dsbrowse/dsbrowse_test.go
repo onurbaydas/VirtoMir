@@ -257,3 +257,27 @@ func TestUploadStopsWhenThePoolRunsLow(t *testing.T) {
 		}
 	}
 }
+
+// A part file that is already there (a transfer running, or one cut off by a crash) is
+// named, so it can be deleted; it is never written over.
+func TestTransferSaysWhenItsPartFileIsThere(t *testing.T) {
+	root, other := pool(t), t.TempDir()
+	must(t, os.WriteFile(filepath.Join(root, ".new.iso.part"), []byte("half"), 0o644))
+	_, err := Upload(root, "new.iso", strings.NewReader("x"), 1)
+	if !errors.Is(err, ErrInUse) || !strings.Contains(err.Error(), ".new.iso.part") {
+		t.Errorf("upload: %v", err)
+	}
+	must(t, os.WriteFile(filepath.Join(other, ".web.qcow2.part"), []byte("half"), 0o644))
+	err = Copy(context.Background(), root, "web.qcow2", other, "web.qcow2", false, nil, nil)
+	if !errors.Is(err, ErrInUse) || !strings.Contains(err.Error(), ".web.qcow2.part") {
+		t.Errorf("copy: %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, ".new.iso.part")); string(b) != "half" {
+		t.Error("another transfer's part file was touched")
+	}
+	// Deleted, the transfer works.
+	must(t, Remove(root, ".new.iso.part", nil))
+	if _, err := Upload(root, "new.iso", strings.NewReader("x"), 1); err != nil {
+		t.Errorf("after deleting the part file: %v", err)
+	}
+}

@@ -342,6 +342,16 @@ func Open(root, rel string) (*os.File, error) {
 	return f, nil
 }
 
+// partError explains why the part file of an upload or copy could not be made. One that is
+// already there belongs to a transfer still running, or to one that a crash or restart cut
+// off: it says which file to delete instead of "file exists".
+func partError(err error, part, dir string) error {
+	if errors.Is(err, fs.ErrExist) {
+		return fmt.Errorf("%w: %s is being written right now, or is left from a transfer that was cut off. Wait for it, or delete %s and try again", ErrInUse, strings.TrimSuffix(strings.TrimPrefix(path.Base(part), "."), ".part"), part)
+	}
+	return notFound(err, dir)
+}
+
 // Upload writes a new file from src: into a hidden part file first, renamed when complete,
 // so a broken upload never looks like an image. An existing file is never replaced. size is
 // what the sender announced (-1: unknown); an upload that would fill the pool is refused
@@ -365,7 +375,7 @@ func Upload(root, rel string, src io.Reader, size int64) (int64, error) {
 	part := path.Join(path.Dir(rel), "."+path.Base(rel)+".part")
 	f, err := r.OpenFile(part, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
-		return 0, notFound(err, path.Dir(rel))
+		return 0, partError(err, part, path.Dir(rel))
 	}
 	n, err := sparseCopy(context.Background(), f, src, -1, nil, func() error { return room(root, 0) })
 	if cerr := f.Close(); err == nil {
@@ -429,7 +439,7 @@ func Copy(ctx context.Context, srcRoot, src, dstRoot, dst string, move bool, use
 	part := path.Join(path.Dir(dst), "."+path.Base(dst)+".part")
 	out, err := dr.OpenFile(part, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
-		return notFound(err, path.Dir(dst))
+		return partError(err, part, path.Dir(dst))
 	}
 	_, err = sparseCopy(ctx, out, in, st.Size(), report, func() error { return room(dstRoot, 0) })
 	if cerr := out.Close(); err == nil {
