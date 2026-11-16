@@ -190,7 +190,7 @@ func (s *Store) CaptureLive(uuid, via string) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
-	id := "live-" + strconv.FormatInt(s.now().UnixNano(), 10)
+	id := nextID(s.now(), s.liveIDs(dir), "live-")
 	if err := s.write(dir, id, doc, Version{ID: id, Time: s.now().UTC(), User: user, Source: source, Via: via, Live: true, Size: len(doc)}); err != nil {
 		return err
 	}
@@ -199,12 +199,32 @@ func (s *Store) CaptureLive(uuid, via string) error {
 	return nil
 }
 
+// write saves a version: its note first, then the XML that makes it one. A crash in between
+// leaves a note nobody lists, never a version without who and when.
 func (s *Store) write(dir, id, doc string, v Version) error {
-	if err := atomicfile.Write(filepath.Join(dir, id+".xml"), []byte(doc), 0o640); err != nil {
+	meta, _ := json.Marshal(v)
+	if err := atomicfile.Write(filepath.Join(dir, id+".json"), meta, 0o640); err != nil {
 		return err
 	}
-	meta, _ := json.Marshal(v)
-	return atomicfile.Write(filepath.Join(dir, id+".json"), meta, 0o640)
+	if err := atomicfile.Write(filepath.Join(dir, id+".xml"), []byte(doc), 0o640); err != nil {
+		_ = os.Remove(filepath.Join(dir, id+".json"))
+		return err
+	}
+	return nil
+}
+
+// nextID is the ID of a new version: the time now, in nanoseconds. Versions are ordered by
+// their IDs, so when the clock stands behind the newest version (set back by hand or by
+// NTP, or a dead clock battery at boot) the new one still comes after it: otherwise it would
+// be listed as old, compared against the wrong one, and dropped first.
+func nextID(now time.Time, ids []string, prefix string) string {
+	n := now.UnixNano()
+	if len(ids) > 0 {
+		if newest, err := strconv.ParseInt(strings.TrimPrefix(ids[0], prefix), 10, 64); err == nil && newest >= n && newest < 1<<62 {
+			n = newest + 1
+		}
+	}
+	return prefix + strconv.FormatInt(n, 10)
 }
 
 func (s *Store) save(uuid, doc, user, source, via string) error {
@@ -214,12 +234,16 @@ func (s *Store) save(uuid, doc, user, source, via string) error {
 	if err != nil {
 		return err
 	}
-	prev, known := s.last[uuid]
+	if strings.TrimSpace(doc) == "" {
+		return errors.New("libvirt gave an empty definition") // never a version, never "unchanged"
+	}
+	key := strings.ToLower(uuid)
+	prev, known := s.last[key]
 	if !known {
 		prev, _ = s.newestLocked(dir)
 	}
 	if prev == doc {
-		s.last[uuid] = doc
+		s.last[key] = doc
 		return nil
 	}
 	if prev == "" {
@@ -228,11 +252,11 @@ func (s *Store) save(uuid, doc, user, source, via string) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
-	id := strconv.FormatInt(s.now().UnixNano(), 10)
+	id := nextID(s.now(), s.ids(dir), "")
 	if err := s.write(dir, id, doc, Version{ID: id, Time: s.now().UTC(), User: user, Source: source, Via: via, Size: len(doc)}); err != nil {
 		return err
 	}
-	s.last[uuid] = doc
+	s.last[key] = doc
 	s.pruneLocked(dir)
 	return nil
 }
@@ -302,13 +326,28 @@ func (s *Store) ListLive(uuid string) ([]Version, error) {
 func (s *Store) versions(dir string, ids []string, live bool) []Version {
 	out := []Version{}
 	for _, id := range ids {
-		v := Version{ID: id, Source: "outside", Live: live}
-		if b, err := os.ReadFile(filepath.Join(dir, id+".json")); err == nil {
-			_ = json.Unmarshal(b, &v)
+		var v Version
+		b, err := os.ReadFile(filepath.Join(dir, id+".json"))
+		if err != nil || json.Unmarshal(b, &v) != nil || v.ID != id || v.Time.IsZero() {
+			v = orphan(dir, id)
 		}
+		v.Live = live
 		out = append(out, v)
 	}
 	return out
+}
+
+// orphan describes a version whose note is missing or unreadable (a crash, a full disk, a
+// file removed by hand) from what is left: its ID is the time it was saved.
+func orphan(dir, id string) Version {
+	v := Version{ID: id, Source: "outside"}
+	if n, err := strconv.ParseInt(strings.TrimPrefix(id, "live-"), 10, 64); err == nil {
+		v.Time = time.Unix(0, n).UTC()
+	}
+	if st, err := os.Stat(filepath.Join(dir, id+".xml")); err == nil {
+		v.Size = int(st.Size())
+	}
+	return v
 }
 
 // ErrNoVersion is returned for unknown version IDs.
@@ -335,12 +374,45 @@ func (s *Store) Sweep() {
 	if err != nil {
 		return
 	}
+	s.forgetGone(uuids)
 	for _, u := range uuids {
 		if err := s.CaptureVia(u, "", ViaScan); err != nil {
 			s.logFailure("config history", u, err)
 		}
 		if err := s.CaptureLive(u, ViaScan); err != nil && !errors.Is(err, errNotRunning) {
 			s.logFailure("config history (live)", u, err)
+		}
+	}
+}
+
+// forgetGone drops what is remembered in memory about machines that no longer exist (their
+// versions on disk stay): a host that makes and deletes machines all day would otherwise
+// keep the definition of every one of them until it restarts.
+func (s *Store) forgetGone(uuids []string) {
+	have := make(map[string]bool, len(uuids))
+	for _, u := range uuids {
+		have[strings.ToLower(u)] = true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for u := range s.last {
+		if !have[u] {
+			delete(s.last, u)
+		}
+	}
+	for u := range s.lastLive {
+		if !have[u] {
+			delete(s.lastLive, u)
+		}
+	}
+	for u := range s.byAPI {
+		if !have[u] {
+			delete(s.byAPI, u)
+		}
+	}
+	for u := range s.restarted {
+		if !have[u] {
+			delete(s.restarted, u)
 		}
 	}
 }
