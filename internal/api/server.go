@@ -473,7 +473,7 @@ func (s *Server) Handler() http.Handler {
 	if s.ui != nil {
 		mux.Handle("GET /", spaHandler(s.ui))
 	}
-	return s.guard(s.replay(mux))
+	return secureHeaders(s.guard(s.replay(mux)))
 }
 
 // sameOrigin: browsers send Origin (or Sec-Fetch-Site) with every cross-site write;

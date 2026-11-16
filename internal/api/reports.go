@@ -215,8 +215,7 @@ func (s *Server) downloadReport(w http.ResponseWriter, r *http.Request) {
 		reports.HTML: "text/html; charset=utf-8", reports.CSV: "text/csv; charset=utf-8", reports.JSON: "application/json",
 	}[m.Format])
 	// Reports are our own HTML, but keep them from running anything if a name slipped through.
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", reportPolicy)
 	disp := "inline"
 	if r.URL.Query().Get("download") != "" {
 		disp = "attachment"

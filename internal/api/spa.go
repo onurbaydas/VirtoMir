@@ -12,6 +12,7 @@ import (
 // routes survive a page reload. Vite's hashed /assets/* are cached forever.
 func spaHandler(ui fs.FS) http.Handler {
 	files := http.FileServerFS(ui)
+	policy := uiPolicy(ui)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if name == "" {
@@ -22,6 +23,7 @@ func spaHandler(ui fs.FS) http.Handler {
 		}
 		if name == "index.html" {
 			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Content-Security-Policy", forHost(policy, r.Host))
 			http.ServeFileFS(w, r, ui, "index.html")
 			return
 		}

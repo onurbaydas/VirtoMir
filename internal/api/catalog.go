@@ -676,6 +676,7 @@ func (s *Server) writeShowback(w http.ResponseWriter, r *http.Request, rep catal
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Content-Security-Policy", reportPolicy) // its own styles, no script
 		_, _ = w.Write(b)
 	default:
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "format must be json, csv or html"})
