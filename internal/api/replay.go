@@ -13,9 +13,14 @@ import (
 // The UI sends every write with an Idempotency-Key and sends it again with the same key; the
 // first answer is replayed instead of doing the work twice ("network already exists").
 
+// What is remembered has an end: a client decides how many keys it sends, and each one
+// holds an answer for ten minutes. Past these bounds a write simply runs as if it had no key.
 const (
-	replayFor     = 10 * time.Minute
-	replayMaxBody = 1 << 20
+	replayFor        = 10 * time.Minute
+	replayMaxBody    = 1 << 20
+	replayMaxEntries = 4096
+	replayMaxBytes   = 64 << 20 // all remembered answers together
+	replaySweepEvery = 30 * time.Second
 )
 
 type replayEntry struct {
@@ -28,8 +33,25 @@ type replayEntry struct {
 }
 
 type replayCache struct {
-	mu sync.Mutex
-	m  map[string]*replayEntry
+	mu    sync.Mutex
+	m     map[string]*replayEntry
+	bytes int       // of the answers kept in m
+	swept time.Time // when the entries past replayFor were last dropped
+}
+
+// sweep drops the entries past replayFor (caller holds c.mu). Not on every request: looking
+// at every entry under the lock for each write would make many keys slow down all writes.
+func (c *replayCache) sweep(now time.Time) {
+	if now.Sub(c.swept) < replaySweepEvery && len(c.m) < replayMaxEntries {
+		return
+	}
+	c.swept = now
+	for k, e := range c.m {
+		if now.Sub(e.at) > replayFor {
+			c.bytes -= len(e.body)
+			delete(c.m, k)
+		}
+	}
 }
 
 // replay answers a write sent again with the same Idempotency-Key (by the same user) with
@@ -41,18 +63,22 @@ func (s *Server) replay(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		id := identity(r).Name + "\x00" + r.Method + " " + r.URL.RequestURI() + "\x00" + key
+		// Only for someone who is signed in: a sign-in attempt, or anything else sent
+		// without a user, is not worth remembering, and anyone can send those.
+		user := identity(r).Name
+		if user == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		id := user + "\x00" + r.Method + " " + r.URL.RequestURI() + "\x00" + key
 		c := &s.replays
+		now := time.Now()
 		c.mu.Lock()
 		if c.m == nil {
 			c.m = map[string]*replayEntry{}
 		}
-		for k, e := range c.m {
-			if time.Since(e.at) > replayFor {
-				delete(c.m, k)
-			}
-		}
-		if e, ok := c.m[id]; ok {
+		c.sweep(now)
+		if e, ok := c.m[id]; ok && now.Sub(e.at) <= replayFor {
 			c.mu.Unlock()
 			select {
 			case <-e.done:
@@ -71,13 +97,31 @@ func (s *Server) replay(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		e := &replayEntry{done: make(chan struct{}), at: time.Now()}
+		if old, ok := c.m[id]; ok { // past replayFor and not swept yet
+			c.bytes -= len(old.body)
+			delete(c.m, id)
+		}
+		if len(c.m) >= replayMaxEntries {
+			c.mu.Unlock()
+			next.ServeHTTP(w, r)
+			return
+		}
+		e := &replayEntry{done: make(chan struct{}), at: now}
 		c.m[id] = e
 		c.mu.Unlock()
 
 		rec := &captureWriter{ResponseWriter: w, status: http.StatusOK}
 		defer func() {
-			e.status, e.ctype, e.body, e.stored = rec.status, rec.Header().Get("Content-Type"), rec.buf.Bytes(), !rec.tooBig
+			body, stored := rec.buf.Bytes(), !rec.tooBig
+			c.mu.Lock()
+			if stored && c.bytes+len(body) > replayMaxBytes {
+				body, stored = nil, false // no room: sent again, this write runs again
+			}
+			if c.m[id] == e {
+				c.bytes += len(body)
+			}
+			c.mu.Unlock()
+			e.status, e.ctype, e.body, e.stored = rec.status, rec.Header().Get("Content-Type"), body, stored
 			close(e.done)
 		}()
 		next.ServeHTTP(rec, r)
