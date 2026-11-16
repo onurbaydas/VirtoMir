@@ -12,9 +12,11 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/digitalocean/go-libvirt"
+	"github.com/onurbaydas/virtomir/internal/atomicfile"
 	"libvirt.org/go/libvirtxml"
 )
 
@@ -104,7 +106,8 @@ func readManifest(path string) (Backup, error) {
 
 func writeManifest(dest string, b Backup) error {
 	raw, _ := json.MarshalIndent(b, "", "  ")
-	return os.WriteFile(filepath.Join(dest, manifestName), raw, 0o640)
+	// Never half a manifest: a backup whose manifest cannot be read is in no list.
+	return atomicfile.Write(filepath.Join(dest, manifestName), raw, 0o640)
 }
 
 // backupPath resolves a backup ID inside dir, refusing anything that escapes it.
@@ -194,8 +197,13 @@ func reserveBackupDir(machineDir, stamp string) (partial, final string, err erro
 	return "", "", fmt.Errorf("create backup folder: no free name for %s in %s", stamp, machineDir)
 }
 
-// finishBackupDir gives a complete backup its final name.
+// finishBackupDir gives a complete backup its final name, once it is on disk. A finished
+// backup lets older ones go (retention) and drops the checkpoints before its own; if it
+// were still only in memory then, a power loss would leave no backup at all.
 func finishBackupDir(partial, final string) error {
+	if err := syncTree(partial); err != nil {
+		return fmt.Errorf("finish backup: write it to disk: %w", err)
+	}
 	backupNames.Lock()
 	defer backupNames.Unlock()
 	if _, err := os.Lstat(final); !errors.Is(err, fs.ErrNotExist) {
@@ -204,7 +212,45 @@ func finishBackupDir(partial, final string) error {
 	if err := os.Rename(partial, final); err != nil {
 		return fmt.Errorf("finish backup: %w", err)
 	}
+	syncDir(filepath.Dir(final)) // the new name itself
 	return nil
+}
+
+// syncTree flushes every file below dir, and the folders, to disk.
+func syncTree(dir string) error {
+	return filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			syncDir(p)
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		f, err := os.Open(p)
+		if err != nil {
+			return err
+		}
+		err = f.Sync()
+		f.Close()
+		// A file system that cannot flush on request (some network mounts say so) is not
+		// a failed backup; a real write error is.
+		if err != nil && !errors.Is(err, syscall.EINVAL) && !errors.Is(err, syscall.ENOTSUP) {
+			return fmt.Errorf("%s: %w", filepath.Base(p), err)
+		}
+		return nil
+	})
+}
+
+// syncDir flushes a folder's entries (new files, renames); best effort, as not every file
+// system lets a folder be flushed.
+func syncDir(dir string) {
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		d.Close()
+	}
 }
 
 // SweepPartialBackups removes backup folders left half-written (by a crash or a restart

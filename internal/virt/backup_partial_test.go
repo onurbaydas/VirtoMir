@@ -75,3 +75,53 @@ func TestPartialBackupsAreHiddenAndSwept(t *testing.T) {
 		t.Fatal("the finished backup went")
 	}
 }
+
+// A backup gets its final name only once every file of it could be flushed to disk: a file
+// that cannot be opened keeps it partial, so it never counts as the newest backup.
+func TestFinishBackupDirFlushesFirst(t *testing.T) {
+	m := t.TempDir()
+	partial, final := filepath.Join(m, "20261001-030000"+partialSuffix), filepath.Join(m, "20261001-030000")
+	if err := os.MkdirAll(filepath.Join(partial, "sub"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"vda.qcow2", "domain.xml", manifestName, "sub/extra"} {
+		if err := os.WriteFile(filepath.Join(partial, f), []byte("x"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A link to nowhere stands for a file that cannot be read back.
+	if err := os.Symlink(filepath.Join(m, "nowhere"), filepath.Join(partial, "dangling")); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncTree(partial); err != nil {
+		t.Fatalf("links are not files to flush: %v", err)
+	}
+	if err := syncTree(filepath.Join(m, "missing")); err == nil {
+		t.Error("a folder that is not there was flushed")
+	}
+	if err := finishBackupDir(filepath.Join(m, "missing"+partialSuffix), filepath.Join(m, "missing")); err == nil {
+		t.Error("a backup that is not there was finished")
+	}
+	if err := finishBackupDir(partial, final); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(final, "sub", "extra")); err != nil {
+		t.Errorf("the finished backup: %v", err)
+	}
+}
+
+// The manifest is replaced whole: no temporary file stays, and a reader never sees half.
+func TestWriteManifestIsAtomic(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"web", "web-renamed"} {
+		if err := writeManifest(dir, Backup{Domain: name}); err != nil {
+			t.Fatal(err)
+		}
+		if b, err := readManifest(filepath.Join(dir, manifestName)); err != nil || b.Domain != name {
+			t.Errorf("manifest: %+v %v", b, err)
+		}
+	}
+	if es, _ := os.ReadDir(dir); len(es) != 1 {
+		t.Errorf("left in the folder: %v", es)
+	}
+}
