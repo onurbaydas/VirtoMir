@@ -314,6 +314,10 @@ Tested on nested KVM, not yet on real hardware. Reports in [#1](https://github.c
 
 Ideas and questions: [Discussions](https://github.com/onurbaydas/VirtoMir/discussions). Found a bug or tried it on your hardware? [Open an issue](https://github.com/onurbaydas/VirtoMir/issues/new/choose) or report your setup in [#1 (Testers wanted)](https://github.com/onurbaydas/VirtoMir/issues/1) — test reports from setups we cannot reach (real BMCs, Ceph, GPUs, other distributions) help the most.
 
+## Thanks
+
+With thanks to Mega Bilgisayar.
+
 ## License
 
 VirtoMir is free software: **GNU Affero General Public License v3.0 or later** — see [LICENSE](LICENSE). You may use, study, change and share it; if you offer a changed VirtoMir to others over a network, you must offer them its source code too.

@@ -197,7 +197,7 @@ export const projects: Project[] = [
   {
     id: 'prod',
     name: 'Production',
-    description: 'Customer-facing services',
+    description: 'Customer-facing services of Mega Bilgisayar',
     members: [
       { kind: 'user', name: 'onur', role: 'admin' },
       { kind: 'user', name: 'demo', role: 'admin' },
