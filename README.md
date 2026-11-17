@@ -316,6 +316,8 @@ Ideas and questions: [Discussions](https://github.com/onurbaydas/VirtoMir/discus
 
 ## Thanks
 
+<p><img src="docs/thanks/mega-bilgisayar.png" alt="Mega Bilgisayar" width="220"></p>
+
 With thanks to Mega Bilgisayar.
 
 ## License
