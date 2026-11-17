@@ -18,6 +18,8 @@
   <a href="https://github.com/onurbaydas/VirtoMir/discussions">Discussions</a>
 </p>
 
+<p align="center"><sub>With thanks to</sub><br><img src="docs/thanks/mega-bilgisayar.png" alt="Mega Bilgisayar" width="170"></p>
+
 <p align="center"><b>Want to help?</b> No server needed: <code>cd web && npm install && npm run dev:demo</code> runs the whole UI against a pretend cluster. Pick a <a href="https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22">good first issue</a> (translations, alert channels, tests, docs) and see <a href="CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>
 
 VirtoMir is a modern web control panel for **KVM / QEMU / libvirt** that tries to be two things at once:
@@ -315,8 +317,6 @@ Tested on nested KVM, not yet on real hardware. Reports in [#1](https://github.c
 Ideas and questions: [Discussions](https://github.com/onurbaydas/VirtoMir/discussions). Found a bug or tried it on your hardware? [Open an issue](https://github.com/onurbaydas/VirtoMir/issues/new/choose) or report your setup in [#1 (Testers wanted)](https://github.com/onurbaydas/VirtoMir/issues/1) — test reports from setups we cannot reach (real BMCs, Ceph, GPUs, other distributions) help the most.
 
 ## Thanks
-
-<p><img src="docs/thanks/mega-bilgisayar.png" alt="Mega Bilgisayar" width="220"></p>
 
 With thanks to Mega Bilgisayar.
 

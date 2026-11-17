@@ -2885,6 +2885,7 @@ export const tr: Record<string, string> = {
   "Text console": "Metin konsolu",
   "Text console of the guest (serial / virtio). Shows boot messages and a login if the guest offers one there.": "Misafirin metin konsolu (seri / virtio). Önyükleme mesajlarını ve misafir orada sunuyorsa bir giriş ekranını gösterir.",
   "Text to type into the machine": "Makineye yazılacak metin",
+  "Thanks to": "Teşekkürler:",
   "That did not work": "Bu işe yaramadı",
   "That host has no started storage pool for image files.": "O hostta imaj dosyaları için başlatılmış bir depolama havuzu yok.",
   "The .pcap download starts when the capture ends ({count} packets or {seconds} s). Needs tcpdump on the host.": ".pcap indirmesi yakalama bitince başlar ({count} paket ya da {seconds} sn). Hostta tcpdump gerekir.",
