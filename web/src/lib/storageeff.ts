@@ -3,6 +3,7 @@
 
 import { api, type Job } from './api'
 import type { RBDPool } from './ceph'
+import { list } from './reply'
 
 const enc = encodeURIComponent
 
@@ -65,8 +66,8 @@ export const eff = {
   moveToTier: (uuid: string, target: string, tier: Tier) => api.post<Job>(`/api/v1/domains/${enc(uuid)}/disks/${enc(target)}/tier`, { tier }),
   tiers: async () => (await api.get<{ tiers: Record<string, Tier> }>('/api/v1/storage/tiers')).tiers,
   setTier: (pool: string, tier: Tier | '') => api.put<void>(`/api/v1/storage/tiers/${enc(pool)}`, { tier }),
-  nvme: async () => (await api.get<{ subsystems: NVMeSubsystem[] }>('/api/v1/storage/nvme')).subsystems,
-  discover: async (portal: string, port?: number) => (await api.post<{ targets: NVMeTarget[] }>('/api/v1/storage/nvme/discover', { portal, port })).targets,
+  nvme: async () => list((await api.get<{ subsystems?: NVMeSubsystem[] | null }>('/api/v1/storage/nvme')).subsystems),
+  discover: async (portal: string, port?: number) => list((await api.post<{ targets?: NVMeTarget[] | null }>('/api/v1/storage/nvme/discover', { portal, port })).targets),
   connect: (t: NVMeTarget) => api.post<void>('/api/v1/storage/nvme/connect', t),
   disconnect: (nqn: string) => api.post<void>('/api/v1/storage/nvme/disconnect', { nqn }),
 }

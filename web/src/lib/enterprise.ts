@@ -3,6 +3,7 @@
 // Mirrors internal/ha, internal/respool, internal/reports, internal/hostinfo, internal/virt/firewall.go.
 
 import { api, scoped, type Job } from './api'
+import { list } from './reply'
 
 const enc = encodeURIComponent
 
@@ -458,7 +459,7 @@ export const ent = {
   haConfirmOff: (node: string) => api.post<void>(`/api/v1/ha/nodes/${enc(node)}/confirm-off`),
   haSimulate: (node: string) => api.post<Simulation>(`/api/v1/ha/nodes/${enc(node)}/simulate`),
 
-  respools: async () => (await api.get<{ pools: PoolView[] }>('/api/v1/respools')).pools,
+  respools: async () => list((await api.get<{ pools?: PoolView[] | null }>('/api/v1/respools')).pools),
   createRespool: (p: Partial<ResourcePool>) => api.post<ResourcePool>('/api/v1/respools', p),
   updateRespool: (p: ResourcePool) => api.put<void>(`/api/v1/respools/${enc(p.id)}`, p),
   deleteRespool: (id: string) => api.delete<void>(`/api/v1/respools/${enc(id)}`),
@@ -468,12 +469,12 @@ export const ent = {
   insights: () => api.get<Insights>('/api/v1/insights'),
   machineInsights: (uuid: string) => api.get<{ rightSize: Recommendation; anomalies: Anomaly[] }>(`/api/v1/insights/vms/${enc(uuid)}`),
 
-  reports: async () => (await api.get<{ reports: ReportMeta[] }>('/api/v1/reports')).reports,
+  reports: async () => list((await api.get<{ reports?: ReportMeta[] | null }>('/api/v1/reports')).reports),
   generateReport: (kind: ReportKind, format: ReportFormat) => api.post<ReportMeta>('/api/v1/reports', { kind, format }),
   deleteReport: (id: string) => api.delete<void>(`/api/v1/reports/${enc(id)}`),
   /** Where to open (or, with download, save) a report. */
   reportURL: (id: string, download = false) => scoped(`/api/v1/reports/${enc(id)}${download ? '?download=1' : ''}`),
-  reportSchedules: async () => (await api.get<{ schedules: ReportSchedule[] }>('/api/v1/report-schedules')).schedules,
+  reportSchedules: async () => list((await api.get<{ schedules?: ReportSchedule[] | null }>('/api/v1/report-schedules')).schedules),
   saveReportSchedule: (s: ReportSchedule) => api.put<ReportSchedule>('/api/v1/report-schedules', s),
   deleteReportSchedule: (id: string) => api.delete<void>(`/api/v1/report-schedules/${enc(id)}`),
 
@@ -482,17 +483,17 @@ export const ent = {
   setKsm: (active: boolean, sleepMillisecs?: number, pagesToScan?: number) =>
     api.put<KSMInfo>('/api/v1/host/ksm', { active, sleepMillisecs, pagesToScan }),
   topology: () => api.get<Topology>('/api/v1/host/topology'),
-  gpus: async () => (await api.get<{ gpus: GPU[] }>('/api/v1/host/gpus')).gpus,
-  clusterGPUs: async () => (await api.get<{ gpus: ClusterGPU[] }>('/api/v1/cluster/gpus')).gpus,
-  gpuPools: async () => (await api.get<{ pools: GPUPoolView[] }>('/api/v1/gpu/pools')).pools,
+  gpus: async () => list((await api.get<{ gpus?: GPU[] | null }>('/api/v1/host/gpus')).gpus),
+  clusterGPUs: async () => list((await api.get<{ gpus?: ClusterGPU[] | null }>('/api/v1/cluster/gpus')).gpus),
+  gpuPools: async () => list((await api.get<{ pools?: GPUPoolView[] | null }>('/api/v1/gpu/pools')).pools),
   createGPUPool: (p: GPUPool) => api.post<GPUPool>('/api/v1/gpu/pools', p),
   saveGPUPool: (id: string, p: GPUPool) => api.put<GPUPool>(`/api/v1/gpu/pools/${enc(id)}`, p),
   deleteGPUPool: (id: string) => api.delete<void>(`/api/v1/gpu/pools/${enc(id)}`),
-  gpuPoolAvailability: async (id: string) => (await api.get<{ hosts: GPUResource[] }>(`/api/v1/gpu/pools/${enc(id)}/availability`)).hosts,
+  gpuPoolAvailability: async (id: string) => list((await api.get<{ hosts?: GPUResource[] | null }>(`/api/v1/gpu/pools/${enc(id)}/availability`)).hosts),
   /** The member with count free GPUs of the pool, or null when none has them. */
   gpuPlacement: (poolId: string, count: number, uuid?: string) =>
     api.post<{ best: GPUCandidate; candidates: GPUCandidate[] } | undefined>('/api/v1/gpu/placement', { poolId, count, uuid }).then((r) => r ?? null),
-  interfaces: async () => (await api.get<{ interfaces: HostInterface[] }>('/api/v1/host/interfaces')).interfaces,
+  interfaces: async () => list((await api.get<{ interfaces?: HostInterface[] | null }>('/api/v1/host/interfaces')).interfaces),
   hostNet: () => api.get<HostNetStatus>('/api/v1/host/network'),
   createHostIf: (s: HostIfSpec) => api.post<HostNetPending>('/api/v1/host/network/interfaces', s),
   deleteHostIf: (name: string) => api.delete<HostNetPending>(`/api/v1/host/network/interfaces/${enc(name)}`),
@@ -510,7 +511,7 @@ export const ent = {
     api.post<Job>(`/api/v1/storage/pools/${enc(pool)}/download`, { url, name, sha256 }),
 
   // ZFS Asynchronous Storage Replication
-  zfsReplications: async () => (await api.get<{ replications: ZFSReplicationStatus[] }>('/api/v1/storage/zfs/replications')).replications,
+  zfsReplications: async () => list((await api.get<{ replications?: ZFSReplicationStatus[] | null }>('/api/v1/storage/zfs/replications')).replications),
   createZFSReplication: (spec: ZFSReplicationSpec) => api.post<ZFSReplicationStatus>('/api/v1/storage/zfs/replications', spec),
   updateZFSReplication: (spec: ZFSReplicationSpec) => api.put<ZFSReplicationStatus>(`/api/v1/storage/zfs/replications/${enc(spec.id ?? '')}`, spec),
   deleteZFSReplication: (id: string) => api.delete<void>(`/api/v1/storage/zfs/replications/${enc(id)}`),
@@ -538,7 +539,7 @@ export const ent = {
   savePlacementRule: (id: string, rule: Partial<PlacementRule>) => api.put<PlacementRule>(`/api/v1/placement/rules/${enc(id)}`, rule),
   deletePlacementRule: (id: string) => api.delete<void>(`/api/v1/placement/rules/${enc(id)}`),
   setHostLabels: (hostId: string, labels: Record<string, string>) => api.put<{ labels: Record<string, string> }>(`/api/v1/placement/hosts/${enc(hostId)}/labels`, { labels }),
-  placementViolations: () => api.get<PlacementViolation[]>('/api/v1/placement/violations'),
+  placementViolations: async () => list(await api.get<PlacementViolation[] | null>('/api/v1/placement/violations')),
   placementCheck: (domainUuid: string, hostId: string) => api.post<PlacementCheckResult>('/api/v1/placement/check', { domainUuid, hostId }),
 }
 

@@ -2,6 +2,7 @@
 // and calls for /api/v1/physnet; mirrors internal/physnet and internal/api/physnet.go.
 
 import { api } from './api'
+import { list } from './reply'
 
 const enc = encodeURIComponent
 
@@ -97,11 +98,11 @@ export interface DNSConfig {
 }
 
 export const physnet = {
-  sriov: async () => (await api.get<{ devices: SRIOVDevice[] }>('/api/v1/physnet/sriov')).devices,
+  sriov: async () => list((await api.get<{ devices?: SRIOVDevice[] | null }>('/api/v1/physnet/sriov')).devices),
   setVFs: (iface: string, vfs: number, persistent: boolean) => api.put<void>(`/api/v1/physnet/sriov/${enc(iface)}`, { vfs, persistent }),
   bgp: () => api.get<BGPView>('/api/v1/physnet/bgp'),
   setBGP: (c: BGPConfig) => api.put<void>('/api/v1/physnet/bgp', c),
-  pools: async () => (await api.get<{ pools: IPPool[] }>('/api/v1/physnet/ip-pools')).pools,
+  pools: async () => list((await api.get<{ pools?: IPPool[] | null }>('/api/v1/physnet/ip-pools')).pools),
   createPool: (p: Partial<IPPool>) => api.post<IPPool>('/api/v1/physnet/ip-pools', p),
   updatePool: (id: string, p: Partial<IPPool>) => api.put<IPPool>(`/api/v1/physnet/ip-pools/${enc(id)}`, p),
   deletePool: (id: string) => api.delete<void>(`/api/v1/physnet/ip-pools/${enc(id)}`),

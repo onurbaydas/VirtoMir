@@ -3,6 +3,7 @@
 // calls go to the member that manages the cluster (host), policies to any member.
 
 import { api, onHost, type Job } from './api'
+import { list } from './reply'
 
 const enc = encodeURIComponent
 
@@ -144,15 +145,15 @@ export function cephOn(host?: string) {
   const p = (path: string) => (host ? onHost(host, path) : path)
   return {
     status: () => api.get<CephStatus>(p('/api/v1/ceph/status')),
-    disks: async () => (await api.get<{ disks: DiskInfo[] }>(p('/api/v1/ceph/disks'))).disks,
-    hosts: async () => (await api.get<{ hosts: CephHost[] }>(p('/api/v1/ceph/hosts'))).hosts,
+    disks: async () => list((await api.get<{ disks?: DiskInfo[] | null }>(p('/api/v1/ceph/disks'))).disks),
+    hosts: async () => list((await api.get<{ hosts?: CephHost[] | null }>(p('/api/v1/ceph/hosts'))).hosts),
     bootstrap: (spec: BootstrapSpec) => api.post<Job>(p('/api/v1/ceph/bootstrap'), spec),
     adopt: () => api.post<ClusterConfig>(p('/api/v1/ceph/adopt'), {}),
     addHost: (member: string) => api.post<{ hostname: string; ip: string }>(p('/api/v1/ceph/hosts'), { member }),
     addOSD: (hostname: string, disk: string) => api.post<Job>(p('/api/v1/ceph/osds'), { hostname, disk }),
     setNoout: (enabled: boolean) => api.put<void>(p('/api/v1/ceph/noout'), { enabled }),
     maintenance: (action: 'enter' | 'exit', hostname: string) => api.post<void>(p(`/api/v1/ceph/maintenance/${action}`), { hostname }),
-    pools: async () => (await api.get<{ pools: RBDPool[] }>(p('/api/v1/ceph/pools'))).pools,
+    pools: async () => list((await api.get<{ pools?: RBDPool[] | null }>(p('/api/v1/ceph/pools'))).pools),
     createPool: (spec: PoolSpec) => api.post<{ name: string; results?: HostResult[] }>(p('/api/v1/ceph/pools'), spec),
     deletePool: (name: string) => api.delete<void>(p(`/api/v1/ceph/pools/${enc(name)}`)),
     setCompression: (name: string, mode: string, algorithm: string) => api.put<void>(p(`/api/v1/ceph/pools/${enc(name)}/compression`), { mode, algorithm }),
@@ -160,7 +161,7 @@ export function cephOn(host?: string) {
 }
 
 export const policies = {
-  list: async () => (await api.get<{ policies: StoragePolicy[] }>('/api/v1/storage/policies')).policies,
+  list: async () => list((await api.get<{ policies?: StoragePolicy[] | null }>('/api/v1/storage/policies')).policies),
   create: (p: StoragePolicy) => api.post<StoragePolicy>('/api/v1/storage/policies', p),
   update: (id: string, p: StoragePolicy) => api.put<StoragePolicy>(`/api/v1/storage/policies/${enc(id)}`, p),
   delete: (id: string) => api.delete<void>(`/api/v1/storage/policies/${enc(id)}`),

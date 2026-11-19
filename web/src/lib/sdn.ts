@@ -3,6 +3,7 @@
 
 import { api } from './api'
 import { t } from './i18n.svelte'
+import { list } from './reply'
 
 const enc = encodeURIComponent
 
@@ -185,30 +186,30 @@ const q = (params: Record<string, string | undefined>) => {
 export const sdn = {
   status: () => api.get<SDNStatus>('/api/v1/sdn/status'),
   reconcile: () => api.post<ReconcileResult>('/api/v1/sdn/reconcile', {}),
-  vpcs: async (project?: string) => (await api.get<{ vpcs: VPC[] }>('/api/v1/sdn/vpcs' + q({ project }))).vpcs,
+  vpcs: async (project?: string) => list((await api.get<{ vpcs?: VPC[] | null }>('/api/v1/sdn/vpcs' + q({ project }))).vpcs),
   vpc: (id: string) => api.get<VPCDetail>(`/api/v1/sdn/vpcs/${enc(id)}`),
   createVPC: (v: Partial<VPC>) => api.post<VPCDetail>('/api/v1/sdn/vpcs', v),
   updateVPC: (id: string, v: Partial<VPC>) => api.put<VPCDetail>(`/api/v1/sdn/vpcs/${enc(id)}`, v),
   deleteVPC: (id: string) => api.delete<void>(`/api/v1/sdn/vpcs/${enc(id)}`),
   setRoutes: (id: string, routes: Route[]) => api.put<Router>(`/api/v1/sdn/vpcs/${enc(id)}/routes`, { routes }),
   setGateway: (id: string, gw: ExternalGateway) => api.put<ExternalGateway>(`/api/v1/sdn/vpcs/${enc(id)}/gateway`, gw),
-  subnets: async (vpc?: string) => (await api.get<{ subnets: Subnet[] }>('/api/v1/sdn/subnets' + q({ vpc }))).subnets,
+  subnets: async (vpc?: string) => list((await api.get<{ subnets?: Subnet[] | null }>('/api/v1/sdn/subnets' + q({ vpc }))).subnets),
   createSubnet: (s: Partial<Subnet>) => api.post<Subnet>('/api/v1/sdn/subnets', s),
   updateSubnet: (id: string, s: Partial<Subnet>) => api.put<Subnet>(`/api/v1/sdn/subnets/${enc(id)}`, s),
   deleteSubnet: (id: string) => api.delete<void>(`/api/v1/sdn/subnets/${enc(id)}`),
-  ports: async (filter: { vm?: string; subnet?: string } = {}) => (await api.get<{ ports: SDNPort[] }>('/api/v1/sdn/ports' + q(filter))).ports,
-  floatingIPs: async (vpc?: string) => (await api.get<{ floatingIps: FloatingIP[] }>('/api/v1/sdn/floating-ips' + q({ vpc }))).floatingIps,
+  ports: async (filter: { vm?: string; subnet?: string } = {}) => list((await api.get<{ ports?: SDNPort[] | null }>('/api/v1/sdn/ports' + q(filter))).ports),
+  floatingIPs: async (vpc?: string) => list((await api.get<{ floatingIps?: FloatingIP[] | null }>('/api/v1/sdn/floating-ips' + q({ vpc }))).floatingIps),
   createFloatingIP: (f: Partial<FloatingIP>) => api.post<FloatingIP>('/api/v1/sdn/floating-ips', f),
   deleteFloatingIP: (id: string) => api.delete<void>(`/api/v1/sdn/floating-ips/${enc(id)}`),
   assignFloatingIP: (id: string, internalIp: string, portId?: string) => api.post<FloatingIP>(`/api/v1/sdn/floating-ips/${enc(id)}/assign`, { internalIp, portId }),
   unassignFloatingIP: (id: string) => api.post<FloatingIP>(`/api/v1/sdn/floating-ips/${enc(id)}/unassign`, {}),
-  securityGroups: async (vpc?: string) => (await api.get<{ securityGroups: SecurityGroup[] }>('/api/v1/sdn/security-groups' + q({ vpc }))).securityGroups,
+  securityGroups: async (vpc?: string) => list((await api.get<{ securityGroups?: SecurityGroup[] | null }>('/api/v1/sdn/security-groups' + q({ vpc }))).securityGroups),
   createSecurityGroup: (g: Partial<SecurityGroup>) => api.post<SecurityGroup>('/api/v1/sdn/security-groups', g),
   updateSecurityGroup: (id: string, g: Partial<SecurityGroup>) => api.put<SecurityGroup>(`/api/v1/sdn/security-groups/${enc(id)}`, g),
   deleteSecurityGroup: (id: string) => api.delete<void>(`/api/v1/sdn/security-groups/${enc(id)}`),
   addRule: (id: string, r: SecurityRule) => api.post<SecurityRule>(`/api/v1/sdn/security-groups/${enc(id)}/rules`, r),
   deleteRule: (id: string, rule: string) => api.delete<void>(`/api/v1/sdn/security-groups/${enc(id)}/rules/${enc(rule)}`),
-  loadBalancers: async (vpc?: string) => (await api.get<{ loadBalancers: LoadBalancer[] }>('/api/v1/sdn/load-balancers' + q({ vpc }))).loadBalancers,
+  loadBalancers: async (vpc?: string) => list((await api.get<{ loadBalancers?: LoadBalancer[] | null }>('/api/v1/sdn/load-balancers' + q({ vpc }))).loadBalancers),
   createLoadBalancer: (lb: Partial<LoadBalancer>) => api.post<LoadBalancer>('/api/v1/sdn/load-balancers', lb),
   updateLoadBalancer: (id: string, lb: Partial<LoadBalancer>) => api.put<LoadBalancer>(`/api/v1/sdn/load-balancers/${enc(id)}`, lb),
   deleteLoadBalancer: (id: string) => api.delete<void>(`/api/v1/sdn/load-balancers/${enc(id)}`),
