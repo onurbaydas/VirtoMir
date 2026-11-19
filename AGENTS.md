@@ -92,4 +92,4 @@ cd web; npm run check         # Svelte/TS type check
 cd web; npm run dev           # hot-reload UI on Windows, proxies /api to the dev host
 ```
 
-Race tests need cgo → run them on the dev host. Go is installed per-user at `%LOCALAPPDATA%\Programs\go` on Windows and at `/usr/local/go` on the dev host.
+Race tests need cgo → run them on a Linux host (`go test -race ./...`). Go is installed per-user at `%LOCALAPPDATA%\Programs\go` on Windows and at `/usr/local/go` on the dev host.
