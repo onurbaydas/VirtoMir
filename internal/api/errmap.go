@@ -52,6 +52,10 @@ func readOnlyMessage(path, msg string) string {
 		return path + " is read-only for VirtoMir: the service may not write under /home (ProtectHome). " +
 			"Use another folder such as /srv or /var/lib, or allow it with `systemctl edit virtomird` and [Service] ProtectHome=false."
 	}
+	if path == "/root/.ssh" || strings.HasPrefix(path, "/root/.ssh/") {
+		return path + " is read-only for VirtoMir: this host's systemd unit predates SSH key setup. " +
+			"Update VirtoMir (its unit allows /root/.ssh), or add ReadWritePaths=/root/.ssh with `systemctl edit virtomird` and restart it."
+	}
 	return path + " is read-only for VirtoMir (the file system is mounted read-only or the service may not write there). Use another folder."
 }
 

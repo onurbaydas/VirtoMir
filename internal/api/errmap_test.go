@@ -22,6 +22,7 @@ func TestPlainError(t *testing.T) {
 		{fmt.Errorf("open: %w", &os.PathError{Op: "open", Path: "/nope", Err: fs.ErrNotExist}), http.StatusNotFound, "/nope does not exist"},
 		{fmt.Errorf("mkdir: %w", &os.PathError{Op: "mkdir", Path: "/root/x", Err: fs.ErrPermission}), http.StatusForbidden, "Permission denied on /root/x"},
 		{fmt.Errorf("mkdir: %w", &os.PathError{Op: "mkdir", Path: "/home/me/backups", Err: syscall.EROFS}), http.StatusForbidden, "ProtectHome=false"},
+		{fmt.Errorf("open: %w", &os.PathError{Op: "open", Path: "/root/.ssh/authorized_keys", Err: syscall.EROFS}), http.StatusForbidden, "ReadWritePaths=/root/.ssh"},
 		{fmt.Errorf("mkdir: %w", &os.PathError{Op: "mkdir", Path: "/mnt/ro/x", Err: syscall.EROFS}), http.StatusForbidden, "/mnt/ro/x is read-only"},
 		{fmt.Errorf("qemu-img convert: exit status 1: qemu-img: Could not open '/x.qcow2': Permission denied"), http.StatusInternalServerError, "Something went wrong: Could not open '/x.qcow2': Permission denied"},
 		{fmt.Errorf("boom"), http.StatusInternalServerError, "Something went wrong: boom"},

@@ -33,6 +33,7 @@ import (
 	"github.com/onurbaydas/virtomir/internal/ha"
 	"github.com/onurbaydas/virtomir/internal/hostinfo"
 	"github.com/onurbaydas/virtomir/internal/hostnet"
+	"github.com/onurbaydas/virtomir/internal/hostsetup"
 	"github.com/onurbaydas/virtomir/internal/insights"
 	"github.com/onurbaydas/virtomir/internal/jobs"
 	"github.com/onurbaydas/virtomir/internal/k8s"
@@ -302,6 +303,7 @@ type Server struct {
 	sdnDB           string
 	ceph            *ceph.Store
 	cephRunner      ceph.Runner
+	hostSetup       *hostsetup.Setup
 	storageEff      *storageeff.Store
 	effRunner       storageeff.Runner
 	physnet         *physnet.Store
@@ -384,6 +386,9 @@ func NewServer(o Options) *Server {
 	if s.cephRunner == nil {
 		s.cephRunner = ceph.Exec{}
 	}
+	if s.hostSetup == nil {
+		s.hostSetup = hostsetup.Host()
+	}
 	if s.effRunner == nil {
 		s.effRunner = storageeff.Exec{}
 	}
@@ -437,6 +442,7 @@ func (s *Server) Handler() http.Handler {
 	s.vmwareRoutes(mux)
 	s.hostdevRoutes(mux)
 	s.extraDeviceRoutes(mux)
+	s.hostSetupRoutes(mux)
 	s.quotaRoutes(mux)
 	s.externalAuthRoutes(mux)
 	s.metricsRoutes(mux)
@@ -668,12 +674,13 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 		status = http.StatusNotFound
 	case errors.As(err, &invErr), errors.Is(err, zfsrep.ErrInvalid), errors.Is(err, drs.ErrInvalid), errors.Is(err, placement.ErrInvalid), errors.Is(err, dr.ErrInvalid), errors.Is(err, gpool.ErrInvalid), errors.Is(err, sdn.ErrInvalid),
 		errors.Is(err, ceph.ErrInvalid), errors.Is(err, ceph.ErrDiskNotEmpty), errors.Is(err, storageeff.ErrInvalid), errors.Is(err, carve.ErrInvalid), errors.Is(err, storconn.ErrInvalid), errors.Is(err, dsbrowse.ErrInvalid),
-		errors.Is(err, physnet.ErrInvalid), errors.Is(err, k8s.ErrInvalid), errors.Is(err, baremetal.ErrInvalid):
+		errors.Is(err, physnet.ErrInvalid), errors.Is(err, k8s.ErrInvalid), errors.Is(err, baremetal.ErrInvalid), errors.Is(err, hostsetup.ErrInvalid):
 		status = http.StatusUnprocessableEntity
 	case errors.As(err, &opErr), errors.As(err, &busyErr), errors.Is(err, zfsrep.ErrBusy), errors.Is(err, dr.ErrBusy), errors.Is(err, dr.ErrConflict), errors.Is(err, gpool.ErrExists), errors.Is(err, gpool.ErrBusy), errors.Is(err, sdn.ErrExists), errors.Is(err, sdn.ErrBusy),
 		errors.Is(err, ceph.ErrExists), errors.Is(err, ceph.ErrBusy), errors.Is(err, dsbrowse.ErrInUse),
 		errors.Is(err, physnet.ErrExists), errors.Is(err, physnet.ErrBusy), errors.Is(err, physnet.ErrConflict),
-		errors.Is(err, k8s.ErrExists), errors.Is(err, k8s.ErrBusy), errors.Is(err, baremetal.ErrExists), errors.Is(err, baremetal.ErrBusy):
+		errors.Is(err, k8s.ErrExists), errors.Is(err, k8s.ErrBusy), errors.Is(err, baremetal.ErrExists), errors.Is(err, baremetal.ErrBusy),
+		errors.Is(err, hostsetup.ErrUnsupported):
 		status = http.StatusConflict
 	case errors.Is(err, dsbrowse.ErrNoSpace):
 		status = http.StatusInsufficientStorage

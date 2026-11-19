@@ -65,6 +65,9 @@ Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
 ProtectHome=read-only
+# VirtoMir sets up root's SSH key for ZFS replication; the rest of /root stays read-only.
+ExecStartPre=+/bin/mkdir -p -m 0700 /root/.ssh
+ReadWritePaths=-/root/.ssh
 PrivateTmp=true
 
 [Install]
