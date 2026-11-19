@@ -1389,6 +1389,7 @@ export const tr: Record<string, string> = {
   "i6300ESB (PCI, hot-pluggable)": "i6300ESB (PCI, çalışırken takılabilir)",
   "Icon": "Simge",
   "ID": "ID",
+  "Idea / Report a bug": "Fikir / Hata bildir",
   "Ideally another disk or an NFS mount — a backup on the same disk does not survive that disk.": "İdeali başka bir disk ya da NFS bağlantısı — aynı diskteki bir yedek o diskle birlikte gider.",
   "If {name} died now": "{name} şimdi ölseydi",
   "If it died…": "Ölürse…",

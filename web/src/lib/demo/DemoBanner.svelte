@@ -14,6 +14,7 @@
     <a href="{REPO}#install" target="_blank" rel="noopener">{t('Install')}</a>
     <a href="{REPO}/blob/main/docs/try-in-a-vm.md" target="_blank" rel="noopener">{t('Try it in a VM')}</a>
     <a href="{REPO}" target="_blank" rel="noopener">GitHub</a>
+    <a href="{REPO}/issues/new/choose" target="_blank" rel="noopener">{t('Idea / Report a bug')}</a>
   </span>
 </div>
 

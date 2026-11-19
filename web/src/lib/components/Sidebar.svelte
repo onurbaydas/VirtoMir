@@ -28,6 +28,7 @@
   import BookOpen from '@lucide/svelte/icons/book-open'
   import ChevronRight from '@lucide/svelte/icons/chevron-right'
   import Settings from '@lucide/svelte/icons/settings'
+  import MessageSquarePlus from '@lucide/svelte/icons/message-square-plus'
   import { cluster } from '../cluster.svelte'
   import { alerts } from '../alerts.svelte'
   import { session } from '../session.svelte'
@@ -267,6 +268,7 @@
         <button class="icon" title={t('Sign out')} aria-label={t('Sign out')} onclick={() => session.logout()}><LogOut size={15} /></button>
       {/if}
     {/if}
+    <a class="icon" href="https://github.com/onurbaydas/VirtoMir/issues/new/choose" target="_blank" rel="noopener" title={t('Idea / Report a bug')} aria-label={t('Idea / Report a bug')}><MessageSquarePlus size={15} /></a>
     <div class="themes" role="radiogroup" aria-label={t('Theme')}>
       {#each THEMES as t (t.key)}
         {@const Icon = t.icon}
