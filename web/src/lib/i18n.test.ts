@@ -35,6 +35,19 @@ describe('i18n', () => {
     expect([...missing]).toEqual([])
   })
 
+  it('keeps no translation and no "stays as it is" entry that the UI no longer uses', () => {
+    // Labels can sit in constants and reach t() through a variable, so a key counts as used
+    // when its text appears anywhere in the UI's code (demo included: it names UI strings too).
+    const sources = import.meta.glob(['./**/*.{svelte,ts}', '!./**/*.test.ts', '!./locales/**'], {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>
+    const code = Object.values(sources).join('\n').replace(/\\(['"\\])/g, '$1')
+    const unused = [...Object.keys(tr), ...untranslated].filter((k) => !code.includes(k))
+    expect(unused).toEqual([])
+  })
+
   it('Turkish strings are not empty and differ from a blank key', () => {
     expect(Object.entries(tr).filter(([k, v]) => !k.trim() || !v.trim())).toEqual([])
     expect(Object.keys(tr).length).toBeGreaterThan(1000)

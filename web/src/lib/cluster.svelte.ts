@@ -1,6 +1,7 @@
 // Cluster members (ADR-0020), polled in the background while signed in. Which member the
 // pages are about lives in the router (/hosts/<id>/…); this store knows who exists.
 
+import { errorText } from './reply'
 import { api, type ClusterInfo, type ClusterMember } from './api'
 import { router } from './router.svelte'
 
@@ -51,7 +52,7 @@ class ClusterStore {
             await fn(m.id)
             return { host: m.name }
           } catch (e) {
-            return { host: m.name, error: e instanceof Error ? e.message : String(e) }
+            return { host: m.name, error: errorText(e) }
           }
         }),
     )

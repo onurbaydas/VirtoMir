@@ -69,7 +69,8 @@ web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embed
   src/app.css        ← design tokens (colors, radii, motion) — use these, never hard-coded colors
   src/lib/i18n.svelte.ts, src/lib/locales/tr.ts ← UI language (ADR-0047): write every UI string as t('English text'),
                        with {name} placeholders for values (t('{n} of {total} running', { n, total })), and add its
-                       Turkish to tr.ts; an untranslated key falls back to English
+                       Turkish to tr.ts; an untranslated key falls back to English. i18n.test.ts fails on a string with
+                       no Turkish (or no entry in untranslated.ts) and on a translation the UI no longer uses: delete it
   src/lib/           ← api client, live/session stores, router, components (Dialog, ConfirmButton, …)
   src/lib/reply.ts   ← read every list in a reply with list() (null or a missing field is []), show every
                        error with errorText() (never String(e)), judge per-host results with allFailed()

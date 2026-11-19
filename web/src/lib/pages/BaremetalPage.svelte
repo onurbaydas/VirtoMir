@@ -227,7 +227,7 @@
       {#if setForm.mode === 'proxy'}
         <label class="ui-field"><span class="label">{t('Interface of the boot network')}</span><input class="ui-input mono" bind:value={setForm.interface} placeholder="br0" /><span class="hint">{t('It answers only the machines being installed; your DHCP server still hands out the addresses.')}</span></label>
         {#if hostState && !hostState.features.baremetal.installed}
-          <InstallFeature feature="baremetal" missing={t('dnsmasq and iPXE are not installed on this host; proxy DHCP needs them.')} oninstalled={loadHostState} />
+          <InstallFeature feature="baremetal" everywhere={false} missing={t('dnsmasq and iPXE are not installed on this host; proxy DHCP needs them.')} oninstalled={loadHostState} />
         {/if}
       {/if}
       <div class="row">

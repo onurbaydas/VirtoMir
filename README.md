@@ -59,7 +59,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 ### Machines
 
 - Live overview of host and machines, updated every second
-- **Nothing to install by hand**: a feature that needs a tool the host lacks (restic, FRR, dnsmasq + iPXE, cephadm + podman) shows an **Install it** button; VirtoMir runs apt or dnf itself and shows the progress as a task
+- **Nothing to install by hand**: a feature that needs a tool the host lacks (restic, FRR, dnsmasq + iPXE, cephadm + podman) shows an **Install it** button (in a cluster: **Install on every host**, on each member that lacks it); VirtoMir runs apt or dnf itself and shows the progress as a task
 - New-machine wizard: install from an ISO, start from a **cloud image with cloud-init** (user, password, SSH keys), or boot an existing disk. Linux, Windows (UEFI + Secure Boot + TPM 2.0) and "other" profiles with sensible defaults
 - Start, shut down, reboot, pause, force off, hard reset, **save to disk** (resume exactly where it was) — one by one or **in bulk**
 - Rename, **clone** (full copies, new identity, runs in the background), delete (optionally with its own disks — never shared ones)
@@ -74,7 +74,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 - **Storage QoS & SLAs**: guarantee and cap I/O bandwidth (`read_bytes_sec`, `write_bytes_sec`) and IOPS (`read_iops_sec`, `write_iops_sec`, burst ceilings) per virtual disk using QEMU `<iotune>`, applied live without guest downtime
 - **Confidential Computing**: machines with encrypted memory (**AMD SEV / SEV-SNP**, **Intel TDX**) on hosts whose CPU and firmware offer it; VirtoMir reads what the host supports from libvirt and only offers that
 - **System Containers**: Linux system containers on libvirt LXC next to the virtual machines — Debian, Ubuntu or Alpine from images.linuxcontainers.org (checked against SHA-256), unprivileged (container root is an unprivileged user on the host), on the same virtual networks, with live CPU and memory, the text console, start, shut down, reboot and delete (needs `libvirt-daemon-driver-lxc`)
-- **PCI/USB passthrough** with an IOMMU group view and safety checks (devices the host needs are refused, with the reason); when the IOMMU is off, one click puts it on the kernel command line (GRUB, grubby or systemd-boot, the old file kept), then a reboot
+- **PCI/USB passthrough** with an IOMMU group view and safety checks (devices the host needs are refused, with the reason); when the IOMMU is off, one click puts it on the kernel command line of this host or of every host (GRUB, grubby or systemd-boot, the old file kept), then a reboot
 - More devices from the Hardware tab: **shared folders** (virtiofs), **vGPU slices** (mediated devices, created on the Hardware page), **clipboard sharing**, video model and **up to 4 monitors**, watchdog, TPM 2.0, random number generator — hot-plugged where possible, otherwise from the next start (and it says which)
 - Expert **QEMU command line** (extra arguments and environment), clearly marked as such
 - **Import**: OVA appliances, a libvirt domain XML, or a disk image already on the host
