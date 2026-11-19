@@ -304,6 +304,25 @@ func buildDomain(s CreateSpec, diskPath, diskFormat, seedPath string, diskVolume
 	return x
 }
 
+// memoryFits refuses a machine that asks for more memory than the host has in total: it
+// could not start, or would push the host into swapping. hostKiB 0 means unknown.
+func memoryFits(memoryMiB, hostKiB uint64) error {
+	if hostKiB == 0 || memoryMiB*1024 <= hostKiB {
+		return nil
+	}
+	return invalidf("The host has %s of memory; give the machine at most that much (asked for %s).", formatMiB(hostKiB/1024), formatMiB(memoryMiB))
+}
+
+func formatMiB(mib uint64) string {
+	if mib >= 1024 && mib%1024 == 0 {
+		return fmt.Sprintf("%d GiB", mib/1024)
+	}
+	if mib >= 1024 {
+		return fmt.Sprintf("%.1f GiB", float64(mib)/1024)
+	}
+	return fmt.Sprintf("%d MiB", mib)
+}
+
 // CheckCreate answers the mistakes CreateDomain would refuse before it touches any disk
 // (invalid spec, name taken, pool without files, disk in use), so the API can say so
 // before it starts the slow part in the background.
@@ -317,6 +336,11 @@ func (c *Client) CheckCreate(spec CreateSpec) error {
 	}
 	if c.nameTaken(l, spec.Name) {
 		return refusedf("A machine named %s already exists.", spec.Name)
+	}
+	if _, hostKiB, _, _, _, _, _, _, err := l.NodeGetInfo(); err == nil {
+		if err := memoryFits(spec.MemoryMiB, hostKiB); err != nil {
+			return err
+		}
 	}
 	if n := spec.Network; n != nil && n.Bridge != "" && !hostIfExists(n.Bridge) {
 		return invalidf("This host has no bridge %s: a machine on it would not start. Pick one of its bridges or networks.", n.Bridge)

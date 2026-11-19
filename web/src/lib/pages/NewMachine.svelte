@@ -294,6 +294,7 @@
       takenNames: (live.snapshot?.domains ?? []).map((d) => d.name),
       ciKeys: keys,
       containersAvailable: ctAvailable,
+      hostMemGiB: (live.host?.memoryKiB ?? 0) / (1 << 20),
     }),
   )
   let canCreate = $derived(!blocker)
@@ -589,7 +590,7 @@
         <input class="ui-input num-in" type="number" min="0.25" step="0.25" bind:value={memGiB} aria-label={t('Memory in GiB')} />
         <span class="hint" class:warn={memGiB > maxMemGiB * 0.8}>
           {overMem
-            ? t('More memory than the host has ({memoryKiB}): the machine may not start, or the host will swap.', { memoryKiB: formatKiB(live.host?.memoryKiB ?? 0) })
+            ? t('More memory than the host has ({memoryKiB}). Lower it to create the machine.', { memoryKiB: formatKiB(live.host?.memoryKiB ?? 0) })
             : memGiB > maxMemGiB * 0.8
               ? t('Close to all host memory — the host may start swapping. The host has {memoryKiB}.', { memoryKiB: formatKiB(live.host?.memoryKiB ?? 0) })
               : t('The host has {memoryKiB}.', { memoryKiB: formatKiB(live.host?.memoryKiB ?? 0) })}

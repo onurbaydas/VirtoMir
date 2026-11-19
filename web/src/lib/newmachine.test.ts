@@ -25,6 +25,12 @@ describe('createBlocker', () => {
     expect(createBlocker(ok)).toBe('')
   })
 
+  it('refuses more memory than the host has', () => {
+    expect(blocker({ memGiB: 5000, hostMemGiB: 256 })).toMatch(/256 GiB/)
+    expect(blocker({ memGiB: 256, hostMemGiB: 256 })).toBe('')
+    expect(blocker({ memGiB: 5000 })).toBe('') // host size not known yet: no guess
+  })
+
   it('names the first problem, in order', () => {
     expect(blocker({ name: '  ' })).toMatch(/name/)
     expect(blocker({ name: '-bad' })).toMatch(/letters, digits/)
