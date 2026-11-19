@@ -1800,8 +1800,11 @@ export const api = {
   pools: async () => (await request<{ pools: Pool[] }>('GET', '/api/v1/storage/pools')).pools,
   createPool: (spec: PoolSpec) => request<void>('POST', '/api/v1/storage/pools', spec),
   /** Scans this host's networks for storage (or asks one server again, e.g. after a sign-in). */
-  discoverStorage: async (req?: { server: string } & StorageLogin) =>
-    (await request<{ found: FoundStorage[] }>('POST', '/api/v1/storage/discover', req ?? {})).found,
+  discoverStorage: async (req?: { server: string } & StorageLogin) => {
+    const res = await request<{ found?: FoundStorage[] } | undefined>('POST', '/api/v1/storage/discover', req ?? {})
+    // Anything but a list (an older daemon, an empty reply) means nothing was found.
+    return Array.isArray(res?.found) ? res.found : []
+  },
   /** Makes found storage a pool (on every cluster member with everywhere). */
   connectStorage: (req: { kind: string; server?: string; host?: string; name: string; everywhere?: boolean } & StorageLogin) =>
     request<{ pool: string; results?: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/storage/connect', req),

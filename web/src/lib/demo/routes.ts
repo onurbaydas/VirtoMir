@@ -10,6 +10,7 @@ import type {
   ContentItem,
   ContentVersion,
   CreateSpec,
+  FoundStorage,
   DeploySpec,
   DomainState,
   Job,
@@ -22,7 +23,7 @@ import type {
   VMwareInventory,
   VMwareWave,
 } from '../api'
-import type { PlacementRule, PlacementViolation } from '../enterprise'
+import type { DRSHostMetric, DRSMode, DRSRecommendation, DRSStatus, PlacementRule, PlacementViolation } from '../enterprise'
 import type { K8sCluster, K8sNode } from '../k8s'
 import type { BMHost } from '../baremetal'
 import * as w from './world'
@@ -212,6 +213,159 @@ function showback(q: URLSearchParams): Reply {
     return { status: 200, body: html, type: 'text/html; charset=utf-8' }
   }
   return json(rep)
+}
+
+// ---- Storage found on the network ----------------------------------------------------------
+
+const SMB_SHARES = ['vm-store', 'iso-library']
+
+/** What a scan of the demo's networks finds; the SMB server lists its shares after a sign-in. */
+function demoFoundStorage(req?: { server?: string; username?: string; password?: string }): FoundStorage[] {
+  const poolFor = (source: string) => w.pools.find((p) => p.source === source)?.name
+  const smb = (name: string): FoundStorage => ({ kind: 'smb', server: '10.20.0.40', host: 'files.lan', name, pool: poolFor(`//10.20.0.40/${name}`) })
+  if (req?.server === '10.20.0.40') return req.username && req.password ? SMB_SHARES.map(smb) : [{ kind: 'smb', server: '10.20.0.40', host: 'files.lan', name: '', needsAuth: true }]
+  return [
+    { kind: 'nfs', server: '10.20.0.30', host: 'nas.lan', name: '/export/vms', detail: 'rw, no_root_squash', pool: 'nas-nfs' },
+    { kind: 'nfs', server: '10.20.0.30', host: 'nas.lan', name: '/export/backup', detail: 'rw', pool: poolFor('10.20.0.30:/export/backup') },
+    { kind: 'iscsi', server: '10.20.0.50', host: 'san.lan', name: 'iqn.2005-10.org.freenas.ctl:vm-lun0', portals: ['10.20.0.50:3260', '10.21.0.50:3260'], sizeBytes: 4e12, pool: poolFor('iqn.2005-10.org.freenas.ctl:vm-lun0') },
+    { kind: 'smb', server: '10.20.0.40', host: 'files.lan', name: '', needsAuth: true },
+  ]
+}
+
+function connectFoundStorage(req?: { kind?: string; server?: string; name?: string; username?: string; password?: string; everywhere?: boolean }): Reply {
+  if (!req?.kind || !req.name) return json({ error: 'choose what to connect' }, 422)
+  if (req.kind === 'smb' && !(req.username && req.password)) return json({ error: 'this share needs a user name and password' }, 422)
+  const source = req.kind === 'nfs' ? `${req.server}:${req.name}` : req.kind === 'smb' ? `//${req.server}/${req.name}` : req.name
+  const existing = w.pools.find((p) => p.source === source)
+  if (existing) return json({ pool: existing.name })
+  const base = (req.kind + '-' + (req.name.split(/[/:]/).filter(Boolean).pop() ?? 'storage')).toLowerCase().replace(/[^a-z0-9-]/g, '-')
+  let name = base
+  for (let i = 2; w.pools.some((p) => p.name === name); i++) name = `${base}-${i}`
+  const cap = req.kind === 'iscsi' ? 4e12 : 8e12
+  w.pools.push({
+    name, uuid: newUUID(), source, active: true, autostart: true, volumes: 0,
+    type: req.kind === 'iscsi' ? 'iscsi' : 'netfs', origin: req.kind === 'smb' ? 'smb' : undefined,
+    path: req.kind === 'iscsi' ? undefined : `/mnt/${name}`,
+    capacityBytes: cap, allocationBytes: cap * 0.1, availableBytes: cap * 0.9,
+  })
+  return json({ pool: name, results: req.everywhere ? w.HOSTS.map((h) => ({ host: h.name, ok: true })) : undefined })
+}
+
+// ---- DRS (computed from the same simulated load the Overview tiles show) ----------------------
+
+const drsConfig: { mode: DRSMode; thresholdStdDev: number } = { mode: 'manual', thresholdStdDev: 15 }
+/** Machines DRS is moving right now: no second recommendation for them until the move ends. */
+const drsMoving = new Set<string>()
+
+const isRunning = (m: w.DemoMachine) => m.state === 'running' || m.state === 'blocked' || m.state === 'shutting-down'
+const round1 = (v: number) => Math.round(v * 10) / 10
+
+function drsHostMetrics(): DRSHostMetric[] {
+  return w.HOSTS.map((h) => {
+    const snap = w.snapshotOf(h)
+    const vms = w.onHost(h.id)
+    return {
+      id: h.id,
+      name: h.name,
+      reachable: true,
+      cpuPct: round1(snap.host.cpuPercent),
+      memPct: round1((snap.host.memUsedKiB / snap.host.memTotalKiB) * 100),
+      memUsedB: snap.host.memUsedKiB * 1024,
+      memTotalB: snap.host.memTotalKiB * 1024,
+      vmCount: vms.length,
+    }
+  })
+}
+
+const stdDev = (xs: number[]) => {
+  const mean = xs.reduce((a, b) => a + b, 0) / xs.length
+  return Math.sqrt(xs.reduce((a, x) => a + (x - mean) ** 2, 0) / xs.length)
+}
+
+function drsRecommendations(hosts: DRSHostMetric[], maxDev: number): DRSRecommendation[] {
+  const recs: DRSRecommendation[] = []
+  const byId = new Map(hosts.map((h) => [h.id, h]))
+  const load = (h: DRSHostMetric) => h.cpuPct + h.memPct
+  const rec = (m: w.DemoMachine, target: DRSHostMetric, priority: number, reason: string, gain: number): DRSRecommendation => ({
+    id: `drs-${m.uuid}-${m.host}-${target.id}`,
+    priority,
+    domainUuid: m.uuid,
+    domainName: m.name,
+    sourceHostId: m.host,
+    sourceName: byId.get(m.host)?.name ?? m.host,
+    targetHostId: target.id,
+    targetName: target.name,
+    reason,
+    expectedGain: gain,
+    createdAt: new Date().toISOString(),
+  })
+  const movable = (m: w.DemoMachine) => isRunning(m) && !drsMoving.has(m.uuid)
+  const fits = (m: w.DemoMachine, h: DRSHostMetric) => h.id !== m.host && demoPlacementCheck(m.uuid, h.id).hard.length === 0
+  // 1. Placement rules that are broken come first.
+  for (const v of getDemoViolations()) {
+    const m = v.domainUuids.map((u) => w.byUUID(u)).filter((x): x is w.DemoMachine => !!x && movable(x)).pop()
+    if (!m || recs.some((r) => r.domainUuid === m.uuid)) continue
+    // Only a host that leaves no rule of this machine broken (a soft rule too) fixes it.
+    const target = hosts.filter((h) => fits(m, h) && demoPlacementCheck(m.uuid, h.id).soft.length === 0).sort((a, b) => load(a) - load(b))[0]
+    if (target) recs.push(rec(m, target, v.hard ? 5 : 2, `Placement rule "${v.ruleName}" is broken: moving ${m.name} to ${target.name} fixes it.`, 15))
+  }
+  // 2. Then the load skew between the busiest and the idlest host.
+  if (maxDev > drsConfig.thresholdStdDev) {
+    const sorted = [...hosts].sort((a, b) => load(b) - load(a))
+    const busy = sorted[0]
+    const idle = sorted[sorted.length - 1]
+    const candidates = w
+      .onHost(busy.id)
+      .filter((m) => movable(m) && !m.template && !recs.some((r) => r.domainUuid === m.uuid) && fits(m, idle))
+      .sort((a, b) => b.memoryMiB - a.memoryMiB)
+    const m = candidates[0]
+    if (m && busy.id !== idle.id)
+      recs.push(
+        rec(m, idle, maxDev > 25 ? 4 : 3, `Cluster skew: ${busy.name} is the busiest host (CPU ${busy.cpuPct.toFixed(1)}%, RAM ${busy.memPct.toFixed(1)}%) while ${idle.name} is the idlest (CPU ${idle.cpuPct.toFixed(1)}%, RAM ${idle.memPct.toFixed(1)}%).`, round1(Math.min(25, maxDev * 0.7))),
+      )
+  }
+  return recs
+}
+
+function demoDRS(): DRSStatus {
+  const hosts = drsHostMetrics()
+  const cpuStdDev = stdDev(hosts.map((h) => h.cpuPct))
+  const memStdDev = stdDev(hosts.map((h) => h.memPct))
+  const maxDev = Math.max(cpuStdDev, memStdDev)
+  return {
+    enabled: true,
+    mode: drsConfig.mode,
+    balanceScore: round1(Math.max(0, Math.min(100, 100 - maxDev * 2))),
+    cpuStdDev: round1(cpuStdDev),
+    memStdDev: round1(memStdDev),
+    thresholdStdDev: drsConfig.thresholdStdDev,
+    lastEvaluationTime: new Date().toISOString(),
+    hosts,
+    recommendations: drsRecommendations(hosts, maxDev),
+    rules: demoPlacementRules.map((r) => ({
+      id: r.id,
+      name: r.name,
+      kind: r.kind === 'vm_host' ? 'vm_host_affinity' : r.kind,
+      enabled: r.enabled,
+      mandatory: r.strength === 'must',
+      domains: r.domains,
+      targetHost: r.hosts?.[0],
+    })),
+  }
+}
+
+/** Applies a recommendation the way the daemon does: a live migration, followed as a job. */
+function applyDRS(id: string): Reply {
+  const r = demoDRS().recommendations.find((x) => x.id === id)
+  if (!r) return json({ error: 'recommendation not found or already applied' }, 404)
+  const m = w.byUUID(r.domainUuid)
+  if (!m) return notFound('no such machine')
+  drsMoving.add(m.uuid)
+  const j = job('move', `Live-migrate ${m.name} to ${r.targetName}`, 6000, () => {
+    m.host = r.targetHostId
+    drsMoving.delete(m.uuid)
+  })
+  return json({ message: `Live migration of ${m.name} to ${r.targetName} started on ${r.sourceName}`, recommendation: r, job: j }, 202)
 }
 
 // ---- Background jobs ------------------------------------------------------------------------
@@ -713,6 +867,8 @@ function domainRoute(host: w.DemoHost, method: string, rest: string[], q: URLSea
 
 function createMachine(host: w.DemoHost, spec: CreateSpec): Reply {
   if (w.machines.some((m) => m.host === host.id && m.name === spec.name)) return json({ error: `A machine named ${spec.name} already exists.` }, 409)
+  const hostMiB = host.info.memoryKiB / 1024
+  if (spec.memoryMiB > hostMiB) return json({ error: `The host has ${hostMiB / 1024} GiB of memory; give the machine at most that much.` }, 422)
   return json(job('create', `Create machine ${spec.name}`, 2500, () => {
     const m = addMachine(host.id, {
       name: spec.name,
@@ -1462,53 +1618,14 @@ export function handle(method: string, url: URL, body: any): Reply {
           },
         ],
       })
-    case 'GET /api/v1/cluster/drs/placement':
-      return json({ hostId: w.HOSTS[1].id, hostName: w.HOSTS[1].name, cpuPct: 22.1, memPct: 38.0 })
+    case 'GET /api/v1/cluster/drs/placement': {
+      const best = drsHostMetrics().sort((a, b) => a.cpuPct + a.memPct - (b.cpuPct + b.memPct))[0]
+      return json({ hostId: best.id, hostName: best.name, cpuPct: best.cpuPct, memPct: best.memPct })
+    }
     case 'GET /api/v1/cluster/drs':
-      return json({
-        enabled: true,
-        mode: 'manual',
-        balanceScore: 78.5,
-        cpuStdDev: 24.2,
-        memStdDev: 18.7,
-        thresholdStdDev: 15.0,
-        lastEvaluationTime: new Date().toISOString(),
-        hosts: w.HOSTS.map((h, i) => ({
-          id: h.id,
-          name: h.name,
-          reachable: true,
-          cpuPct: [68.4, 22.1, 41.3][i % 3],
-          memPct: [74.2, 38.0, 52.6][i % 3],
-          memUsedB: [48 * 2 ** 30, 16 * 2 ** 30, 32 * 2 ** 30][i % 3],
-          memTotalB: 64 * 2 ** 30,
-          vmCount: [7, 2, 4][i % 3],
-        })),
-        recommendations: [
-          {
-            id: 'drs-rec-01',
-            priority: 4,
-            domainUuid: '4f1c2a7e-9b3d-4c21-8e5f-0a1b2c3d4e03',
-            domainName: 'db-01',
-            sourceHostId: 'hv-01',
-            sourceName: 'hv-01',
-            targetHostId: 'hv-02',
-            targetName: 'hv-02',
-            reason: 'hv-01 CPU utilization (68.4%) exceeds cluster average by 24.2%. Migrating db-01 to hv-02 balances compute load.',
-            expectedGain: 14.8,
-            createdAt: new Date().toISOString(),
-          },
-        ],
-        rules: demoPlacementRules.map((r) => ({
-          id: r.id,
-          name: r.name,
-          kind: r.kind === 'vm_host' ? 'vm_host_affinity' : r.kind,
-          enabled: r.enabled,
-          mandatory: r.strength === 'must',
-          domains: r.domains,
-          targetHost: r.hosts?.[0],
-        })),
-      })
+      return json(demoDRS())
     case 'PUT /api/v1/cluster/drs/config':
+      Object.assign(drsConfig, { mode: body?.mode ?? drsConfig.mode, thresholdStdDev: body?.thresholdStdDev ?? drsConfig.thresholdStdDev })
       return json({ status: 'ok' })
     case 'POST /api/v1/cluster/drs/rules': {
       const id = newUUID().replace(/-/g, '').slice(0, 16)
@@ -1597,6 +1714,10 @@ export function handle(method: string, url: URL, body: any): Reply {
     // Storage and networks
     case 'GET /api/v1/storage/pools':
       return json({ pools: w.pools })
+    case 'POST /api/v1/storage/discover':
+      return json({ found: demoFoundStorage(body) })
+    case 'POST /api/v1/storage/connect':
+      return connectFoundStorage(body)
     case 'GET /api/v1/networks':
       return json({ networks: w.networks })
 
@@ -2235,6 +2356,7 @@ export function handle(method: string, url: URL, body: any): Reply {
       return json({ labels: demoHostLabels[id] })
     }
   }
+  if (parts[0] === 'cluster' && parts[1] === 'drs' && parts[2] === 'recommendations' && parts[4] === 'apply' && method === 'POST') return applyDRS(parts[3])
   if (parts[0] === 'cluster' && parts[1] === 'drs' && parts[2] === 'rules' && parts.length === 4 && method === 'DELETE') {
     const id = parts[3]
     const idx = demoPlacementRules.findIndex((r) => r.id === id)

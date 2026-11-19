@@ -735,4 +735,46 @@ describe('demo API', () => {
     expect(call('POST', `/api/v1/baremetal/hosts/${v.hosts[0].id}/install`).status).toBe(409)
     expect(call('DELETE', `/api/v1/baremetal/hosts/${h.id}`).status).toBe(204)
   })
+
+  it('finds storage on the network and makes it a pool', () => {
+    const found = call('POST', '/api/v1/storage/discover', {}).json.found
+    expect(Array.isArray(found)).toBe(true)
+    expect(found.length).toBeGreaterThan(0)
+    const iscsi = found.find((f: { kind: string }) => f.kind === 'iscsi')
+    const made = call('POST', '/api/v1/storage/connect', { ...iscsi, everywhere: true })
+    expect(made.status).toBe(200)
+    expect(call('GET', '/api/v1/storage/pools').json.pools.some((p: { name: string }) => p.name === made.json.pool)).toBe(true)
+    // An SMB server lists its shares only after a sign-in.
+    expect(call('POST', '/api/v1/storage/discover', { server: '10.20.0.40' }).json.found[0].needsAuth).toBe(true)
+    expect(call('POST', '/api/v1/storage/discover', { server: '10.20.0.40', username: 'u', password: 'p' }).json.found.length).toBe(2)
+  })
+
+  it('refuses a machine with more memory than the host', () => {
+    const r = call('POST', '/api/v1/domains', { name: 'too-big', vcpus: 2, memoryMiB: 5000 * 1024, diskGiB: 20 })
+    expect(r.status).toBe(422)
+    expect(r.json.error).toMatch(/256 GiB/)
+  })
+
+  it('computes DRS from the live host load and applies a move as a job', () => {
+    vi.useFakeTimers()
+    try {
+      const drs = call('GET', '/api/v1/cluster/drs').json
+      const summaries = drs.hosts.map((h: { id: string }) => call('GET', `/api/v1/hosts/${h.id}/summary`).json.host.cpuPercent)
+      // Same simulation as the Overview tiles: within a few points of a fresh sample.
+      drs.hosts.forEach((h: { cpuPct: number }, i: number) => expect(Math.abs(h.cpuPct - summaries[i])).toBeLessThan(15))
+      expect(drs.recommendations.length).toBeGreaterThan(0)
+      const rec = drs.recommendations[0]
+      const res = call('POST', `/api/v1/cluster/drs/recommendations/${rec.id}/apply`)
+      expect(res.status).toBe(202)
+      expect(res.json.job.state).toBe('running')
+      // While it moves, the same recommendation is not offered again.
+      expect(call('GET', '/api/v1/cluster/drs').json.recommendations.some((r: { id: string }) => r.id === rec.id)).toBe(false)
+      vi.advanceTimersByTime(7000)
+      expect(call('GET', `/api/v1/jobs/${res.json.job.id}`).json.state).toBe('succeeded')
+      expect(call('GET', `/api/v1/hosts/${rec.targetHostId}/domains/${rec.domainUuid}`).json.name).toBe(rec.domainName)
+      expect(call('POST', `/api/v1/cluster/drs/recommendations/${rec.id}/apply`).status).toBe(404)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
