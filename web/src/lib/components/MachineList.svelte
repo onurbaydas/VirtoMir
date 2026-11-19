@@ -1,3 +1,13 @@
+<script module lang="ts">
+  import type { Domain as ScopeDomain } from '../api'
+  /** What the list covers right now (the node filter applied), for a page header. */
+  export interface MachineScope {
+    domains: ScopeDomain[]
+    /** The node the list is narrowed to; null for all nodes (or a single host). */
+    hostName: string | null
+  }
+</script>
+
 <script lang="ts">
   import { t } from '../i18n.svelte'
   import { session } from '../session.svelte'
@@ -15,6 +25,8 @@
   import { router } from '../router.svelte'
   import { projects } from '../projects.svelte'
   import { ent, violationsByDomain, type PlacementViolation } from '../enterprise'
+
+  let { scope = $bindable() }: { scope?: MachineScope } = $props()
 
   type Filter = 'all' | 'running' | 'stopped'
   let filter = $state<Filter>('all')
@@ -99,6 +111,13 @@
   let domains = $derived.by(() => {
     if (!cluster.clustered || !hostFilter) return allDomains
     return allDomains.filter((d) => d.hostId === hostFilter)
+  })
+
+  $effect(() => {
+    scope = {
+      domains,
+      hostName: cluster.clustered && hostFilter ? (cluster.members.find((m) => m.id === hostFilter)?.name ?? null) : null,
+    }
   })
 
   let counts = $derived({

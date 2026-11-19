@@ -6,10 +6,12 @@
   import Plus from '@lucide/svelte/icons/plus'
   import Download from '@lucide/svelte/icons/download'
   import Boxes from '@lucide/svelte/icons/boxes'
-  import MachineList from '../components/MachineList.svelte'
+  import MachineList, { type MachineScope } from '../components/MachineList.svelte'
   import { isActive } from '../live.svelte'
 
-  let domains = $derived(live.snapshot?.domains ?? [])
+  // The counts follow the list below: every node of a cluster, or the one node picked there.
+  let scope = $state<MachineScope>()
+  let domains = $derived(scope?.domains ?? live.snapshot?.domains ?? [])
   let running = $derived(domains.filter((d) => isActive(d.state)))
   let paused = $derived(domains.filter((d) => d.state === 'paused'))
   let stopped = $derived(domains.filter((d) => !isActive(d.state) && d.state !== 'paused'))
@@ -24,6 +26,7 @@
       <h1>{t('Virtual Machines')}</h1>
     </div>
     <div class="chips">
+      {#if scope?.hostName}<span class="chip host mono" title={t('Counts for this node only')}>{scope.hostName}</span>{/if}
       <span class="chip on" title={t('Running machines')}>● {t('{n} running', { n: running.length })}</span>
       {#if paused.length}
         <span class="chip paused" title={t('Paused machines')}>⏸ {t('{n} paused', { n: paused.length })}</span>
@@ -44,7 +47,7 @@
   </div>
 </header>
 
-<MachineList />
+<MachineList bind:scope />
 
 <style>
   .title-row {
@@ -77,6 +80,10 @@
     color: var(--ok);
     border-color: color-mix(in srgb, var(--ok) 40%, transparent);
     background: color-mix(in srgb, var(--ok) 10%, var(--surface));
+  }
+  .chip.host {
+    color: var(--text);
+    font-weight: 600;
   }
   .chip.paused {
     color: var(--warn);
