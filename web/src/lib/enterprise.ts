@@ -521,7 +521,10 @@ export const ent = {
   saveDRSConfig: (cfg: { enabled: boolean; mode: DRSMode; thresholdStdDev: number }) => api.put<void>('/api/v1/cluster/drs/config', cfg),
   addDRSRule: (rule: Partial<AffinityRule>) => api.post<AffinityRule>('/api/v1/cluster/drs/rules', rule),
   deleteDRSRule: (id: string) => api.delete<void>(`/api/v1/cluster/drs/rules/${enc(id)}`),
-  applyDRSRecommendation: (id: string) => api.post<{ message: string; recommendation: DRSRecommendation }>(`/api/v1/cluster/drs/recommendations/${enc(id)}/apply`),
+  /** Starts the move. The daemon answers with the move job itself (the machine is on this host)
+   *  or with { message, job, jobHost } (it runs on the member that has the machine). */
+  applyDRSRecommendation: (id: string) =>
+    api.post<Job | { message?: string; recommendation?: DRSRecommendation; job?: Job; jobHost?: string }>(`/api/v1/cluster/drs/recommendations/${enc(id)}/apply`),
   /** The member DRS would put a new machine on; undefined while DRS does not place machines. */
   drsPlacement: (memoryMiB: number) => api.get<DRSPlacement | undefined>(`/api/v1/cluster/drs/placement?memoryMiB=${memoryMiB}`),
   clusterInventoryMachines: async () => {

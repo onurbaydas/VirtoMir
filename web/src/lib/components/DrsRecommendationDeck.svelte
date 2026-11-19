@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { ent, type DRSStatus, type DRSRecommendation, type AffinityRule, type DRSMode } from '../enterprise'
   import { toasts } from '../toast.svelte'
+  import { track } from '../jobs'
   import { t } from '../i18n.svelte'
   import Dialog from './Dialog.svelte'
 
@@ -49,12 +50,34 @@
     }
   }
 
+  // Machines whose move is running: their card stays hidden until the move ends.
+  let moving = $state<Set<string>>(new Set())
+  let shownRecs = $derived((status?.recommendations ?? []).filter((r) => !moving.has(r.domainUuid)))
+
   async function applyRecommendation(rec: DRSRecommendation) {
     try {
       applying = rec.id
       const res = await ent.applyDRSRecommendation(rec.id)
-      toasts.push({ kind: 'info', title: res.message || t('Live migration initiated') })
-      await load()
+      // The move is a background job: follow it (it shows in Tasks too) and look again when it ends.
+      const job = 'state' in res && 'id' in res ? res : 'job' in res ? res.job : undefined
+      const jobHost = 'jobHost' in res ? res.jobHost : undefined
+      const done = () => {
+        moving.delete(rec.domainUuid)
+        moving = new Set(moving)
+        void load()
+      }
+      if (job?.id) {
+        moving = new Set(moving).add(rec.domainUuid)
+        track(job, {
+          success: t('{vm} now runs on {host}', { vm: rec.domainName, host: rec.targetName }),
+          host: jobHost,
+          onSuccess: done,
+          onFailure: done,
+        })
+      } else {
+        toasts.push({ kind: 'info', title: ('message' in res && res.message) || t('Live migration initiated') })
+        await load()
+      }
     } catch (e) {
       toasts.push({ kind: 'error', title: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -106,6 +129,9 @@
 
   onMount(() => {
     void load()
+    // The balance follows the live load: look again now and then, quietly.
+    const iv = setInterval(() => void load(), 10_000)
+    return () => clearInterval(iv)
   })
 </script>
 
@@ -170,19 +196,19 @@
     <div class="recommendations-section">
       <h4>
         {t('Optimization Recommendations')}
-        {#if status.recommendations.length > 0}
-          <span class="count-badge">{status.recommendations.length}</span>
+        {#if shownRecs.length > 0}
+          <span class="count-badge">{shownRecs.length}</span>
         {/if}
       </h4>
 
-      {#if status.recommendations.length === 0}
+      {#if shownRecs.length === 0}
         <div class="empty-recs">
           <span class="check-icon">✓</span>
           {t('Cluster is optimally balanced. No migrations recommended.')}
         </div>
       {:else}
         <div class="rec-list">
-          {#each status.recommendations as rec (rec.id)}
+          {#each shownRecs as rec (rec.id)}
             <div class="rec-row" class:priority-high={rec.priority >= 4}>
               <div class="rec-stars" title="{rec.priority} of 5 priority">
                 {'★'.repeat(rec.priority)}{'☆'.repeat(5 - rec.priority)}
