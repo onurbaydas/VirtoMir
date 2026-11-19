@@ -854,6 +854,28 @@ export interface FileEntry {
 }
 
 /** Network or SAN storage VirtoMir found by itself. */
+export type SetupFeature = 'offsite' | 'physnet' | 'baremetal' | 'ceph'
+
+export interface HostSetupState {
+  features: Record<SetupFeature, { title: string; installed: boolean }>
+  watchdog: boolean
+}
+
+export interface IOMMUResult {
+  /** Added to the kernel command line; empty when they were there already. */
+  params: string[]
+  method: 'grubby' | 'grub' | 'kernel-cmdline'
+  rebootNeeded: boolean
+  backup?: string
+}
+
+export interface SSHTrust {
+  authorized: boolean
+  verified: boolean
+  publicKey: string
+  reason?: string
+}
+
 export interface FoundStorage {
   kind: 'iscsi' | 'nfs' | 'smb' | 'fc' | 'lun'
   server?: string
@@ -1765,6 +1787,15 @@ export const api = {
   saveQEMUArgs: (uuid: string, q: QEMUArgs) => request<DefineResult>('PUT', `${domainPath(uuid)}/qemu-args`, q),
   createMDev: (parent: string, type: string) => request<{ uuid: string }>('POST', '/api/v1/host/mdevs', { parent, type }),
   deleteMDev: (uuid: string) => request<void>('DELETE', `/api/v1/host/mdevs/${enc(uuid)}`),
+
+  // Host chores VirtoMir does itself (packages, IOMMU, watchdog, replication SSH trust).
+  hostSetup: (host?: string) => request<HostSetupState>('GET', at(host, '/api/v1/host/setup')),
+  /** Installs a feature's packages in the background; follow the job. */
+  installFeature: (feature: SetupFeature, host?: string) => request<Job>('POST', at(host, `/api/v1/host/setup/packages/${enc(feature)}`)),
+  enableIOMMU: (host?: string) => request<IOMMUResult>('POST', at(host, '/api/v1/host/setup/iommu')),
+  enableWatchdog: (host?: string) => request<{ watchdog: boolean }>('POST', at(host, '/api/v1/host/setup/watchdog')),
+  /** Makes a replication target accept this host's root SSH key (by itself for cluster members). */
+  sshTrust: (target: string, host?: string) => request<SSHTrust>('POST', at(host, '/api/v1/host/setup/ssh-trust'), { target }),
 
   snapshots: async (uuid: string) =>
     list((await request<{ snapshots?: SnapshotInfo[] | null }>('GET', `${domainPath(uuid)}/snapshots`)).snapshots),

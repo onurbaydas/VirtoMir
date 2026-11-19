@@ -1,4 +1,5 @@
 <script lang="ts">
+  import InstallFeature from '../components/InstallFeature.svelte'
   import { t } from '../i18n.svelte'
   // Physical network (ADR-0075): SR-IOV virtual functions and BGP on this host, IP pools that
   // give machines fixed addresses and dynamic DNS for their names (the same on every member).
@@ -252,7 +253,7 @@
         <section class="ui-panel card">
           <h3>{t('FRR on this host')}</h3>
           {#if !bgp.frr.installed}
-            <p class="muted">{t('FRR is not installed. Install it (apt install frr, or dnf install frr) and set bgpd=yes in /etc/frr/daemons.')}</p>
+            <InstallFeature feature="physnet" missing={t('FRR is not installed on this host; it does the BGP routing. Installing it also turns on its BGP daemon.')} oninstalled={loadBGP} />
           {:else}
             <dl>
               <dt>{t('Version')}</dt><dd class="mono">{bgp.frr.version ?? '?'}</dd>

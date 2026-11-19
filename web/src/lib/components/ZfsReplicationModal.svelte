@@ -3,7 +3,8 @@
   import { ent, type ZFSReplicationStatus, type ZFSReplicationSpec } from '../enterprise'
   import { session } from '../session.svelte'
   import { toasts } from '../toast.svelte'
-  import { errorText } from '../api'
+  import { api, errorText, type SSHTrust } from '../api'
+  import { cluster } from '../cluster.svelte'
   import { formatBytes } from '../format'
   import Dialog from './Dialog.svelte'
   import RefreshCw from '@lucide/svelte/icons/refresh-cw'
@@ -86,11 +87,35 @@
     }
   }
 
+  // The SSH trust the replication needs, set up when the schedule is made: by VirtoMir itself
+  // for a cluster member, or the key to add by hand (shown until dismissed) for any other host.
+  let trust = $state<SSHTrust | null>(null)
+  // Cluster members to pick as the target (any other host can still be typed).
+  let memberHosts = $derived(
+    cluster.members.filter((m) => !m.self).map((m) => {
+      try {
+        return new URL(m.address).hostname
+      } catch {
+        return m.name
+      }
+    }),
+  )
+
+  async function copyKey() {
+    try {
+      await navigator.clipboard.writeText(trust?.publicKey ?? '')
+      toasts.push({ kind: 'info', title: t('Copied') })
+    } catch {
+      /* the clipboard needs https */
+    }
+  }
+
   async function createSchedule(e: SubmitEvent) {
     e.preventDefault()
     formError = ''
     creating = true
     try {
+      trust = await api.sshTrust(targetHost.trim()).catch((err) => ({ authorized: false, verified: false, publicKey: '', reason: errorText(err) }))
       await ent.createZFSReplication({
         sourcePool: sourcePool.trim(),
         sourceVolume: sourceVolume.trim(),
@@ -100,7 +125,12 @@
         keep: Number(keep),
         enabled: true,
       })
-      toasts.push({ kind: 'info', title: t('ZFS replication schedule created') })
+      toasts.push({
+        kind: trust.verified ? 'info' : 'warn',
+        title: t('ZFS replication schedule created'),
+        detail: trust.verified ? t('{host} accepts this host\'s SSH key; the first copy runs on schedule.', { host: targetHost.trim() }) : t('The target does not accept this host\'s SSH key yet; see the note above the list.'),
+      })
+      if (trust.verified) trust = null
       sourceVolume = ''
       showAdd = false
       await load()
@@ -123,7 +153,7 @@
       <div class="info-banner">
         <ShieldCheck size={18} class="banner-icon" />
         <span>
-          {t('On its schedule VirtoMir snapshots the dataset or zvol and sends only what changed since the last snapshot both hosts have (zfs send -i | ssh … zfs receive). This host connects to the target as root with an SSH key — set that up first (ssh-copy-id) — and the target pool must exist there.')}
+          {t('On its schedule VirtoMir snapshots the dataset or zvol and sends only what changed since the last snapshot both hosts have (zfs send -i | ssh … zfs receive). VirtoMir sets up the SSH key itself when the target is a member of this cluster; the target pool must exist there.')}
         </span>
       </div>
       <div class="header-actions">
@@ -137,6 +167,19 @@
         {/if}
       </div>
     </div>
+
+    {#if trust && !trust.verified}
+      <div class="trust ui-panel">
+        <p>{trust.reason}</p>
+        {#if trust.publicKey}
+          <code class="mono key">{trust.publicKey}</code>
+          <div class="trust-actions">
+            <button class="ui-btn sm" onclick={copyKey}>{t('Copy the key')}</button>
+            <button class="ui-btn sm ghost" onclick={() => (trust = null)}>{t('Done')}</button>
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     {#if showAdd}
       <form class="add-box ui-panel" onsubmit={createSchedule}>
@@ -154,7 +197,8 @@
         <div class="grid2">
           <label class="ui-field">
             <span class="label">{t('Target host (SSH)')}</span>
-            <input class="ui-input mono" bind:value={targetHost} placeholder="root@192.168.1.50" required />
+            <input class="ui-input mono" bind:value={targetHost} placeholder={memberHosts[0] ?? '192.168.1.50'} list="zfs-targets" required />
+            <datalist id="zfs-targets">{#each memberHosts as h (h)}<option value={h}></option>{/each}</datalist>
           </label>
           <label class="ui-field">
             <span class="label">{t('Target ZFS Pool')}</span>
@@ -245,6 +289,27 @@
 </Dialog>
 
 <style>
+  .trust {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    border-left: 3px solid var(--warn);
+  }
+  .trust p {
+    margin: 0;
+  }
+  .key {
+    word-break: break-all;
+    font-size: 12px;
+    padding: 6px 8px;
+    background: var(--surface-2);
+  }
+  .trust-actions {
+    display: flex;
+    gap: 8px;
+  }
   .rep-container {
     display: flex;
     flex-direction: column;

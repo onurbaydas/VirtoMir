@@ -809,4 +809,24 @@ describe('demo API', () => {
     expect(call('GET', '/api/v1/networks').json.networks.some((n: { name: string }) => n.name === 'probe-net')).toBe(true)
     expect(call('POST', '/api/v1/storage/pools', { name: 'probe-pool' }).status).toBe(409)
   })
+
+  it('does the host chores itself: packages, IOMMU, watchdog and SSH trust', () => {
+    vi.useFakeTimers()
+    try {
+      expect(call('GET', '/api/v1/host/setup').json.features.baremetal.installed).toBe(false)
+      const j = call('POST', '/api/v1/host/setup/packages/baremetal')
+      expect(j.status).toBe(202)
+      vi.advanceTimersByTime(3500)
+      expect(call('GET', '/api/v1/host/setup').json.features.baremetal.installed).toBe(true)
+      expect(call('POST', '/api/v1/host/setup/packages/nope').status).toBe(404)
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(call('POST', '/api/v1/host/setup/iommu').json.rebootNeeded).toBe(true)
+    expect(call('POST', '/api/v1/host/setup/watchdog').json.watchdog).toBe(true)
+    expect(call('POST', '/api/v1/host/setup/ssh-trust', { target: '10.20.0.12' }).json.verified).toBe(true)
+    const outside = call('POST', '/api/v1/host/setup/ssh-trust', { target: 'root@backup.example.com' }).json
+    expect(outside.authorized).toBe(false)
+    expect(outside.publicKey).toMatch(/^ssh-ed25519 /)
+  })
 })

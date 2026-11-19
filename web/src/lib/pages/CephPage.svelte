@@ -1,4 +1,5 @@
 <script lang="ts">
+  import InstallFeature from '../components/InstallFeature.svelte'
   import { t } from '../i18n.svelte'
   // Hyper-converged Ceph (ADR-0073): bootstrap a cluster on the VirtoMir hosts, add hosts and
   // OSDs (empty disks only), watch health and capacity, create RBD pools that become libvirt
@@ -226,7 +227,7 @@
     <section class="ui-panel card">
       <h3>{t('No Ceph cluster yet')}</h3>
       {#if !status.installed && !status.cephadm}
-        <p class="muted">{t('Install cephadm on this host (apt install cephadm, or dnf install cephadm) together with podman, then bootstrap the first monitor here. Every host that should store data needs podman too.')}</p>
+        <InstallFeature feature="ceph" missing={t('cephadm and podman are not installed on this host; Ceph runs with them. After the install, bootstrap the first monitor here. Every host that should store data needs them too.')} oninstalled={load} />
       {:else}
         <p class="muted">{t('Bootstrapping starts the first monitor and manager on this host; then add the other members as Ceph hosts and give Ceph their empty disks. Three hosts with at least one disk each keep three copies of everything.')}</p>
       {/if}

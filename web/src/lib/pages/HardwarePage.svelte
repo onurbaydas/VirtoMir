@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IommuFix from '../components/IommuFix.svelte'
   import { t } from '../i18n.svelte'
   // The host's PCI and USB devices: what each is, who uses it, and whether it can be passed
   // through to a machine — with the reason when not.
@@ -92,7 +93,8 @@
         <span>{t('Devices are isolated in IOMMU groups. {passable} PCI device{v} can be passed through right now.', { passable: passable, v: passable === 1 ? '' : 's' })}</span>
       {:else}
         <strong>{t('IOMMU is off — PCI passthrough is not possible')}</strong>
-        <span>{t('Turn on VT-d (Intel) or AMD-Vi in the firmware settings and add')} <span class="mono">{t('intel_iommu=on iommu=pt')}</span> {t('(or')} <span class="mono">{t('amd_iommu=on')}</span>{t(') to the kernel command line, then reboot. USB devices work without it.')}</span>
+        <span>{t('VirtoMir can put it on the kernel command line for you; then reboot the host. USB devices work without it.')}</span>
+        <IommuFix />
       {/if}
     </div>
   </section>

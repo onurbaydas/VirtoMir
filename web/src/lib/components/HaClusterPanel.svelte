@@ -8,7 +8,9 @@
   import FlaskConical from '@lucide/svelte/icons/flask-conical'
   import Save from '@lucide/svelte/icons/save'
   import Trash from '@lucide/svelte/icons/trash'
-  import { errorText } from '../api'
+  import { api, errorText } from '../api'
+  import { cluster } from '../cluster.svelte'
+  import { allFailed } from '../reply'
   import { ent, PRIORITIES, type FenceAgent, type HASettings, type HAStatus, type Simulation } from '../enterprise'
   import { session } from '../session.svelte'
   import { toasts } from '../toast.svelte'
@@ -59,10 +61,23 @@
     if (!form) return
     saving = true
     try {
+      const wantWatchdog = form.watchdog
       status = await ent.haSettings(form)
       dirty = false
       form = toForm(status)
       toasts.push({ kind: 'info', title: t('HA settings saved'), detail: t('Every member picks them up with its next heartbeat.') })
+      // The watchdog needs /dev/watchdog on every member: VirtoMir loads the kernel's software
+      // watchdog where there is no hardware one, and keeps it loaded across reboots.
+      if (wantWatchdog) {
+        const res = await cluster.everywhere((h) => api.enableWatchdog(h))
+        const failed = res.filter((r) => r.error)
+        if (failed.length)
+          toasts.push({
+            kind: allFailed(res) ? 'error' : 'warn',
+            title: t('The watchdog is not ready on {n} of {total} hosts', { n: failed.length, total: res.length }),
+            detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · '),
+          })
+      }
     } catch (e) {
       toasts.push({ kind: 'error', title: t('Not saved'), detail: errorText(e) })
     } finally {
@@ -249,7 +264,7 @@
       <div class="grid">
         <label class="ui-field"><span class="label">{t('Watchdog timeout (s)')}</span>
           <input class="ui-input" type="number" min="10" max="600" bind:value={form.watchdogTimeoutSec} oninput={() => (dirty = true)} disabled={!admin} /></label>
-        <p class="hint warn">{t('A host that hangs or loses quorum')} <b>{t('resets itself')}</b>{t('. Needs /dev/watchdog (or')} <span class="mono">{t('modprobe softdog')}</span>).</p>
+        <p class="hint warn">{t('A host that hangs or loses quorum')} <b>{t('resets itself')}</b>. {t('VirtoMir sets up the watchdog on every host when you save (the kernel\'s software watchdog where there is no hardware one).')}</p>
       </div>
     {/if}
     <p class="hint">{t('Protected machines\' disks must be on storage every member reaches.')}</p>

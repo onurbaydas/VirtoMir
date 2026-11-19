@@ -263,6 +263,27 @@ function addNetwork(spec?: { name?: string; mode?: string; subnet?: string; brid
   return undefined
 }
 
+// ---- Host chores VirtoMir does itself ---------------------------------------------------------
+
+const setup = {
+  features: {
+    offsite: { title: 'Off-site copies (restic)', installed: true },
+    physnet: { title: 'BGP / EVPN routing (FRR)', installed: true },
+    baremetal: { title: 'Network installs (dnsmasq + iPXE)', installed: false },
+    ceph: { title: 'Ceph (cephadm + podman)', installed: true },
+  } as Record<string, { title: string; installed: boolean }>,
+  watchdog: false,
+}
+
+function installFeature(name: string): Reply {
+  const f = setup.features[name]
+  if (!f) return json({ error: `VirtoMir does not know how to set up ${name}` }, 404)
+  return json(job('setup', `Install ${f.title}`, 3000, () => {
+    f.installed = true
+    return name
+  }), 202)
+}
+
 // ---- Storage found on the network ----------------------------------------------------------
 
 const SMB_SHARES = ['vm-store', 'iso-library']
@@ -1775,6 +1796,24 @@ export function handle(method: string, url: URL, body: any): Reply {
       if (made) return made
       return json(path.includes('/cluster/') ? { results: w.HOSTS.map((h) => ({ host: h.name, ok: true })) } : {})
     }
+    case 'GET /api/v1/host/setup':
+      return json({ features: setup.features, watchdog: setup.watchdog })
+    case 'POST /api/v1/host/setup/iommu':
+      return json({ params: ['amd_iommu=on', 'iommu=pt'], method: 'grub', rebootNeeded: true, backup: '/etc/default/grub.virtomir-backup' })
+    case 'POST /api/v1/host/setup/watchdog':
+      setup.watchdog = true
+      return json({ watchdog: true })
+    case 'POST /api/v1/host/setup/ssh-authorize':
+      return none()
+    case 'POST /api/v1/host/setup/ssh-trust': {
+      const target = String(body?.target ?? '').replace(/^root@/, '').trim()
+      const publicKey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDemoDemoDemoDemoDemoDemoDemoDemoDemoDemo virtomir@hv-01'
+      if (!/^[A-Za-z0-9.:-]+$/.test(target)) return json({ error: 'the target is a host name or address (or root@host)' }, 422)
+      const member = w.HOSTS.find((h, i) => h.name === target || `10.20.0.1${i + 1}` === target)
+      return member
+        ? json({ authorized: true, verified: true, publicKey })
+        : json({ authorized: false, verified: false, publicKey, reason: `${target} is not a member of this cluster, so VirtoMir cannot sign in there by itself. Add this key to /root/.ssh/authorized_keys on ${target}, or join it to the cluster and try again.` })
+    }
     case 'POST /api/v1/storage/discover':
       return json({ found: demoFoundStorage(body) })
     case 'POST /api/v1/storage/connect':
@@ -2421,6 +2460,7 @@ export function handle(method: string, url: URL, body: any): Reply {
       return json({ labels: demoHostLabels[id] })
     }
   }
+  if (parts[0] === 'host' && parts[1] === 'setup' && parts[2] === 'packages' && parts.length === 4 && method === 'POST') return installFeature(parts[3])
   if (parts[0] === 'cluster' && parts[1] === 'drs' && parts[2] === 'recommendations' && parts[4] === 'apply' && method === 'POST') return applyDRS(parts[3])
   if (parts[0] === 'cluster' && parts[1] === 'drs' && parts[2] === 'rules' && parts.length === 4 && method === 'DELETE') {
     const id = parts[3]

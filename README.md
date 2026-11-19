@@ -59,6 +59,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 ### Machines
 
 - Live overview of host and machines, updated every second
+- **Nothing to install by hand**: a feature that needs a tool the host lacks (restic, FRR, dnsmasq + iPXE, cephadm + podman) shows an **Install it** button; VirtoMir runs apt or dnf itself and shows the progress as a task
 - New-machine wizard: install from an ISO, start from a **cloud image with cloud-init** (user, password, SSH keys), or boot an existing disk. Linux, Windows (UEFI + Secure Boot + TPM 2.0) and "other" profiles with sensible defaults
 - Start, shut down, reboot, pause, force off, hard reset, **save to disk** (resume exactly where it was) — one by one or **in bulk**
 - Rename, **clone** (full copies, new identity, runs in the background), delete (optionally with its own disks — never shared ones)
@@ -73,7 +74,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 - **Storage QoS & SLAs**: guarantee and cap I/O bandwidth (`read_bytes_sec`, `write_bytes_sec`) and IOPS (`read_iops_sec`, `write_iops_sec`, burst ceilings) per virtual disk using QEMU `<iotune>`, applied live without guest downtime
 - **Confidential Computing**: machines with encrypted memory (**AMD SEV / SEV-SNP**, **Intel TDX**) on hosts whose CPU and firmware offer it; VirtoMir reads what the host supports from libvirt and only offers that
 - **System Containers**: Linux system containers on libvirt LXC next to the virtual machines — Debian, Ubuntu or Alpine from images.linuxcontainers.org (checked against SHA-256), unprivileged (container root is an unprivileged user on the host), on the same virtual networks, with live CPU and memory, the text console, start, shut down, reboot and delete (needs `libvirt-daemon-driver-lxc`)
-- **PCI/USB passthrough** with an IOMMU group view and safety checks (devices the host needs are refused, with the reason)
+- **PCI/USB passthrough** with an IOMMU group view and safety checks (devices the host needs are refused, with the reason); when the IOMMU is off, one click puts it on the kernel command line (GRUB, grubby or systemd-boot, the old file kept), then a reboot
 - More devices from the Hardware tab: **shared folders** (virtiofs), **vGPU slices** (mediated devices, created on the Hardware page), **clipboard sharing**, video model and **up to 4 monitors**, watchdog, TPM 2.0, random number generator — hot-plugged where possible, otherwise from the next start (and it says which)
 - Expert **QEMU command line** (extra arguments and environment), clearly marked as such
 - **Import**: OVA appliances, a libvirt domain XML, or a disk image already on the host
@@ -106,7 +107,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 - Virtual networks (NAT, isolated, routed, bridged) with **IPv4 and IPv6** (SLAAC, DHCPv6, NAT66), DHCP leases with machine names, **reserved addresses**
 - **Cross-Host VXLAN Overlay (SDN)**: one layer-2 network spanning several hosts, tunnelled over their existing network (UDP 4789) without switch changes; created cluster-wide, every member gets the others as peers and one host is the gateway (NAT, DHCP); VirtoMir keeps the tunnel devices in place, also after a reboot
 - **Software-defined networking on OVN** *(experimental, not yet run on a real OVN cluster)*: per-project **VPCs** with subnets, OVN-native DHCP and a distributed router, static routes, an **external gateway** with SNAT, **floating IPs**, **security groups** (stateful rules, default deny, rules between groups), **load balancers** with TCP/UDP health checks and **IPsec** for the Geneve tunnels; a machine's adapter can be put on a VPC subnet when it is created or later
-- **Asynchronous ZFS Storage Replication**: datasets and zvols replicated to another host on a schedule with incremental `zfs send -i | ssh … zfs receive`, old replication snapshots pruned on both sides; a copy of the data elsewhere without a SAN
+- **Asynchronous ZFS Storage Replication**: datasets and zvols replicated to another host on a schedule with incremental `zfs send -i | ssh … zfs receive`, old replication snapshots pruned on both sides; a copy of the data elsewhere without a SAN. VirtoMir sets up the root SSH key on a target that is a cluster member itself
 - **Host wiring** at a glance: physical ports, bonds, VLANs, bridges and which machines are plugged in
 - **Create bridges, bonds and VLAN interfaces on the host** — through netplan, NetworkManager or systemd-networkd, whichever the host uses; a bridge can take over the host's own address. Every change must be confirmed within two minutes, or the host undoes it by itself (so a change that cuts you off heals itself)
 - **Packet capture** on any host interface (tcpdump): watch it live or download a `.pcap` for Wireshark
@@ -137,7 +138,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 - Alerts, activity and backups of all hosts in one place, history charts of every host side by side; roles apply on every host
 - Alert rules, notifications and the backup location saved **the same on every host** in one step
 - A **CPU model every host supports**, so machines can live-migrate between different CPUs
-- **High availability**: protected machines are restarted on another host when theirs dies — with quorum (and an optional witness), and only after the dead host is certainly off: through its BMC (IPMI or Redfish), its hardware watchdog, or an admin's confirmation. Priorities, preferred hosts, a "what if this host died" preview
+- **High availability**: protected machines are restarted on another host when theirs dies — with quorum (and an optional witness), and only after the dead host is certainly off: through its BMC (IPMI or Redfish), its watchdog (VirtoMir loads the kernel's software watchdog where there is no hardware one), or an admin's confirmation. Priorities, preferred hosts, a "what if this host died" preview
 - **Maintenance**: move every running machine off a host in one go
 - **Rolling cluster upgrade**: pre-checks (quorum, room to evacuate, versions), then one host at a time — machines live-migrate away, VirtoMir (and optionally the OS packages, with a reboot) is updated, the host comes back and takes its machines again; pause, resume or abort between steps
 - **GPU pools**: the cluster's GPUs grouped by how machines get them (whole card by passthrough, a vGPU type, a MIG profile); a new machine asks for "2 of l40s" and is placed on the member that has them free, within its project's GPU quota

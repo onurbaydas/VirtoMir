@@ -1,4 +1,5 @@
 <script lang="ts">
+  import InstallFeature from './InstallFeature.svelte'
   import { t } from '../i18n.svelte'
   // Off-site copies of backups with restic (ADR-0043): one encrypted, deduplicated repository
   // on S3 (or anything S3-compatible), B2, Azure, Google Cloud Storage, SFTP, a REST server or a
@@ -133,7 +134,7 @@
     <div class="ui-error-box">{error}</div>
   {:else if cfg}
     {#if !restic}
-      <p class="warn">{t('restic is not installed on this host. Install it (')}<span class="mono">{t('apt install restic')}</span> {t('or')} <span class="mono">{t('dnf install restic')}</span>{t(') to copy backups off-site.')}</p>
+      <InstallFeature feature="offsite" missing={t('restic is not installed on this host; it copies the backups off-site.')} oninstalled={load} />
     {/if}
     {#if !editing}
       {#if configured}
@@ -236,13 +237,6 @@
   h2 { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 15px; }
   .muted { color: var(--text-3); font-size: 12.5px; }
   .small { font-size: 12px; }
-  .warn {
-    padding: 10px 12px;
-    background: var(--surface-2);
-    border-left: 3px solid var(--warn);
-    color: var(--text-2);
-    font-size: 12.5px;
-  }
   .form { display: flex; flex-direction: column; gap: 12px; max-width: 640px; margin: 8px 0; }
   .ex { background: none; border: 0; padding: 0 8px 0 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; text-decoration: underline; }
   .env { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }

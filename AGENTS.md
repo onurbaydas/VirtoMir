@@ -54,6 +54,8 @@ internal/timeline/   ← what happened to a machine, one list: libvirt's lifecyc
 internal/quota/      ← per-user/group quotas, machine ownership, operator self-service (ADR-0022)
 internal/activity/   ← who did what: -state-dir/activity.jsonl (ADR-0015)
 internal/alerts/     ← alert rules on live snapshots, webhook/e-mail channels (ADR-0017)
+internal/hostsetup/  ← host chores done for the admin: feature packages (apt/dnf), IOMMU on the kernel command line,
+                       softdog for HA, root SSH key + authorized_keys for ZFS replication (API: internal/api/hostsetup.go)
 internal/schedule/   ← automatic snapshots/backups with retention (ADR-0018)
 internal/cluster/    ← multi-host (ADR-0020): member list, join codes, pinned peer HTTPS + peer keys;
                        forwarding of /api/v1/hosts/<id>/… lives in internal/api/cluster.go

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import InstallFeature from '../components/InstallFeature.svelte'
   import { t } from '../i18n.svelte'
   // Bare-metal onboarding (ADR-0077): register a machine by the MAC it boots from, then
   // VirtoMir installs Debian 13 and VirtoMir on it over the network and it joins the cluster.
@@ -8,7 +9,7 @@
   import Trash from '@lucide/svelte/icons/trash'
   import Download from '@lucide/svelte/icons/download'
   import Power from '@lucide/svelte/icons/power'
-  import { errorText } from '../api'
+  import { api, errorText, type HostSetupState } from '../api'
   import { router } from '../router.svelte'
   import { session } from '../session.svelte'
   import { toasts } from '../toast.svelte'
@@ -29,6 +30,14 @@
       error = errorText(e)
     }
   }
+  // What this host has installed: proxy DHCP needs dnsmasq and iPXE.
+  let hostState = $state<HostSetupState | null>(null)
+  const loadHostState = async () => {
+    hostState = await api.hostSetup().catch(() => hostState)
+  }
+  $effect(() => {
+    if (setForm?.mode === 'proxy' && !hostState) void loadHostState()
+  })
   $effect(() => {
     void router.host
     void load()
@@ -216,7 +225,10 @@
         </select>
       </label>
       {#if setForm.mode === 'proxy'}
-        <label class="ui-field"><span class="label">{t('Interface of the boot network')}</span><input class="ui-input mono" bind:value={setForm.interface} placeholder="br0" /><span class="hint">{t('Needs dnsmasq and iPXE (apt install ipxe). It answers only the machines being installed; your DHCP server still hands out the addresses.')}</span></label>
+        <label class="ui-field"><span class="label">{t('Interface of the boot network')}</span><input class="ui-input mono" bind:value={setForm.interface} placeholder="br0" /><span class="hint">{t('It answers only the machines being installed; your DHCP server still hands out the addresses.')}</span></label>
+        {#if hostState && !hostState.features.baremetal.installed}
+          <InstallFeature feature="baremetal" missing={t('dnsmasq and iPXE are not installed on this host; proxy DHCP needs them.')} oninstalled={loadHostState} />
+        {/if}
       {/if}
       <div class="row">
         <label class="ui-field"><span class="label">{t('Debian mirror')}</span><input class="ui-input mono" bind:value={setForm.mirror} /></label>

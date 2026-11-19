@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import IommuFix from './IommuFix.svelte'
   export type ManageDialog = 'rename' | 'clone' | 'delete' | 'disk' | 'nic' | 'media' | 'resize' | 'diskmove' | 'qos' | 'bandwidth' | 'template' | 'move' | 'hostdev' | null
 </script>
 
@@ -459,7 +460,7 @@
       <p class="text">{t('Looking at the host\'s hardware…')}</p>
     {:else}
       {#if hdKind === 'pci' && !hw.iommu}
-        <div class="ui-error-box">{t('The IOMMU is off on this host, so no PCI device can be passed through. Turn on VT-d/AMD-Vi in the firmware and add')} <span class="mono">{t('intel_iommu=on')}</span> {t('(or')} <span class="mono">{t('amd_iommu=on')}</span>{t(') to the kernel command line.')}</div>
+        <div class="ui-error-box">{t('The IOMMU is off on this host, so no PCI device can be passed through yet.')} <IommuFix /></div>
       {/if}
       <div class="hd-list" role="radiogroup">
         {#if hdKind === 'pci'}
