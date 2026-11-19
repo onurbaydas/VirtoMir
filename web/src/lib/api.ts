@@ -864,7 +864,8 @@ export interface HostSetupState {
 export interface IOMMUResult {
   /** Added to the kernel command line; empty when they were there already. */
   params: string[]
-  method: 'grubby' | 'grub' | 'kernel-cmdline'
+  /** active: the IOMMU was on already and nothing was changed. */
+  method: 'grubby' | 'grub' | 'kernel-cmdline' | 'active'
   rebootNeeded: boolean
   backup?: string
 }

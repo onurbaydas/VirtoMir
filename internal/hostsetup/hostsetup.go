@@ -183,7 +183,8 @@ func (s *Setup) enableBGPD() error {
 type IOMMUResult struct {
 	// Params were added to the kernel command line (empty: they were there already).
 	Params []string `json:"params"`
-	// Method is how: grubby, grub (with its config file) or kernel-cmdline.
+	// Method is how: grubby, grub (with its config file) or kernel-cmdline; active when the
+	// IOMMU was already on and nothing was changed.
 	Method string `json:"method"`
 	// RebootNeeded is true until the host has started with the new command line.
 	RebootNeeded bool `json:"rebootNeeded"`
@@ -198,6 +199,12 @@ func (s *Setup) iommuParams() []string {
 		return []string{"amd_iommu=on", "iommu=pt"}
 	}
 	return []string{"intel_iommu=on", "iommu=pt"}
+}
+
+// iommuActive tells whether the running kernel already has an IOMMU (dmar0, ivhd0…).
+func (s *Setup) iommuActive() bool {
+	e, _ := os.ReadDir(s.path("/sys/class/iommu"))
+	return len(e) > 0
 }
 
 // missingParams are the ones not already in line.
@@ -218,6 +225,10 @@ var grubDefault = regexp.MustCompile(`(?m)^GRUB_CMDLINE_LINUX_DEFAULT=(["']?)(.*
 // keeping a backup of the file it edits. The firmware switch (VT-d / AMD-Vi) cannot be set
 // from Linux; the result says a reboot is needed.
 func (s *Setup) EnableIOMMU(ctx context.Context) (IOMMUResult, error) {
+	if s.iommuActive() {
+		// Many kernels (Fedora's among them) turn it on without a parameter: change nothing.
+		return IOMMUResult{Method: "active"}, nil
+	}
 	want := s.iommuParams()
 	running, _ := os.ReadFile(s.path("/proc/cmdline"))
 	res := IOMMUResult{RebootNeeded: len(missingParams(string(running), want)) > 0}
@@ -340,10 +351,13 @@ func (s *Setup) HasWatchdog() bool { return fileExists(s.path("/dev/watchdog")) 
 // EnableWatchdog loads the kernel's software watchdog (softdog) when the host has no hardware
 // one, and keeps it loaded across reboots.
 func (s *Setup) EnableWatchdog(ctx context.Context) error {
-	if !s.HasWatchdog() {
+	switch {
+	case !s.HasWatchdog():
 		if _, err := s.Run.Run(ctx, "modprobe", "softdog"); err != nil {
 			return err
 		}
+	case !fileExists(s.path("/sys/module/softdog")):
+		return nil // a hardware watchdog: softdog would only add a second one at every boot
 	}
 	dir := s.path("/etc/modules-load.d")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

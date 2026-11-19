@@ -166,6 +166,20 @@ func TestEnableIOMMUWithGrubby(t *testing.T) {
 	}
 }
 
+// Fedora's kernel turns the IOMMU on with nothing on the command line: leave the boot alone.
+func TestEnableIOMMUAlreadyActive(t *testing.T) {
+	s, f := newSetup(t, "grubby")
+	write(t, s, "/sys/class/iommu/dmar0/uevent", "")
+	write(t, s, "/proc/cmdline", "ro rhgb quiet\n")
+	res, err := s.EnableIOMMU(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Method != "active" || res.RebootNeeded || len(res.Params) > 0 || len(f.calls) > 0 {
+		t.Errorf("result %+v, calls %q", res, f.calls)
+	}
+}
+
 func TestEnableIOMMUUnknownBootLoader(t *testing.T) {
 	s, _ := newSetup(t)
 	if _, err := s.EnableIOMMU(context.Background()); !errors.Is(err, ErrUnsupported) {
@@ -185,7 +199,7 @@ func TestEnableWatchdog(t *testing.T) {
 	s2, f2 := newSetup(t)
 	write(t, s2, "/dev/watchdog", "")
 	_ = s2.EnableWatchdog(context.Background())
-	if len(f2.calls) != 0 {
+	if len(f2.calls) != 0 || fileExists(s2.path("/etc/modules-load.d/virtomir-softdog.conf")) {
 		t.Errorf("loaded softdog next to a hardware watchdog: %q", f2.calls)
 	}
 }

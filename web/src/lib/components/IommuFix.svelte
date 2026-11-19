@@ -14,18 +14,26 @@
   let done = $state<IOMMUResult | null>(null)
   // Every member at once (the same hardware usually needs the same switch everywhere).
   let doneAll = $state<{ host: string; error?: string }[] | null>(null)
+  // Hosts whose kernel had it on already: nothing changed there, no reboot.
+  let alreadyOn = $state(0)
 
   async function enableAll() {
     busy = true
     try {
-      const res = await cluster.everywhere((h) => api.enableIOMMU(h))
+      let active = 0
+      const res = await cluster.everywhere(async (h) => {
+        if ((await api.enableIOMMU(h)).method === 'active') active++
+      })
       doneAll = res
+      alreadyOn = active
       const failed = res.filter((r) => r.error)
       toasts.push({
         kind: allFailed(res) ? 'error' : failed.length ? 'warn' : 'info',
         title: failed.length
           ? t('IOMMU set up on {n} of {total} hosts', { n: res.length - failed.length, total: res.length })
-          : t('IOMMU is set up on every host; reboot them to finish'),
+          : active === res.length
+            ? t('The IOMMU is already on on every host')
+            : t('IOMMU is set up on every host; reboot them to finish'),
         detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') || undefined,
       })
     } finally {
@@ -48,7 +56,9 @@
 
 {#if doneAll}
   <p class="done">
-    {t('Reboot the hosts to finish. If the IOMMU is still off after that, turn on VT-d (Intel) or AMD-Vi / SVM in the firmware settings: that switch cannot be set from Linux.')}
+    {#if alreadyOn < doneAll.length}
+      {t('Reboot the hosts to finish. If the IOMMU is still off after that, turn on VT-d (Intel) or AMD-Vi / SVM in the firmware settings: that switch cannot be set from Linux.')}
+    {/if}
     {#each doneAll.filter((r) => r.error) as r (r.host)}<span class="hint">{r.host}: {r.error}</span>{/each}
   </p>
 {:else if done}

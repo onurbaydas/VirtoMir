@@ -2913,6 +2913,7 @@ export const tr: Record<string, string> = {
   "The ID is 3 to 40 lower-case letters, digits and dashes.": "Kimlik 3 ile 40 arası küçük harf, rakam ve tireden oluşur.",
   "The image is {v} GiB; cloud-init grows the file system on first boot.": "İmaj {v} GiB; cloud-init dosya sistemini ilk açılışta büyütür.",
   "The IOMMU could not be turned on": "IOMMU açılamadı",
+  "The IOMMU is already on on every host": "IOMMU her hostta zaten açık",
   "The IOMMU is off on this host, so no PCI device can be passed through yet.": "Bu hostta IOMMU kapalı, bu yüzden henüz hiçbir PCI aygıtı aktarılamaz.",
   "The IP addresses of the other hosts on this overlay. Their firewalls must let UDP port 4789 through.": "Bu overlay'deki diğer host'ların IP adresleri. Güvenlik duvarları UDP 4789 portuna izin vermelidir.",
   "The kernel command line already has it.": "Çekirdek komut satırında zaten var.",
