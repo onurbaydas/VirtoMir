@@ -827,7 +827,9 @@ describe('demo API', () => {
     expect(call('POST', '/api/v1/host/setup/ssh-trust', { target: '10.20.0.12' }).json.verified).toBe(true)
     const outside = call('POST', '/api/v1/host/setup/ssh-trust', { target: 'root@backup.example.com' }).json
     expect(outside.authorized).toBe(false)
+    expect(outside.needsPassword).toBe(true)
     expect(outside.publicKey).toMatch(/^ssh-ed25519 /)
+    expect(call('POST', '/api/v1/host/setup/ssh-trust', { target: 'backup.example.com', password: 'x' }).json.verified).toBe(true)
   })
 
   it('prepares a running machine as a template by itself', () => {

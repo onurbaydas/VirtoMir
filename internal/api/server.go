@@ -674,7 +674,7 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 		status = http.StatusNotFound
 	case errors.As(err, &invErr), errors.Is(err, zfsrep.ErrInvalid), errors.Is(err, drs.ErrInvalid), errors.Is(err, placement.ErrInvalid), errors.Is(err, dr.ErrInvalid), errors.Is(err, gpool.ErrInvalid), errors.Is(err, sdn.ErrInvalid),
 		errors.Is(err, ceph.ErrInvalid), errors.Is(err, ceph.ErrDiskNotEmpty), errors.Is(err, storageeff.ErrInvalid), errors.Is(err, carve.ErrInvalid), errors.Is(err, storconn.ErrInvalid), errors.Is(err, dsbrowse.ErrInvalid),
-		errors.Is(err, physnet.ErrInvalid), errors.Is(err, k8s.ErrInvalid), errors.Is(err, baremetal.ErrInvalid), errors.Is(err, hostsetup.ErrInvalid):
+		errors.Is(err, physnet.ErrInvalid), errors.Is(err, k8s.ErrInvalid), errors.Is(err, baremetal.ErrInvalid), errors.Is(err, hostsetup.ErrInvalid), errors.Is(err, hostsetup.ErrPassword):
 		status = http.StatusUnprocessableEntity
 	case errors.As(err, &opErr), errors.As(err, &busyErr), errors.Is(err, zfsrep.ErrBusy), errors.Is(err, dr.ErrBusy), errors.Is(err, dr.ErrConflict), errors.Is(err, gpool.ErrExists), errors.Is(err, gpool.ErrBusy), errors.Is(err, sdn.ErrExists), errors.Is(err, sdn.ErrBusy),
 		errors.Is(err, ceph.ErrExists), errors.Is(err, ceph.ErrBusy), errors.Is(err, dsbrowse.ErrInUse),

@@ -874,6 +874,8 @@ export interface SSHTrust {
   authorized: boolean
   verified: boolean
   publicKey: string
+  /** Not a cluster member: root's password there (sent once, kept nowhere) lets VirtoMir add the key. */
+  needsPassword?: boolean
   reason?: string
 }
 
@@ -1798,7 +1800,8 @@ export const api = {
   enableIOMMU: (host?: string) => request<IOMMUResult>('POST', at(host, '/api/v1/host/setup/iommu')),
   enableWatchdog: (host?: string) => request<{ watchdog: boolean }>('POST', at(host, '/api/v1/host/setup/watchdog')),
   /** Makes a replication target accept this host's root SSH key (by itself for cluster members). */
-  sshTrust: (target: string, host?: string) => request<SSHTrust>('POST', at(host, '/api/v1/host/setup/ssh-trust'), { target }),
+  sshTrust: (target: string, password?: string, host?: string) =>
+    request<SSHTrust>('POST', at(host, '/api/v1/host/setup/ssh-trust'), { target, password }),
 
   snapshots: async (uuid: string) =>
     list((await request<{ snapshots?: SnapshotInfo[] | null }>('GET', `${domainPath(uuid)}/snapshots`)).snapshots),

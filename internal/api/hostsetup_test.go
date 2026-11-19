@@ -14,10 +14,16 @@ import (
 	"github.com/onurbaydas/virtomir/internal/hostsetup"
 )
 
-type setupRunner struct{ calls []string }
+type setupRunner struct {
+	calls   []string
+	failSSH bool
+}
 
 func (r *setupRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
 	r.calls = append(r.calls, name+" "+strings.Join(args, " "))
+	if name == "ssh" && r.failSSH {
+		return nil, errors.New("Permission denied (publickey)")
+	}
 	return nil, nil
 }
 
@@ -89,14 +95,28 @@ func TestHostSetupRoutes(t *testing.T) {
 		t.Errorf("authorized_keys = %q", b)
 	}
 
-	// A target outside the cluster: the key to add by hand, and why.
+	// A target outside the cluster that does not take the key yet: ask for root's password.
+	runner.failSSH = true
 	_ = os.WriteFile(filepath.Join(root, "root/.ssh/id_ed25519"), []byte("k"), 0o600)
 	_ = os.WriteFile(filepath.Join(root, "root/.ssh/id_ed25519.pub"), []byte("ssh-ed25519 AAAAC3Nza virtomir@hv-01\n"), 0o644)
 	rec = do(h, "POST", "/api/v1/host/setup/ssh-trust", `{"target":"root@10.0.0.9"}`, nil)
 	var trust sshTrust
 	_ = json.Unmarshal(rec.Body.Bytes(), &trust)
-	if rec.Code != http.StatusOK || trust.Authorized || !strings.HasPrefix(trust.PublicKey, "ssh-ed25519") || !strings.Contains(trust.Reason, "not a member") {
+	if rec.Code != http.StatusOK || trust.Authorized || !trust.NeedsPassword || !strings.HasPrefix(trust.PublicKey, "ssh-ed25519") || !strings.Contains(trust.Reason, "password") {
 		t.Errorf("trust: %d %s", rec.Code, rec.Body)
+	}
+	// It takes the key already: nothing to ask.
+	runner.failSSH = false
+	trust = sshTrust{}
+	rec = do(h, "POST", "/api/v1/host/setup/ssh-trust", `{"target":"10.0.0.9"}`, nil)
+	_ = json.Unmarshal(rec.Body.Bytes(), &trust)
+	if !trust.Verified || trust.NeedsPassword {
+		t.Errorf("trust with a working key: %s", rec.Body)
+	}
+	// A wrong password (nothing listens there): an error, never a 401 that would sign the admin out.
+	rec = do(h, "POST", "/api/v1/host/setup/ssh-trust", `{"target":"127.0.0.1","password":"x"}`, nil)
+	if rec.Code == http.StatusOK || rec.Code == http.StatusUnauthorized {
+		t.Errorf("unreachable target with a password: %d %s", rec.Code, rec.Body)
 	}
 	for _, bad := range []string{`{"target":"admin@10.0.0.9"}`, `{"target":"10.0.0.9; reboot"}`, `{"target":""}`} {
 		if rec = do(h, "POST", "/api/v1/host/setup/ssh-trust", bad, nil); rec.Code != http.StatusUnprocessableEntity {

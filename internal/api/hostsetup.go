@@ -98,15 +98,19 @@ type sshTrust struct {
 	// Verified: an ssh to the target worked (it also remembered the target's host key).
 	Verified  bool   `json:"verified"`
 	PublicKey string `json:"publicKey"`
-	// Reason says why it could not be done by itself, and what to do.
+	// NeedsPassword: the target is not a cluster member; with root's password there (sent once,
+	// kept nowhere) VirtoMir adds the key itself.
+	NeedsPassword bool `json:"needsPassword,omitempty"`
+	// Reason says why it is not done yet.
 	Reason string `json:"reason,omitempty"`
 }
 
 // trustSSHTarget makes the replication target accept this host's root key: a cluster member
-// is asked over the peer protocol; anything else gets the key to add by hand.
+// is asked over the peer protocol; any other host is signed in to once with root's password.
 func (s *Server) trustSSHTarget(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Target string `json:"target"`
+		Target   string `json:"target"`
+		Password string `json:"password"`
 	}
 	if !s.decode(w, r, &body) {
 		return
@@ -125,19 +129,36 @@ func (s *Server) trustSSHTarget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res := sshTrust{PublicKey: pub}
-	memberID := s.memberAt(host)
-	if memberID == "" {
-		res.Reason = host + " is not a member of this cluster, so VirtoMir cannot sign in there by itself. Add this key to /root/.ssh/authorized_keys on " + host + ", or join it to the cluster and try again."
+	// One ssh: it checks the key works and remembers the target's host key.
+	verify := func() error {
+		_, err := s.hostSetup.Run.Run(ctx, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "StrictHostKeyChecking=accept-new", "root@"+host, "true")
+		return err
+	}
+	switch memberID := s.memberAt(host); {
+	case memberID != "":
+		if err := s.callHost(ctx, identity(r), memberID, http.MethodPost, "/api/v1/host/setup/ssh-authorize", map[string]string{"key": pub}, nil); err != nil {
+			s.writeError(w, err)
+			return
+		}
+	case body.Password != "":
+		if err := s.hostSetup.CopyKey(ctx, host, body.Password, pub); err != nil {
+			s.writeError(w, err)
+			return
+		}
+		s.log.Info("SSH key added on a host outside the cluster", "target", host, "by", identity(r).Name)
+	default:
+		if verify() == nil { // it already accepts the key
+			res.Authorized, res.Verified = true, true
+			s.writeJSON(w, http.StatusOK, res)
+			return
+		}
+		res.NeedsPassword = true
+		res.Reason = host + " is not a member of this cluster. Enter root's password on " + host + " once: VirtoMir adds this host's key there and does not keep the password."
 		s.writeJSON(w, http.StatusOK, res)
 		return
 	}
-	if err := s.callHost(ctx, identity(r), memberID, http.MethodPost, "/api/v1/host/setup/ssh-authorize", map[string]string{"key": pub}, nil); err != nil {
-		s.writeError(w, err)
-		return
-	}
 	res.Authorized = true
-	// One ssh now: it checks the key works and remembers the target's host key.
-	if _, err := s.hostSetup.Run.Run(ctx, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "StrictHostKeyChecking=accept-new", "root@"+host, "true"); err != nil {
+	if err := verify(); err != nil {
 		res.Reason = "The key was added on " + host + ", but signing in did not work yet: " + err.Error()
 	} else {
 		res.Verified = true

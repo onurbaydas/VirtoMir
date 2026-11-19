@@ -87,9 +87,12 @@
     }
   }
 
-  // The SSH trust the replication needs, set up when the schedule is made: by VirtoMir itself
-  // for a cluster member, or the key to add by hand (shown until dismissed) for any other host.
+  // The SSH trust the replication needs, set up when the schedule is made: by VirtoMir itself,
+  // over the cluster for a member, with root's password there (asked once) for any other host.
   let trust = $state<SSHTrust | null>(null)
+  let trustTarget = $state('')
+  let rootPassword = $state('')
+  let sending = $state(false)
   // Cluster members to pick as the target (any other host can still be typed).
   let memberHosts = $derived(
     cluster.members.filter((m) => !m.self).map((m) => {
@@ -101,12 +104,20 @@
     }),
   )
 
-  async function copyKey() {
+  async function sendPassword(e: SubmitEvent) {
+    e.preventDefault()
+    sending = true
     try {
-      await navigator.clipboard.writeText(trust?.publicKey ?? '')
-      toasts.push({ kind: 'info', title: t('Copied') })
-    } catch {
-      /* the clipboard needs https */
+      trust = await api.sshTrust(trustTarget, rootPassword)
+      if (trust.verified) {
+        toasts.push({ kind: 'info', title: t('{host} accepts this host\'s SSH key; the first copy runs on schedule.', { host: trustTarget }) })
+        trust = null
+      }
+    } catch (err) {
+      toasts.push({ kind: 'error', title: t('The key could not be added'), detail: errorText(err) })
+    } finally {
+      rootPassword = ''
+      sending = false
     }
   }
 
@@ -115,7 +126,8 @@
     formError = ''
     creating = true
     try {
-      trust = await api.sshTrust(targetHost.trim()).catch((err) => ({ authorized: false, verified: false, publicKey: '', reason: errorText(err) }))
+      trustTarget = targetHost.trim()
+      trust = await api.sshTrust(trustTarget).catch((err) => ({ authorized: false, verified: false, publicKey: '', reason: errorText(err) }))
       await ent.createZFSReplication({
         sourcePool: sourcePool.trim(),
         sourceVolume: sourceVolume.trim(),
@@ -128,7 +140,11 @@
       toasts.push({
         kind: trust.verified ? 'info' : 'warn',
         title: t('ZFS replication schedule created'),
-        detail: trust.verified ? t('{host} accepts this host\'s SSH key; the first copy runs on schedule.', { host: targetHost.trim() }) : t('The target does not accept this host\'s SSH key yet; see the note above the list.'),
+        detail: trust.verified
+          ? t('{host} accepts this host\'s SSH key; the first copy runs on schedule.', { host: targetHost.trim() })
+          : trust.needsPassword
+            ? t('Enter root\'s password on the target once, above the list.')
+            : t('The target does not accept this host\'s SSH key yet; see the note above the list.'),
       })
       if (trust.verified) trust = null
       sourceVolume = ''
@@ -153,7 +169,7 @@
       <div class="info-banner">
         <ShieldCheck size={18} class="banner-icon" />
         <span>
-          {t('On its schedule VirtoMir snapshots the dataset or zvol and sends only what changed since the last snapshot both hosts have (zfs send -i | ssh … zfs receive). VirtoMir sets up the SSH key itself when the target is a member of this cluster; the target pool must exist there.')}
+          {t('On its schedule VirtoMir snapshots the dataset or zvol and sends only what changed since the last snapshot both hosts have (zfs send -i | ssh … zfs receive). VirtoMir sets up the SSH key itself: over the cluster for a member, with root\'s password there (asked once, never kept) for any other host. The target pool must exist there.')}
         </span>
       </div>
       <div class="header-actions">
@@ -171,10 +187,14 @@
     {#if trust && !trust.verified}
       <div class="trust ui-panel">
         <p>{trust.reason}</p>
-        {#if trust.publicKey}
-          <code class="mono key">{trust.publicKey}</code>
+        {#if trust.needsPassword}
+          <form class="trust-actions" onsubmit={sendPassword}>
+            <input class="ui-input" type="password" autocomplete="off" bind:value={rootPassword} placeholder={t('root password on {host}', { host: trustTarget })} aria-label={t('root password on {host}', { host: trustTarget })} required />
+            <button class="ui-btn sm primary" disabled={sending || !rootPassword}>{sending ? t('Adding the key…') : t('Add the key')}</button>
+            <button type="button" class="ui-btn sm ghost" onclick={() => (trust = null)}>{t('Later')}</button>
+          </form>
+        {:else}
           <div class="trust-actions">
-            <button class="ui-btn sm" onclick={copyKey}>{t('Copy the key')}</button>
             <button class="ui-btn sm ghost" onclick={() => (trust = null)}>{t('Done')}</button>
           </div>
         {/if}
@@ -300,14 +320,9 @@
   .trust p {
     margin: 0;
   }
-  .key {
-    word-break: break-all;
-    font-size: 12px;
-    padding: 6px 8px;
-    background: var(--surface-2);
-  }
   .trust-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
   }
   .rep-container {

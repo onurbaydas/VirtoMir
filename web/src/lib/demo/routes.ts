@@ -1820,7 +1820,9 @@ export function handle(method: string, url: URL, body: any): Reply {
       const member = w.HOSTS.find((h, i) => h.name === target || `10.20.0.1${i + 1}` === target)
       return member
         ? json({ authorized: true, verified: true, publicKey })
-        : json({ authorized: false, verified: false, publicKey, reason: `${target} is not a member of this cluster, so VirtoMir cannot sign in there by itself. Add this key to /root/.ssh/authorized_keys on ${target}, or join it to the cluster and try again.` })
+        : body?.password
+          ? json({ authorized: true, verified: true, publicKey })
+          : json({ authorized: false, verified: false, needsPassword: true, publicKey, reason: `${target} is not a member of this cluster. Enter root's password on ${target} once: VirtoMir adds this host's key there and does not keep the password.` })
     }
     case 'POST /api/v1/storage/discover':
       return json({ found: demoFoundStorage(body) })
