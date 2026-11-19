@@ -1,1 +1,0 @@
-import{xt as e}from"./i18n.svelte-B21ppdLh.js";e();
