@@ -1,7 +1,7 @@
 // Unit tests for the UI's pure helpers (P7): `npm test`.
 import { describe, expect, it } from 'vitest'
 import { diffLines, hunks } from './diff'
-import { list } from './reply'
+import { allFailed, list } from './reply'
 import { ago, formatBps, formatBytes, formatKiB, formatMHz, formatPercent, formatRate, plural } from './format'
 import { guessLayout, keysym, strokeFor } from './keymaps'
 import { highlightXML } from './xml'
@@ -132,5 +132,16 @@ describe('list', () => {
     expect(list(null)).toEqual([])
     expect(list(undefined)).toEqual([])
     expect(list({} as unknown as number[])).toEqual([])
+  })
+})
+
+describe('allFailed', () => {
+  it('is a failure only when hosts answered and all of them failed', () => {
+    expect(allFailed([])).toBe(false)
+    expect(allFailed(undefined)).toBe(false)
+    expect(allFailed([{ ok: false }, { ok: true }])).toBe(false)
+    expect(allFailed([{ ok: false }, { ok: false }])).toBe(true)
+    expect(allFailed([{ error: 'down' }])).toBe(true)
+    expect(allFailed([{}])).toBe(false)
   })
 })

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { allFailed } from '../reply'
   // Storage VirtoMir finds by itself on this host's networks (iSCSI targets, NFS exports, SMB
   // shares): one click makes it a pool. Only a server that asks for a password asks the user.
   import { onMount } from 'svelte'
@@ -60,7 +61,7 @@
     try {
       const res = await api.connectStorage({ kind: f.kind, server: f.server, host: f.host, name: f.name, everywhere, ...login(f) })
       const failed = (res.results ?? []).filter((r) => !r.ok)
-      if (res.results && failed.length === res.results.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
+      if (allFailed(res.results)) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
       toasts.push({
         kind: failed.length ? 'warn' : 'info',
         title: t('{pool} is ready', { pool: res.pool }),

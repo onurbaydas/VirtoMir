@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { allFailed } from '../reply'
   import { t } from '../i18n.svelte'
   import Archive from '@lucide/svelte/icons/archive'
   import FolderCog from '@lucide/svelte/icons/folder-cog'
@@ -123,7 +124,7 @@
       if (cluster.clustered && dirEverywhere) {
         const res = await cluster.everywhere((h) => api.saveBackupSettings(target, h))
         const failed = res.filter((r) => r.error)
-        if (failed.length === res.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
+        if (allFailed(res)) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
         dir = target
         toasts.push({
           kind: failed.length ? 'warn' : 'info',

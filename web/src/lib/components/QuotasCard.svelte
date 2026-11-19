@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { allFailed } from '../reply'
   import { t } from '../i18n.svelte'
   // Quotas (ADR-0022): your own, and for admins the rules — which users or Linux groups may
   // create machines themselves, and how much.
@@ -43,7 +44,7 @@
       if (cluster.clustered && everywhere) {
         const res = await cluster.everywhere((h) => api.saveQuotas(snap, h))
         const failed = res.filter((r) => r.error)
-        if (failed.length === res.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
+        if (allFailed(res)) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
         if (failed.length) toasts.push({ kind: 'warn', title: t('Saved on {v} of {length} hosts', { v: res.length - failed.length, length: res.length }), detail: failed.map((r) => `${r.host}: ${r.error}`).join(' · ') })
         else toasts.push({ kind: 'info', title: t('Quotas saved on every host') })
       } else {

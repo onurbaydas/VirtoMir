@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { allFailed } from '../reply'
   import { t } from '../i18n.svelte'
   import BellRing from '@lucide/svelte/icons/bell-ring'
   import Check from '@lucide/svelte/icons/check'
@@ -93,7 +94,7 @@
       if (cluster.clustered && everywhere) {
         const res = await cluster.everywhere((h) => api.saveAlertConfig(snap, h))
         const failed = res.filter((r) => r.error)
-        if (failed.length === res.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
+        if (allFailed(res)) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
         saved = JSON.stringify(snap)
         toasts.push({
           kind: failed.length ? 'warn' : 'info',

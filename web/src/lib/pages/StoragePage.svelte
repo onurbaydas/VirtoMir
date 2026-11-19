@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { allFailed } from '../reply'
   import { t } from '../i18n.svelte'
   import ObjectXmlDialog from '../components/ObjectXmlDialog.svelte'
   import FileCode from '@lucide/svelte/icons/file-code'
@@ -270,7 +271,7 @@
       if (cluster.clustered && pEverywhere && !localDisks) {
         const res = await api.createClusterPool(spec)
         const failed = res.filter((r) => !r.ok)
-        if (failed.length === res.length) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
+        if (allFailed(res)) throw new Error(failed.map((r) => `${r.host}: ${r.error}`).join(' · '))
         toasts.push({
           kind: failed.length ? 'warn' : 'info',
           title: failed.length ? t('{pName} created on {v} of {length} hosts', { pName: pName, v: res.length - failed.length, length: res.length }) : t('{pName} created on every host', { pName: pName }),
