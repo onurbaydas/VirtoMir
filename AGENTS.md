@@ -21,6 +21,11 @@ The maintainers keep the project memory (vision, decision log, roadmap, session 
 - **Licenses:** Learning from other open-source projects is encouraged. Copying **code** requires license compatibility (e.g. virt-manager is GPL-2.0+, Cockpit is LGPL-2.1+). Note the source + license in the file header and in `decisions.md` when code is borrowed.
 - **Commits:** Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:` …). Keep `.ai/` updates in the same commit as the work they describe, or in a separate `docs(ai):` commit.
 - **Current focus (since 1.0): no new features.** Harden and simplify what exists, single host first: fix bugs and data-safety gaps, add tests for risky paths, make everyday flows clearer. Advanced, multi-host and integration features stay, but one level deeper (sidebar groups, the machine page's Advanced tab, folded wizard sections) and only shown when they are set up. A change that adds a capability needs the maintainer's explicit go-ahead.
+- **Nothing is left to the user that VirtoMir can do or know itself.** Pick from lists, never type IDs or UUIDs;
+  fill sensible names and defaults; say what is still missing next to the disabled button; refuse unsafe values
+  (more memory than the host, a smaller disk) in the daemon too, not only as a UI hint.
+- **The demo answers like a host.** A change the UI reads a reply from returns those fields in `web/src/lib/demo/routes.ts`,
+  or a 422 saying it needs a real host; never a silent `{}`.
 - **Product principles override convenience.** If an implementation shortcut hurts user-friendliness, visual quality, monitoring accuracy or console reliability, don't take it.
 
 ## 4. Repository layout
@@ -64,6 +69,8 @@ web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embed
                        with {name} placeholders for values (t('{n} of {total} running', { n, total })), and add its
                        Turkish to tr.ts; an untranslated key falls back to English
   src/lib/           ← api client, live/session stores, router, components (Dialog, ConfirmButton, …)
+  src/lib/reply.ts   ← read every list in a reply with list() (null or a missing field is []), show every
+                       error with errorText() (never String(e)), judge per-host results with allFailed()
   src/lib/pages/     ← Overview, MachinePage (#console|#settings|#hardware|#snapshots|#backups, and #advanced with
                        #changes|#timeline|#firewall|#xml), NewMachine, Import, Storage, Networks, Hardware (host PCI/USB), Backups,
                        Alerts, Account (own role, 2FA, API tokens), HostSettings (/settings: updates, sign-in, quotas,
