@@ -42,11 +42,23 @@ func (c *Client) ResizeDisk(uuid, target string, sizeGiB uint64) error {
 		return invalidf("%s has no image to resize.", target)
 	}
 	bytes := sizeGiB << 30
+	// The disk's size now, from its pool or, for a running machine, from QEMU. Without it
+	// nothing is resized: a block resize to a smaller size would cut off the end of the disk.
+	var capacity uint64
+	known := false
 	vol, volErr := l.StorageVolLookupByPath(src)
 	if volErr == nil {
-		if _, capacity, _, err := l.StorageVolGetInfo(vol); err == nil && bytes <= capacity {
-			return invalidf("The disk is already %s. Disks can only grow; shrinking would destroy data.", humanBytes(capacity))
+		if _, c, _, err := l.StorageVolGetInfo(vol); err == nil {
+			capacity, known = c, true
 		}
+	}
+	if !known && on {
+		if _, c, _, err := l.DomainGetBlockInfo(d, target, 0); err == nil {
+			capacity, known = c, true
+		}
+	}
+	if err := checkGrow(bytes, capacity, known); err != nil {
+		return err
 	}
 	if on {
 		if err := l.DomainBlockResize(d, target, bytes, libvirt.DomainBlockResizeBytes); err != nil {
@@ -61,6 +73,17 @@ func (c *Client) ResizeDisk(uuid, target string, sizeGiB uint64) error {
 		}
 	}
 	c.log.Info("disk resized", "domain", d.Name, "target", target, "GiB", sizeGiB)
+	return nil
+}
+
+// checkGrow allows only a resize that makes the disk larger than it is (capacity bytes).
+func checkGrow(bytes, capacity uint64, known bool) error {
+	if !known {
+		return refusedf("VirtoMir could not read the disk's current size, so it is not resized (a smaller size would destroy data).")
+	}
+	if bytes <= capacity {
+		return invalidf("The disk is already %s. Disks can only grow; shrinking would destroy data.", humanBytes(capacity))
+	}
 	return nil
 }
 
