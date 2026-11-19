@@ -2,6 +2,7 @@
 
 import { apiLog } from './apilog.svelte'
 import { router } from './router.svelte'
+import { list } from './reply'
 
 export type DomainState =
   | 'unknown'
@@ -1631,10 +1632,10 @@ export const api = {
   twoFactorSetup: () => request<{ secret: string; uri: string; qr: string }>('POST', '/api/v1/account/2fa/setup'),
   twoFactorConfirm: (code: string) => request<{ recovery: string[] }>('POST', '/api/v1/account/2fa/confirm', { code }),
   twoFactorDisable: (code: string) => request<void>('POST', '/api/v1/account/2fa/disable', { code }),
-  twoFactorUsers: async () => (await request<{ users: string[] }>('GET', '/api/v1/twofactor/users')).users,
+  twoFactorUsers: async () => list((await request<{ users?: string[] | null }>('GET', '/api/v1/twofactor/users')).users),
   twoFactorReset: (user: string) => request<void>('DELETE', `/api/v1/twofactor/users/${enc(user)}`),
 
-  tokens: async (all = false) => (await request<{ tokens: ApiToken[] }>('GET', `/api/v1/tokens${all ? '?all=true' : ''}`)).tokens,
+  tokens: async (all = false) => list((await request<{ tokens?: ApiToken[] | null }>('GET', `/api/v1/tokens${all ? '?all=true' : ''}`)).tokens),
   createToken: (name: string, role: Role, ttlDays: number) =>
     request<{ token: ApiToken; secret: string }>('POST', '/api/v1/tokens', { name, role, ttlDays }),
   revokeToken: (id: string) => request<void>('DELETE', `/api/v1/tokens/${enc(id)}`),
@@ -1644,7 +1645,7 @@ export const api = {
     if (q.target) p.set('target', q.target)
     if (q.failed) p.set('failed', 'true')
     p.set('limit', String(q.limit ?? 300))
-    return (await request<{ entries: ActivityEntry[] }>('GET', at(host, `/api/v1/activity?${p}`))).entries
+    return list((await request<{ entries?: ActivityEntry[] | null }>('GET', at(host, `/api/v1/activity?${p}`))).entries)
   },
   siemConfig: () => request<SIEMConfig>('GET', '/api/v1/activity/siem'),
   saveSiemConfig: (cfg: SIEMConfig) => request<SIEMConfig>('PUT', '/api/v1/activity/siem', cfg),
@@ -1661,7 +1662,7 @@ export const api = {
   clusterCompliance: () => request<HostCompliance[]>('GET', '/api/v1/cluster/compliance'),
 
 
-  alerts: async (host?: string) => (await request<{ alerts: Alert[] }>('GET', at(host, '/api/v1/alerts'))).alerts,
+  alerts: async (host?: string) => list((await request<{ alerts?: Alert[] | null }>('GET', at(host, '/api/v1/alerts'))).alerts),
   ackAlert: (id: string, host?: string) => request<void>('POST', at(host, `/api/v1/alerts/${enc(id)}/ack`)),
   alertConfig: () => request<AlertConfig>('GET', '/api/v1/alerts/config'),
   saveAlertConfig: (c: AlertConfig, host?: string) => request<AlertConfig>('PUT', at(host, '/api/v1/alerts/config'), c),
@@ -1679,20 +1680,20 @@ export const api = {
   saveOffsite: (c: OffsiteConfig, host?: string) =>
     request<{ config: OffsiteConfig; status: { restic?: string; configured: boolean } }>('PUT', at(host, '/api/v1/offsite'), c),
   checkOffsite: (init: boolean, host?: string) => request<{ message: string }>('POST', at(host, '/api/v1/offsite/check'), { init }),
-  offsiteSnapshots: async (host?: string) => (await request<{ snapshots: OffsiteSnapshot[] }>('GET', at(host, '/api/v1/offsite/snapshots'))).snapshots,
+  offsiteSnapshots: async (host?: string) => list((await request<{ snapshots?: OffsiteSnapshot[] | null }>('GET', at(host, '/api/v1/offsite/snapshots'))).snapshots),
   offsiteUpload: (backup: string, host?: string) => request<Job>('POST', at(host, '/api/v1/offsite/upload'), { backup }),
   offsiteRestore: (snapshot: string, host?: string) => request<Job>('POST', at(host, '/api/v1/offsite/restore'), { snapshot }),
   saveBackupSettings: (backupDir: string, host?: string) =>
     request<{ backupDir: string }>('PUT', at(host, '/api/v1/backups/settings'), { backupDir }),
   schedules: async (domain?: string) =>
-    (await request<{ schedules: ScheduleInfo[] }>('GET', `/api/v1/schedules${domain ? `?domain=${enc(domain)}` : ''}`)).schedules,
+    list((await request<{ schedules?: ScheduleInfo[] | null }>('GET', `/api/v1/schedules${domain ? `?domain=${enc(domain)}` : ''}`)).schedules),
   saveSchedule: (s: ScheduleInfo) => request<ScheduleInfo>('PUT', '/api/v1/schedules', s),
   deleteSchedule: (id: string) => request<void>('DELETE', `/api/v1/schedules/${enc(id)}`),
   runSchedule: (id: string) => request<void>('POST', `/api/v1/schedules/${enc(id)}/run`),
 
   job: (id: string, host?: string) => request<Job>('GET', at(host, `/api/v1/jobs/${enc(id)}`)),
   jobs: async (host?: string) =>
-    (await request<{ jobs: Job[] }>('GET', at(host, '/api/v1/jobs'))).jobs,
+    list((await request<{ jobs?: Job[] | null }>('GET', at(host, '/api/v1/jobs'))).jobs),
 
   // Machines
   domain: (uuid: string) => request<DomainDetail>('GET', domainPath(uuid)),
@@ -1712,7 +1713,7 @@ export const api = {
   create: (spec: CreateSpec, respool?: string) =>
     request<Job>('POST', `/api/v1/domains${respool ? `?respool=${enc(respool)}` : ''}`, spec),
   /** Memory encryption this host can give new machines (sev, sev-snp, tdx). */
-  confidentialKinds: async () => (await request<{ kinds: string[] }>('GET', '/api/v1/host/confidential')).kinds,
+  confidentialKinds: async () => list((await request<{ kinds?: string[] | null }>('GET', '/api/v1/host/confidential')).kinds),
   containerImages: () => request<{ images: ContainerImage[]; available: boolean; reason?: string }>('GET', '/api/v1/containers/images'),
   setTemplate: (uuid: string, template: boolean) => request<void>('PUT', `${domainPath(uuid)}/template`, { template }),
   deploy: (uuid: string, spec: DeploySpec) => request<Job>('POST', `${domainPath(uuid)}/deploy`, spec),
@@ -1722,11 +1723,11 @@ export const api = {
   authMethods: () => request<{ ldap: boolean; oidc: boolean; oidcLabel?: string }>('GET', '/api/v1/auth/methods'),
   signinConfig: () => request<{ config: SigninConfig; redirectUrl: string }>('GET', '/api/v1/signin-config'),
   saveSigninConfig: (c: SigninConfig) => request<{ config: SigninConfig; redirectUrl: string }>('PUT', '/api/v1/signin-config', c),
-  quotas: async () => (await request<{ rules: QuotaRule[] }>('GET', '/api/v1/quotas')).rules,
+  quotas: async () => list((await request<{ rules?: QuotaRule[] | null }>('GET', '/api/v1/quotas')).rules),
   saveQuotas: async (rules: QuotaRule[], host?: string) =>
-    (await request<{ rules: QuotaRule[] }>('PUT', at(host, '/api/v1/quotas'), { rules })).rules,
+    list((await request<{ rules?: QuotaRule[] | null }>('PUT', at(host, '/api/v1/quotas'), { rules })).rules),
   myQuota: () => request<MyQuota>('GET', '/api/v1/quotas/mine'),
-  projects: async () => (await request<{ projects: Project[] }>('GET', '/api/v1/projects')).projects,
+  projects: async () => list((await request<{ projects?: Project[] | null }>('GET', '/api/v1/projects')).projects),
   createProject: (p: Project) => request<{ project: Project }>('POST', '/api/v1/projects', p),
   updateProject: (id: string, p: Project) => request<{ project: Project }>('PUT', `/api/v1/projects/${enc(id)}`, p),
   deleteProject: (id: string) => request<void>('DELETE', `/api/v1/projects/${enc(id)}`),
@@ -1748,7 +1749,7 @@ export const api = {
   /** Moves a machine to another cluster member: copied when stopped, live-migrated when running. */
   move: (uuid: string, host: string, pool: string) => request<Job>('POST', `${domainPath(uuid)}/move`, { host, pool }),
   /** Storage pools of a given member. */
-  poolsOn: async (host: string | undefined) => (await request<{ pools: Pool[] }>('GET', at(host, '/api/v1/storage/pools'))).pools,
+  poolsOn: async (host: string | undefined) => list((await request<{ pools?: Pool[] | null }>('GET', at(host, '/api/v1/storage/pools'))).pools),
   remove: (uuid: string, removeStorage: boolean) =>
     request<DeleteResult>('DELETE', `${domainPath(uuid)}${removeStorage ? '?storage=remove' : ''}`),
 
@@ -1765,7 +1766,7 @@ export const api = {
   deleteMDev: (uuid: string) => request<void>('DELETE', `/api/v1/host/mdevs/${enc(uuid)}`),
 
   snapshots: async (uuid: string) =>
-    (await request<{ snapshots: SnapshotInfo[] }>('GET', `${domainPath(uuid)}/snapshots`)).snapshots,
+    list((await request<{ snapshots?: SnapshotInfo[] | null }>('GET', `${domainPath(uuid)}/snapshots`)).snapshots),
   createSnapshot: (uuid: string, name: string, description: string) =>
     request<{ name: string }>('POST', `${domainPath(uuid)}/snapshots`, { name, description }),
   /** Takes a safety snapshot of the current state first (safety=false skips it). */
@@ -1797,19 +1798,18 @@ export const api = {
     request<HistoryResult>('GET', at(host, `/api/v1/history?range=${range}&series=${series.map(enc).join(',')}`)),
 
   // Storage
-  pools: async () => (await request<{ pools: Pool[] }>('GET', '/api/v1/storage/pools')).pools,
+  pools: async () => list((await request<{ pools?: Pool[] | null }>('GET', '/api/v1/storage/pools')).pools),
   createPool: (spec: PoolSpec) => request<void>('POST', '/api/v1/storage/pools', spec),
   /** Scans this host's networks for storage (or asks one server again, e.g. after a sign-in). */
   discoverStorage: async (req?: { server: string } & StorageLogin) => {
-    const res = await request<{ found?: FoundStorage[] } | undefined>('POST', '/api/v1/storage/discover', req ?? {})
-    // Anything but a list (an older daemon, an empty reply) means nothing was found.
-    return Array.isArray(res?.found) ? res.found : []
+    const res = await request<{ found?: FoundStorage[] | null } | undefined>('POST', '/api/v1/storage/discover', req ?? {})
+    return list(res?.found)
   },
   /** Makes found storage a pool (on every cluster member with everywhere). */
   connectStorage: (req: { kind: string; server?: string; host?: string; name: string; everywhere?: boolean } & StorageLogin) =>
     request<{ pool: string; results?: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/storage/connect', req),
   files: async (pool: string, path: string) =>
-    (await request<{ entries: FileEntry[] }>('GET', `${poolPath(pool)}/files?path=${enc(path)}`)).entries,
+    list((await request<{ entries?: FileEntry[] | null }>('GET', `${poolPath(pool)}/files?path=${enc(path)}`)).entries),
   /** A link that downloads a file (resumable). */
   fileDownloadURL: (pool: string, path: string) => scoped(`${poolPath(pool)}/files/download?path=${enc(path)}`),
   uploadFile: (pool: string, path: string, file: File, onProgress: (fraction: number) => void, signal?: AbortSignal) =>
@@ -1820,14 +1820,14 @@ export const api = {
   copyFile: (pool: string, req: { path: string; toPool: string; toPath: string; move: boolean }) =>
     request<Job>('POST', `${poolPath(pool)}/files/copy`, req),
   deleteFile: (pool: string, path: string) => request<void>('DELETE', `${poolPath(pool)}/files?path=${enc(path)}`),
-  poolSources: async () => (await request<{ sources: PoolSource[] }>('GET', '/api/v1/storage/sources')).sources,
+  poolSources: async () => list((await request<{ sources?: PoolSource[] | null }>('GET', '/api/v1/storage/sources')).sources),
   /** A pool of the asked size made from a source's free space (a job). */
   carvePool: (req: CarveRequest) => request<Job>('POST', '/api/v1/storage/pools/carve', req),
   /** The same pool on every cluster member; each host reports its own result. */
   createClusterNetwork: async (spec: NetworkSpec) =>
-    (await request<{ results: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/cluster/networks', spec)).results,
+    list((await request<{ results?: { host: string; ok: boolean; error?: string }[] | null }>('POST', '/api/v1/cluster/networks', spec)).results),
   createClusterPool: async (spec: PoolSpec) =>
-    (await request<{ results: { host: string; ok: boolean; error?: string }[] }>('POST', '/api/v1/cluster/pools', spec)).results,
+    list((await request<{ results?: { host: string; ok: boolean; error?: string }[] | null }>('POST', '/api/v1/cluster/pools', spec)).results),
   /** freeSpace: also give back the space VirtoMir carved for the pool (its logical volume or dataset). */
   deletePool: (name: string, freeSpace = false) => request<void>('DELETE', poolPath(name) + (freeSpace ? '?storage=remove' : '')),
   poolXML: async (name: string) => (await send('GET', `${poolPath(name)}/xml`, { accept: 'application/xml' })).text(),
@@ -1838,7 +1838,7 @@ export const api = {
     (await send('PUT', `${netPath(name)}/xml`, { body: xml, contentType: 'application/xml' })).json(),
   poolAction: (name: string, action: 'start' | 'stop' | 'refresh') => request<void>('POST', `${poolPath(name)}/actions/${action}`),
   poolAutostart: (name: string, enabled: boolean) => request<void>('PUT', `${poolPath(name)}/autostart`, { enabled }),
-  volumes: async (pool: string) => (await request<{ volumes: Volume[] }>('GET', `${poolPath(pool)}/volumes`)).volumes,
+  volumes: async (pool: string) => list((await request<{ volumes?: Volume[] | null }>('GET', `${poolPath(pool)}/volumes`)).volumes),
   createVolume: (pool: string, name: string, sizeGiB: number, format: 'qcow2' | 'raw', provisioning?: 'thin' | 'thick') =>
     request<Volume>('POST', `${poolPath(pool)}/volumes`, { name, sizeGiB, format, provisioning }),
   resizeVolume: (pool: string, name: string, sizeGiB: number) =>
@@ -1854,7 +1854,7 @@ export const api = {
   importXML: (xml: string) => request<{ uuid: string }>('POST', '/api/v1/domains/import', { xml }),
 
   // Networks
-  networks: async () => (await request<{ networks: VNetwork[] }>('GET', '/api/v1/networks')).networks,
+  networks: async () => list((await request<{ networks?: VNetwork[] | null }>('GET', '/api/v1/networks')).networks),
   /** A network bridged to a Wi-Fi card like VirtualBox does: the router's DHCP gives the machines their addresses. */
   wifiNetwork: (name: string, uplink: string) => request<{ name: string; bridge: string }>('POST', '/api/v1/networks/wifi', { name, uplink }),
   createNetwork: (spec: NetworkSpec) => request<void>('POST', '/api/v1/networks', spec),
@@ -1863,14 +1863,14 @@ export const api = {
   networkAutostart: (name: string, enabled: boolean) => request<void>('PUT', `${netPath(name)}/autostart`, { enabled }),
   addDHCPHost: (name: string, h: DHCPHost) => request<void>('POST', `${netPath(name)}/dhcp-hosts`, h),
   deleteDHCPHost: (name: string, mac: string) => request<void>('DELETE', `${netPath(name)}/dhcp-hosts/${enc(mac)}`),
-  leases: async (name: string) => (await request<{ leases: Lease[] }>('GET', `${netPath(name)}/leases`)).leases,
+  leases: async (name: string) => list((await request<{ leases?: Lease[] | null }>('GET', `${netPath(name)}/leases`)).leases),
 
   // Catalog (ADR-0065)
   catalogBlueprints: async (project?: string): Promise<Blueprint[] & { blueprints: Blueprint[] }> => {
-    const res = await request<{ blueprints: Blueprint[] }>('GET', `/api/v1/catalog/blueprints${project ? `?project=${enc(project)}` : ''}`)
-    const list = res.blueprints as Blueprint[] & { blueprints: Blueprint[] }
-    list.blueprints = res.blueprints
-    return list
+    const res = await request<{ blueprints?: Blueprint[] | null }>('GET', `/api/v1/catalog/blueprints${project ? `?project=${enc(project)}` : ''}`)
+    const items = list(res.blueprints) as Blueprint[] & { blueprints: Blueprint[] }
+    items.blueprints = [...items]
+    return items
   },
   createBlueprint: async (bp: Partial<Blueprint>) =>
     (await request<{ blueprint: Blueprint }>('POST', '/api/v1/catalog/blueprints', bp)).blueprint,
@@ -1884,10 +1884,10 @@ export const api = {
     if (params.status) p.set('status', params.status)
     if (params.requester) p.set('requester', params.requester)
     const q = p.toString()
-    const res = await request<{ requests: CatalogRequest[] }>('GET', `/api/v1/catalog/requests${q ? `?${q}` : ''}`)
-    const list = res.requests as CatalogRequest[] & { requests: CatalogRequest[] }
-    list.requests = res.requests
-    return list
+    const res = await request<{ requests?: CatalogRequest[] | null }>('GET', `/api/v1/catalog/requests${q ? `?${q}` : ''}`)
+    const items = list(res.requests) as CatalogRequest[] & { requests: CatalogRequest[] }
+    items.requests = [...items]
+    return items
   },
   /** One request, with its lease when the machine is provisioned. */
   catalogRequest: (id: string) => request<{ request: CatalogRequest; lease?: CatalogLease }>('GET', `/api/v1/catalog/requests/${enc(id)}`),
@@ -1930,14 +1930,14 @@ export const api = {
     request<VMwarePreflightResult>('POST', at(host, '/api/v1/vmware/preflight'), spec),
   vmwareImport: (spec: VMwareImportSpec, host?: string) => request<Job>('POST', at(host, '/api/v1/vmware/import'), spec),
   vmwareWave: (id: string, host?: string) => request<VMwareWave>('GET', at(host, `/api/v1/vmware/waves/${enc(id)}`)),
-  vmwareWaves: async (host?: string) => (await request<{ waves: VMwareWave[] }>('GET', at(host, '/api/v1/vmware/waves'))).waves,
+  vmwareWaves: async (host?: string) => list((await request<{ waves?: VMwareWave[] | null }>('GET', at(host, '/api/v1/vmware/waves'))).waves),
   vmwareCreateWave: (spec: VMwareWaveSpec, host?: string) => request<Job>('POST', at(host, '/api/v1/vmware/waves'), spec),
   vmwareRetry: (id: string, spec?: VMwareRetrySpec, host?: string) =>
     request<Job>('POST', at(host, `/api/v1/vmware/waves/${enc(id)}/retry`), spec ?? {}),
 
   // Content Library (ADR-0063)
   contentItems: async (host?: string) =>
-    (await request<{ items: ContentItem[] }>('GET', at(host, '/api/v1/content/items'))).items,
+    list((await request<{ items?: ContentItem[] | null }>('GET', at(host, '/api/v1/content/items'))).items),
   contentItem: (id: string, host?: string) =>
     request<ContentItem>('GET', at(host, `/api/v1/content/items/${enc(id)}`)),
   publishContent: (req: PublishContentReq, host?: string) =>

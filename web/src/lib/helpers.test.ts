@@ -1,6 +1,7 @@
 // Unit tests for the UI's pure helpers (P7): `npm test`.
 import { describe, expect, it } from 'vitest'
 import { diffLines, hunks } from './diff'
+import { list } from './reply'
 import { ago, formatBps, formatBytes, formatKiB, formatMHz, formatPercent, formatRate, plural } from './format'
 import { guessLayout, keysym, strokeFor } from './keymaps'
 import { highlightXML } from './xml'
@@ -122,5 +123,14 @@ describe('xml highlighting', () => {
     const lines = highlightXML('<!-- one\ntwo -->\n<a/>')
     expect(lines).toHaveLength(3)
     for (const l of lines) expect((l.match(/<span/g) ?? []).length).toBe((l.match(/<\/span>/g) ?? []).length)
+  })
+})
+
+describe('list', () => {
+  it('reads anything but an array as an empty list', () => {
+    expect(list([1, 2])).toEqual([1, 2])
+    expect(list(null)).toEqual([])
+    expect(list(undefined)).toEqual([])
+    expect(list({} as unknown as number[])).toEqual([])
   })
 })

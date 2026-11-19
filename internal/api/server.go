@@ -8,8 +8,10 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
+	"reflect"
 	"sync"
 	"time"
 
@@ -598,9 +600,37 @@ func appendEvent(dst, data []byte) []byte {
 func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(v); err != nil {
+	if err := json.NewEncoder(w).Encode(emptyLists(v)); err != nil {
 		s.log.Warn("write response", "err", err)
 	}
+}
+
+// emptyLists sends a nil slice in a top-level reply map ({"jobs": nil}) as [] instead of
+// null: a client reads a list field as a list, and an empty Go slice is not "no field".
+func emptyLists(v any) any {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return v
+	}
+	var out map[string]any
+	for k, x := range m {
+		if x == nil {
+			continue
+		}
+		rv := reflect.ValueOf(x)
+		if rv.Kind() != reflect.Slice || !rv.IsNil() {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]any, len(m))
+			maps.Copy(out, m)
+		}
+		out[k] = reflect.MakeSlice(rv.Type(), 0, 0).Interface()
+	}
+	if out == nil {
+		return v
+	}
+	return out
 }
 
 // maxBody limits JSON and XML request bodies (uploads have their own path).
