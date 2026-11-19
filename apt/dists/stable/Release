@@ -1,28 +1,28 @@
 Architectures: amd64 arm64
 Codename: stable
 Components: main
-Date: Tue, 27 Oct 2026 06:08:23 +0000
+Date: Thu, 19 Nov 2026 19:55:46 +0000
 Description: VirtoMir, a detailed control deck for KVM/QEMU/libvirt
 Label: VirtoMir
 Origin: VirtoMir
 Suite: stable
 MD5Sum:
- bf2b3d05545a583d7777f0a78737d2f7             7219 main/binary-amd64/Packages
- aef3e77cacf59c2e61bb411bd151990f             1815 main/binary-amd64/Packages.gz
- 00243d13e89a4d702924d8c8dffdc2dc             7219 main/binary-arm64/Packages
- 808f057131b9c777f1f49f693a9701a9             1818 main/binary-arm64/Packages.gz
+ 528b5b31304dd9b976bc188e585434b9             7236 main/binary-amd64/Packages
+ 24eac714360be5cd654f4541cda26aad             1813 main/binary-amd64/Packages.gz
+ eb195fdd123d47d44d001d2add9ece0d             7236 main/binary-arm64/Packages
+ def14cb55bcc6b5fb63ddb96c51c262f             1815 main/binary-arm64/Packages.gz
 SHA1:
- f122c4cd1453eec183ee42b0b55ce403d03c3d5d             7219 main/binary-amd64/Packages
- a92e28dcd15ebec3d7089706b67b1ef60da36d5f             1815 main/binary-amd64/Packages.gz
- 25fb163f45dfc8e0e9e4edb6aa20c9efe5b92266             7219 main/binary-arm64/Packages
- d703c2f125cd52e722cff6a511963a332bed4b4c             1818 main/binary-arm64/Packages.gz
+ f983542ae7bcaef12c8d790e2fcc0b2803c09042             7236 main/binary-amd64/Packages
+ ae05b2c267e611ecb7b6603472a66f8fa11e9187             1813 main/binary-amd64/Packages.gz
+ 02216e41a462213555e44a4456b9c8a8164319a2             7236 main/binary-arm64/Packages
+ 93c2d87b053e72d54dc8f4a7c5189846f8c673f7             1815 main/binary-arm64/Packages.gz
 SHA256:
- 28bcfaf0fa21b4f20f3807b21ac13191828ab9aa4f586c9b5019e746ce319801             7219 main/binary-amd64/Packages
- 75b22ee22ce39365c275098013ce1d79d0371697f4f6c0785f5f87a7b833a2c9             1815 main/binary-amd64/Packages.gz
- 3ae765fd315c6b1fd88d479d8335393cacc67976a197df9c2e7603d25ce677b8             7219 main/binary-arm64/Packages
- bfd58373e54b3aae30662e001b914900d845fc08adc7407c4e7c19b1ce700185             1818 main/binary-arm64/Packages.gz
+ 05141ef955d91f7dc32134d23e85f9f686487e1cfb38ca409f745a36a3411531             7236 main/binary-amd64/Packages
+ a43fd7cb06ed088e56180e154e4dc15fd67c877d6fb4e3e52a3dd15582cba0c9             1813 main/binary-amd64/Packages.gz
+ 510825ca57a6171712a2cd2d8e563a37d92e1585f9b5817ae156111c54acb85d             7236 main/binary-arm64/Packages
+ 0e98b62778b3a300e06d804d7feac8315dc73d2f98ed1f4e23fc1aa784c5208c             1815 main/binary-arm64/Packages.gz
 SHA512:
- 5de6fd9bb7471299898402426d00162796fa1b6aa573d8b27b3d0f9dd3cb2892157571083cba92dd52cbeb9b7825fdfd98f761213efca85f63e27f04510fc69e             7219 main/binary-amd64/Packages
- cd41a5e1d2fd885e28583199d62b7fee72e9732ecddabe16ffcafb37cf6dda66721ea0c9c5040a7a4eea785ff947efe5e7573f67b9a27f3b749b1965d4fe9107             1815 main/binary-amd64/Packages.gz
- 223352280b4a55ede6d5d8d185020de417304a0fa9e8fadf0635f6a0ebe425ceea18b819829905d1c692549271a3c1dafa7db58ec4d2033eda7062168c068376             7219 main/binary-arm64/Packages
- 38741a12989f14db830f42129b3bdb9481b61403719a833fe3018e23ae12b8b948ff635afa93d5ec6f9697d44cfb3410d976e8d4d5199ea4f4ed3690cac3c62e             1818 main/binary-arm64/Packages.gz
+ daf53ac4d0bef0761fad833a077944f3ef42e110a4697740b743b2dca148c643ea3da09efe6c7f2d9b4a582ebdf1bf1cc64150896ca7ddffd20409fec8a80fe8             7236 main/binary-amd64/Packages
+ 766a887f152321f46157841c4d2e848fbdd400314f9b667ec3495e75b9b13b927ee9bb59d4b44e7d85a932e2fb9eba4341d29fab21c4a70dbc8a80ec6faeeef0             1813 main/binary-amd64/Packages.gz
+ 3e1dd38c15a57aae83d99305ada9fb8db39118506c31062c18a2ee8b176ed1aa6fdd605524ee25b4c1b9b571272dcee26f621b5a999c2f1b59d1ba33a6309706             7236 main/binary-arm64/Packages
+ 78b65a36974ed98c40c0622b3efa14ce8758ccee4bb61479d44502342e04d3ca6d31940eb2e62a8c7d6c9a50458e6fe620f296a6c30c50d00fd70f3679c8d467             1815 main/binary-arm64/Packages.gz
