@@ -2,7 +2,6 @@ package baremetal
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,8 +18,28 @@ import (
 // Unit is the systemd unit dnsmasq runs as.
 const Unit = "virtomir-netboot-dhcp"
 
-// ipxeDir is where the Debian package ipxe keeps its boot programs.
-var ipxeDir = "/usr/lib/ipxe"
+// ipxeDirs are where the iPXE boot programs live: Debian's ipxe package, then Fedora/RHEL's
+// ipxe-bootimgs-x86.
+var ipxeDirs = []string{"/usr/lib/ipxe", "/usr/share/ipxe"}
+
+// ipxeNames are the names each boot program has in those packages (Fedora calls the UEFI one
+// ipxe-x86_64.efi).
+var ipxeNames = map[string][]string{
+	"undionly.kpxe": {"undionly.kpxe"},
+	"ipxe.efi":      {"ipxe.efi", "ipxe-x86_64.efi"},
+}
+
+// findIPXE is the path of boot program f on this host, or "".
+func findIPXE(f string) string {
+	for _, d := range ipxeDirs {
+		for _, n := range ipxeNames[f] {
+			if p := filepath.Join(d, n); fileExists(p) {
+				return p
+			}
+		}
+	}
+	return ""
+}
 
 // Runner runs a program on this host.
 type Runner interface {
@@ -75,10 +94,11 @@ func ApplyProxy(ctx context.Context, r Runner, s Settings, network string, macs 
 		return err
 	}
 	for _, f := range []string{"undionly.kpxe", "ipxe.efi"} {
-		if err := copyFile(filepath.Join(ipxeDir, f), filepath.Join(tftp, f)); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return ErrNoIPXE
-			}
+		src := findIPXE(f)
+		if src == "" {
+			return ErrNoIPXE
+		}
+		if err := copyFile(src, filepath.Join(tftp, f)); err != nil {
 			return err
 		}
 	}
@@ -106,4 +126,9 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Close()
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }

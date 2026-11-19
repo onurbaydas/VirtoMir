@@ -395,5 +395,6 @@ func (b *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ErrNoIPXE: proxy DHCP needs the iPXE boot programs (Debian package ipxe).
-var ErrNoIPXE = errors.New("proxy DHCP needs iPXE: apt install ipxe (it puts undionly.kpxe and ipxe.efi in /usr/lib/ipxe)")
+// ErrNoIPXE: proxy DHCP needs the iPXE boot programs (ipxe on Debian, ipxe-bootimgs-x86 on
+// Fedora/RHEL).
+var ErrNoIPXE = errors.New("proxy DHCP needs iPXE, which is not installed: the Install button under Proxy DHCP sets it up")

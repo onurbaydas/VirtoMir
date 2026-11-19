@@ -285,15 +285,17 @@ func TestProxy(t *testing.T) {
 			t.Errorf("dnsmasq lacks %q:\n%s", want, conf)
 		}
 	}
-	old := ipxeDir
-	defer func() { ipxeDir = old }()
-	ipxeDir = t.TempDir()
+	old := ipxeDirs
+	defer func() { ipxeDirs = old }()
+	ipxeDir := t.TempDir()
+	ipxeDirs = []string{t.TempDir(), ipxeDir}
 	dir := t.TempDir()
 	r := &fakeRunner{}
 	if err := ApplyProxy(context.Background(), r, s, "10.0.0.0", []string{"52:54:00:aa:bb:01"}, dir); !errors.Is(err, ErrNoIPXE) {
 		t.Errorf("without iPXE: %v", err)
 	}
-	for _, f := range []string{"undionly.kpxe", "ipxe.efi"} {
+	// Fedora's names, in the second place looked at.
+	for _, f := range []string{"undionly.kpxe", "ipxe-x86_64.efi"} {
 		_ = os.WriteFile(filepath.Join(ipxeDir, f), []byte("x"), 0o644)
 	}
 	r.calls = nil

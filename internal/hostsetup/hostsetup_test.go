@@ -102,6 +102,19 @@ func TestInstallFRRTurnsOnBGP(t *testing.T) {
 	}
 }
 
+// dnsmasq alone is not network installs: the iPXE boot programs must be there too, where
+// Fedora (/usr/share/ipxe) or Debian (/usr/lib/ipxe) puts them.
+func TestBaremetalNeedsIPXE(t *testing.T) {
+	s, _ := newSetup(t, "dnsmasq")
+	if s.Installed("baremetal") {
+		t.Error("installed with dnsmasq but no iPXE")
+	}
+	write(t, s, "/usr/share/ipxe/undionly.kpxe", "x")
+	if !s.Installed("baremetal") {
+		t.Error("Fedora's iPXE not seen")
+	}
+}
+
 func TestInstallRefusesWhatItCannot(t *testing.T) {
 	s, _ := newSetup(t)
 	if err := s.Install(context.Background(), "offsite", func(string) {}); !errors.Is(err, ErrUnsupported) {

@@ -84,13 +84,16 @@ type Feature struct {
 	Dnf   []string
 	// Commands are what must be on PATH afterwards (and tell whether it is installed).
 	Commands []string
+	// AnyFile: one of these must exist as well (files a package ships outside PATH; the
+	// places differ between Debian and Fedora).
+	AnyFile []string
 }
 
 // Features VirtoMir installs by itself. The names are the API's.
 var Features = map[string]Feature{
 	"offsite":   {Title: "Off-site copies (restic)", Apt: []string{"restic"}, Dnf: []string{"restic"}, Commands: []string{"restic"}},
 	"physnet":   {Title: "BGP / EVPN routing (FRR)", Apt: []string{"frr"}, Dnf: []string{"frr"}, Commands: []string{"vtysh"}},
-	"baremetal": {Title: "Network installs (dnsmasq + iPXE)", Apt: []string{"dnsmasq", "ipxe"}, Dnf: []string{"dnsmasq", "ipxe-bootimgs-x86"}, Commands: []string{"dnsmasq"}},
+	"baremetal": {Title: "Network installs (dnsmasq + iPXE)", Apt: []string{"dnsmasq", "ipxe"}, Dnf: []string{"dnsmasq", "ipxe-bootimgs-x86"}, Commands: []string{"dnsmasq"}, AnyFile: []string{"/usr/lib/ipxe/undionly.kpxe", "/usr/share/ipxe/undionly.kpxe"}},
 	"ceph":      {Title: "Ceph (cephadm + podman)", Apt: []string{"cephadm", "podman"}, Dnf: []string{"cephadm", "podman"}, Commands: []string{"cephadm", "podman"}},
 }
 
@@ -105,7 +108,11 @@ func (s *Setup) Installed(feature string) bool {
 			return false
 		}
 	}
-	return true
+	return s.hasAnyFile(f)
+}
+
+func (s *Setup) hasAnyFile(f Feature) bool {
+	return len(f.AnyFile) == 0 || slices.ContainsFunc(f.AnyFile, func(p string) bool { return fileExists(s.path(p)) })
 }
 
 // Install installs the feature's packages with the host's package manager, then does what the
@@ -155,6 +162,9 @@ func (s *Setup) Install(ctx context.Context, feature string, report func(string)
 		if !s.has(c) {
 			return fmt.Errorf("the packages were installed but %s is still missing", c)
 		}
+	}
+	if !s.hasAnyFile(f) {
+		return fmt.Errorf("the packages were installed but %s is still missing", f.AnyFile[len(f.AnyFile)-1])
 	}
 	return nil
 }
