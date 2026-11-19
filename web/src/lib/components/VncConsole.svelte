@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '../i18n.svelte'
-  import { wsURL } from '../api'
+  import { errorText, wsURL } from '../api'
   // Graphical console: noVNC over virtomird's WebSocket bridge to the machine's local VNC
   // server. Designed around the usual console pain points:
   //  - keyboard layouts: QEMU's extended key events send physical key positions, so the
@@ -129,7 +129,7 @@
     } catch (e) {
       // The console code could not be loaded (e.g. VirtoMir was updated meanwhile).
       conn = 'error'
-      message = t('The console could not be loaded ({error}). Reload the page.', { error: e instanceof Error ? e.message : String(e) })
+      message = t('The console could not be loaded ({error}). Reload the page.', { error: errorText(e) })
       return
     }
     if (destroyed) return

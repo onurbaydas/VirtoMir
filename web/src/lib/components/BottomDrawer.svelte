@@ -3,7 +3,7 @@
   // The drawer at the bottom: background jobs, recent changes, active alerts, and the API
   // calls this browser made (copyable as curl). All of it live; nothing here is sample data.
   import { onMount } from 'svelte'
-  import { api, type Job, type ActivityEntry } from '../api'
+  import { api, errorText, type Job, type ActivityEntry } from '../api'
   import { alerts } from '../alerts.svelte'
   import { apiLog, asCurl } from '../apilog.svelte'
   import { router } from '../router.svelte'
@@ -58,7 +58,7 @@
       await api.ackAlert(id, host)
       void alerts.refresh()
     } catch (e) {
-      toasts.push({ kind: 'error', title: t('Not acknowledged'), detail: String(e) })
+      toasts.push({ kind: 'error', title: t('Not acknowledged'), detail: errorText(e) })
     }
   }
 
@@ -76,12 +76,12 @@
   <section class="drawer" aria-label={t('Tasks and activity')}>
     <header>
       <div class="tabs" role="tablist">
-        <button role="tab" aria-selected={activeTab === 'tasks'} class:on={activeTab === 'tasks'} onclick={() => show('tasks')}>Tasks{running ? ` · ${running} running` : ''}</button>
+        <button role="tab" aria-selected={activeTab === 'tasks'} class:on={activeTab === 'tasks'} onclick={() => show('tasks')}>{t('Tasks')}{running ? ` · ${t('{n} running', { n: running })}` : ''}</button>
         {#if session.can('admin')}<button role="tab" aria-selected={activeTab === 'events'} class:on={activeTab === 'events'} onclick={() => show('events')}>{t('Recent changes')}</button>{/if}
-        <button role="tab" aria-selected={activeTab === 'alerts'} class:on={activeTab === 'alerts'} onclick={() => show('alerts')}>Alerts{alerts.open ? ` · ${alerts.open}` : ''}</button>
+        <button role="tab" aria-selected={activeTab === 'alerts'} class:on={activeTab === 'alerts'} onclick={() => show('alerts')}>{t('Alerts')}{alerts.open ? ` · ${alerts.open}` : ''}</button>
         <button role="tab" aria-selected={activeTab === 'inspector'} class:on={activeTab === 'inspector'} onclick={() => show('inspector')}>{t('API calls')}</button>
       </div>
-      <span class="hint">Press ` to toggle</span>
+      <span class="hint">{t('Press ` to open or close')}</span>
       <button class="close" onclick={toggle} aria-label={t('Close')}><X size={16} /></button>
     </header>
 

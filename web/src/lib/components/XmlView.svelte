@@ -6,7 +6,7 @@
   import RefreshCw from '@lucide/svelte/icons/refresh-cw'
   import Pencil from '@lucide/svelte/icons/pencil'
   import XmlEditor from './XmlEditor.svelte'
-  import { api, ApiError } from '../api'
+  import { api, errorText } from '../api'
   import { copy } from '../machine'
   import { highlightXML } from '../xml'
 
@@ -38,7 +38,7 @@
     try {
       xml = await api.domainXML(uuid, inactive)
     } catch (e) {
-      error = e instanceof ApiError ? e.message : String(e)
+      error = errorText(e)
     } finally {
       loading = false
     }

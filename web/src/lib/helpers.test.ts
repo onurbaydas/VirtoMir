@@ -1,7 +1,7 @@
 // Unit tests for the UI's pure helpers (P7): `npm test`.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { diffLines, hunks } from './diff'
-import { allFailed, list } from './reply'
+import { allFailed, errorText, list } from './reply'
 import { ago, formatBps, formatBytes, formatKiB, formatMHz, formatPercent, formatRate, plural } from './format'
 import { guessLayout, keysym, strokeFor } from './keymaps'
 import { highlightXML } from './xml'
@@ -143,5 +143,16 @@ describe('allFailed', () => {
     expect(allFailed([{ ok: false }, { ok: false }])).toBe(true)
     expect(allFailed([{ error: 'down' }])).toBe(true)
     expect(allFailed([{}])).toBe(false)
+  })
+})
+
+describe('errorText', () => {
+  it('never shows a raw JavaScript error', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(errorText(new TypeError('O is not a function or its return value is not iterable'))).toMatch(/^Something went wrong on this page/)
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+    expect(errorText(new Error('disk missing'))).toBe('Disk missing')
+    expect(errorText('')).toMatch(/without a reason/)
   })
 })

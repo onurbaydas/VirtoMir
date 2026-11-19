@@ -3,6 +3,7 @@
 import { apiLog } from './apilog.svelte'
 import { router } from './router.svelte'
 import { list } from './reply'
+export { errorText } from './reply'
 
 export type DomainState =
   | 'unknown'
@@ -1961,7 +1962,3 @@ export const api = {
 }
 
 /** Human message for any error thrown by api calls. */
-export function errorText(e: unknown): string {
-  const s = e instanceof ApiError ? e.message : String(e)
-  return s.charAt(0).toUpperCase() + s.slice(1)
-}

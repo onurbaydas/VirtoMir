@@ -10,7 +10,7 @@
   import SearchX from '@lucide/svelte/icons/search-x'
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert'
   import ChevronDown from '@lucide/svelte/icons/chevron-down'
-  import { api, ApiError, type DetachKind, type Device, type DeviceGroup, type DomainDetail, type ExtraDeviceKind, type Prop } from '../api'
+  import { api, ApiError, errorText, type DetachKind, type Device, type DeviceGroup, type DomainDetail, type ExtraDeviceKind, type Prop } from '../api'
   import { ACTIONS, isActive, live } from '../live.svelte'
   import { formatBytes, formatKiB, formatPercent, plural } from '../format'
   import { copy } from '../machine'
@@ -55,7 +55,6 @@
   import SDNPortsPanel from '../components/SDNPortsPanel.svelte'
   import { cluster } from '../cluster.svelte'
   import { machineHref } from '../router.svelte'
-  import { errorText } from '../api'
   import { toasts } from '../toast.svelte'
 
   let { uuid }: { uuid: string } = $props()
@@ -86,7 +85,7 @@
     } catch (e) {
       if (my !== seq) return
       if (detail) reloadErr = errorText(e)
-      else error = e instanceof ApiError ? { status: e.status, message: e.message } : { status: 0, message: String(e) }
+      else error = e instanceof ApiError ? { status: e.status, message: e.message } : { status: 0, message: errorText(e) }
     }
   }
 

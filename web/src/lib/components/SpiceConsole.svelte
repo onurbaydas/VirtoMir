@@ -8,7 +8,7 @@
   import RefreshCw from '@lucide/svelte/icons/refresh-cw'
   import Keyboard from '@lucide/svelte/icons/keyboard'
   import { onDestroy, onMount } from 'svelte'
-  import { wsURL } from '../api'
+  import { errorText, wsURL } from '../api'
   import type { SpiceMainConn } from '@spice-project/spice-html5'
 
   let { uuid, name, password, standalone = false }: { uuid: string; name: string; password?: string; standalone?: boolean } = $props()
@@ -48,7 +48,7 @@
         onerror: (e: Error) => {
           if (destroyed) return
           conn = 'error'
-          message = e?.message || String(e)
+          message = errorText(e)
           stop()
           // Guest reboots and short drops: try again, slower each time.
           retry++
@@ -63,7 +63,7 @@
       g.sc = sc
     } catch (e) {
       conn = 'error'
-      message = e instanceof Error ? e.message : String(e)
+      message = errorText(e)
     }
   }
   function stop() {
