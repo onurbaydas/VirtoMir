@@ -22,6 +22,7 @@ import type {
   VMwareConnection,
   VMwareInventory,
   VMwareWave,
+  VNetwork,
 } from '../api'
 import type { DRSHostMetric, DRSMode, DRSRecommendation, DRSStatus, PlacementRule, PlacementViolation } from '../enterprise'
 import type { K8sCluster, K8sNode } from '../k8s'
@@ -213,6 +214,53 @@ function showback(q: URLSearchParams): Reply {
     return { status: 200, body: html, type: 'text/html; charset=utf-8' }
   }
   return json(rep)
+}
+
+const oidcCallback = () => `${typeof location === 'undefined' ? 'https://demo.virtomir' : location.origin}/api/v1/auth/oidc/callback`
+
+// ---- Settings the demo keeps while the page is open ----------------------------------------
+
+const settings = {
+  quotas: [
+    { kind: 'group', name: 'ml-team', machines: 6, vcpus: 48, memoryMiB: 196608, diskGiB: 2000 },
+    { kind: 'user', name: 'deniz', machines: 3, vcpus: 24, memoryMiB: 65536, diskGiB: 500 },
+  ] as unknown[],
+  backupDir: '/var/lib/virtomir/backups',
+  offsite: { repository: 's3:https://s3.eu-central-1.wasabisys.com/acme-vm-backups', password: '••••••••', env: { AWS_ACCESS_KEY_ID: '••••••••', AWS_SECRET_ACCESS_KEY: '••••••••' }, afterScheduled: true, keepDaily: 14, keepWeekly: 8, keepMonthly: 12, limitUploadKiB: 51200 } as Record<string, unknown>,
+  signin: {
+          ldap: { enabled: true, url: 'ldaps://dc01.example.com', startTLS: false, insecureSkipVerify: false, bindDN: 'CN=virtomir,OU=Service,DC=example,DC=com', bindPassword: '••••••••', userBase: 'OU=Staff,DC=example,DC=com', userFilter: '(sAMAccountName=%s)', groupAttr: 'memberOf', roles: { admin: ['VirtoMir-Admins'], operator: ['VirtoMir-Operators'], viewer: ['Domain Users'] } },
+          oidc: { enabled: true, label: 'Sign in with Keycloak', issuer: 'https://sso.example.com/realms/company', clientId: 'virtomir', clientSecret: '••••••••', usernameClaim: 'preferred_username', groupsClaim: 'groups', roles: { admin: ['virtomir-admins'], operator: [], viewer: [] } },
+        } as Record<string, unknown>,
+}
+
+/** A new pool, as the host would list it; an error reply when it cannot be made. */
+function addPool(spec?: { name?: string; type?: string; path?: string; source?: string; host?: string; export?: string; target?: string }): Reply | undefined {
+  const name = spec?.name?.trim() ?? ''
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name)) return json({ error: 'give the pool a name: letters, digits, ".", "_" or "-"' }, 422)
+  if (w.pools.some((p) => p.name === name)) return json({ error: `a pool named ${name} already exists` }, 409)
+  const type = spec?.type ?? 'dir'
+  const cap = type === 'dir' ? 3.6e12 : 8e12
+  w.pools.push({
+    name, uuid: newUUID(), type, active: true, autostart: true, volumes: 0,
+    path: type === 'dir' || type === 'netfs' ? spec?.path || `/var/lib/libvirt/${name}` : undefined,
+    source: type === 'netfs' ? `${spec?.host}:${spec?.export}` : spec?.target || spec?.source,
+    capacityBytes: cap, allocationBytes: 0, availableBytes: cap,
+  })
+  return undefined
+}
+
+function addNetwork(spec?: { name?: string; mode?: string; subnet?: string; bridge?: string; dhcp?: boolean }): Reply | undefined {
+  const name = spec?.name?.trim() ?? ''
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name)) return json({ error: 'give the network a name: letters, digits, ".", "_" or "-"' }, 422)
+  if (w.networks.some((n) => n.name === name)) return json({ error: `a network named ${name} already exists` }, 409)
+  const n = w.networks.length
+  w.networks.push({
+    name, uuid: newUUID(), active: true, autostart: true, persistent: true, mode: spec?.mode ?? 'nat',
+    bridge: spec?.bridge || `virbr${n}`, subnet: spec?.subnet,
+    usedBy: [],
+    dhcpHosts: [],
+  } satisfies VNetwork)
+  return undefined
 }
 
 // ---- Storage found on the network ----------------------------------------------------------
@@ -1504,20 +1552,21 @@ export function handle(method: string, url: URL, body: any): Reply {
     case 'GET /api/v1/quotas/mine':
       return json({ unlimited: true })
     case 'GET /api/v1/quotas':
-      return json({
-        rules: [
-          { kind: 'group', name: 'ml-team', machines: 6, vcpus: 48, memoryMiB: 196608, diskGiB: 2000 },
-          { kind: 'user', name: 'deniz', machines: 3, vcpus: 24, memoryMiB: 65536, diskGiB: 500 },
-        ],
-      })
+      return json({ rules: settings.quotas })
+    case 'PUT /api/v1/quotas':
+      if (!Array.isArray(body?.rules)) return json({ error: 'send the rules as a list' }, 422)
+      settings.quotas = body.rules
+      return json({ rules: settings.quotas })
+    case 'POST /api/v1/account/2fa/setup':
+    case 'POST /api/v1/account/2fa/confirm':
+    case 'POST /api/v1/host/mdevs':
+    case 'POST /api/v1/networks/wifi':
+      return json({ error: DEMO_ONLY }, 422)
     case 'GET /api/v1/signin-config':
-      return json({
-        redirectUrl: `${location.origin}/api/v1/auth/oidc/callback`,
-        config: {
-          ldap: { enabled: true, url: 'ldaps://dc01.example.com', startTLS: false, insecureSkipVerify: false, bindDN: 'CN=virtomir,OU=Service,DC=example,DC=com', bindPassword: '••••••••', userBase: 'OU=Staff,DC=example,DC=com', userFilter: '(sAMAccountName=%s)', groupAttr: 'memberOf', roles: { admin: ['VirtoMir-Admins'], operator: ['VirtoMir-Operators'], viewer: ['Domain Users'] } },
-          oidc: { enabled: true, label: 'Sign in with Keycloak', issuer: 'https://sso.example.com/realms/company', clientId: 'virtomir', clientSecret: '••••••••', usernameClaim: 'preferred_username', groupsClaim: 'groups', roles: { admin: ['virtomir-admins'], operator: [], viewer: [] } },
-        },
-      })
+      return json({ redirectUrl: oidcCallback(), config: settings.signin })
+    case 'PUT /api/v1/signin-config':
+      settings.signin = { ...settings.signin, ...body }
+      return json({ redirectUrl: oidcCallback(), config: settings.signin })
     case 'GET /api/v1/update':
       return json({ current: '0.6.0-demo', repo: 'onurbaydas/VirtoMir', available: false, installable: false, reason: 'This is the online demo; install VirtoMir on a host to get updates.', checkedAt: new Date().toISOString() })
     case 'GET /api/v1/setup':
@@ -1714,6 +1763,18 @@ export function handle(method: string, url: URL, body: any): Reply {
     // Storage and networks
     case 'GET /api/v1/storage/pools':
       return json({ pools: w.pools })
+    case 'POST /api/v1/storage/pools':
+    case 'POST /api/v1/cluster/pools': {
+      const made = addPool(body)
+      if (made) return made
+      return json(path.includes('/cluster/') ? { results: w.HOSTS.map((h) => ({ host: h.name, ok: true })) } : {})
+    }
+    case 'POST /api/v1/networks':
+    case 'POST /api/v1/cluster/networks': {
+      const made = addNetwork(body)
+      if (made) return made
+      return json(path.includes('/cluster/') ? { results: w.HOSTS.map((h) => ({ host: h.name, ok: true })) } : {})
+    }
     case 'POST /api/v1/storage/discover':
       return json({ found: demoFoundStorage(body) })
     case 'POST /api/v1/storage/connect':
@@ -1801,12 +1862,16 @@ export function handle(method: string, url: URL, body: any): Reply {
     case 'POST /api/v1/backups/restore':
       return json(job('restore', `Restore ${body?.name ?? 'backup'}`, 5000, () => addMachine(host.id, { name: body?.name || 'restored' }).uuid))
     case 'GET /api/v1/backups/settings':
-      return json({ backupDir: '/var/lib/virtomir/backups' })
+      return json({ backupDir: settings.backupDir })
+    case 'PUT /api/v1/backups/settings':
+      if (!String(body?.backupDir ?? '').startsWith('/')) return json({ error: 'the backup folder must be an absolute path' }, 422)
+      settings.backupDir = body.backupDir
+      return json({ backupDir: settings.backupDir })
     case 'GET /api/v1/offsite':
-      return json({
-        config: { repository: 's3:https://s3.eu-central-1.wasabisys.com/acme-vm-backups', password: '••••••••', env: { AWS_ACCESS_KEY_ID: '••••••••', AWS_SECRET_ACCESS_KEY: '••••••••' }, afterScheduled: true, keepDaily: 14, keepWeekly: 8, keepMonthly: 12, limitUploadKiB: 51200 },
-        status: { restic: 'restic 0.18.1', configured: true },
-      })
+      return json({ config: settings.offsite, status: { restic: 'restic 0.18.1', configured: !!settings.offsite.repository } })
+    case 'PUT /api/v1/offsite':
+      settings.offsite = { ...settings.offsite, ...body }
+      return json({ config: settings.offsite, status: { restic: 'restic 0.18.1', configured: !!settings.offsite.repository } })
     case 'GET /api/v1/offsite/snapshots':
       return json({
         snapshots: w.backups.slice(0, 4).map((b, i) => ({ id: `${i}a1f9c2e7d4b3`.padEnd(64, '0'), shortId: `${i}a1f9c2e`, time: b.created, host: 'hv-01', machine: b.domain, domainUuid: b.domainUuid, backup: b.id, path: `/var/lib/virtomir/backups/${b.id}`, sizeBytes: b.sizeBytes * 0.6 })),

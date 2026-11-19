@@ -777,4 +777,36 @@ describe('demo API', () => {
       vi.useRealTimers()
     }
   })
+
+  it('answers every change the UI reads a reply from, or says it needs a real host', () => {
+    const d = `/api/v1/domains/${DB1}`
+    const cases: [string, string, unknown, string[]][] = [
+      ['PUT', '/api/v1/offsite', { keepDaily: 7 }, ['config', 'status']],
+      ['PUT', '/api/v1/backups/settings', { backupDir: '/srv/backups' }, ['backupDir']],
+      ['PUT', '/api/v1/signin-config', {}, ['config', 'redirectUrl']],
+      ['PUT', '/api/v1/quotas', { rules: [] }, ['rules']],
+      ['POST', '/api/v1/tokens', { name: 'x', role: 'viewer', ttlDays: 1 }, ['token', 'secret']],
+      ['POST', `${d}/snapshots`, { name: 'probe' }, ['name']],
+      ['POST', `${d}/settings/preview`, {}, ['before', 'after']],
+      ['POST', '/api/v1/cluster/pools', { name: 'probe-pool', path: '/srv/p' }, ['results']],
+      ['POST', '/api/v1/cluster/networks', { name: 'probe-net', mode: 'nat' }, ['results']],
+      ['POST', '/api/v1/account/2fa/setup', {}, []],
+      ['POST', '/api/v1/host/mdevs', {}, []],
+      ['POST', '/api/v1/networks/wifi', {}, []],
+    ]
+    for (const [m, p, b, keys] of cases) {
+      const r = call(m, p, b)
+      if (r.status === 422 && keys.length === 0) {
+        expect(r.json.error, p).toMatch(/real host/)
+        continue
+      }
+      expect(r.status, p).toBeLessThan(300)
+      for (const k of keys) expect(r.json, `${m} ${p} → ${k}`).toHaveProperty(k)
+    }
+    // What was saved is what is read back, and what was made is listed.
+    expect(call('GET', '/api/v1/backups/settings').json.backupDir).toBe('/srv/backups')
+    expect(call('GET', '/api/v1/storage/pools').json.pools.some((p: { name: string }) => p.name === 'probe-pool')).toBe(true)
+    expect(call('GET', '/api/v1/networks').json.networks.some((n: { name: string }) => n.name === 'probe-net')).toBe(true)
+    expect(call('POST', '/api/v1/storage/pools', { name: 'probe-pool' }).status).toBe(409)
+  })
 })
