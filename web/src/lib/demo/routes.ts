@@ -849,6 +849,14 @@ function domainRoute(host: w.DemoHost, method: string, rest: string[], q: URLSea
       if (!body?.name) return json({ error: 'give it a name' }, 422)
       m.name = body.name
       return none()
+    case op === 'POST template/prepare':
+      if (m.state !== 'running') return json({ error: "the machine's guest agent does not answer: start the machine and install qemu-guest-agent in it, or prepare it by hand" }, 409)
+      return json(job('template', `Prepare ${m.name} as a template`, 5000, () => {
+        m.state = 'shutoff'
+        m.template = true
+        m.autostart = false
+        return m.uuid
+      }), 202)
     case op === 'PUT template':
       if (m.state !== 'shutoff') return json({ error: 'Shut the machine down first.' }, 409)
       m.template = !!body?.template

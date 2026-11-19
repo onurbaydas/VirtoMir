@@ -172,6 +172,28 @@
       onclose()
     })
 
+  // A running machine with a guest agent is prepared by VirtoMir itself: made anonymous, shut
+  // down and turned into a template, followed as a task.
+  let agentUp = $state<boolean | null>(null)
+  $effect(() => {
+    if (which !== 'template' || !active) return
+    agentUp = null
+    api
+      .guestInfo(detail.uuid)
+      .then((g) => (agentUp = g.connected))
+      .catch(() => (agentUp = false))
+  })
+
+  const prepareTemplate = () =>
+    run(async () => {
+      const job = await api.prepareTemplate(detail.uuid)
+      onclose()
+      track(job, {
+        success: t('{name} is now a template', { name: detail.name }),
+        onSuccess: () => onchange(),
+      })
+    })
+
   const clone = () =>
     run(async () => {
       const job = await api.clone(detail.uuid, newName)
@@ -375,18 +397,30 @@
       <li>{t('New machines can be')} <b>{t('linked clones')}</b> {t('(ready in seconds, store only their own changes) or full copies.')}</li>
       <li>{t('You can turn it back into a normal machine as long as no linked clone depends on it.')}</li>
     </ul>
+    {#if active && agentUp}
+      <div class="prep">
+        <span class="prep-title">{t('VirtoMir prepares it for you')}</span>
+        <span>{t('Through the guest agent it makes the system anonymous (Linux: a new machine ID and SSH host keys in every copy; Windows: sysprep), shuts it down and makes it a template.')}</span>
+      </div>
+    {:else}
     <div class="prep">
       <span class="prep-title">{t('Before you do: make the system anonymous, then shut it down')}</span>
       <span>{t('Otherwise every copy shares its identity (machine ID, SSH host keys).')}</span>
       <span>{t('Linux:')} <code class="mono">sudo cloud-init clean --logs --machine-id</code> {t('— or')} <code class="mono">sudo truncate -s0 /etc/machine-id</code> {t('without cloud-init.')}</span>
       <span>{t('Windows:')} <code class="mono">sysprep /generalize /oobe /shutdown</code></span>
+      <span>{t('Or start it with qemu-guest-agent installed, and VirtoMir does all of this itself.')}</span>
     </div>
-    {#if active}<div class="ui-error-box">{t('Shut {name} down first.', { name: detail.name })}</div>{/if}
+    {#if active && agentUp === false}<div class="ui-error-box">{t('Shut {name} down first.', { name: detail.name })}</div>{/if}
+    {/if}
     {#if error}<div class="ui-error-box">{error}</div>{/if}
   </div>
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={onclose}>{t('Cancel')}</button>
-    <button class="ui-btn primary" disabled={busy || active} onclick={makeTemplate}>{t('Make template')}</button>
+    {#if active && agentUp}
+      <button class="ui-btn primary" disabled={busy} onclick={prepareTemplate}>{t('Prepare and make template')}</button>
+    {:else}
+      <button class="ui-btn primary" disabled={busy || active} onclick={makeTemplate}>{t('Make template')}</button>
+    {/if}
   {/snippet}
 </Dialog>
 

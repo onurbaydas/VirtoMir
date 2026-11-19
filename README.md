@@ -63,7 +63,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 - New-machine wizard: install from an ISO, start from a **cloud image with cloud-init** (user, password, SSH keys), or boot an existing disk. Linux, Windows (UEFI + Secure Boot + TPM 2.0) and "other" profiles with sensible defaults
 - Start, shut down, reboot, pause, force off, hard reset, **save to disk** (resume exactly where it was) — one by one or **in bulk**
 - Rename, **clone** (full copies, new identity, runs in the background), delete (optionally with its own disks — never shared ones)
-- **Templates**: turn a prepared machine into a template and create new machines from it in seconds — **linked clones** (store only their own changes) or full copies, with optional cloud-init
+- **Templates**: turn a machine into a template — a running one with the guest agent is made anonymous (machine ID and SSH host keys, or sysprep on Windows), shut down and converted by VirtoMir itself — and create new machines from it in seconds — **linked clones** (store only their own changes) or full copies, with optional cloud-init
 - **Console in the browser**: graphical over VNC (noVNC) or **SPICE** (spice-html5: resolution follows the window, shared clipboard with the guest agent) and serial, also full-screen
 - **Settings form** for CPU (topology, model), memory (balloon), boot order, firmware — with a **"review changes" XML diff** before saving; vCPUs and memory are applied live where possible
 - **Tuning**: CPU and emulator pinning, huge pages, NUMA memory policy

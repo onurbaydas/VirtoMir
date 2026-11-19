@@ -1739,6 +1739,8 @@ export const api = {
   confidentialKinds: async () => list((await request<{ kinds?: string[] | null }>('GET', '/api/v1/host/confidential')).kinds),
   containerImages: () => request<{ images: ContainerImage[]; available: boolean; reason?: string }>('GET', '/api/v1/containers/images'),
   setTemplate: (uuid: string, template: boolean) => request<void>('PUT', `${domainPath(uuid)}/template`, { template }),
+  /** Makes a running machine anonymous through its guest agent, shuts it down and makes it a template (a job). */
+  prepareTemplate: (uuid: string) => request<Job>('POST', `${domainPath(uuid)}/template/prepare`),
   deploy: (uuid: string, spec: DeploySpec) => request<Job>('POST', `${domainPath(uuid)}/deploy`, spec),
   setAutostart: (uuid: string, enabled: boolean) => request<void>('PUT', `${domainPath(uuid)}/autostart`, { enabled }),
   rename: (uuid: string, name: string) => request<void>('POST', `${domainPath(uuid)}/rename`, { name }),

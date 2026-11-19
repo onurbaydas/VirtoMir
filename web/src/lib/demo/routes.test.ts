@@ -829,4 +829,18 @@ describe('demo API', () => {
     expect(outside.authorized).toBe(false)
     expect(outside.publicKey).toMatch(/^ssh-ed25519 /)
   })
+
+  it('prepares a running machine as a template by itself', () => {
+    vi.useFakeTimers()
+    try {
+      const r = call('POST', `/api/v1/domains/${DB1}/template/prepare`)
+      expect(r.status).toBe(202)
+      vi.advanceTimersByTime(5500)
+      const d = call('GET', `/api/v1/domains/${DB1}`).json
+      expect(d.state).toBe('shutoff')
+      expect(call('POST', `/api/v1/domains/${DB1}/template/prepare`).status).toBe(409)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
