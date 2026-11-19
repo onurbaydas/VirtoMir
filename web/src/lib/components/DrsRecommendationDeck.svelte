@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { ent, type DRSStatus, type DRSRecommendation, type AffinityRule, type DRSMode } from '../enterprise'
+  import { ent, type DRSStatus, type DRSRecommendation, type AffinityRule, type DRSMode, type ClusterDomainSummary } from '../enterprise'
+  import { errorText } from '../api'
+  import { plural } from '../format'
   import { toasts } from '../toast.svelte'
   import { track } from '../jobs'
   import { t } from '../i18n.svelte'
@@ -21,8 +23,53 @@
   let newRuleName = $state('')
   let newRuleKind = $state<'vm_anti_affinity' | 'vm_affinity' | 'vm_host_affinity'>('vm_anti_affinity')
   let newRuleMandatory = $state(true)
-  let newRuleDomains = $state('')
+  let newRuleDomains = $state<string[]>([])
   let newRuleTargetHost = $state('')
+  // Machines to pick from, by name (nobody types a UUID).
+  let inventory = $state<ClusterDomainSummary[]>([])
+  let vmFilter = $state('')
+  let pickable = $derived(
+    inventory
+      .filter((m) => !vmFilter.trim() || `${m.name} ${m.hostName}`.toLowerCase().includes(vmFilter.trim().toLowerCase()))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  )
+  const KIND_LABEL = {
+    vm_anti_affinity: t('Keep apart'),
+    vm_affinity: t('Keep together'),
+    vm_host_affinity: t('Keep on {host}'),
+  }
+
+  async function openRuleDialog() {
+    showRuleDialog = true
+    newRuleTargetHost ||= status?.hosts[0]?.id ?? ''
+    try {
+      inventory = await ent.clusterInventoryMachines()
+    } catch (e) {
+      toasts.push({ kind: 'error', title: t('Could not list the machines'), detail: errorText(e) })
+    }
+  }
+
+  function toggleDomain(uuid: string) {
+    newRuleDomains = newRuleDomains.includes(uuid) ? newRuleDomains.filter((u) => u !== uuid) : [...newRuleDomains, uuid]
+  }
+
+  // A name nobody has to think up: what the rule does, with the machines it is about.
+  let suggestedName = $derived.by(() => {
+    const names = newRuleDomains.map((u) => inventory.find((m) => m.uuid === u)?.name).filter(Boolean)
+    if (!names.length) return ''
+    const host = status?.hosts.find((h) => h.id === newRuleTargetHost)?.name ?? ''
+    const what = KIND_LABEL[newRuleKind].replace('{host}', host)
+    return `${what}: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3}` : ''}`
+  })
+  let ruleProblem = $derived(
+    newRuleDomains.length === 0
+      ? t('Pick the machines this rule is about.')
+      : newRuleKind !== 'vm_host_affinity' && newRuleDomains.length < 2
+        ? t('Pick at least two machines to keep apart or together.')
+        : newRuleKind === 'vm_host_affinity' && !newRuleTargetHost
+          ? t('Pick the host.')
+          : '',
+  )
 
   async function load() {
     try {
@@ -46,7 +93,7 @@
       toasts.push({ kind: 'info', title: t('DRS mode updated to {mode}', { mode }) })
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: e instanceof Error ? e.message : String(e) })
+      toasts.push({ kind: 'error', title: t('That did not work'), detail: errorText(e) })
     }
   }
 
@@ -79,41 +126,30 @@
         await load()
       }
     } catch (e) {
-      toasts.push({ kind: 'error', title: e instanceof Error ? e.message : String(e) })
+      toasts.push({ kind: 'error', title: t('That did not work'), detail: errorText(e) })
     } finally {
       applying = null
     }
   }
 
   async function handleAddRule() {
-    if (!newRuleName.trim()) {
-      toasts.push({ kind: 'error', title: t('Rule name is required') })
-      return
-    }
-    const domains = newRuleDomains
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-    if (domains.length === 0) {
-      toasts.push({ kind: 'error', title: t('Specify at least one VM UUID') })
-      return
-    }
+    if (ruleProblem) return
     try {
       await ent.addDRSRule({
-        name: newRuleName.trim(),
+        name: newRuleName.trim() || suggestedName,
         kind: newRuleKind,
         mandatory: newRuleMandatory,
-        domains,
-        targetHost: newRuleKind === 'vm_host_affinity' ? newRuleTargetHost.trim() : undefined,
+        domains: newRuleDomains,
+        targetHost: newRuleKind === 'vm_host_affinity' ? newRuleTargetHost : undefined,
       })
       toasts.push({ kind: 'info', title: t('Affinity rule created') })
       showRuleDialog = false
       newRuleName = ''
-      newRuleDomains = ''
-      newRuleTargetHost = ''
+      newRuleDomains = []
+      vmFilter = ''
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: e instanceof Error ? e.message : String(e) })
+      toasts.push({ kind: 'error', title: t('That did not work'), detail: errorText(e) })
     }
   }
 
@@ -123,7 +159,7 @@
       toasts.push({ kind: 'info', title: t('Rule deleted') })
       await load()
     } catch (e) {
-      toasts.push({ kind: 'error', title: e instanceof Error ? e.message : String(e) })
+      toasts.push({ kind: 'error', title: t('That did not work'), detail: errorText(e) })
     }
   }
 
@@ -161,7 +197,7 @@
           <span class="mode-hint">{MODE_HINTS[status.mode]}</span>
         </div>
 
-        <button class="btn btn-sm" onclick={() => (showRuleDialog = true)}>
+        <button class="btn btn-sm" onclick={openRuleDialog}>
           + {t('Add Rule')}
         </button>
       </div>
@@ -249,10 +285,10 @@
           {#each status.rules as rule (rule.id)}
             <div class="rule-chip">
               <span class="kind-tag" class:anti={rule.kind === 'vm_anti_affinity'}>
-                {rule.kind === 'vm_anti_affinity' ? 'ANTI-AFFINITY' : 'AFFINITY'}
+                {rule.kind === 'vm_anti_affinity' ? t('Keep apart') : rule.kind === 'vm_affinity' ? t('Keep together') : t('Host')}
               </span>
               <span class="name">{rule.name}</span>
-              <span class="count">({rule.domains.length} VMs)</span>
+              <span class="count">({plural(rule.domains.length, 'machine')})</span>
               <button
                 class="del-btn"
                 title={t('Delete rule')}
@@ -275,10 +311,6 @@
   onclose={() => (showRuleDialog = false)}
 >
   <div class="dialog-form">
-    <label>
-      {t('Rule Name')}
-      <input type="text" bind:value={newRuleName} placeholder="e.g. DNS Cluster Anti-Affinity" />
-    </label>
 
     <label>
       {t('Constraint Type')}
@@ -289,17 +321,35 @@
       </select>
     </label>
 
-    <label>
-      {t('Virtual Machine UUIDs (comma-separated)')}
-      <textarea bind:value={newRuleDomains} placeholder="uuid-1, uuid-2"></textarea>
-    </label>
-
     {#if newRuleKind === 'vm_host_affinity'}
       <label>
-        {t('Target Host ID / Name')}
-        <input type="text" bind:value={newRuleTargetHost} placeholder="e.g. host-01" />
+        {t('Host')}
+        <select bind:value={newRuleTargetHost}>
+          {#each status?.hosts ?? [] as h (h.id)}<option value={h.id}>{h.name}</option>{/each}
+        </select>
       </label>
     {/if}
+
+    <div class="vm-pick">
+      <span class="pick-head">{t('Machines')} <span class="muted">{t('{n} selected', { n: newRuleDomains.length })}</span></span>
+      {#if inventory.length > 8}<input type="search" placeholder={t('Filter machines…')} bind:value={vmFilter} />{/if}
+      <div class="pick-list">
+        {#each pickable as vm (vm.uuid)}
+          <label class="pick-item">
+            <input type="checkbox" checked={newRuleDomains.includes(vm.uuid)} onchange={() => toggleDomain(vm.uuid)} />
+            <span>{vm.name}</span>
+            <span class="muted">{vm.hostName}</span>
+          </label>
+        {:else}
+          <p class="muted">{t('No machines found.')}</p>
+        {/each}
+      </div>
+    </div>
+
+    <label>
+      {t('Name')} <span class="muted">{t('(optional)')}</span>
+      <input type="text" bind:value={newRuleName} placeholder={suggestedName || t('Named after the machines')} />
+    </label>
 
     <label class="checkbox-row">
       <input type="checkbox" bind:checked={newRuleMandatory} />
@@ -310,7 +360,8 @@
       <button class="btn btn-secondary" onclick={() => (showRuleDialog = false)}>
         {t('Cancel')}
       </button>
-      <button class="btn btn-primary" onclick={handleAddRule}>
+      {#if ruleProblem}<span class="muted">{ruleProblem}</span>{/if}
+      <button class="btn btn-primary" onclick={handleAddRule} disabled={!!ruleProblem}>
         {t('Create Rule')}
       </button>
     </div>
@@ -318,6 +369,31 @@
 </Dialog>
 
 <style>
+  .vm-pick {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .pick-head {
+    font-weight: 600;
+  }
+  .pick-list {
+    max-height: 220px;
+    overflow: auto;
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+  }
+  .pick-item {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 3px 0;
+    font-weight: 400;
+  }
+  .muted {
+    color: var(--text-2);
+    font-weight: 400;
+  }
   .drs-deck {
     background: var(--surface);
     border: 2px solid var(--border);
@@ -616,13 +692,6 @@
 
   .dialog-form input,
   .dialog-form select,
-  .dialog-form textarea {
-    padding: 6px;
-    font-size: 0.85rem;
-    background: var(--surface);
-    border: 1px solid var(--border);
-  }
-
   .checkbox-row {
     flex-direction: row !important;
     align-items: center;
