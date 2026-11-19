@@ -111,3 +111,12 @@ jobs:
     with:
       tag: ${{ github.ref_name }}
     secrets: inherit
+
+  # Arch User Repository (virtomir-bin), for stable releases.
+  aur:
+    needs: publish
+    if: ${{ !contains(github.ref_name, '-') }}
+    uses: ./.github/workflows/aur.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit
