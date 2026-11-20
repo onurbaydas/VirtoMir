@@ -220,6 +220,12 @@ func run(c config, log *slog.Logger) error {
 	if _, err := client.SweepPartialBackups(virt.BackupDir(scheduler.Settings().BackupDir), time.Hour); err != nil {
 		log.Warn("remove unfinished backups", "err", err)
 	}
+	// Folders libvirt cannot use under SELinux (a pool or backup location outside the known
+	// places) get the label for VM images.
+	safeGo(ctx, log, "selinux labels", func(context.Context) {
+		client.LabelDirPools()
+		virt.LabelForVMs(log, scheduler.Settings().BackupDir)
+	})
 	safeGo(ctx, log, "scheduler", scheduler.Run)
 	hubDone := make(chan struct{})
 	go func() { runSafe(ctx, log, "live hub", hub.Run); close(hubDone) }()

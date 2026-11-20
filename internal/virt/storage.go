@@ -768,6 +768,9 @@ func (c *Client) CreatePool(spec PoolSpec) error {
 			return classify(err)
 		}
 	}
+	if x.Type == "dir" && x.Target != nil {
+		LabelForVMs(c.log, x.Target.Path)
+	}
 	if err := l.StoragePoolCreate(p, 0); err != nil {
 		_ = l.StoragePoolUndefine(p)
 		return classify(err)

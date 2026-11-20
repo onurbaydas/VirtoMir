@@ -171,6 +171,7 @@ func (s *Server) putBackupSettings(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
+	virt.LabelForVMs(s.log, s.schedules.Settings().BackupDir)
 	s.writeJSON(w, http.StatusOK, s.schedules.Settings())
 }
 

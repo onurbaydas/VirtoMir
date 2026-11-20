@@ -27,8 +27,8 @@
 	(allow virtomir_libvirt_daemon unconfined_service_t (file (open read getattr)))
 	(allow virtomir_libvirt_daemon unconfined_service_t (lnk_file (read))))
 
-; Backups (the default location; another one needs: semanage fcontext -a -t virt_image_t
-; "<dir>(/.*)?" && restorecon -R <dir>).
+; Backups (the default location; virtomird labels another one, and directory pools elsewhere,
+; itself with semanage fcontext + restorecon: internal/virt/selinux.go).
 (optional virtomir_backups
 	(filecon "/var/lib/virtomir/backups(/.*)?" any (system_u object_r virt_image_t ((s0) (s0)))))
 
