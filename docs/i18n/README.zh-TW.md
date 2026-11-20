@@ -67,6 +67,9 @@ VirtoMir 想同時做到兩件事：
 > [!TIP]
 > **喜歡這個方向嗎？給個 ⭐ 吧。** VirtoMir 由一個人開發：星星能讓更多人發現它，也讓專案持續下去。想收到新版本通知，請點 **Watch → Custom → Releases**。
 
+> [!NOTE]
+> **試過了嗎？花 30 秒告訴我們。** [開啟快速回饋表單](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml)，選 😀 😐 😞 或 💡，想的話再寫一句。在 VirtoMir 裡，側邊欄底部的 💬 按鈕會開啟同一份表單，並自動填好你的版本資訊。
+
 ## 30 秒上手
 
 | | |

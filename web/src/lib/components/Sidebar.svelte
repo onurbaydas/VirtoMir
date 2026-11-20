@@ -35,9 +35,23 @@
   import { isActive, live } from '../live.svelte'
   import { machineHref, router } from '../router.svelte'
   import { theme, type ThemePref } from '../theme.svelte'
+  import { api } from '../api'
+  import { ent } from '../enterprise'
+  import { feedbackURL, type FeedbackSetup } from '../feedback'
 
 
   type Status = 'up' | 'degraded' | 'down' | 'pending'
+  // The feedback link opens the quick form with this host's versions filled in (never its name).
+  let fbSetup = $state<FeedbackSetup>({})
+  let fbLoaded = false
+  $effect(() => {
+    if (!session.ready || fbLoaded) return
+    fbLoaded = true
+    api.version().then((v) => (fbSetup.version = v.version)).catch(() => {})
+    ent.chassis().then((c) => (fbSetup.os = c.os)).catch(() => {})
+  })
+  let fbHref = $derived(feedbackURL({ ...fbSetup, libvirt: live.host?.libvirtVersion, qemu: live.host?.hypervisorVersion }))
+
   let status = $derived<Status>(
     !live.streamOpen ? 'down' : live.snapshot?.connected === false ? 'degraded' : live.snapshot ? 'up' : 'pending',
   )
@@ -268,7 +282,7 @@
         <button class="icon" title={t('Sign out')} aria-label={t('Sign out')} onclick={() => session.logout()}><LogOut size={15} /></button>
       {/if}
     {/if}
-    <a class="icon" href="https://github.com/onurbaydas/VirtoMir/issues/new/choose" target="_blank" rel="noopener" title={t('Idea / Report a bug')} aria-label={t('Idea / Report a bug')}><MessageSquarePlus size={15} /></a>
+    <a class="icon" href={fbHref} target="_blank" rel="noopener" title={t('Idea / Report a bug')} aria-label={t('Idea / Report a bug')}><MessageSquarePlus size={15} /></a>
     <div class="themes" role="radiogroup" aria-label={t('Theme')}>
       {#each THEMES as t (t.key)}
         {@const Icon = t.icon}

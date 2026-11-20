@@ -66,6 +66,9 @@ It is a single binary with the web UI built in: no dedicated distribution, no da
 > [!TIP]
 > **Like where this is going? Give it a ⭐.** VirtoMir is built by one person: stars are how other people find it, and they keep it going. To hear about new versions, click **Watch → Custom → Releases**.
 
+> [!NOTE]
+> **Tried it? Tell us in 30 seconds.** [Open the quick feedback form](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml), pick 😀 😐 😞 or 💡 and add a sentence if you like. Inside VirtoMir, the 💬 button at the bottom of the sidebar opens the same form with your versions already filled in.
+
 ## Try it in 30 seconds
 
 | | |

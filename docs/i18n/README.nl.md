@@ -67,6 +67,9 @@ Eén binary met de webinterface ingebouwd: geen eigen distributie, geen database
 > [!TIP]
 > **Bevalt de richting? Geef een ⭐.** VirtoMir wordt door één persoon gebouwd: via sterren vinden anderen het, en ze houden het project gaande. Voor nieuwe versies: **Watch → Custom → Releases**.
 
+> [!NOTE]
+> **Geprobeerd? Vertel het ons in 30 seconden.** [Open het snelle feedbackformulier](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml), kies 😀 😐 😞 of 💡 en voeg eventueel een zin toe. In VirtoMir opent de 💬-knop onderaan de zijbalk hetzelfde formulier met je versies al ingevuld.
+
 ## Probeer het in 30 seconden
 
 | | |

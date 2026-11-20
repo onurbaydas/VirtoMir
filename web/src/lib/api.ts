@@ -1649,6 +1649,7 @@ export const api = {
   lcmResume: (id: string) => request<LCMPlan>('POST', `/api/v1/cluster/lcm/plans/${enc(id)}/resume`),
   lcmAbort: (id: string) => request<LCMPlan>('POST', `/api/v1/cluster/lcm/plans/${enc(id)}/abort`),
   host: () => request<HostInfo>('GET', '/api/v1/host'),
+  version: () => request<{ version: string }>('GET', '/api/v1/version'),
 
   session: () => request<Session>('GET', '/api/v1/auth/session'),
   login: (user: string, password: string) => request<Session>('POST', '/api/v1/auth/login', { user, password }),

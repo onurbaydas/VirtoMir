@@ -1,0 +1,27 @@
+name: Quick feedback (30 seconds)
+description: One click and a sentence if you like. Good, bad or an idea, it all helps.
+title: "Feedback: "
+labels: ["feedback"]
+body:
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: How is VirtoMir for you?
+      options:
+        - 😀 It works, I like it
+        - 😐 It works, but something is rough
+        - 😞 Something is broken
+        - 💡 I have an idea
+    validations:
+      required: true
+  - type: textarea
+    id: note
+    attributes:
+      label: Anything to add? (optional)
+      description: One sentence is plenty. For a bug with steps and logs, the "Bug report" form is better.
+  - type: input
+    id: setup
+    attributes:
+      label: Your setup (optional)
+      description: Filled in when you open this from VirtoMir. Only versions, never host names or addresses.
+      placeholder: "VirtoMir 1.2.1 · Ubuntu 24.04 · libvirt 10.0.0 · QEMU 8.2.2"

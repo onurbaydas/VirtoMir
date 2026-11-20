@@ -85,9 +85,11 @@ sorted). To add a language:
 Untranslated keys fall back to English, so a partial translation is still useful.
 
 The README's front page is translated too, in [`docs/i18n`](docs/i18n) (one `README.<code>.md` per
-language, linked from the language bar at the top of every version). To add a language, copy one of
-them, translate the text and keep the structure, links and image paths as they are; then add it to
-the language bar in `README.md` and in every file in `docs/i18n`. Corrections by native speakers are
+language, linked from the language bar at the top of every version). Those files are generated: the
+texts live in [`scripts/readme-i18n`](scripts/readme-i18n) (`<code>.py` and `extra.py`). To correct a
+translation, change the text there and run `python3 scripts/readme-i18n/gen.py <code>`. To add a
+language, copy one of the `<code>.py` files, translate it, add it to `LANGS` in `gen.py` and to
+`extra.py`, run the script for every language, and add the language to the bar in `README.md`. Corrections by native speakers are
 very welcome: the current translations were written with an AI and may read stiffly.
 
 ## License and CLA

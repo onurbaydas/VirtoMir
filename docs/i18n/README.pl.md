@@ -67,6 +67,9 @@ Jeden plik binarny z wbudowanym interfejsem webowym: bez osobnej dystrybucji, be
 > [!TIP]
 > **Podoba ci się kierunek? Zostaw ⭐.** VirtoMir tworzy jedna osoba: dzięki gwiazdkom inni go znajdują, a projekt trwa. O nowych wersjach powiadomi cię **Watch → Custom → Releases**.
 
+> [!NOTE]
+> **Wypróbowałeś? Napisz w 30 sekund.** [Otwórz szybki formularz opinii](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml), wybierz 😀 😐 😞 lub 💡 i dodaj zdanie, jeśli chcesz. W VirtoMir przycisk 💬 na dole paska bocznego otwiera ten sam formularz z wypełnionymi już wersjami.
+
 ## Wypróbuj w 30 sekund
 
 | | |

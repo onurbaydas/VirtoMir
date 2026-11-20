@@ -1,6 +1,7 @@
 <script lang="ts">
   // The strip above the online demo: says the data is made up and where the real thing is.
   import { t } from '../i18n.svelte'
+  import { feedbackURL } from '../feedback'
   import megaLogo from './mega-bilgisayar.png'
 
   const REPO = 'https://github.com/onurbaydas/VirtoMir'
@@ -14,7 +15,7 @@
     <a href="{REPO}#install" target="_blank" rel="noopener">{t('Install')}</a>
     <a href="{REPO}/blob/main/docs/try-in-a-vm.md" target="_blank" rel="noopener">{t('Try it in a VM')}</a>
     <a href="{REPO}" target="_blank" rel="noopener">GitHub</a>
-    <a href="{REPO}/issues/new/choose" target="_blank" rel="noopener">{t('Idea / Report a bug')}</a>
+    <a href={feedbackURL({ os: 'online demo' })} target="_blank" rel="noopener">{t('Idea / Report a bug')}</a>
   </span>
 </div>
 

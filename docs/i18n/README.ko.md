@@ -67,6 +67,9 @@ VirtoMir는 두 가지를 동시에 해내려고 합니다.
 > [!TIP]
 > **방향이 마음에 드시나요? ⭐을 눌러 주세요.** VirtoMir는 한 사람이 만듭니다. 스타 덕분에 다른 사람들이 프로젝트를 찾고, 프로젝트가 이어집니다. 새 버전 소식은 **Watch → Custom → Releases**에서 받을 수 있습니다.
 
+> [!NOTE]
+> **써 보셨나요? 30초만 내 주세요.** [빠른 피드백 양식을 열고](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml) 😀 😐 😞 💡 중 하나를 고른 뒤, 원하면 한 문장 덧붙여 주세요. VirtoMir 안에서는 사이드바 아래의 💬 버튼이 버전 정보가 채워진 같은 양식을 엽니다.
+
 ## 30초 만에 체험
 
 | | |
