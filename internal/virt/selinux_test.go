@@ -10,10 +10,14 @@ import (
 
 func TestNeedsVMLabel(t *testing.T) {
 	for label, want := range map[string]bool{
-		"system_u:object_r:var_t:s0":        true,
-		"system_u:object_r:default_t:s0":    true,
-		"system_u:object_r:virt_image_t:s0": false,
-		"":                                  false, // unknown: left alone
+		"system_u:object_r:var_t:s0":               true,
+		"system_u:object_r:default_t:s0":           true,
+		"system_u:object_r:virt_image_t:s0":        false,
+		"unconfined_u:object_r:user_home_t:s0":     true,
+		"unconfined_u:object_r:user_home_dir_t:s0": false, // a home directory itself
+		"system_u:object_r:etc_t:s0":               false,
+		"system_u:object_r:mysqld_db_t:s0":         false, // another service's data
+		"":                                         false, // unknown: left alone
 	} {
 		if got := needsVMLabel(label); got != want {
 			t.Errorf("needsVMLabel(%q) = %v, want %v", label, got, want)
@@ -47,6 +51,12 @@ func TestLabelForVMs(t *testing.T) {
 	LabelForVMs(log, "/srv/vms")
 	if last := ran[len(ran)-1]; last != "chcon -R -t virt_image_t /srv/vms" {
 		t.Errorf("without semanage the last command is %q, want chcon", last)
+	}
+
+	ran = nil
+	LabelForVMs(log, "/srv/vm.s|x")
+	if len(ran) == 0 || ran[0] != `semanage fcontext -a -t virt_image_t /srv/vm\.s\|x(/.*)?` {
+		t.Errorf("regex characters of the folder are not escaped: %q", ran)
 	}
 
 	for _, dir := range []string{"/srv", "/", "relative/dir", ""} {

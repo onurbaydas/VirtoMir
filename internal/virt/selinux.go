@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -32,13 +34,15 @@ var labelRunner = func(ctx context.Context, name string, args ...string) error {
 	return exec.CommandContext(ctx, name, args...).Run()
 }
 
+// relabelFrom are the labels of folders nothing else claims (a new folder under /srv, a
+// mount point, a folder in a home directory). A folder with any other label (system
+// configuration, a home directory itself, a service's data) is never relabelled.
+var relabelFrom = []string{"var_t", "default_t", "unlabeled_t", "mnt_t", "user_home_t"}
+
 // needsVMLabel reports whether a folder with this label must be relabelled for VM images.
 func needsVMLabel(label string) bool {
-	if label == "" {
-		return false // unknown: leave it alone
-	}
 	f := strings.Split(label, ":")
-	return len(f) < 3 || f[2] != "virt_image_t"
+	return len(f) >= 3 && slices.Contains(relabelFrom, f[2])
 }
 
 // LabelForVMs gives dir (and everything below it) the virt_image_t label when SELinux is on
@@ -60,7 +64,9 @@ func LabelForVMs(log *slog.Logger, dir string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	rule := dir + "(/.*)?"
+	// semanage reads the path as a regular expression: a dot or bar in a folder name must not
+	// widen the rule to other files.
+	rule := regexp.QuoteMeta(dir) + "(/.*)?"
 	err := labelRunner(ctx, "semanage", "fcontext", "-a", "-t", "virt_image_t", rule)
 	if err != nil {
 		// The rule may exist with another type: modify it.

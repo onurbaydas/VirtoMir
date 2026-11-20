@@ -175,3 +175,28 @@ func TestCheck(t *testing.T) {
 		t.Errorf("calls %v", f.calls)
 	}
 }
+
+// A REST server's password can be part of the repository address: it is masked like the
+// other secrets, and sending the masked address back keeps the stored one.
+func TestRepositoryPasswordIsMasked(t *testing.T) {
+	s := newStore(t, &fake{})
+	repo := "rest:https://backup:hunter2@restic.example.com:8000/virtomir/"
+	if err := s.SetConfig(Config{Repository: repo, Password: "pw"}); err != nil {
+		t.Fatal(err)
+	}
+	shown := s.Config()
+	if strings.Contains(shown.Repository, "hunter2") || shown.Repository != "rest:https://backup:"+Secret+"@restic.example.com:8000/virtomir/" {
+		t.Fatalf("repository shown as %q", shown.Repository)
+	}
+	if err := s.SetConfig(shown); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.current().Repository; got != repo {
+		t.Errorf("stored %q, want %q", got, repo)
+	}
+	for _, plain := range []string{"s3:https://s3.example.com/bkt/vm", "sftp:backup@host:/srv/restic", "/mnt/usb/restic", "b2:bucket:virtomir"} {
+		if got := maskRepository(plain); got != plain {
+			t.Errorf("maskRepository(%q) = %q, want it unchanged", plain, got)
+		}
+	}
+}

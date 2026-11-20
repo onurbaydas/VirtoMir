@@ -151,11 +151,22 @@ func (s *Store) Config() Config {
 	if c.Password != "" {
 		c.Password = Secret
 	}
+	c.Repository = maskRepository(c.Repository)
 	c.Env = map[string]string{}
 	for k := range s.cfg.Env {
 		c.Env[k] = Secret
 	}
 	return c
+}
+
+// repoPassword is the password of a repository address with credentials in it
+// (rest:https://user:password@host/, s3:https://key:secret@host/bucket).
+var repoPassword = regexp.MustCompile(`(://[^/:@]+:)([^/@]+)@`)
+
+// maskRepository hides the password inside a repository address, as Config does for the
+// other secrets; sending the masked address back keeps the stored one.
+func maskRepository(repo string) string {
+	return repoPassword.ReplaceAllString(repo, "${1}"+Secret+"@")
 }
 
 // SetConfig stores a configuration. Secrets sent back as Secret keep their value; an env
@@ -168,6 +179,9 @@ func (s *Store) SetConfig(c Config) error {
 	defer s.mu.Unlock()
 	if c.Password == Secret {
 		c.Password = s.cfg.Password
+	}
+	if c.Repository == maskRepository(s.cfg.Repository) {
+		c.Repository = s.cfg.Repository
 	}
 	env := map[string]string{}
 	for k, v := range c.Env {
