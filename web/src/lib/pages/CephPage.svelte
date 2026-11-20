@@ -229,6 +229,7 @@
       {#if !status.installed && !status.cephadm}
         <InstallFeature feature="ceph" missing={t('cephadm and podman are not installed on this host; Ceph runs with them. After the install, bootstrap the first monitor here. Every host that should store data needs them too.')} oninstalled={load} />
       {:else}
+        <InstallFeature feature="ceph" installedHere missing="" oninstalled={load} />
         <p class="muted">{t('Bootstrapping starts the first monitor and manager on this host; then add the other members as Ceph hosts and give Ceph their empty disks. Three hosts with at least one disk each keep three copies of everything.')}</p>
       {/if}
       {#if admin}

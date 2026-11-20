@@ -133,9 +133,7 @@
   {#if error}
     <div class="ui-error-box">{error}</div>
   {:else if cfg}
-    {#if !restic}
-      <InstallFeature feature="offsite" missing={t('restic is not installed on this host; it copies the backups off-site.')} oninstalled={load} />
-    {/if}
+    <InstallFeature feature="offsite" installedHere={!!restic} missing={t('restic is not installed on this host; it copies the backups off-site.')} oninstalled={load} />
     {#if !editing}
       {#if configured}
         <p class="muted">

@@ -255,6 +255,7 @@
           {#if !bgp.frr.installed}
             <InstallFeature feature="physnet" missing={t('FRR is not installed on this host; it does the BGP routing. Installing it also turns on its BGP daemon.')} oninstalled={loadBGP} />
           {:else}
+            <InstallFeature feature="physnet" installedHere missing="" oninstalled={loadBGP} />
             <dl>
               <dt>{t('Version')}</dt><dd class="mono">{bgp.frr.version ?? '?'}</dd>
               <dt>bgpd</dt><dd><span class="pill" class:drop={!bgp.frr.bgpd}>{bgp.frr.bgpd ? t('running') : t('off: set bgpd=yes in /etc/frr/daemons')}</span></dd>
