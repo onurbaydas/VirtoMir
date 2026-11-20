@@ -313,6 +313,15 @@ func memoryFits(memoryMiB, hostKiB uint64) error {
 	return invalidf("The host has %s of memory; give the machine at most that much (asked for %s).", formatMiB(hostKiB/1024), formatMiB(memoryMiB))
 }
 
+// cpusFit refuses a machine with more vCPUs than the host has CPU threads: its vCPUs would
+// compete with each other for the same threads. hostCPUs 0 means unknown.
+func cpusFit(vcpus uint, hostCPUs int32) error {
+	if hostCPUs <= 0 || vcpus <= uint(hostCPUs) {
+		return nil
+	}
+	return invalidf("The host has %d CPU threads; give the machine at most %d vCPUs (asked for %d).", hostCPUs, hostCPUs, vcpus)
+}
+
 func formatMiB(mib uint64) string {
 	if mib >= 1024 && mib%1024 == 0 {
 		return fmt.Sprintf("%d GiB", mib/1024)
@@ -337,8 +346,11 @@ func (c *Client) CheckCreate(spec CreateSpec) error {
 	if c.nameTaken(l, spec.Name) {
 		return refusedf("A machine named %s already exists.", spec.Name)
 	}
-	if _, hostKiB, _, _, _, _, _, _, err := l.NodeGetInfo(); err == nil {
+	if _, hostKiB, hostCPUs, _, _, _, _, _, err := l.NodeGetInfo(); err == nil {
 		if err := memoryFits(spec.MemoryMiB, hostKiB); err != nil {
+			return err
+		}
+		if err := cpusFit(uint(spec.VCPUs), hostCPUs); err != nil {
 			return err
 		}
 	}

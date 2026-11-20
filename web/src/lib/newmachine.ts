@@ -21,6 +21,8 @@ export interface CreateInput {
   rootPassword: string
   /** The host's memory in GiB; 0 while unknown. */
   hostMemGiB?: number
+  /** The host's CPU threads; 0 while unknown. */
+  hostCPUs?: number
 }
 
 /** What is wrong with the cloud-init settings, or '' (only for cloud images). */
@@ -39,6 +41,8 @@ export function createBlocker(i: CreateInput): string {
   if (i.vcpus < 1 || !(i.memGiB > 0)) return t('Give it at least one vCPU and some memory.')
   if (i.hostMemGiB && i.memGiB > i.hostMemGiB)
     return t('The host has {total} GiB of memory; give the machine at most that much.', { total: Math.floor(i.hostMemGiB * 100) / 100 })
+  if (i.hostCPUs && i.vcpus > i.hostCPUs)
+    return t('The host has {n} CPU threads; give the machine at most that many vCPUs.', { n: i.hostCPUs })
   if (i.kind === 'container') {
     if (!i.containersAvailable) return t('System containers are not available on this host.')
     if (i.rootPassword.length < 8 || /[:\u0000-\u001f]/.test(i.rootPassword)) return t('Set a root password of at least 8 characters.')

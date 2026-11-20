@@ -31,6 +31,12 @@ describe('createBlocker', () => {
     expect(blocker({ memGiB: 5000 })).toBe('') // host size not known yet: no guess
   })
 
+  it('refuses more vCPUs than the host has threads', () => {
+    expect(blocker({ vcpus: 64, hostCPUs: 20 })).toMatch(/20 CPU threads/)
+    expect(blocker({ vcpus: 20, hostCPUs: 20 })).toBe('')
+    expect(blocker({ vcpus: 64 })).toBe('') // host not known yet
+  })
+
   it('names the first problem, in order', () => {
     expect(blocker({ name: '  ' })).toMatch(/name/)
     expect(blocker({ name: '-bad' })).toMatch(/letters, digits/)

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/digitalocean/go-libvirt"
@@ -38,6 +40,31 @@ type MigrationSource struct {
 	Networks []string `json:"networks"`
 	// CPUMode of the machine: host-passthrough needs an identical CPU on the target.
 	CPUMode string `json:"cpuMode"`
+	// MemoryKiB is the machine's memory; the target must have that much available.
+	MemoryKiB uint64 `json:"memoryKiB"`
+}
+
+// MemAvailableKiB is the host's MemAvailable from /proc/meminfo (0 when unknown): memory a
+// new guest can get without the host swapping. Tests replace it.
+var MemAvailableKiB = func() uint64 {
+	raw, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0
+	}
+	return parseMemAvailable(string(raw))
+}
+
+func parseMemAvailable(meminfo string) uint64 {
+	for _, line := range strings.Split(meminfo, "\n") {
+		if rest, ok := strings.CutPrefix(line, "MemAvailable:"); ok {
+			f := strings.Fields(rest)
+			if len(f) > 0 {
+				v, _ := strconv.ParseUint(f[0], 10, 64)
+				return v
+			}
+		}
+	}
+	return 0
 }
 
 // PlanMigration checks that a machine can be live-migrated and describes its disks.
@@ -66,6 +93,9 @@ func (c *Client) PlanMigration(uuid string) (MigrationSource, error) {
 	src := MigrationSource{UUID: formatUUID(d.UUID), Name: d.Name, Disks: []LiveDisk{}, Networks: []string{}}
 	if x.CPU != nil {
 		src.CPUMode = x.CPU.Mode
+	}
+	if x.Memory != nil {
+		src.MemoryKiB = toKiB(x.Memory.Value, x.Memory.Unit)
 	}
 	if x.Devices == nil {
 		return src, nil

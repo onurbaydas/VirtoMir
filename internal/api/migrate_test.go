@@ -47,3 +47,20 @@ func TestDisksToCopy(t *testing.T) {
 		}
 	}
 }
+
+func TestMemoryRoom(t *testing.T) {
+	const gib = 1 << 20 // KiB
+	for _, c := range []struct {
+		need, avail uint64
+		ok          bool
+	}{
+		{4 * gib, 8 * gib, true},
+		{8 * gib, 8 * gib, true},
+		{16 * gib, 8 * gib, false},
+		{16 * gib, 0, true}, // an older member that does not say
+	} {
+		if err := memoryRoom("dev2", c.need, c.avail); (err == nil) != c.ok {
+			t.Errorf("memoryRoom(%d, %d) = %v, want ok=%v", c.need, c.avail, err, c.ok)
+		}
+	}
+}

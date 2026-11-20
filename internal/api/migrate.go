@@ -142,7 +142,7 @@ func (s *Server) migrateCheck(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, map[string]any{"paths": res})
+	s.writeJSON(w, http.StatusOK, map[string]any{"paths": res, "memAvailableKiB": virt.MemAvailableKiB()})
 }
 
 func (s *Server) migratePrepare(w http.ResponseWriter, r *http.Request) {
@@ -223,8 +223,14 @@ func planMigration(ctx context.Context, p *cluster.Peer, m Migrator, src virt.Mi
 	for i, d := range src.Disks {
 		paths[i] = d.Path
 	}
-	var check struct{ Paths []virt.PathCheck }
+	var check struct {
+		Paths           []virt.PathCheck
+		MemAvailableKiB uint64 `json:"memAvailableKiB"`
+	}
 	if err := p.Call(ctx, http.MethodPost, "/api/v1/migrate/check", map[string]any{"paths": paths}, &check); err != nil {
+		return plan, err
+	}
+	if err := memoryRoom(host, src.MemoryKiB, check.MemAvailableKiB); err != nil {
 		return plan, err
 	}
 	copyDisks, err := disksToCopy(host, src.Disks, check.Paths)
@@ -236,6 +242,17 @@ func planMigration(ctx context.Context, p *cluster.Peer, m Migrator, src virt.Mi
 		plan.flags |= libvirt.MigrateNonSharedDisk
 	}
 	return plan, nil
+}
+
+// memoryRoom refuses a live migration to a host that has less memory available than the
+// machine has: the host would swap or kill a process to make room. 0 means unknown (an
+// older member that does not say).
+func memoryRoom(host string, needKiB, availKiB uint64) error {
+	if needKiB == 0 || availKiB == 0 || needKiB <= availKiB {
+		return nil
+	}
+	return fmt.Errorf("%s has %d MiB of memory available; this machine needs %d MiB. Free memory there or pick another host",
+		host, availKiB>>10, needKiB>>10)
 }
 
 // checkSameCPU refuses to send a machine that sees the host's exact CPU to a host with a

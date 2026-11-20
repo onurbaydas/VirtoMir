@@ -697,6 +697,27 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 		}
 	}
 
+	// Backups are qcow2 files VirtoMir wrote: standalone, or for an incremental backup a
+	// chain inside the machine's backup folder; anything else is refused. All are read
+	// first so a pool without room is refused before anything is written.
+	chains := make([][]imageInfo, len(b.Disks))
+	for i, bd := range b.Disks {
+		chain, err := checkedImage(ctx, filepath.Join(p, bd.File), "qcow2", b.Incremental)
+		if err == nil {
+			err = chainInside(filepath.Dir(p), chain)
+		}
+		if err != nil {
+			return "", fmt.Errorf("restore %s: %w", bd.Target, err)
+		}
+		chains[i] = chain
+	}
+	if _, _, _, avail, err := l.StoragePoolGetInfo(sp); err == nil {
+		if need := restoreNeed(chains, !fileTarget); need > avail {
+			return "", refusedf("Pool %s has %s free; restoring this backup needs about %s. Free some space or pick another pool.",
+				pool, humanBytes(avail), humanBytes(need))
+		}
+	}
+
 	prepareClone(&x, name)
 	var written []string             // files this restore created
 	var volumes []libvirt.StorageVol // block volumes this restore created
@@ -719,17 +740,8 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 	}
 	for i, bd := range b.Disks {
 		report(fmt.Sprintf("Restoring disk %s (%d of %d)…", bd.Target, i+1, len(b.Disks)))
-		// Backups are qcow2 files VirtoMir wrote: standalone, or for an incremental backup a
-		// chain inside the machine's backup folder; anything else is refused.
 		src := filepath.Join(p, bd.File)
-		chain, err := checkedImage(ctx, src, "qcow2", b.Incremental)
-		if err == nil {
-			err = chainInside(filepath.Dir(p), chain)
-		}
-		if err != nil {
-			rollback()
-			return "", fmt.Errorf("restore %s: %w", bd.Target, err)
-		}
+		chain := chains[i]
 		disk := findDisk(&x, bd.Target)
 		if fileTarget {
 			dst := filepath.Join(px.Target.Path, fmt.Sprintf("%s-%s.qcow2", name, bd.Target))
@@ -795,6 +807,26 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 	c.log.Info("backup restored", "backup", id, "as", name, "pool", pool)
 	return formatUUID(nd.UUID), nil
 }
+
+// restoreNeed estimates the bytes a restore writes into the pool: a block volume (LVM, ZFS)
+// takes the disk's whole size; a qcow2 file at most what its backup chain holds.
+func restoreNeed(chains [][]imageInfo, block bool) uint64 {
+	var need uint64
+	for _, chain := range chains {
+		if len(chain) == 0 {
+			continue
+		}
+		if block {
+			need += chain[0].VirtualSize
+			continue
+		}
+		for _, img := range chain {
+			need += img.ActualSize
+		}
+	}
+	return need
+}
+
 func driverCache(d *libvirtxml.DomainDiskDriver) string {
 	if d == nil {
 		return ""

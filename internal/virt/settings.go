@@ -474,6 +474,20 @@ func previewSettings(x *libvirtxml.Domain, s Settings) (Preview, error) {
 
 // SaveSettings writes the settings to the definition. On a running machine, active vCPUs
 // and the balloon target are also applied live when possible.
+// settingsFit refuses raising memory or active vCPUs above what the host has. A value that
+// is not changed is never refused: a machine moved here from a larger host stays editable.
+func settingsFit(old SettingsView, s Settings, hostKiB uint64, hostCPUs int32) error {
+	if s.MemoryMiB != old.MemoryMiB {
+		if err := memoryFits(s.MemoryMiB, hostKiB); err != nil {
+			return err
+		}
+	}
+	if s.VCPUs != old.VCPUs {
+		return cpusFit(s.VCPUs, hostCPUs)
+	}
+	return nil
+}
+
 func (c *Client) SaveSettings(uuid string, s Settings) (SaveResult, error) {
 	res := SaveResult{AppliedLive: []string{}, LiveErrors: []string{}}
 	l, d, err := c.lookup(uuid)
@@ -487,6 +501,11 @@ func (c *Client) SaveSettings(uuid string, s Settings) (SaveResult, error) {
 	old := settingsFromXML(x)
 	if err := applySettings(x, s); err != nil {
 		return res, err
+	}
+	if _, hostKiB, hostCPUs, _, _, _, _, _, err := l.NodeGetInfo(); err == nil {
+		if err := settingsFit(old, s, hostKiB, hostCPUs); err != nil {
+			return res, err
+		}
 	}
 	doc, err := x.Marshal()
 	if err != nil {

@@ -233,6 +233,16 @@ func (c *Client) AttachInterface(uuid string, spec NICSpec) error {
 	if err != nil {
 		return err
 	}
+	// The machine would not start again on an adapter whose network or bridge is not here.
+	switch {
+	case spec.IfaceID != "":
+	case spec.Bridge != "" && !hostIfExists(spec.Bridge):
+		return invalidf("This host has no bridge %s: the machine would not start with it. Pick one of its bridges or networks.", spec.Bridge)
+	case spec.Network != "":
+		if _, err := l.NetworkLookupByName(spec.Network); err != nil {
+			return invalidf("This host has no virtual network %s. Pick one of its networks.", spec.Network)
+		}
+	}
 	flags, _, err := c.deviceFlags(l, d)
 	if err != nil {
 		return err

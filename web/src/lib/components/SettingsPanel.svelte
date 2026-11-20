@@ -87,6 +87,7 @@
   $effect(() => () => ondirty?.(false))
   let hostThreads = $derived(live.host?.cpus ?? 0)
   let hostMemMiB = $derived(Math.floor((live.host?.memoryKiB ?? 0) / 1024))
+  let hostCPUs = $derived(live.host?.cpus ?? 0)
 
   // Topology follows the vCPU count unless the user shapes it: 1 socket × N cores × 1 thread.
   function setMaxVcpus(n: number) {
@@ -109,6 +110,11 @@
     if (form.cpuMode === 'custom' && !form.cpuModel?.trim()) p.push( t('Name the CPU model for custom mode.'))
     if (form.currentMemoryMiB > form.memoryMiB) p.push( t('Current memory cannot be larger than the assigned memory.'))
     if (form.memoryMiB < 64) p.push( t('Memory must be at least 64 MiB.'))
+    // As the daemon: only a changed value is held against the host (a machine moved here from a larger one stays editable).
+    if (hostMemMiB && form.memoryMiB > hostMemMiB && form.memoryMiB !== view?.memoryMiB)
+      p.push(t('The host has {total} of memory; give the machine at most that much.', { total: formatKiB(hostMemMiB * 1024) }))
+    if (hostCPUs && form.vcpus > hostCPUs && form.vcpus !== view?.vcpus)
+      p.push(t('The host has {n} CPU threads; give the machine at most that many active vCPUs.', { n: hostCPUs }))
     if (form.firmware === 'bios' && form.secureBoot) p.push( t('Secure Boot needs UEFI.'))
     const bad = form.pinning.findIndex(badSet)
     if (bad >= 0) p.push(t('vCPU {bad}: use host CPU numbers and ranges like 2, 4-5 or 0,2.', { bad: bad }))

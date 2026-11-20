@@ -295,6 +295,7 @@
       ciKeys: keys,
       containersAvailable: ctAvailable,
       hostMemGiB: (live.host?.memoryKiB ?? 0) / (1 << 20),
+      hostCPUs: live.host?.cpus ?? 0,
     }),
   )
   let canCreate = $derived(!blocker)
