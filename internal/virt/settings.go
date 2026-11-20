@@ -524,14 +524,24 @@ func (c *Client) SaveSettings(uuid string, s Settings) (SaveResult, error) {
 	if !isOn(sum.State) {
 		return res, nil
 	}
-	if s.VCPUs != old.VCPUs {
+	// Above the running machine's maximum nothing can be applied live: that waits for the
+	// next start (AppliesOnNextBoot), not an error. The live maximum can differ from the
+	// saved definition (an earlier save that raised it), so libvirt is asked.
+	liveMaxVCPUs, liveMaxMemKiB := uint(old.MaxVCPUs), old.MemoryMiB<<10
+	if n, err := l.DomainGetVcpusFlags(d, uint32(libvirt.DomainVCPULive|libvirt.DomainVCPUMaximum)); err == nil {
+		liveMaxVCPUs = uint(n)
+	}
+	if m, err := l.DomainGetMaxMemory(d); err == nil {
+		liveMaxMemKiB = m
+	}
+	if s.VCPUs != old.VCPUs && s.VCPUs <= liveMaxVCPUs {
 		if err := l.DomainSetVcpusFlags(d, uint32(s.VCPUs), uint32(libvirt.DomainVCPULive)); err != nil {
 			res.LiveErrors = append(res.LiveErrors, fmt.Sprintf("vCPUs: %v", classify(err)))
 		} else {
 			res.AppliedLive = append(res.AppliedLive, "vCPUs")
 		}
 	}
-	if s.CurrentMemoryMiB != old.CurrentMemoryMiB {
+	if s.CurrentMemoryMiB != old.CurrentMemoryMiB && s.CurrentMemoryMiB<<10 <= liveMaxMemKiB {
 		if err := l.DomainSetMemoryFlags(d, s.CurrentMemoryMiB<<10, uint32(libvirt.DomainMemLive)); err != nil {
 			res.LiveErrors = append(res.LiveErrors, fmt.Sprintf("memory: %v", classify(err)))
 		} else {
