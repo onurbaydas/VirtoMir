@@ -711,6 +711,8 @@ func (c *Client) RestoreBackup(ctx context.Context, dir BackupDir, id, name, poo
 		}
 		chains[i] = chain
 	}
+	// libvirt keeps a pool's free space from its last refresh, which can be long stale.
+	_ = l.StoragePoolRefresh(sp, 0)
 	if _, _, _, avail, err := l.StoragePoolGetInfo(sp); err == nil {
 		if need := restoreNeed(chains, !fileTarget); need > avail {
 			return "", refusedf("Pool %s has %s free; restoring this backup needs about %s. Free some space or pick another pool.",
