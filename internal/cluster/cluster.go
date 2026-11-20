@@ -164,6 +164,15 @@ func (s *Store) Invite() string {
 	return secret
 }
 
+// InviteValid reports whether secret is a live invite, without using it up: a join is
+// checked against it before this node reaches out to the joining one.
+func (s *Store) InviteValid(secret string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	exp, ok := s.invites[secret]
+	return ok && !s.now().After(exp)
+}
+
 // Admit uses up an invite secret and adds n. selfAddress is how n reached this node, which
 // becomes this node's address if it had none yet (first join of a standalone host).
 func (s *Store) Admit(secret string, n Node, selfAddress string) ([]Node, int, error) {

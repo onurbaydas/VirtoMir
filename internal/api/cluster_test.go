@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -536,5 +537,22 @@ func TestSyncMembersCatchesUpPlacement(t *testing.T) {
 	}
 	if b.placement.Shared().Version != a.placement.Shared().Version {
 		t.Error("versions differ after sync")
+	}
+}
+
+// An unauthenticated peer join with a wrong secret is refused before this host connects
+// anywhere: otherwise anyone could make it open connections to addresses of their choice.
+func TestPeerJoinChecksTheSecretFirst(t *testing.T) {
+	a := newTestNode(t, "alpha", []virt.Domain{})
+	var hits atomic.Int32
+	bait := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits.Add(1) }))
+	defer bait.Close()
+	anon := &browser{t: t, base: a.url, c: &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}}
+	body := `{"secret":"00000000000000000000000000000000","node":{"id":"x1","name":"evil","fingerprint":"ab","keyHash":"cd","address":"` + bait.URL + `"}}`
+	if resp, _ := anon.req("POST", "/api/v1/cluster/peer/join", body); resp.StatusCode != http.StatusForbidden {
+		t.Errorf("wrong secret: %d, want 403", resp.StatusCode)
+	}
+	if n := hits.Load(); n != 0 {
+		t.Errorf("the host connected to the given address %d times before checking the secret", n)
 	}
 }

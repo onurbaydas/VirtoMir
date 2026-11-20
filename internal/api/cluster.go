@@ -327,6 +327,11 @@ func (s *Server) peerJoin(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "incomplete node description"})
 		return
 	}
+	// The secret first: without it nobody may make this host connect anywhere.
+	if !s.cluster.InviteValid(b.Secret) {
+		s.writeJSON(w, http.StatusForbidden, map[string]string{"error": "the join code is unknown or expired; create a new one"})
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	h, err := s.peer(n).Hello(ctx)
