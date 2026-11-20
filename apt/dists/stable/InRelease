@@ -4,35 +4,35 @@ Hash: SHA512
 Architectures: amd64 arm64
 Codename: stable
 Components: main
-Date: Thu, 19 Nov 2026 19:55:46 +0000
+Date: Fri, 20 Nov 2026 18:32:53 +0000
 Description: VirtoMir, a detailed control deck for KVM/QEMU/libvirt
 Label: VirtoMir
 Origin: VirtoMir
 Suite: stable
 MD5Sum:
- 528b5b31304dd9b976bc188e585434b9             7236 main/binary-amd64/Packages
- 24eac714360be5cd654f4541cda26aad             1813 main/binary-amd64/Packages.gz
- eb195fdd123d47d44d001d2add9ece0d             7236 main/binary-arm64/Packages
- def14cb55bcc6b5fb63ddb96c51c262f             1815 main/binary-arm64/Packages.gz
+ 4cff13a34094725969882d0daac75989             7253 main/binary-amd64/Packages
+ 93214efbcb158765c8c585758d115dcd             1811 main/binary-amd64/Packages.gz
+ e0223197f37ec0ed2ace39c90f86ed21             7253 main/binary-arm64/Packages
+ 3be15277318e956db3e427d2900dce07             1809 main/binary-arm64/Packages.gz
 SHA1:
- f983542ae7bcaef12c8d790e2fcc0b2803c09042             7236 main/binary-amd64/Packages
- ae05b2c267e611ecb7b6603472a66f8fa11e9187             1813 main/binary-amd64/Packages.gz
- 02216e41a462213555e44a4456b9c8a8164319a2             7236 main/binary-arm64/Packages
- 93c2d87b053e72d54dc8f4a7c5189846f8c673f7             1815 main/binary-arm64/Packages.gz
+ ff385fabaad5d6e5b2205b9f370442fc5325bf9a             7253 main/binary-amd64/Packages
+ fa57cfb33d54f8a2d8cb0aabca2de2cbff4c8e40             1811 main/binary-amd64/Packages.gz
+ f88cbe69b611ba9072024d3c6d4b561f013901b4             7253 main/binary-arm64/Packages
+ 7f8b8a621d8796981878e5ce92e0b011535d0d84             1809 main/binary-arm64/Packages.gz
 SHA256:
- 05141ef955d91f7dc32134d23e85f9f686487e1cfb38ca409f745a36a3411531             7236 main/binary-amd64/Packages
- a43fd7cb06ed088e56180e154e4dc15fd67c877d6fb4e3e52a3dd15582cba0c9             1813 main/binary-amd64/Packages.gz
- 510825ca57a6171712a2cd2d8e563a37d92e1585f9b5817ae156111c54acb85d             7236 main/binary-arm64/Packages
- 0e98b62778b3a300e06d804d7feac8315dc73d2f98ed1f4e23fc1aa784c5208c             1815 main/binary-arm64/Packages.gz
+ da89446347b12638a5ea37344673939851240c68903017cbf7ab2469d0fe007e             7253 main/binary-amd64/Packages
+ d6e9fe71729653968b0158a96c700554809172c4527dd71066f0194024e7be49             1811 main/binary-amd64/Packages.gz
+ 1aaa865534a082020d45ee3651247a19fa47f87479a518d9974951cf487ae02c             7253 main/binary-arm64/Packages
+ ea1cbfd4e609bce9df03ceca97700b708f34c84a5aae95bcce2cc431a61522a1             1809 main/binary-arm64/Packages.gz
 SHA512:
- daf53ac4d0bef0761fad833a077944f3ef42e110a4697740b743b2dca148c643ea3da09efe6c7f2d9b4a582ebdf1bf1cc64150896ca7ddffd20409fec8a80fe8             7236 main/binary-amd64/Packages
- 766a887f152321f46157841c4d2e848fbdd400314f9b667ec3495e75b9b13b927ee9bb59d4b44e7d85a932e2fb9eba4341d29fab21c4a70dbc8a80ec6faeeef0             1813 main/binary-amd64/Packages.gz
- 3e1dd38c15a57aae83d99305ada9fb8db39118506c31062c18a2ee8b176ed1aa6fdd605524ee25b4c1b9b571272dcee26f621b5a999c2f1b59d1ba33a6309706             7236 main/binary-arm64/Packages
- 78b65a36974ed98c40c0622b3efa14ce8758ccee4bb61479d44502342e04d3ca6d31940eb2e62a8c7d6c9a50458e6fe620f296a6c30c50d00fd70f3679c8d467             1815 main/binary-arm64/Packages.gz
+ 34bbb58571eb830024937c805b88fee1e18bdbbeb07a88feb48f6bdbd765208f53597a24d15172f9de974785ee98488798b89f027a918625445075c4885f30d6             7253 main/binary-amd64/Packages
+ 45746e2ba4a8713be1eecec59baa6603c23ed2825c3306cbfb091da76780a98c30fa95c4ed8445148c6592dca6b9c5845f282020cb200ee0ffcdeb04f4e89746             1811 main/binary-amd64/Packages.gz
+ 9664e172c8e6c52c1e3a0bcdd1491226217e16d634ec958bc39804b531316ba888bfa1037a0832e7931ac8d30d205a6ed72a9cedb646c8b7128ce952d9fc0a56             7253 main/binary-arm64/Packages
+ c97396e114a9322f01ab6a8fb96951ed1ed7d34bf01a2c6bbadfe03711a71d87046e978e14477f38a7b0bb50b39be57164feb3e44a024092c231a4768d3c8cca             1809 main/binary-arm64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYKAB0WIQT1SwcWokCyLpR7jcbkEHU7/jOp8AUCav9UQgAKCRDkEHU7/jOp
-8G4PAQDi4Oi+jhesHxhXnsi+6LmeFxx8bV7yz32TFDyWn6Z+lgD/QH21NKSJ4jFa
-0ONjZTPI7GscUSsweNlTXTuF+4PeQAs=
-=aZ29
+iHUEARYKAB0WIQT1SwcWokCyLpR7jcbkEHU7/jOp8AUCawCSVQAKCRDkEHU7/jOp
+8LMtAP99wX8VL1knZ6rR1f+TA6N3maVmAW4jP8y1p6lLGDtXwAD/SeIGZcVK9RDk
+f5oA/rj9N5YiT2k2CsSUhoU0og5uWAk=
+=sR41
 -----END PGP SIGNATURE-----
