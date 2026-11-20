@@ -284,6 +284,34 @@ func (s *Setup) EnableIOMMU(ctx context.Context) (IOMMUResult, error) {
 
 	case fileExists(s.path("/etc/default/grub")): // Debian, Ubuntu
 		res.Method = "grub"
+		if res.Params = missingParams(string(running), want); len(res.Params) == 0 {
+			return res, nil
+		}
+		// Debian and Ubuntu read /etc/default/grub.d/*.cfg after /etc/default/grub, and cloud
+		// images set GRUB_CMDLINE_LINUX_DEFAULT there: an edit of /etc/default/grub alone is
+		// silently overridden. A file of VirtoMir's own, read last, adds to whatever is set.
+		if fi, err := os.Stat(s.path("/etc/default/grub.d")); err == nil && fi.IsDir() {
+			p := s.path(grubDropIn)
+			old, readErr := os.ReadFile(p)
+			if readErr == nil && len(missingParams(dropInParams(string(old)), res.Params)) == 0 {
+				return res, nil // written before, waiting for the reboot
+			}
+			body := "# Written by VirtoMir: turns on the IOMMU for PCI passthrough.\n" +
+				"# Delete this file and run update-grub (or grub-mkconfig) to undo it.\n" +
+				`GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT ` + strings.Join(res.Params, " ") + "\"\n"
+			if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+				return res, err
+			}
+			err := s.applyGrub(ctx, res.Params)
+			if err != nil {
+				if readErr == nil {
+					_ = os.WriteFile(p, old, 0o644)
+				} else {
+					_ = os.Remove(p)
+				}
+			}
+			return res, err
+		}
 		p := s.path("/etc/default/grub")
 		b, err := os.ReadFile(p)
 		if err != nil {
@@ -310,23 +338,64 @@ func (s *Setup) EnableIOMMU(ctx context.Context) (IOMMUResult, error) {
 		if err := os.WriteFile(p, out, 0o644); err != nil {
 			return res, err
 		}
-		switch {
-		case s.has("update-grub"):
-			_, err = s.Run.Run(ctx, "update-grub")
-		case s.has("grub-mkconfig"):
-			_, err = s.Run.Run(ctx, "grub-mkconfig", "-o", "/boot/grub/grub.cfg")
-		case s.has("grub2-mkconfig"):
-			_, err = s.Run.Run(ctx, "grub2-mkconfig", "-o", "/boot/grub2/grub.cfg")
-		default:
-			err = fmt.Errorf("%w: /etc/default/grub was changed, but no grub-mkconfig was found to apply it", ErrUnsupported)
-		}
-		if err != nil {
+		if err := s.applyGrub(ctx, res.Params); err != nil {
 			_ = os.WriteFile(p, b, 0o644) // put the old file back: nothing half-done
 			res.Backup = ""
+			return res, err
 		}
-		return res, err
+		return res, nil
 	}
 	return res, fmt.Errorf("%w: VirtoMir does not know this host's boot loader; add %s to the kernel command line and reboot", ErrUnsupported, strings.Join(want, " "))
+}
+
+// grubDropIn is VirtoMir's own GRUB settings file on Debian and Ubuntu (read last).
+const grubDropIn = "/etc/default/grub.d/99-virtomir-iommu.cfg"
+
+// dropInParams are the parameters VirtoMir's drop-in adds.
+func dropInParams(body string) string {
+	m := grubDefault.FindStringSubmatch(body)
+	if m == nil {
+		return ""
+	}
+	return strings.TrimPrefix(m[2], "$GRUB_CMDLINE_LINUX_DEFAULT")
+}
+
+// applyGrub regenerates GRUB's configuration and checks that its kernel lines now carry
+// params: another settings file can override the change, and a reboot would then bring
+// no IOMMU while VirtoMir said it would.
+func (s *Setup) applyGrub(ctx context.Context, params []string) error {
+	var cfg string
+	var err error
+	switch {
+	case s.has("update-grub"):
+		cfg = "/boot/grub/grub.cfg"
+		_, err = s.Run.Run(ctx, "update-grub")
+	case s.has("grub-mkconfig"):
+		cfg = "/boot/grub/grub.cfg"
+		_, err = s.Run.Run(ctx, "grub-mkconfig", "-o", cfg)
+	case s.has("grub2-mkconfig"):
+		cfg = "/boot/grub2/grub.cfg"
+		_, err = s.Run.Run(ctx, "grub2-mkconfig", "-o", cfg)
+	default:
+		return fmt.Errorf("%w: the GRUB settings were changed, but no grub-mkconfig was found to apply them", ErrUnsupported)
+	}
+	if err != nil {
+		return err
+	}
+	b, err := os.ReadFile(s.path(cfg))
+	if err != nil {
+		return nil // not where expected (EFI-only layouts): nothing to check against
+	}
+	for _, l := range strings.Split(string(b), "\n") {
+		f := strings.Fields(l)
+		if len(f) > 1 && (f[0] == "linux" || f[0] == "linuxefi") {
+			if len(missingParams(l, params)) > 0 {
+				return fmt.Errorf("%w: GRUB's configuration (%s) still starts the kernel without %s: another settings file overrides it. Add them to GRUB_CMDLINE_LINUX_DEFAULT where it is set and run update-grub", ErrUnsupported, cfg, strings.Join(params, " "))
+			}
+			return nil
+		}
+	}
+	return nil
 }
 
 // grubbyArgs is the args="…" line of grubby --info.

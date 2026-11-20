@@ -166,6 +166,55 @@ func TestEnableIOMMUPutsGrubBackWhenItCannotApply(t *testing.T) {
 	}
 }
 
+// Ubuntu and Debian cloud images set GRUB_CMDLINE_LINUX_DEFAULT in grub.d, which is read
+// after /etc/default/grub: VirtoMir adds its own file there, read last (found live on
+// Ubuntu 24.04, where an edit of /etc/default/grub had no effect after the reboot).
+func TestEnableIOMMUWithGrubDropIn(t *testing.T) {
+	s, f := newSetup(t, "update-grub")
+	write(t, s, "/proc/cpuinfo", "vendor_id : GenuineIntel\n")
+	write(t, s, "/proc/cmdline", "BOOT_IMAGE=/vmlinuz root=LABEL=cloudimg-rootfs ro console=tty1 console=ttyS0\n")
+	orig := "GRUB_CMDLINE_LINUX_DEFAULT=\"quiet splash\"\n"
+	write(t, s, "/etc/default/grub", orig)
+	write(t, s, "/etc/default/grub.d/50-cloudimg-settings.cfg", "GRUB_CMDLINE_LINUX_DEFAULT=\"console=tty1 console=ttyS0\"\n")
+	res, err := s.EnableIOMMU(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	drop := read(t, s, grubDropIn)
+	if !strings.Contains(drop, `GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT intel_iommu=on iommu=pt"`) {
+		t.Errorf("drop-in = %q", drop)
+	}
+	if read(t, s, "/etc/default/grub") != orig || !res.RebootNeeded || !slices.Contains(f.calls, "update-grub") {
+		t.Errorf("result %+v, calls %q, /etc/default/grub changed", res, f.calls)
+	}
+	// Written before, waiting for the reboot: nothing again.
+	f.calls = nil
+	if _, err := s.EnableIOMMU(context.Background()); err != nil || len(f.calls) != 0 {
+		t.Errorf("second run: %v %q", err, f.calls)
+	}
+}
+
+// When the generated grub.cfg still lacks the parameters, the change is taken back and the
+// result is an error, never "reboot and it is on".
+func TestEnableIOMMUChecksTheGeneratedGrubConfig(t *testing.T) {
+	s, _ := newSetup(t, "update-grub")
+	write(t, s, "/proc/cmdline", "ro quiet\n")
+	orig := "GRUB_CMDLINE_LINUX_DEFAULT=\"quiet\"\n"
+	write(t, s, "/etc/default/grub", orig)
+	write(t, s, "/boot/grub/grub.cfg", "menuentry 'Linux' {\n\tlinux /vmlinuz root=/dev/sda1 ro quiet\n}\n")
+	if _, err := s.EnableIOMMU(context.Background()); err == nil || !strings.Contains(err.Error(), "overrides") {
+		t.Fatalf("want an override error, got %v", err)
+	}
+	if got := read(t, s, "/etc/default/grub"); got != orig {
+		t.Errorf("grub not restored: %q", got)
+	}
+	// The same with the parameters in place succeeds.
+	write(t, s, "/boot/grub/grub.cfg", "menuentry 'Linux' {\n\tlinux /vmlinuz root=/dev/sda1 ro quiet intel_iommu=on iommu=pt\n}\n")
+	if _, err := s.EnableIOMMU(context.Background()); err != nil {
+		t.Errorf("with the parameters in grub.cfg: %v", err)
+	}
+}
+
 func TestEnableIOMMUWithGrubby(t *testing.T) {
 	s, f := newSetup(t, "grubby")
 	write(t, s, "/proc/cpuinfo", "vendor_id : GenuineIntel\n")
