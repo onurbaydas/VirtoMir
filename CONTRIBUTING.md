@@ -84,6 +84,12 @@ sorted). To add a language:
 
 Untranslated keys fall back to English, so a partial translation is still useful.
 
+The README's front page is translated too, in [`docs/i18n`](docs/i18n) (one `README.<code>.md` per
+language, linked from the language bar at the top of every version). To add a language, copy one of
+them, translate the text and keep the structure, links and image paths as they are; then add it to
+the language bar in `README.md` and in every file in `docs/i18n`. Corrections by native speakers are
+very welcome: the current translations were written with an AI and may read stiffly.
+
 ## License and CLA
 
 VirtoMir is licensed under the [GNU AGPL v3.0 or later](LICENSE), and is also offered under

@@ -44,6 +44,7 @@ internal/virt/       ← libvirt gateway: connection, reconnect, libvirt → Vir
                        move.go / migrate.go: cold move + live migration, cpucompat.go: CPU baseline, ova.go: OVA import,
                        tuning.go: pinning/hugepages/NUMA, hostdev.go: PCI/USB passthrough + IOMMU safety checks,
                        extradevs.go: watchdog/TPM/RNG/virtiofs/mdev/clipboard/video + QEMU args, mdev.go: host vGPU slices (ADR-0025)
+                       selinux.go: pool/backup folders labelled virt_image_t on SELinux hosts (semanage + restorecon, ADR-0082)
 internal/live/       ← 1 s sampling hub + 60 s backlog, per-VM bulk stats, host /proc I/O (SSE)
 internal/api/        ← HTTP/JSON API (/api/v1), sign-in guard, SSE stream, serves the embedded UI
 internal/auth/       ← PAM (build tag `pam`), sessions, lockout, self-signed TLS (ADR-0010), roles + API tokens (ADR-0015),
@@ -55,7 +56,8 @@ internal/quota/      ← per-user/group quotas, machine ownership, operator self
 internal/activity/   ← who did what: -state-dir/activity.jsonl (ADR-0015)
 internal/alerts/     ← alert rules on live snapshots, webhook/e-mail channels (ADR-0017)
 internal/hostsetup/  ← host chores done for the admin: feature packages (apt/dnf), IOMMU on the kernel command line,
-                       softdog for HA, root SSH key + authorized_keys for ZFS replication (password sign-in for non-members: sshcopy.go) (API: internal/api/hostsetup.go)
+                       softdog for HA, root SSH key + authorized_keys for ZFS replication (password sign-in for non-members: sshcopy.go) (API: internal/api/hostsetup.go);
+                       GRUB hosts with /etc/default/grub.d get 99-virtomir-iommu.cfg, and every GRUB change is checked in grub.cfg (ADR-0082)
 internal/schedule/   ← automatic snapshots/backups with retention (ADR-0018)
 internal/cluster/    ← multi-host (ADR-0020): member list, join codes, pinned peer HTTPS + peer keys;
                        forwarding of /api/v1/hosts/<id>/… lives in internal/api/cluster.go
@@ -64,7 +66,11 @@ internal/history/    ← metric history rings, saved to -state-dir/history.gob (
 packaging/           ← /etc/pam.d/virtomir, systemd unit
 .github/workflows/   ← CI (tests, race, PAM build, shellcheck) and releases on v* tags
 scripts/install.sh   ← installer shipped in release tarballs; build-release.sh builds them
-docs/screenshots/    ← README images (taken from the mock UI)
+docs/features.md     ← the full feature list (the README keeps the short version and links here)
+docs/i18n/           ← README.<lang>.md: the README front page in 15 languages; a change to the front page's text
+                       should reach them too (or say in the PR that they lag), same structure and image paths
+docs/screenshots/    ← README images, taken from the demo UI (cd web && npm run dev:demo) at 1440×900, demo strip
+                       and toasts hidden; tour.gif is a crossfade of eight of them (ffmpeg xfade)
 web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embedded into virtomird
   src/app.css        ← design tokens (colors, radii, motion) — use these, never hard-coded colors
   src/lib/i18n.svelte.ts, src/lib/locales/tr.ts ← UI language (ADR-0047): write every UI string as t('English text'),
