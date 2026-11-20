@@ -32,12 +32,24 @@ KVM / QEMU / libvirt のためのモダンな Web コントロールパネル。
 </p>
 
 <p align="center">
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=social" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=social" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=social" alt="Watch"></a>
+</p>
+
+<p align="center">
   <a href="https://onurbaydas.github.io/VirtoMir/demo/"><b>▶ ライブデモ</b></a> ·
   <a href="#install">インストール</a> ·
   <a href="../try-in-a-vm.md">VM で試す</a> ·
   <a href="../features.md">全機能</a> ·
+  <a href="#contribute">コントリビュート</a> ·
   <a href="https://github.com/onurbaydas/VirtoMir/discussions">ディスカッション</a>
 </p>
+
+<table align="center">
+<tr><td align="center"><h3>1</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>90+</h3></td><td align="center"><h3>16</h3></td><td align="center"><h3>1 s</h3></td></tr>
+<tr><td align="center"><sub>バイナリ（UI 内蔵）</sub></td><td align="center"><sub>データベース</sub></td><td align="center"><sub>VM 内エージェント</sub></td><td align="center"><sub>機能</sub></td><td align="center"><sub>README の言語</sub></td><td align="center"><sub>ライブグラフ</sub></td></tr>
+</table>
 
 > この翻訳はコミュニティが管理しており、[英語版 README](../../README.md) より古い場合があります。
 
@@ -52,14 +64,17 @@ Web UI を内蔵した単一のバイナリです。専用ディストリビュ�
 
 > **状況: 1.2。** Ubuntu 26.04 と Fedora 44 で、単一ホストと小規模クラスタでテスト済みです。高可用性はまだ実機の BMC で試しておらず、VMware からのインポートは実験的です。1.0 以降は新機能を追加せず、単一ホストでの日常的な使い勝手を固めることに注力しています。本番で使う前に必ず試し、問題があれば [#1](https://github.com/onurbaydas/VirtoMir/issues/1) で教えてください。
 
+> [!TIP]
+> **この方向性が気に入ったら ⭐ を。** VirtoMir は一人で開発しています。スターがあると他の人に見つけてもらえ、プロジェクトが続きます。新しいバージョンの通知は **Watch → Custom → Releases** から。
+
 ## 30 秒で試す
 
 | | |
 |---|---|
 | **見るだけ** | [オンラインデモ](https://onurbaydas.github.io/VirtoMir/demo/) を触ってみてください。架空のホストで、インストールは不要です。 |
 | **使い捨てホスト** | コマンド一つで VirtoMir 入りのテスト VM が手に入ります: [サーバーに触れずに VirtoMir を試す](../try-in-a-vm.md)。 |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.0_amd64.deb` — [最新リリース](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.0-1.x86_64.rpm` — [最新リリース](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [最新リリース](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [最新リリース](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 パッケージは libvirt と QEMU/KVM が無ければ導入し、ポート 8420 を開けてサービスを起動します。ほかに入力するものはありません。
 
@@ -160,6 +175,7 @@ sudo dnf install virtomir
 
 セキュリティの問題は非公開で報告してください。[SECURITY.md](../../SECURITY.md) を参照。
 
+<a id="contribute"></a>
 ## 協力者募集
 
 VirtoMir は一人の開発者が AI コーディングエージェントと一緒に作っています。だからこそ速く成長し、だからこそ一般的な個人プロジェクトより多くの目が必要です。
@@ -175,6 +191,13 @@ VirtoMir は一人の開発者が AI コーディングエージェントと一�
 ## 謝辞
 
 <p><img src="../thanks/mega-bilgisayar.png" alt="Mega Bilgisayar" width="170"><br>Mega Bilgisayar に感謝します。</p>
+
+<p align="center">
+  <b>VirtoMir が役に立ったら、スターで他の人にも届けてください。</b><br><br>
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=e8b931&label=Star" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=3b5bdb&label=Fork" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=2f9e44&label=Watch" alt="Watch"></a>
+</p>
 
 ## ライセンス
 

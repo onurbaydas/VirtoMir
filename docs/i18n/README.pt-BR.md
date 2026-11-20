@@ -32,12 +32,24 @@ Português ·
 </p>
 
 <p align="center">
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=social" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=social" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=social" alt="Watch"></a>
+</p>
+
+<p align="center">
   <a href="https://onurbaydas.github.io/VirtoMir/demo/"><b>▶ Demo ao vivo</b></a> ·
   <a href="#install">Instalação</a> ·
   <a href="../try-in-a-vm.md">Testar em uma VM</a> ·
   <a href="../features.md">Todos os recursos</a> ·
+  <a href="#contribute">Contribuir</a> ·
   <a href="https://github.com/onurbaydas/VirtoMir/discussions">Discussões</a>
 </p>
+
+<table align="center">
+<tr><td align="center"><h3>1</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>90+</h3></td><td align="center"><h3>16</h3></td><td align="center"><h3>1 s</h3></td></tr>
+<tr><td align="center"><sub>binário, UI embutida</sub></td><td align="center"><sub>bancos de dados</sub></td><td align="center"><sub>agentes nas VMs</sub></td><td align="center"><sub>recursos</sub></td><td align="center"><sub>idiomas do README</sub></td><td align="center"><sub>gráficos ao vivo</sub></td></tr>
+</table>
 
 > Esta tradução é mantida pela comunidade e pode estar atrás do [README em inglês](../../README.md).
 
@@ -52,14 +64,17 @@ Um único binário com a interface web embutida: sem distribuição própria, se
 
 > **Situação: 1.2.** Testado no Ubuntu 26.04 e no Fedora 44, em hosts únicos e pequenos clusters. A alta disponibilidade ainda não foi testada em hardware BMC real, e a importação do VMware é experimental. Desde a 1.0 nenhum recurso novo é adicionado: o trabalho vai para tornar o uso diário em um host sólido. Teste antes de confiar a produção a ele e conte o que quebra em [#1](https://github.com/onurbaydas/VirtoMir/issues/1).
 
+> [!TIP]
+> **Gostou do rumo? Deixe uma ⭐.** O VirtoMir é feito por uma pessoa: as estrelas fazem outros o encontrarem e mantêm o projeto vivo. Para saber das novas versões: **Watch → Custom → Releases**.
+
 ## Teste em 30 segundos
 
 | | |
 |---|---|
 | **Só olhar** | Navegue pela [demo online](https://onurbaydas.github.io/VirtoMir/demo/): hosts fictícios, nada para instalar. |
 | **Host descartável** | Um comando cria uma VM de teste com o VirtoMir dentro: [Teste o VirtoMir sem mexer nos seus servidores](../try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.0_amd64.deb` — [versão mais recente](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.0-1.x86_64.rpm` — [versão mais recente](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [versão mais recente](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [versão mais recente](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 O pacote instala o libvirt e o QEMU/KVM se faltarem, abre a porta 8420 e inicia o serviço. Não sobra mais nada para digitar.
 
@@ -160,6 +175,7 @@ Pacotes, tarball, configuração e compilação a partir do código: [README em 
 
 Relate problemas de segurança em particular, veja [SECURITY.md](../../SECURITY.md).
 
+<a id="contribute"></a>
 ## Procuramos ajuda
 
 O VirtoMir é construído por uma pessoa, junto com agentes de programação com IA. Foi assim que cresceu tão rápido, e é por isso que precisa de mais olhos que um projeto paralelo comum.
@@ -175,6 +191,13 @@ Ideias e perguntas: [Discussões](https://github.com/onurbaydas/VirtoMir/discuss
 ## Agradecimentos
 
 <p><img src="../thanks/mega-bilgisayar.png" alt="Mega Bilgisayar" width="170"><br>Agradecimentos à Mega Bilgisayar.</p>
+
+<p align="center">
+  <b>Se o VirtoMir é útil para você, uma estrela ajuda outras pessoas a encontrá-lo.</b><br><br>
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=e8b931&label=Star" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=3b5bdb&label=Fork" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=2f9e44&label=Watch" alt="Watch"></a>
+</p>
 
 ## Licença
 

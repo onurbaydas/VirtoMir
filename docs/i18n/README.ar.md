@@ -34,12 +34,24 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=social" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=social" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=social" alt="Watch"></a>
+</p>
+
+<p align="center">
   <a href="https://onurbaydas.github.io/VirtoMir/demo/"><b>▶ عرض مباشر</b></a> ·
   <a href="#install">التثبيت</a> ·
   <a href="../try-in-a-vm.md">جرّبه في آلة افتراضية</a> ·
   <a href="../features.md">كل الميزات</a> ·
+  <a href="#contribute">ساهم</a> ·
   <a href="https://github.com/onurbaydas/VirtoMir/discussions">النقاشات</a>
 </p>
+
+<table align="center">
+<tr><td align="center"><h3>1</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>90+</h3></td><td align="center"><h3>16</h3></td><td align="center"><h3>1 s</h3></td></tr>
+<tr><td align="center"><sub>ملف تنفيذي بواجهة مدمجة</sub></td><td align="center"><sub>قواعد بيانات</sub></td><td align="center"><sub>وكلاء داخل أجهزتك</sub></td><td align="center"><sub>ميزة</sub></td><td align="center"><sub>لغة لملف README</sub></td><td align="center"><sub>رسوم حيّة</sub></td></tr>
+</table>
 
 > يحافظ المجتمع على هذه الترجمة، وقد تتأخر عن [ملف README الإنجليزي](../../README.md).
 
@@ -54,14 +66,17 @@
 
 > **الحالة: 1.2.** جُرّب على Ubuntu 26.04 وFedora 44، على مضيفات منفردة وعناقيد صغيرة. لم تُجرَّب الإتاحة العالية بعد على عتاد BMC حقيقي، واستيراد VMware تجريبي. منذ الإصدار 1.0 لا تُضاف ميزات جديدة: يذهب العمل إلى جعل الاستخدام اليومي على مضيف واحد متينًا. جرّبه قبل أن تأتمنه على بيئة الإنتاج، وأخبرنا بما يتعطّل في [#1](https://github.com/onurbaydas/VirtoMir/issues/1).
 
+> [!TIP]
+> **أعجبك الاتجاه؟ امنحه ⭐.** يبني VirtoMir شخص واحد: النجوم هي ما يجعل الآخرين يجدونه، وهي ما يُبقي المشروع حيًّا. لتصلك أخبار الإصدارات الجديدة: **Watch → Custom → Releases**.
+
 ## جرّبه في 30 ثانية
 
 | | |
 |---|---|
 | **مجرد نظرة** | تصفّح [العرض التجريبي على الإنترنت](https://onurbaydas.github.io/VirtoMir/demo/): مضيفات وهمية، لا شيء لتثبيته. |
 | **مضيف مؤقت** | أمر واحد يمنحك آلة افتراضية للاختبار وبداخلها VirtoMir: [جرّب VirtoMir دون لمس خوادمك](../try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.0_amd64.deb` — [أحدث إصدار](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.0-1.x86_64.rpm` — [أحدث إصدار](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [أحدث إصدار](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [أحدث إصدار](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 تثبّت الحزمة libvirt وQEMU/KVM إن لم تكن موجودة، وتفتح المنفذ 8420 وتشغّل الخدمة. لا يبقى شيء لتكتبه.
 
@@ -162,6 +177,7 @@ sudo dnf install virtomir
 
 يُرجى الإبلاغ عن المشكلات الأمنية بشكل خاص، انظر [SECURITY.md](../../SECURITY.md).
 
+<a id="contribute"></a>
 ## نبحث عن مساعدة
 
 يبني VirtoMir شخص واحد، بمساعدة وكلاء برمجة بالذكاء الاصطناعي. لهذا نما بهذه السرعة، ولهذا يحتاج إلى أعين أكثر من أي مشروع جانبي معتاد.
@@ -177,6 +193,13 @@ sudo dnf install virtomir
 ## شكر
 
 <p><img src="../thanks/mega-bilgisayar.png" alt="Mega Bilgisayar" width="170"><br>شكرًا لـ Mega Bilgisayar.</p>
+
+<p align="center">
+  <b>إن كان VirtoMir مفيدًا لك، فنجمة واحدة تساعد الآخرين على إيجاده.</b><br><br>
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=e8b931&label=Star" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=3b5bdb&label=Fork" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=2f9e44&label=Watch" alt="Watch"></a>
+</p>
 
 ## الترخيص
 

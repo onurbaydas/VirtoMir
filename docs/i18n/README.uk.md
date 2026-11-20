@@ -32,12 +32,24 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=social" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=social" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=social" alt="Watch"></a>
+</p>
+
+<p align="center">
   <a href="https://onurbaydas.github.io/VirtoMir/demo/"><b>▶ Живе демо</b></a> ·
   <a href="#install">Встановлення</a> ·
   <a href="../try-in-a-vm.md">Спробувати у ВМ</a> ·
   <a href="../features.md">Усі можливості</a> ·
+  <a href="#contribute">Долучитися</a> ·
   <a href="https://github.com/onurbaydas/VirtoMir/discussions">Обговорення</a>
 </p>
+
+<table align="center">
+<tr><td align="center"><h3>1</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>90+</h3></td><td align="center"><h3>16</h3></td><td align="center"><h3>1 s</h3></td></tr>
+<tr><td align="center"><sub>бінарник із вбудованим UI</sub></td><td align="center"><sub>баз даних</sub></td><td align="center"><sub>агентів у ВМ</sub></td><td align="center"><sub>можливостей</sub></td><td align="center"><sub>мов README</sub></td><td align="center"><sub>живі графіки</sub></td></tr>
+</table>
 
 > Цей переклад підтримує спільнота, і він може відставати від [англійського README](../../README.md).
 
@@ -52,14 +64,17 @@ VirtoMir намагається бути двома речами водноча�
 
 > **Стан: 1.2.** Перевірено на Ubuntu 26.04 і Fedora 44, на окремих хостах і невеликих кластерах. Високу доступність ще не перевіряли на справжньому обладнанні з BMC, імпорт із VMware експериментальний. Від версії 1.0 нові функції не додаються: уся робота йде на надійність щоденного використання на одному хості. Перевірте його, перш ніж довіряти продакшн, і розкажіть у [#1](https://github.com/onurbaydas/VirtoMir/issues/1), що не працює.
 
+> [!TIP]
+> **Подобається напрям? Поставте ⭐.** VirtoMir робить одна людина: за зірками його знаходять інші, і вони підтримують проєкт. Щоб дізнаватися про нові версії: **Watch → Custom → Releases**.
+
 ## Спробуйте за 30 секунд
 
 | | |
 |---|---|
 | **Просто подивитися** | Поклацайте [онлайн-демо](https://onurbaydas.github.io/VirtoMir/demo/): вигадані хости, нічого не треба встановлювати. |
 | **Одноразовий хост** | Одна команда створює тестову ВМ із VirtoMir усередині: [Спробуйте VirtoMir, не чіпаючи своїх серверів](../try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.0_amd64.deb` — [останній реліз](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.0-1.x86_64.rpm` — [останній реліз](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [останній реліз](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [останній реліз](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 Пакет сам довстановить libvirt і QEMU/KVM, якщо їх немає, відкриє порт 8420 і запустить службу. Більше нічого вводити не потрібно.
 
@@ -160,6 +175,7 @@ sudo dnf install virtomir
 
 Про проблеми безпеки повідомляйте приватно, див. [SECURITY.md](../../SECURITY.md).
 
+<a id="contribute"></a>
 ## Потрібна допомога
 
 VirtoMir створює одна людина разом з ІІ-агентами для програмування. Тому він виріс так швидко, і тому йому потрібно більше очей, ніж звичайному хобі-проєкту.
@@ -175,6 +191,13 @@ VirtoMir створює одна людина разом з ІІ-агентам�
 ## Подяки
 
 <p><img src="../thanks/mega-bilgisayar.png" alt="Mega Bilgisayar" width="170"><br>Дякуємо Mega Bilgisayar.</p>
+
+<p align="center">
+  <b>Якщо VirtoMir вам корисний, зірка допоможе іншим його знайти.</b><br><br>
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=e8b931&label=Star" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=3b5bdb&label=Fork" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=2f9e44&label=Watch" alt="Watch"></a>
+</p>
 
 ## Ліцензія
 

@@ -32,12 +32,24 @@ Deutsch ·
 </p>
 
 <p align="center">
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=social" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=social" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=social" alt="Watch"></a>
+</p>
+
+<p align="center">
   <a href="https://onurbaydas.github.io/VirtoMir/demo/"><b>▶ Live-Demo</b></a> ·
   <a href="#install">Installation</a> ·
   <a href="../try-in-a-vm.md">In einer VM ausprobieren</a> ·
   <a href="../features.md">Alle Funktionen</a> ·
+  <a href="#contribute">Mitmachen</a> ·
   <a href="https://github.com/onurbaydas/VirtoMir/discussions">Diskussionen</a>
 </p>
+
+<table align="center">
+<tr><td align="center"><h3>1</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>90+</h3></td><td align="center"><h3>16</h3></td><td align="center"><h3>1 s</h3></td></tr>
+<tr><td align="center"><sub>Binary, UI eingebaut</sub></td><td align="center"><sub>Datenbanken</sub></td><td align="center"><sub>Agenten in den VMs</sub></td><td align="center"><sub>Funktionen</sub></td><td align="center"><sub>README-Sprachen</sub></td><td align="center"><sub>Live-Diagramme</sub></td></tr>
+</table>
 
 > Diese Übersetzung wird von der Community gepflegt und kann hinter der [englischen README](../../README.md) zurückliegen.
 
@@ -52,14 +64,17 @@ Ein einziges Binary mit eingebauter Weboberfläche: keine eigene Distribution, k
 
 > **Stand: 1.2.** Getestet auf Ubuntu 26.04 und Fedora 44, auf einzelnen Hosts und kleinen Clustern. Hochverfügbarkeit wurde noch nicht mit echter BMC-Hardware erprobt, der VMware-Import ist experimentell. Seit 1.0 kommen keine neuen Funktionen hinzu: Die Arbeit fließt in einen soliden Alltag auf einem Host. Teste es, bevor du ihm Produktion anvertraust, und berichte in [#1](https://github.com/onurbaydas/VirtoMir/issues/1), was nicht funktioniert.
 
+> [!TIP]
+> **Gefällt dir die Richtung? Gib einen ⭐.** VirtoMir wird von einer Person gebaut: Über Sterne finden andere das Projekt, und sie halten es am Leben. Über neue Versionen informiert dich **Watch → Custom → Releases**.
+
 ## In 30 Sekunden ausprobieren
 
 | | |
 |---|---|
 | **Nur ansehen** | Durch die [Online-Demo](https://onurbaydas.github.io/VirtoMir/demo/) klicken: erfundene Hosts, nichts zu installieren. |
 | **Wegwerf-Host** | Ein Befehl ergibt eine Test-VM mit VirtoMir: [VirtoMir ausprobieren, ohne die eigenen Server anzufassen](../try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.0_amd64.deb` — [neuestes Release](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.0-1.x86_64.rpm` — [neuestes Release](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [neuestes Release](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [neuestes Release](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 Das Paket installiert libvirt und QEMU/KVM, falls sie fehlen, öffnet Port 8420 und startet den Dienst. Sonst ist nichts einzutippen.
 
@@ -160,6 +175,7 @@ Pakete, Tarball, Konfiguration und Bauen aus dem Quellcode: [englische README](.
 
 Sicherheitsprobleme bitte vertraulich melden, siehe [SECURITY.md](../../SECURITY.md).
 
+<a id="contribute"></a>
 ## Hilfe gesucht
 
 VirtoMir wird von einer Person gebaut, zusammen mit KI-Coding-Agenten. Deshalb ist es so schnell gewachsen, und deshalb braucht es mehr Augen als ein typisches Nebenprojekt.
@@ -175,6 +191,13 @@ Ideen und Fragen: [Diskussionen](https://github.com/onurbaydas/VirtoMir/discussi
 ## Dank
 
 <p><img src="../thanks/mega-bilgisayar.png" alt="Mega Bilgisayar" width="170"><br>Mit Dank an Mega Bilgisayar.</p>
+
+<p align="center">
+  <b>Wenn dir VirtoMir nützt, hilft ein Stern anderen, es zu finden.</b><br><br>
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=e8b931&label=Star" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=3b5bdb&label=Fork" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=2f9e44&label=Watch" alt="Watch"></a>
+</p>
 
 ## Lizenz
 

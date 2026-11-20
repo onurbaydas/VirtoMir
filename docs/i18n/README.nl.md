@@ -32,12 +32,24 @@ Nederlands ·
 </p>
 
 <p align="center">
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=social" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=social" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=social" alt="Watch"></a>
+</p>
+
+<p align="center">
   <a href="https://onurbaydas.github.io/VirtoMir/demo/"><b>▶ Live demo</b></a> ·
   <a href="#install">Installatie</a> ·
   <a href="../try-in-a-vm.md">Probeer in een VM</a> ·
   <a href="../features.md">Alle functies</a> ·
+  <a href="#contribute">Bijdragen</a> ·
   <a href="https://github.com/onurbaydas/VirtoMir/discussions">Discussies</a>
 </p>
+
+<table align="center">
+<tr><td align="center"><h3>1</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>90+</h3></td><td align="center"><h3>16</h3></td><td align="center"><h3>1 s</h3></td></tr>
+<tr><td align="center"><sub>binary, UI ingebouwd</sub></td><td align="center"><sub>databases</sub></td><td align="center"><sub>agents in je VM's</sub></td><td align="center"><sub>functies</sub></td><td align="center"><sub>README-talen</sub></td><td align="center"><sub>live grafieken</sub></td></tr>
+</table>
 
 > Deze vertaling wordt door de community bijgehouden en kan achterlopen op de [Engelse README](../../README.md).
 
@@ -52,14 +64,17 @@ Eén binary met de webinterface ingebouwd: geen eigen distributie, geen database
 
 > **Status: 1.2.** Getest op Ubuntu 26.04 en Fedora 44, op losse hosts en kleine clusters. Hoge beschikbaarheid is nog niet op echte BMC-hardware geprobeerd en de VMware-import is experimenteel. Sinds 1.0 komen er geen nieuwe functies bij: het werk gaat naar dagelijks gebruik op één host dat solide is. Test het voordat je er productie aan toevertrouwt en meld in [#1](https://github.com/onurbaydas/VirtoMir/issues/1) wat er misgaat.
 
+> [!TIP]
+> **Bevalt de richting? Geef een ⭐.** VirtoMir wordt door één persoon gebouwd: via sterren vinden anderen het, en ze houden het project gaande. Voor nieuwe versies: **Watch → Custom → Releases**.
+
 ## Probeer het in 30 seconden
 
 | | |
 |---|---|
 | **Alleen kijken** | Klik door de [online demo](https://onurbaydas.github.io/VirtoMir/demo/): verzonnen hosts, niets te installeren. |
 | **Wegwerphost** | Eén commando geeft je een test-VM met VirtoMir erin: [Probeer VirtoMir zonder je servers aan te raken](../try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.0_amd64.deb` — [nieuwste release](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.0-1.x86_64.rpm` — [nieuwste release](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [nieuwste release](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [nieuwste release](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 Het pakket installeert libvirt en QEMU/KVM als ze ontbreken, opent poort 8420 en start de dienst. Verder hoef je niets te typen.
 
@@ -160,6 +175,7 @@ Pakketten, tarball, configuratie en bouwen vanuit de broncode: [Engelse README](
 
 Meld beveiligingsproblemen vertrouwelijk, zie [SECURITY.md](../../SECURITY.md).
 
+<a id="contribute"></a>
 ## Hulp gezocht
 
 VirtoMir wordt gebouwd door één persoon, samen met AI-programmeeragents. Daardoor groeide het zo snel, en daardoor heeft het meer ogen nodig dan een gemiddeld hobbyproject.
@@ -175,6 +191,13 @@ Ideeën en vragen: [Discussies](https://github.com/onurbaydas/VirtoMir/discussio
 ## Dank
 
 <p><img src="../thanks/mega-bilgisayar.png" alt="Mega Bilgisayar" width="170"><br>Met dank aan Mega Bilgisayar.</p>
+
+<p align="center">
+  <b>Als VirtoMir je helpt, zorgt een ster dat anderen het ook vinden.</b><br><br>
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=e8b931&label=Star" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=3b5bdb&label=Fork" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=2f9e44&label=Watch" alt="Watch"></a>
+</p>
 
 ## Licentie
 

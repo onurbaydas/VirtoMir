@@ -32,12 +32,24 @@ Türkçe ·
 </p>
 
 <p align="center">
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=social" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=social" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=social" alt="Watch"></a>
+</p>
+
+<p align="center">
   <a href="https://onurbaydas.github.io/VirtoMir/demo/"><b>▶ Canlı demo</b></a> ·
   <a href="#install">Kurulum</a> ·
   <a href="../try-in-a-vm.md">Bir VM'de dene</a> ·
   <a href="../features.md">Tüm özellikler</a> ·
+  <a href="#contribute">Katkıda bulun</a> ·
   <a href="https://github.com/onurbaydas/VirtoMir/discussions">Tartışmalar</a>
 </p>
+
+<table align="center">
+<tr><td align="center"><h3>1</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>90+</h3></td><td align="center"><h3>16</h3></td><td align="center"><h3>1 s</h3></td></tr>
+<tr><td align="center"><sub>ikili, arayüz içinde</sub></td><td align="center"><sub>veritabanı</sub></td><td align="center"><sub>VM'lerinde ajan</sub></td><td align="center"><sub>özellik</sub></td><td align="center"><sub>README dili</sub></td><td align="center"><sub>canlı grafikler</sub></td></tr>
+</table>
 
 > Bu çeviri topluluk tarafından sürdürülür ve [İngilizce README](../../README.md)'nin gerisinde kalabilir.
 
@@ -52,14 +64,17 @@ Web arayüzü içine gömülü tek bir ikili dosyadır: ayrı bir dağıtım, ve
 
 > **Durum: 1.2.** Ubuntu 26.04 ve Fedora 44 üzerinde, tek host ve küçük cluster'larda test edildi. Yüksek erişilebilirlik henüz gerçek BMC donanımında denenmedi, VMware içe aktarma deneyseldir. 1.0'dan beri yeni özellik eklenmiyor: emek, günlük tek host kullanımını sağlamlaştırmaya gidiyor. Üretimde güvenmeden önce test et ve neyin bozulduğunu [#1](https://github.com/onurbaydas/VirtoMir/issues/1)'de anlat.
 
+> [!TIP]
+> **Gidişatı beğendin mi? Bir ⭐ ver.** VirtoMir'i tek bir kişi geliştiriyor: başkaları onu yıldızlar sayesinde buluyor ve proje yıldızlarla ayakta kalıyor. Yeni sürümlerden haberdar olmak için **Watch → Custom → Releases**'e tıkla.
+
 ## 30 saniyede dene
 
 | | |
 |---|---|
 | **Sadece bak** | [Çevrimiçi demoya](https://onurbaydas.github.io/VirtoMir/demo/) tıkla: uydurma hostlar, kurulacak bir şey yok. |
 | **Tek kullanımlık host** | Tek komutla içinde VirtoMir olan bir test VM'i: [Sunucularına dokunmadan VirtoMir'i dene](../try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.0_amd64.deb` — [son sürüm](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.0-1.x86_64.rpm` — [son sürüm](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [son sürüm](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [son sürüm](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 Paket eksikse libvirt ve QEMU/KVM'i kendisi kurar, 8420 portunu açar ve servisi başlatır. Elle yazılacak başka bir şey kalmaz.
 
@@ -160,6 +175,7 @@ Paketler, tarball, yapılandırma ve kaynaktan derleme: [İngilizce README](../.
 
 Güvenlik sorunlarını lütfen gizli olarak bildir, bkz. [SECURITY.md](../../SECURITY.md).
 
+<a id="contribute"></a>
 ## Yardım aranıyor
 
 VirtoMir'i tek bir kişi, yapay zekâ kodlama ajanlarıyla birlikte geliştiriyor. Bu kadar hızlı büyümesinin sebebi bu; tipik bir yan projeden daha fazla göze ihtiyaç duymasının sebebi de bu.
@@ -175,6 +191,13 @@ Fikirler ve sorular: [Tartışmalar](https://github.com/onurbaydas/VirtoMir/disc
 ## Teşekkürler
 
 <p><img src="../thanks/mega-bilgisayar.png" alt="Mega Bilgisayar" width="170"><br>Mega Bilgisayar'a teşekkürler.</p>
+
+<p align="center">
+  <b>VirtoMir işine yarıyorsa, bir yıldız başkalarının da onu bulmasını sağlar.</b><br><br>
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=e8b931&label=Star" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=3b5bdb&label=Fork" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=2f9e44&label=Watch" alt="Watch"></a>
+</p>
 
 ## Lisans
 

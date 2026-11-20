@@ -32,12 +32,24 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=social" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=social" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=social" alt="Watch"></a>
+</p>
+
+<p align="center">
   <a href="https://onurbaydas.github.io/VirtoMir/demo/"><b>▶ 在线演示</b></a> ·
   <a href="#install">安装</a> ·
   <a href="../try-in-a-vm.md">在虚拟机里试用</a> ·
   <a href="../features.md">全部功能</a> ·
+  <a href="#contribute">参与贡献</a> ·
   <a href="https://github.com/onurbaydas/VirtoMir/discussions">讨论区</a>
 </p>
+
+<table align="center">
+<tr><td align="center"><h3>1</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>90+</h3></td><td align="center"><h3>16</h3></td><td align="center"><h3>1 s</h3></td></tr>
+<tr><td align="center"><sub>个二进制文件，内置 UI</sub></td><td align="center"><sub>个数据库</sub></td><td align="center"><sub>虚拟机内代理</sub></td><td align="center"><sub>项功能</sub></td><td align="center"><sub>种 README 语言</sub></td><td align="center"><sub>实时图表</sub></td></tr>
+</table>
 
 > 本翻译由社区维护，可能落后于[英文 README](../../README.md)。
 
@@ -52,14 +64,17 @@ VirtoMir 想同时做到两件事：
 
 > **状态：1.2。** 已在 Ubuntu 26.04 和 Fedora 44 上测试，包括单台主机和小型集群。高可用尚未在真实的 BMC 硬件上验证，VMware 导入仍属实验性质。从 1.0 起不再添加新功能：精力都放在让单主机的日常使用更可靠。投入生产前请先测试，并在 [#1](https://github.com/onurbaydas/VirtoMir/issues/1) 中告诉我们哪里出了问题。
 
+> [!TIP]
+> **喜欢这个方向？点个 ⭐ 吧。** VirtoMir 由一个人开发：Star 能让更多人发现它，也让项目持续下去。想收到新版本通知，请点 **Watch → Custom → Releases**。
+
 ## 30 秒上手
 
 | | |
 |---|---|
 | **随便看看** | 点开[在线演示](https://onurbaydas.github.io/VirtoMir/demo/)：虚构的主机，无需安装。 |
 | **一次性主机** | 一条命令即可得到一台装好 VirtoMir 的测试虚拟机：[不碰你的服务器就能试用 VirtoMir](../try-in-a-vm.md)。 |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.0_amd64.deb` — [最新版本](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.0-1.x86_64.rpm` — [最新版本](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [最新版本](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [最新版本](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 如果缺少 libvirt 和 QEMU/KVM，安装包会自动安装它们，开放 8420 端口并启动服务。不需要再敲任何命令。
 
@@ -160,6 +175,7 @@ sudo dnf install virtomir
 
 安全问题请私下报告，见 [SECURITY.md](../../SECURITY.md)。
 
+<a id="contribute"></a>
 ## 欢迎参与
 
 VirtoMir 由一个人和 AI 编程助手一起开发。这让它成长得很快，也意味着它比一般的个人项目更需要更多人来把关。
@@ -175,6 +191,13 @@ VirtoMir 由一个人和 AI 编程助手一起开发。这让它成长得很快�
 ## 致谢
 
 <p><img src="../thanks/mega-bilgisayar.png" alt="Mega Bilgisayar" width="170"><br>感谢 Mega Bilgisayar。</p>
+
+<p align="center">
+  <b>如果 VirtoMir 对你有用，点个 Star 能帮助更多人找到它。</b><br><br>
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=e8b931&label=Star" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=3b5bdb&label=Fork" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=2f9e44&label=Watch" alt="Watch"></a>
+</p>
 
 ## 许可证
 

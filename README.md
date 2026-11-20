@@ -29,8 +29,13 @@ English ·
   <a href="https://github.com/onurbaydas/VirtoMir/actions/workflows/ci.yml"><img src="https://github.com/onurbaydas/VirtoMir/actions/workflows/ci.yml/badge.svg" alt="CI Status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_3.0-blue.svg" alt="License: AGPL-3.0"></a>
   <img src="https://img.shields.io/badge/Linux-amd64%20%C2%B7%20arm64-333?logo=linux&logoColor=white" alt="Linux amd64 and arm64">
-  <a href="https://goreportcard.com/report/github.com/onurbaydas/VirtoMir"><img src="https://goreportcard.com/badge/github.com/onurbaydas/VirtoMir" alt="Go Report Card"></a>
   <a href="https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22"><img src="https://img.shields.io/github/issues/onurbaydas/VirtoMir/good%20first%20issue?style=flat&color=7057ff&label=good%20first%20issues" alt="Good First Issues"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=social" alt="Star VirtoMir on GitHub"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=social" alt="Fork VirtoMir"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=social" alt="Watch VirtoMir"></a>
 </p>
 
 <p align="center">
@@ -38,8 +43,14 @@ English ·
   <a href="#install">Install</a> ·
   <a href="docs/try-in-a-vm.md">Try it in a VM</a> ·
   <a href="docs/features.md">All features</a> ·
+  <a href="#contribute">Contribute</a> ·
   <a href="https://github.com/onurbaydas/VirtoMir/discussions">Discussions</a>
 </p>
+
+<table align="center">
+<tr><td align="center"><h3>1</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>0</h3></td><td align="center"><h3>90+</h3></td><td align="center"><h3>16</h3></td><td align="center"><h3>1 s</h3></td></tr>
+<tr><td align="center"><sub>binary, UI built in</sub></td><td align="center"><sub>databases</sub></td><td align="center"><sub>agents in your VMs</sub></td><td align="center"><sub>features</sub></td><td align="center"><sub>README languages</sub></td><td align="center"><sub>live charts</sub></td></tr>
+</table>
 
 <p align="center"><img src="docs/screenshots/tour.gif" alt="A tour of VirtoMir: overview, a machine, the new-machine wizard, storage, the cluster, high availability, backups and the light theme" width="100%"></p>
 
@@ -52,14 +63,17 @@ It is a single binary with the web UI built in: no dedicated distribution, no da
 
 > **Status: 1.2.** Tested on Ubuntu 26.04 and Fedora 44, on single hosts and small clusters. High availability has not been tried on real BMC hardware yet, and the VMware import is experimental. From 1.0 on no new features are added: the work goes into making everyday single-host use solid. Test it before you trust it with production, and tell us what breaks in [#1](https://github.com/onurbaydas/VirtoMir/issues/1).
 
+> [!TIP]
+> **Like where this is going? Give it a ⭐.** VirtoMir is built by one person: stars are how other people find it, and they keep it going. To hear about new versions, click **Watch → Custom → Releases**.
+
 ## Try it in 30 seconds
 
 | | |
 |---|---|
 | **Just look** | Click through the [online demo](https://onurbaydas.github.io/VirtoMir/demo/): made-up hosts, nothing to install. |
 | **Throwaway host** | One command gives you a test VM with VirtoMir inside: [Try VirtoMir without touching your servers](docs/try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.0_amd64.deb` from the [latest release](https://github.com/onurbaydas/VirtoMir/releases/latest), or the [signed repository](#signed-package-repository-apt--dnf). |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.0-1.x86_64.rpm`, or the [signed repository](#signed-package-repository-apt--dnf). |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` from the [latest release](https://github.com/onurbaydas/VirtoMir/releases/latest), or the [signed repository](#signed-package-repository-apt--dnf). |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm`, or the [signed repository](#signed-package-repository-apt--dnf). |
 
 The package pulls in libvirt and QEMU/KVM if they are missing, opens port 8420 and starts the service. Nothing else is left to type.
 
@@ -180,7 +194,7 @@ Then open `https://<host>:8420/` and sign in as `root` or as an administrator (g
 <summary><b>Debian / Ubuntu package</b></summary>
 
 ```sh
-sudo apt install ./virtomir_1.2.0_amd64.deb   # or _arm64.deb; pulls libvirt and QEMU if missing
+sudo apt install ./virtomir_1.2.1_amd64.deb   # or _arm64.deb; pulls libvirt and QEMU if missing
 ```
 
 Every package does the host setup itself: it pulls in libvirt and QEMU/KVM, starts libvirt and its `default` NAT network, opens port 8420 in ufw or firewalld when one is on, and starts `virtomird` (self-signed HTTPS). Members of `virtomir-operator` and `virtomir-viewer` get fewer rights than admins. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
@@ -190,7 +204,7 @@ Every package does the host setup itself: it pulls in libvirt and QEMU/KVM, star
 <summary><b>Fedora / RHEL package (experimental)</b></summary>
 
 ```sh
-sudo dnf install ./virtomir-1.2.0-1.x86_64.rpm   # or .aarch64.rpm; Fedora 40+ / RHEL 10
+sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm   # or .aarch64.rpm; Fedora 40+ / RHEL 10
 ```
 
 Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf` or from the UI. Built with `scripts/build-rpm.sh <version>`. With SELinux on, the package (and `install.sh`) loads a small policy module, `virtomir`: without it libvirt refuses virtomird ("Cannot find start time for pid") and QEMU cannot write backups. Storage pool folders and backup locations outside the usual places are given the label for VM images by VirtoMir itself.
@@ -202,8 +216,8 @@ Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf`
 If libvirt and QEMU/KVM are missing, the installer adds them with apt or dnf.
 
 ```sh
-tar xzf virtomir_v1.2.0_linux_amd64.tar.gz
-sudo ./virtomir_v1.2.0_linux_amd64/install.sh
+tar xzf virtomir_v1.2.1_linux_amd64.tar.gz
+sudo ./virtomir_v1.2.1_linux_amd64/install.sh
 ```
 
 The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pam.d/virtomir`) and a systemd unit, opens the port in ufw or firewalld, starts it and prints the address.
@@ -247,17 +261,31 @@ Without `-tags pam` the binary builds anywhere (also cross-compiled from Windows
 
 Security problems: please report them privately, see [SECURITY.md](SECURITY.md).
 
-## Help wanted
+<a id="contribute"></a>
+## Contribute
 
-VirtoMir is built by one person, together with AI coding agents (their working rules are in [AGENTS.md](AGENTS.md), which is also the best map of the code for people). That is how it grew this fast, and it is also why it needs more eyes than a typical side project. Help means the most here:
+VirtoMir is built by one person, together with AI coding agents (their working rules are in [AGENTS.md](AGENTS.md), which is also the best map of the code for people). That is how it grew this fast, and it is why it needs more eyes and hands than a typical side project. **Every pull request is read and answered, and a first one is very welcome.**
 
-- 🧪 **Run it** on Debian, an older Ubuntu, Rocky/Alma or Arch, and tell us what breaks.
-- 🔍 **Review the security-sensitive parts**: it runs as root and handles sign-in (`internal/auth`, `internal/api`). Report problems privately, see [SECURITY.md](SECURITY.md).
+**No server needed:** `cd web && npm install && npm run dev:demo` runs the whole UI against a pretend cluster, the same one as the [online demo](https://onurbaydas.github.io/VirtoMir/demo/). The daemon is plain Go: `go test ./...` runs anywhere, without libvirt.
+
+| ⏱️ | Pick one | What you touch |
+|---|---|---|
+| **As long as you like** | Translate the UI (a partial translation helps too): [German](https://github.com/onurbaydas/VirtoMir/issues/107) · [Spanish](https://github.com/onurbaydas/VirtoMir/issues/108) · [French](https://github.com/onurbaydas/VirtoMir/issues/109) · [Russian](https://github.com/onurbaydas/VirtoMir/issues/110) · [Portuguese](https://github.com/onurbaydas/VirtoMir/issues/111) | one file of strings |
+| **An evening** | An alert channel: [Telegram](https://github.com/onurbaydas/VirtoMir/issues/115) · [Matrix](https://github.com/onurbaydas/VirtoMir/issues/116) · [Gotify](https://github.com/onurbaydas/VirtoMir/issues/117) · [Pushover](https://github.com/onurbaydas/VirtoMir/issues/118) · [Teams](https://github.com/onurbaydas/VirtoMir/issues/114) | Go, one function and a test |
+| **An evening** | The datastore browser: [sort](https://github.com/onurbaydas/VirtoMir/issues/95) · [filter](https://github.com/onurbaydas/VirtoMir/issues/96) · [drop files to upload](https://github.com/onurbaydas/VirtoMir/issues/97) | Svelte |
+| **An evening** | [A `-version` flag](https://github.com/onurbaydas/VirtoMir/issues/100) · [machine list as CSV](https://github.com/onurbaydas/VirtoMir/issues/102) · [a man page](https://github.com/onurbaydas/VirtoMir/issues/104) | Go or docs |
+| **A weekend** | install.sh on [Arch / Manjaro](https://github.com/onurbaydas/VirtoMir/issues/122) or [openSUSE](https://github.com/onurbaydas/VirtoMir/issues/123) · [an AUR package](https://github.com/onurbaydas/VirtoMir/issues/124) | shell, packaging |
+| **Any time** | Tests for the risky paths: [atomic files](https://github.com/onurbaydas/VirtoMir/issues/125) · [systemd watchdog](https://github.com/onurbaydas/VirtoMir/issues/126) · [reports](https://github.com/onurbaydas/VirtoMir/issues/127) · [ZFS replication](https://github.com/onurbaydas/VirtoMir/issues/128) | Go tests |
+
+Not a coder? That helps just as much:
+
+- 🧪 **Run it** on Debian, an older Ubuntu, Rocky/Alma or Arch, and tell us what breaks in [#1](https://github.com/onurbaydas/VirtoMir/issues/1).
 - 🔧 **Test what we cannot reach**: GPU passthrough, Ceph, real BMCs, VMware.
-- 🌍 **Translate**: the UI ([`web/src/lib/locales`](web/src/lib/locales)) or this README ([`docs/i18n`](docs/i18n)).
-- 💻 **Write code**: no server needed, `cd web && npm install && npm run dev:demo` runs the whole UI against a pretend cluster. Start with a [good first issue](https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) and see [CONTRIBUTING.md](CONTRIBUTING.md).
+- 🔍 **Review the security-sensitive parts**: it runs as root and handles sign-in (`internal/auth`, `internal/api`). Report problems privately, see [SECURITY.md](SECURITY.md).
+- 🌍 **Improve a translation** of this README in [`docs/i18n`](docs/i18n): they were written with an AI and native speakers will do better.
+- 📣 **Tell someone** who runs a homelab or a few KVM hosts.
 
-Ideas and questions: [Discussions](https://github.com/onurbaydas/VirtoMir/discussions). Found a bug? [Open an issue](https://github.com/onurbaydas/VirtoMir/issues/new/choose).
+All [good first issues](https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) · [CONTRIBUTING.md](CONTRIBUTING.md) · Ideas and questions in [Discussions](https://github.com/onurbaydas/VirtoMir/discussions) · Found a bug? [Open an issue](https://github.com/onurbaydas/VirtoMir/issues/new/choose).
 
 ## Roadmap
 
@@ -268,6 +296,13 @@ These arrived last and need the most real-world testing: Kubernetes clusters on 
 ## Thanks
 
 <p><img src="docs/thanks/mega-bilgisayar.png" alt="Mega Bilgisayar" width="170"><br>With thanks to Mega Bilgisayar.</p>
+
+<p align="center">
+  <b>If VirtoMir is useful to you, a star helps others find it.</b><br><br>
+  <a href="https://github.com/onurbaydas/VirtoMir/stargazers"><img src="https://img.shields.io/github/stars/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=e8b931&label=Star" alt="Star"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/fork"><img src="https://img.shields.io/github/forks/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=3b5bdb&label=Fork" alt="Fork"></a>
+  <a href="https://github.com/onurbaydas/VirtoMir/subscription"><img src="https://img.shields.io/github/watchers/onurbaydas/VirtoMir?style=for-the-badge&logo=github&color=2f9e44&label=Watch" alt="Watch"></a>
+</p>
 
 ## License
 
