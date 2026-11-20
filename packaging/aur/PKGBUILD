@@ -18,8 +18,8 @@ backup=('etc/pam.d/virtomir')
 
 source_x86_64=("${pkgname}-${pkgver}-x86_64.tar.gz::https://github.com/onurbaydas/VirtoMir/releases/download/v${pkgver}/virtomir_v${pkgver}_linux_amd64.tar.gz")
 source_aarch64=("${pkgname}-${pkgver}-aarch64.tar.gz::https://github.com/onurbaydas/VirtoMir/releases/download/v${pkgver}/virtomir_v${pkgver}_linux_arm64.tar.gz")
-sha256sums_x86_64=('SKIP')
-sha256sums_aarch64=('SKIP')
+sha256sums_x86_64=('697ea04ee1b690813947c85c3f29e3a0e046253011b8146b53fd22c886576843')
+sha256sums_aarch64=('65f0ce478d7903c4e37dd7c66e7ddf5d89cf90d6600449c6bd956ddc3e2c6bbb')
 
 package() {
     local goarch=amd64
