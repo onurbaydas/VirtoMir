@@ -294,6 +294,8 @@ Not a coder? That helps just as much:
 
 All [good first issues](https://github.com/onurbaydas/VirtoMir/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) · [CONTRIBUTING.md](CONTRIBUTING.md) · Ideas and questions in [Discussions](https://github.com/onurbaydas/VirtoMir/discussions) · Found a bug? [Open an issue](https://github.com/onurbaydas/VirtoMir/issues/new/choose).
 
+Not on GitHub? Read-only mirrors on [GitLab](https://gitlab.com/onurbaydas/VirtoMir) and [Codeberg](https://codeberg.org/onurbaydas/VirtoMir); issues and pull requests live here.
+
 ## Roadmap
 
 The feature set is complete; **no new features are being added**. The work goes into the everyday single-host features: data safety (nothing in use is ever deleted, refusals before anything is changed), clear everyday flows with plain errors, advanced features one click deeper, and tests for the risky paths.
