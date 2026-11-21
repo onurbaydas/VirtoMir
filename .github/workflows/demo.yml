@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 # Shares the gh-pages lock with repos.yml so the two never push over each other.
 concurrency:
@@ -23,6 +23,8 @@ concurrency:
 
 jobs:
   demo:
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

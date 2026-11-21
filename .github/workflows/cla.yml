@@ -11,13 +11,15 @@ on:
     types: [opened, closed, synchronize]
 
 permissions:
-  actions: write
-  contents: write
-  pull-requests: write
-  statuses: write
+  contents: read
 
 jobs:
   cla:
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      statuses: write
     runs-on: ubuntu-24.04
     if: >-
       github.event_name == 'pull_request_target' ||

@@ -20,7 +20,7 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: gh-pages
@@ -28,6 +28,8 @@ concurrency:
 
 jobs:
   repos:
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     env:
       SIGNING_KEY: ${{ secrets.REPO_SIGNING_KEY }}

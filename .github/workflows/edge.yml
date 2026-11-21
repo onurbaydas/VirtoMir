@@ -9,7 +9,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: edge
@@ -61,6 +61,8 @@ jobs:
             out/*.sha256
 
   publish:
+    permissions:
+      contents: write
     needs: build
     runs-on: ubuntu-24.04
     steps:
