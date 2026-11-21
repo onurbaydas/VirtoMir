@@ -11,6 +11,9 @@ on:
       tag:
         description: "Tag to publish (an existing VirtoMir tag, e.g. v1.2.2)"
         required: true
+      ref:
+        description: "Commit or branch to copy from (default: the tag)"
+        required: false
 
 permissions:
   contents: read
@@ -28,7 +31,7 @@ jobs:
       - uses: actions/checkout@v5
         if: env.HAS_KEY == 'true'
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ inputs.ref || env.TAG }}
           path: virtomir
           persist-credentials: false
       - name: Push the provider and its tag
