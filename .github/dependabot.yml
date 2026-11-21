@@ -18,6 +18,10 @@ updates:
     directory: "/web"
     schedule:
       interval: weekly
+    ignore:
+      # svelte-check supports TypeScript 5 and 6 only; a new major waits until it does.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     groups:
       npm:
         patterns: ["*"]
