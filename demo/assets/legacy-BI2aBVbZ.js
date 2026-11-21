@@ -1,0 +1,1 @@
+import{xt as e}from"./i18n.svelte-CkNrLb-f.js";var t=`https://tally.so/r/db904z`;function n(e){return[e.version&&`VirtoMir ${e.version.replace(/^v/,``)}`,e.os,e.libvirt&&`libvirt ${e.libvirt}`,e.qemu&&`QEMU ${e.qemu}`].filter(Boolean).join(` · `)}function r(e,r){let i=new URLSearchParams({source:r}),a=n(e);return a&&i.set(`setup`,a),`${t}?${i}`}e();export{r as t};
