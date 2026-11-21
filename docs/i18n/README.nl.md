@@ -76,8 +76,8 @@ Eén binary met de webinterface ingebouwd: geen eigen distributie, geen database
 |---|---|
 | **Alleen kijken** | Klik door de [online demo](https://onurbaydas.github.io/VirtoMir/demo/): verzonnen hosts, niets te installeren. |
 | **Wegwerphost** | Eén commando geeft je een test-VM met VirtoMir erin: [Probeer VirtoMir zonder je servers aan te raken](../try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [nieuwste release](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [nieuwste release](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.2_amd64.deb` — [nieuwste release](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.2-1.x86_64.rpm` — [nieuwste release](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 Het pakket installeert libvirt en QEMU/KVM als ze ontbreken, opent poort 8420 en start de dienst. Verder hoef je niets te typen.
 

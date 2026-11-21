@@ -78,8 +78,8 @@
 |---|---|
 | **مجرد نظرة** | تصفّح [العرض التجريبي على الإنترنت](https://onurbaydas.github.io/VirtoMir/demo/): مضيفات وهمية، لا شيء لتثبيته. |
 | **مضيف مؤقت** | أمر واحد يمنحك آلة افتراضية للاختبار وبداخلها VirtoMir: [جرّب VirtoMir دون لمس خوادمك](../try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [أحدث إصدار](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [أحدث إصدار](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.2_amd64.deb` — [أحدث إصدار](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.2-1.x86_64.rpm` — [أحدث إصدار](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 تثبّت الحزمة libvirt وQEMU/KVM إن لم تكن موجودة، وتفتح المنفذ 8420 وتشغّل الخدمة. لا يبقى شيء لتكتبه.
 

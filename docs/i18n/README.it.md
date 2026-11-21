@@ -76,8 +76,8 @@ Un unico binario con l'interfaccia web incorporata: nessuna distribuzione dedica
 |---|---|
 | **Solo guardare** | Esplora la [demo online](https://onurbaydas.github.io/VirtoMir/demo/): host inventati, niente da installare. |
 | **Host usa e getta** | Un comando ti dà una VM di prova con VirtoMir dentro: [Prova VirtoMir senza toccare i tuoi server](../try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [ultima versione](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [ultima versione](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.2_amd64.deb` — [ultima versione](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.2-1.x86_64.rpm` — [ultima versione](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 Il pacchetto installa libvirt e QEMU/KVM se mancano, apre la porta 8420 e avvia il servizio. Non resta altro da digitare.
 

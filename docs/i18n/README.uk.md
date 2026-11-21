@@ -76,8 +76,8 @@ VirtoMir намагається бути двома речами водноча�
 |---|---|
 | **Просто подивитися** | Поклацайте [онлайн-демо](https://onurbaydas.github.io/VirtoMir/demo/): вигадані хости, нічого не треба встановлювати. |
 | **Одноразовий хост** | Одна команда створює тестову ВМ із VirtoMir усередині: [Спробуйте VirtoMir, не чіпаючи своїх серверів](../try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [останній реліз](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [останній реліз](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.2_amd64.deb` — [останній реліз](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.2-1.x86_64.rpm` — [останній реліз](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 Пакет сам довстановить libvirt і QEMU/KVM, якщо їх немає, відкриє порт 8420 і запустить службу. Більше нічого вводити не потрібно.
 

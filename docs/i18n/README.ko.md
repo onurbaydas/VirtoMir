@@ -76,8 +76,8 @@ VirtoMir는 두 가지를 동시에 해내려고 합니다.
 |---|---|
 | **구경만** | [온라인 데모](https://onurbaydas.github.io/VirtoMir/demo/)를 눌러 보세요. 가상의 호스트라 설치할 것이 없습니다. |
 | **일회용 호스트** | 명령 하나로 VirtoMir가 들어 있는 테스트 VM을 만듭니다: [서버를 건드리지 않고 VirtoMir 체험하기](../try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [최신 릴리스](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [최신 릴리스](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.2_amd64.deb` — [최신 릴리스](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.2-1.x86_64.rpm` — [최신 릴리스](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 패키지는 libvirt와 QEMU/KVM이 없으면 설치하고, 8420 포트를 열고, 서비스를 시작합니다. 더 입력할 것은 없습니다.
 

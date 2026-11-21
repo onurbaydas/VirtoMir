@@ -76,8 +76,8 @@ VirtoMir 想同時做到兩件事：
 |---|---|
 | **隨便看看** | 點開[線上展示](https://onurbaydas.github.io/VirtoMir/demo/)：虛構的主機，不必安裝任何東西。 |
 | **拋棄式主機** | 一個指令就能得到一台裝好 VirtoMir 的測試虛擬機：[不碰你的伺服器就能試用 VirtoMir](../try-in-a-vm.md)。 |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.1_amd64.deb` — [最新版本](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.1-1.x86_64.rpm` — [最新版本](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.2_amd64.deb` — [最新版本](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.2-1.x86_64.rpm` — [最新版本](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 若缺少 libvirt 與 QEMU/KVM，套件會自動安裝，開放 8420 連接埠並啟動服務。不需要再輸入任何指令。
 

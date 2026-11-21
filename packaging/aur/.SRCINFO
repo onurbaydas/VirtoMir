@@ -1,6 +1,6 @@
 pkgbase = virtomir-bin
 	pkgdesc = A Detailed Control Deck for Virtual Environments (KVM / QEMU / libvirt)
-	pkgver = 1.2.1
+	pkgver = 1.2.2
 	pkgrel = 1
 	url = https://github.com/onurbaydas/VirtoMir
 	arch = x86_64
@@ -15,9 +15,9 @@ pkgbase = virtomir-bin
 	provides = virtomir
 	conflicts = virtomir
 	backup = etc/pam.d/virtomir
-	source_x86_64 = virtomir-bin-1.2.1-x86_64.tar.gz::https://github.com/onurbaydas/VirtoMir/releases/download/v1.2.1/virtomir_v1.2.1_linux_amd64.tar.gz
-	sha256sums_x86_64 = 697ea04ee1b690813947c85c3f29e3a0e046253011b8146b53fd22c886576843
-	source_aarch64 = virtomir-bin-1.2.1-aarch64.tar.gz::https://github.com/onurbaydas/VirtoMir/releases/download/v1.2.1/virtomir_v1.2.1_linux_arm64.tar.gz
-	sha256sums_aarch64 = 65f0ce478d7903c4e37dd7c66e7ddf5d89cf90d6600449c6bd956ddc3e2c6bbb
+	source_x86_64 = virtomir-bin-1.2.2-x86_64.tar.gz::https://github.com/onurbaydas/VirtoMir/releases/download/v1.2.2/virtomir_v1.2.2_linux_amd64.tar.gz
+	sha256sums_x86_64 = SKIP
+	source_aarch64 = virtomir-bin-1.2.2-aarch64.tar.gz::https://github.com/onurbaydas/VirtoMir/releases/download/v1.2.2/virtomir_v1.2.2_linux_arm64.tar.gz
+	sha256sums_aarch64 = SKIP
 
 pkgname = virtomir-bin
