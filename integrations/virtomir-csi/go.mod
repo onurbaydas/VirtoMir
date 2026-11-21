@@ -3,7 +3,7 @@ module github.com/onurbaydas/virtomir/integrations/virtomir-csi
 go 1.27.2
 
 require (
-	github.com/container-storage-interface/spec v1.12.0
+	github.com/container-storage-interface/spec v1.14.0
 	google.golang.org/grpc v1.85.0
 )
 
