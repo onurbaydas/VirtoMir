@@ -1,0 +1,60 @@
+# Mirrors main and the tags to gitlab.com/onurbaydas/VirtoMir and codeberg.org/onurbaydas/VirtoMir,
+# creating those repositories on the first run (issues and merge requests stay on GitHub).
+# Needs the secrets GITLAB_TOKEN (scopes: api, write_repository) and CODEBERG_TOKEN (write:repository);
+# a missing secret only skips that mirror.
+name: Mirror
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    env:
+      OWNER: onurbaydas
+      REPO: VirtoMir
+      DESC: "Mirror of https://github.com/onurbaydas/VirtoMir (web UI for KVM/libvirt). Issues and pull requests go there."
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: GitLab
+        env:
+          TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TOKEN" ]; then echo "::notice::GITLAB_TOKEN is not set; GitLab is skipped."; exit 0; fi
+          if ! curl -sf -H "PRIVATE-TOKEN: $TOKEN" "https://gitlab.com/api/v4/projects/$OWNER%2F$REPO" >/dev/null; then
+            curl -sf -H "PRIVATE-TOKEN: $TOKEN" -X POST https://gitlab.com/api/v4/projects \
+              --data-urlencode "name=$REPO" --data-urlencode "path=$REPO" --data-urlencode "visibility=public" \
+              --data-urlencode "description=$DESC" --data-urlencode "issues_access_level=disabled" \
+              --data-urlencode "merge_requests_access_level=disabled" >/dev/null
+          fi
+          git push --force "https://oauth2:$TOKEN@gitlab.com/$OWNER/$REPO.git" HEAD:refs/heads/main
+          git push --force "https://oauth2:$TOKEN@gitlab.com/$OWNER/$REPO.git" --tags
+      - name: Codeberg
+        env:
+          TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TOKEN" ]; then echo "::notice::CODEBERG_TOKEN is not set; Codeberg is skipped."; exit 0; fi
+          if ! curl -sf -H "Authorization: token $TOKEN" "https://codeberg.org/api/v1/repos/$OWNER/$REPO" >/dev/null; then
+            jq -n --arg n "$REPO" --arg d "$DESC" '{name:$n, description:$d, private:false}' |
+              curl -sf -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
+                -X POST https://codeberg.org/api/v1/user/repos -d @- >/dev/null
+            jq -n --arg w "https://github.com/$OWNER/$REPO" '{has_issues:false, has_pull_requests:false, website:$w}' |
+              curl -sf -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
+                -X PATCH "https://codeberg.org/api/v1/repos/$OWNER/$REPO" -d @- >/dev/null
+          fi
+          git push --force "https://$OWNER:$TOKEN@codeberg.org/$OWNER/$REPO.git" HEAD:refs/heads/main
+          git push --force "https://$OWNER:$TOKEN@codeberg.org/$OWNER/$REPO.git" --tags
