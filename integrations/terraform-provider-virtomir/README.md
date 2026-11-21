@@ -1,5 +1,7 @@
 # Terraform provider for VirtoMir
 
+[![Terraform Registry](https://img.shields.io/badge/Terraform_Registry-onurbaydas%2Fvirtomir-7B42BC?logo=terraform&logoColor=white)](https://registry.terraform.io/providers/onurbaydas/virtomir/latest)
+
 Manage machines, networks and storage pools of a [VirtoMir](https://github.com/onurbaydas/VirtoMir) host (or any member of a VirtoMir cluster) with Terraform or OpenTofu.
 
 ```hcl
@@ -28,7 +30,9 @@ resource "virtomir_machine" "web" {
 }
 ```
 
-More in [examples/](examples/) and [docs/](docs/).
+`terraform init` installs it from the [Terraform Registry](https://registry.terraform.io/providers/onurbaydas/virtomir/latest), where the documentation is too. More in [examples/](examples/) and [docs/](docs/).
+
+This provider is developed in [VirtoMir](https://github.com/onurbaydas/VirtoMir/tree/main/integrations/terraform-provider-virtomir) and copied to [terraform-provider-virtomir](https://github.com/onurbaydas/terraform-provider-virtomir) with every release; open issues and pull requests there, in VirtoMir.
 
 | | |
 |---|---|
