@@ -70,8 +70,9 @@ docs/features.md     ← the full feature list (the README keeps the short versi
 docs/i18n/           ← README.<lang>.md: the README front page in 15 languages, generated: edit the template and
                        texts in scripts/readme-i18n/ (gen.py, <lang>.py, extra.py) and run `python3 scripts/readme-i18n/gen.py`;
                        a change to the front page's text should reach them too (or say in the PR that they lag)
-.github/ISSUE_TEMPLATE/quick_feedback.yml ← the 30-second form; the sidebar's feedback button and the demo strip open it
-                       with versions filled in (web/src/lib/feedback.ts: never host names, addresses or serials)
+web/src/lib/feedback.ts ← the 30-second feedback: the sidebar button and the demo strip open the Tally form
+                       (no account; hidden fields setup + source, never host names, addresses or serials); the same
+                       questions for GitHub users in .github/ISSUE_TEMPLATE/quick_feedback.yml
 docs/screenshots/    ← README images, taken from the demo UI (cd web && npm run dev:demo) at 1440×900, demo strip
                        and toasts hidden; tour.gif is a crossfade of eight of them (ffmpeg xfade)
 web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embedded into virtomird
