@@ -68,7 +68,7 @@ Web arayüzü içine gömülü tek bir ikili dosyadır: ayrı bir dağıtım, ve
 > **Gidişatı beğendin mi? Bir ⭐ ver.** VirtoMir'i tek bir kişi geliştiriyor: başkaları onu yıldızlar sayesinde buluyor ve proje yıldızlarla ayakta kalıyor. Yeni sürümlerden haberdar olmak için **Watch → Custom → Releases**'e tıkla.
 
 > [!NOTE]
-> **Denedin mi? 30 saniyede anlat.** [Hızlı geri bildirim formunu aç](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml), 😀 😐 😞 ya da 💡 seç, istersen bir cümle ekle. VirtoMir'in içinde kenar çubuğunun altındaki 💬 düğmesi aynı formu sürüm bilgilerin doldurulmuş olarak açar.
+> **Denedin mi? 30 saniyede anlat. (hesap gerekmez)** [Hızlı geri bildirim formunu aç](https://tally.so/r/db904z), 😀 😐 😞 ya da 💡 seç, istersen bir cümle ekle. VirtoMir'in içinde kenar çubuğunun altındaki 💬 düğmesi aynı formu sürüm bilgilerin doldurulmuş olarak açar. GitHub hesabın varsa [issue formu](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml) da olur.
 
 ## 30 saniyede dene
 

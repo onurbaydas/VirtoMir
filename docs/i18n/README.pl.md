@@ -68,7 +68,7 @@ Jeden plik binarny z wbudowanym interfejsem webowym: bez osobnej dystrybucji, be
 > **Podoba ci się kierunek? Zostaw ⭐.** VirtoMir tworzy jedna osoba: dzięki gwiazdkom inni go znajdują, a projekt trwa. O nowych wersjach powiadomi cię **Watch → Custom → Releases**.
 
 > [!NOTE]
-> **Wypróbowałeś? Napisz w 30 sekund.** [Otwórz szybki formularz opinii](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml), wybierz 😀 😐 😞 lub 💡 i dodaj zdanie, jeśli chcesz. W VirtoMir przycisk 💬 na dole paska bocznego otwiera ten sam formularz z wypełnionymi już wersjami.
+> **Wypróbowałeś? Napisz w 30 sekund. (bez konta)** [Otwórz szybki formularz opinii](https://tally.so/r/db904z), wybierz 😀 😐 😞 lub 💡 i dodaj zdanie, jeśli chcesz. W VirtoMir przycisk 💬 na dole paska bocznego otwiera ten sam formularz z wypełnionymi już wersjami. Z kontem GitHub możesz też użyć [formularza issue](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml).
 
 ## Wypróbuj w 30 sekund
 

@@ -50,7 +50,7 @@
     api.version().then((v) => (fbSetup.version = v.version)).catch(() => {})
     ent.chassis().then((c) => (fbSetup.os = c.os)).catch(() => {})
   })
-  let fbHref = $derived(feedbackURL({ ...fbSetup, libvirt: live.host?.libvirtVersion, qemu: live.host?.hypervisorVersion }))
+  let fbHref = $derived(feedbackURL({ ...fbSetup, libvirt: live.host?.libvirtVersion, qemu: live.host?.hypervisorVersion }, 'app'))
 
   let status = $derived<Status>(
     !live.streamOpen ? 'down' : live.snapshot?.connected === false ? 'degraded' : live.snapshot ? 'up' : 'pending',

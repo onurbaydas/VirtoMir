@@ -1,7 +1,9 @@
-// The quick feedback form on GitHub (.github/ISSUE_TEMPLATE/quick_feedback.yml), opened with
-// the setup already filled in: versions only, never host names, addresses or serial numbers.
+// The feedback form (Tally: no account needed), opened with the setup already filled in its
+// hidden fields: versions only, never host names, addresses or serial numbers. People with a
+// GitHub account can use the same questions as an issue form (.github/ISSUE_TEMPLATE/quick_feedback.yml).
 
-export const FEEDBACK_FORM = 'https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml'
+export const FEEDBACK_FORM = 'https://tally.so/r/db904z'
+export const GITHUB_FEEDBACK_FORM = 'https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml'
 
 export interface FeedbackSetup {
   version?: string
@@ -22,7 +24,10 @@ export function setupLine(s: FeedbackSetup): string {
     .join(' · ')
 }
 
-export function feedbackURL(s: FeedbackSetup): string {
+/** The form's address; source says where it was opened (app, demo). */
+export function feedbackURL(s: FeedbackSetup, source: 'app' | 'demo'): string {
+  const q = new URLSearchParams({ source })
   const line = setupLine(s)
-  return line ? `${FEEDBACK_FORM}&setup=${encodeURIComponent(line)}` : FEEDBACK_FORM
+  if (line) q.set('setup', line)
+  return `${FEEDBACK_FORM}?${q}`
 }

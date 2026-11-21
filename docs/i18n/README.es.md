@@ -68,7 +68,7 @@ Un único binario con la interfaz web incluida: sin distribución propia, sin ba
 > **¿Te gusta hacia dónde va? Dale una ⭐.** VirtoMir lo construye una sola persona: las estrellas hacen que otros lo encuentren y lo mantienen vivo. Para enterarte de nuevas versiones: **Watch → Custom → Releases**.
 
 > [!NOTE]
-> **¿Lo probaste? Cuéntanoslo en 30 segundos.** [Abre el formulario de opinión rápida](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml), elige 😀 😐 😞 o 💡 y añade una frase si quieres. Dentro de VirtoMir, el botón 💬 al pie de la barra lateral abre el mismo formulario con tus versiones ya rellenadas.
+> **¿Lo probaste? Cuéntanoslo en 30 segundos. (sin cuenta)** [Abre el formulario de opinión rápida](https://tally.so/r/db904z), elige 😀 😐 😞 o 💡 y añade una frase si quieres. Dentro de VirtoMir, el botón 💬 al pie de la barra lateral abre el mismo formulario con tus versiones ya rellenadas. Con cuenta de GitHub también sirve [el formulario de issue](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml).
 
 ## Pruébalo en 30 segundos
 

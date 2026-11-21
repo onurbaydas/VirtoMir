@@ -68,7 +68,7 @@ VirtoMir 想同时做到两件事：
 > **喜欢这个方向？点个 ⭐ 吧。** VirtoMir 由一个人开发：Star 能让更多人发现它，也让项目持续下去。想收到新版本通知，请点 **Watch → Custom → Releases**。
 
 > [!NOTE]
-> **试过了吗？花 30 秒告诉我们。** [打开快速反馈表单](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml)，选 😀 😐 😞 或 💡，愿意的话再写一句。在 VirtoMir 里，侧边栏底部的 💬 按钮会打开同一个表单，并自动填好你的版本信息。
+> **试过了吗？花 30 秒告诉我们。 (无需账号)** [打开快速反馈表单](https://tally.so/r/db904z)，选 😀 😐 😞 或 💡，愿意的话再写一句。在 VirtoMir 里，侧边栏底部的 💬 按钮会打开同一个表单，并自动填好你的版本信息。 有 GitHub 账号的话，也可以用[议题表单](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml)。
 
 ## 30 秒上手
 

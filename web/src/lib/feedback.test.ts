@@ -9,10 +9,11 @@ describe('feedback', () => {
     expect(setupLine({ libvirt: '10.0.0' })).toBe('libvirt 10.0.0')
   })
 
-  it('fills the setup field of the form, or opens it empty', () => {
-    expect(feedbackURL({})).toBe(FEEDBACK_FORM)
-    const u = new URL(feedbackURL({ version: '1.2.1', os: 'Ubuntu 24.04 LTS' }))
-    expect(u.searchParams.get('template')).toBe('quick_feedback.yml')
+  it('fills the hidden fields of the form', () => {
+    const u = new URL(feedbackURL({ version: '1.2.1', os: 'Ubuntu 24.04 LTS' }, 'app'))
+    expect(u.origin + u.pathname).toBe(FEEDBACK_FORM)
+    expect(u.searchParams.get('source')).toBe('app')
     expect(u.searchParams.get('setup')).toBe('VirtoMir 1.2.1 · Ubuntu 24.04 LTS')
+    expect(new URL(feedbackURL({}, 'demo')).searchParams.has('setup')).toBe(false)
   })
 })

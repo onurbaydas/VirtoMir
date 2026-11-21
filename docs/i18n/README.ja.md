@@ -68,7 +68,7 @@ Web UI を内蔵した単一のバイナリです。専用ディストリビュ�
 > **この方向性が気に入ったら ⭐ を。** VirtoMir は一人で開発しています。スターがあると他の人に見つけてもらえ、プロジェクトが続きます。新しいバージョンの通知は **Watch → Custom → Releases** から。
 
 > [!NOTE]
-> **試してみましたか？30 秒で教えてください。** [クイックフィードバックのフォームを開き](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml)、😀 😐 😞 💡 のどれかを選んで、よければ一言添えてください。VirtoMir の中では、サイドバー下部の 💬 ボタンからバージョン情報入りの同じフォームが開きます。
+> **試してみましたか？30 秒で教えてください。 (アカウント不要)** [クイックフィードバックのフォームを開き](https://tally.so/r/db904z)、😀 😐 😞 💡 のどれかを選んで、よければ一言添えてください。VirtoMir の中では、サイドバー下部の 💬 ボタンからバージョン情報入りの同じフォームが開きます。 GitHub アカウントがあれば[Issue フォーム](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml)も使えます。
 
 ## 30 秒で試す
 

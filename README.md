@@ -67,7 +67,7 @@ It is a single binary with the web UI built in: no dedicated distribution, no da
 > **Like where this is going? Give it a ⭐.** VirtoMir is built by one person: stars are how other people find it, and they keep it going. To hear about new versions, click **Watch → Custom → Releases**.
 
 > [!NOTE]
-> **Tried it? Tell us in 30 seconds.** [Open the quick feedback form](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml), pick 😀 😐 😞 or 💡 and add a sentence if you like. Inside VirtoMir, the 💬 button at the bottom of the sidebar opens the same form with your versions already filled in.
+> **Tried it? Tell us in 30 seconds, no account needed.** [Open the feedback form](https://tally.so/r/db904z), pick 😀 😐 😞 or 💡 and add a sentence if you like. Inside VirtoMir, the 💬 button at the bottom of the sidebar opens the same form with your versions already filled in. On GitHub? Use [the issue form](https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml) instead.
 
 ## Try it in 30 seconds
 
@@ -281,6 +281,8 @@ VirtoMir is built by one person, together with AI coding agents (their working r
 | **Any time** | Tests for the risky paths: [atomic files](https://github.com/onurbaydas/VirtoMir/issues/125) · [systemd watchdog](https://github.com/onurbaydas/VirtoMir/issues/126) · [reports](https://github.com/onurbaydas/VirtoMir/issues/127) · [ZFS replication](https://github.com/onurbaydas/VirtoMir/issues/128) | Go tests |
 
 Not a coder? That helps just as much:
+
+- 💬 **Tell us how it went** in [30 seconds, no account needed](https://tally.so/r/db904z).
 
 - 🧪 **Run it** on Debian, an older Ubuntu, Rocky/Alma or Arch, and tell us what breaks in [#1](https://github.com/onurbaydas/VirtoMir/issues/1).
 - 🔧 **Test what we cannot reach**: GPU passthrough, Ceph, real BMCs, VMware.

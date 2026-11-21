@@ -230,10 +230,15 @@ Copyright © 2026 Onur Baydas. {license_commercial}
 '''
 
 def render(code, T):
-    from extra import X, FEEDBACK
+    from extra import X, FEEDBACK, NO_ACCOUNT, GITHUB_ALT
     tip, footer, stats, contribute = X[code]
-    form = "https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml"
-    extra = dict(star_tip=tip, star_footer=footer, contribute=contribute, feedback=FEEDBACK[code].replace("{u}", form),
+    form = "https://tally.so/r/db904z"
+    github = "https://github.com/onurbaydas/VirtoMir/issues/new?template=quick_feedback.yml"
+    fb = FEEDBACK[code].replace("{u}", form)
+    head, sep, rest = fb.partition("**")  # "**<first sentence>** rest": the first sentence gets "(no account)"
+    first, sep2, rest = rest.partition("**")
+    fb = f"{head}**{first} ({NO_ACCOUNT[code]})**{rest} " + GITHUB_ALT[code].replace("{g}", github)
+    extra = dict(star_tip=tip, star_footer=footer, contribute=contribute, feedback=fb,
                  **{f"s{i}": v for i, v in enumerate(stats)})
     body = TEMPLATE.format(langbar=langbar(code), **T, **extra)
     if code == "ar":
