@@ -47,7 +47,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 - Per machine: CPU, per-vCPU load, disk throughput / IOPS / latency, network traffic, guest-reported memory
 - Host CPU, memory, physical disk and network throughput
 - **History** for 1 h, 6 h, 24 h, 7 days and 30 days — kept by VirtoMir itself, no Prometheus needed
-- …and a **Prometheus endpoint** (`/api/v1/metrics`) for those who have one, with ready-made **Grafana dashboards** (host overview, one machine) and **Prometheus alert rules** in [`contrib/`](../contrib/README.md); the whole API is described by **OpenAPI** (`/api/v1/openapi.json`)
+- …and a **Prometheus endpoint** (`/api/v1/metrics`) for those who have one, with ready-made **Grafana dashboards** (host overview, one machine; also on grafana.com as [26096](https://grafana.com/grafana/dashboards/26096-virtomir-overview/) and [26097](https://grafana.com/grafana/dashboards/26097-virtomir-machine/)) and **Prometheus alert rules** in [`contrib/`](../contrib/README.md); the whole API is described by **OpenAPI** (`/api/v1/openapi.json`)
 - **Alerts** with sensible defaults (host overloaded, machine crashed, pool filling up, libvirt down) — to a webhook, Slack, Discord, ntfy or e-mail
 - **Host hardware**: vendor, model, BIOS, temperatures, fans and power from the host's own sensors; GPUs with load, memory, temperature and power (NVIDIA, AMD)
 - **Busiest machines** right now, and "would N more machines fit?" from live numbers (with an N+1 check in a cluster)

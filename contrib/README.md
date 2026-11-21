@@ -78,7 +78,10 @@ Two rules deserve a note:
 ## 4. Import the Grafana dashboards
 
 In Grafana: **Dashboards → New → Import**, then either upload the JSON file or
-paste its contents. Both dashboards ask for one thing on import: the
+paste its contents. They are also on grafana.com, so you can type the ID
+instead: **26096** ([VirtoMir Overview](https://grafana.com/grafana/dashboards/26096-virtomir-overview/))
+and **26097** ([VirtoMir Machine](https://grafana.com/grafana/dashboards/26097-virtomir-machine/)).
+Both dashboards ask for one thing on import: the
 **Prometheus datasource** to use — pick the one that scrapes VirtoMir, and every
 panel is wired to it.
 
