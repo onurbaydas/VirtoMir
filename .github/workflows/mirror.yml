@@ -52,9 +52,10 @@ jobs:
             jq -n --arg n "$REPO" --arg d "$DESC" '{name:$n, description:$d, private:false}' |
               curl -sf -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
                 -X POST https://codeberg.org/api/v1/user/repos -d @- >/dev/null
-            jq -n --arg w "https://github.com/$OWNER/$REPO" '{has_issues:false, has_pull_requests:false, website:$w}' |
-              curl -sf -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
-                -X PATCH "https://codeberg.org/api/v1/repos/$OWNER/$REPO" -d @- >/dev/null
           fi
+          jq -n --arg w "https://github.com/$OWNER/$REPO" '{has_issues:false, has_pull_requests:false, website:$w}' |
+            curl -sS --fail-with-body -o /tmp/settings.json -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
+              -X PATCH "https://codeberg.org/api/v1/repos/$OWNER/$REPO" -d @- ||
+            { cat /tmp/settings.json; echo; echo "::warning::Codeberg repository settings were not applied."; }
           git push --force "https://$OWNER:$TOKEN@codeberg.org/$OWNER/$REPO.git" HEAD:refs/heads/main
           git push --force "https://$OWNER:$TOKEN@codeberg.org/$OWNER/$REPO.git" --tags
