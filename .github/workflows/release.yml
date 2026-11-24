@@ -118,7 +118,7 @@ jobs:
       tag: ${{ github.ref_name }}
     secrets: inherit
 
-  # After a stable release: the README (and its translations), the AUR PKGBUILD with the new
+  # After a stable release: the README (and its translations), the PKGBUILD (for the AUR maintainer) with the new
   # checksums and the Ansible collection name the new version on main, with nothing left to do by hand.
   pins:
     permissions:
@@ -154,9 +154,3 @@ jobs:
           git add -A
           git commit -m "chore(release): ${TAG} in the README and its translations; pin the ${TAG} checksums in the PKGBUILD"
           git push origin HEAD:main
-
-  aur:
-    needs: pins
-    if: ${{ !contains(github.ref_name, '-') }}
-    uses: ./.github/workflows/aur.yml
-    secrets: inherit
