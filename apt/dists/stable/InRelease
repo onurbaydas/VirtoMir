@@ -4,35 +4,35 @@ Hash: SHA512
 Architectures: amd64 arm64
 Codename: stable
 Components: main
-Date: Tue, 24 Nov 2026 12:50:51 +0000
+Date: Tue, 24 Nov 2026 12:58:05 +0000
 Description: VirtoMir, a detailed control deck for KVM/QEMU/libvirt
 Label: VirtoMir
 Origin: VirtoMir
 Suite: stable
 MD5Sum:
- 91ee6ade3306ceb4b2c74ce261d35ebf             7270 main/binary-amd64/Packages
- efe5d492af690fb5c307733154f03061             1770 main/binary-amd64/Packages.gz
- edde5e9f11aa5652fabd38bf1834d1a3             7270 main/binary-arm64/Packages
- 5cf4d083a8c36e0e0040f54454a08fe3             1763 main/binary-arm64/Packages.gz
+ e3a36442500bd3defa9edd226db0f37c             7270 main/binary-amd64/Packages
+ 678ccb03804cfda4876ff3bea8839016             1772 main/binary-amd64/Packages.gz
+ e57df728daf0defb23f2ddc8d558b5f6             7270 main/binary-arm64/Packages
+ 46bc5477eba2849cc86cb22b0a1f58e2             1761 main/binary-arm64/Packages.gz
 SHA1:
- 8d8967d7ed193b422d560a7e0369a4e9525b20a1             7270 main/binary-amd64/Packages
- 2d275f2f59267213a3e31f96fd7acf0522b122ee             1770 main/binary-amd64/Packages.gz
- 6582bb5971597e3400a58042822d977e3599e8cb             7270 main/binary-arm64/Packages
- 8724b9ceda1f1123359dc6e8f9702dcbc7f3fc82             1763 main/binary-arm64/Packages.gz
+ e91830c57b421401f2e0ca200ce01a883506e3a7             7270 main/binary-amd64/Packages
+ 868535e445f2c97389898ac54bdb3a28bfef3e58             1772 main/binary-amd64/Packages.gz
+ 5533e0b4e8201b00598ae1cf33addb319c98a5b1             7270 main/binary-arm64/Packages
+ 63cf1955bb42e3309355c660244d46ddac3adfff             1761 main/binary-arm64/Packages.gz
 SHA256:
- a25202e87615a3b7801de0fa36ccf07a019f3ae70db16c3d651f0b052158ed29             7270 main/binary-amd64/Packages
- cae91be753e35935798393497518baef89dbf86efcd9eda4d7c7758b3fc358b1             1770 main/binary-amd64/Packages.gz
- a0289fa64ed1500317c945333c3571e560e5e4ae1fd93cc317f9bdfeec1a98be             7270 main/binary-arm64/Packages
- ee427a4c06a972b955ad22f5c5759bb4be1f47d7338b1d54774afb979608e6e7             1763 main/binary-arm64/Packages.gz
+ 3784ee38bca359213db211f8692a25a4d57d25e8ef9d7e15c35ad7fa3e0b4845             7270 main/binary-amd64/Packages
+ ec9a334beef8559a8004d5020107c5c8990376e66cbe5c3cc66809f08740ea71             1772 main/binary-amd64/Packages.gz
+ a216fc7d80e249b8c5572fb472d320b0244cf9fe3341513bb87b9f3ab8964ea2             7270 main/binary-arm64/Packages
+ 3e443ce1811f1d36ebf67d1ed1b329b0e8b7fa99af1acbf6c2633afbebf6789e             1761 main/binary-arm64/Packages.gz
 SHA512:
- 55c57bfaab9024e980bd797ed292d076a0116806b43b456d7c3eded3dcc20740bedc042c4cedf7c3d392e860e3f0e944bf134b84e1a0db6ed3a485f13b9a1517             7270 main/binary-amd64/Packages
- 1602c0e143c4fb5be6dd2edd1061b097652d4ce639649992d8d43d7425fed416b22b15559f88a56a545e1a36a451fbaccff6cdcf684282aaba2f5b86bfd6de8f             1770 main/binary-amd64/Packages.gz
- 81610109ea9235db652e55f3e0f50a3ca13c8c2f9bea61c5cb9152b97cf8cb19ae955d30430e4bec6f6d9f60229de6a01ccf8f32624672ba77b237f95ce77364             7270 main/binary-arm64/Packages
- 7de66b72b50a96663614595f675d5ecbb2e8e41af1698cac5457b3b25125af87b592c412721362f60d915388e685a43775d8866440d4f617b37416db9224dc92             1763 main/binary-arm64/Packages.gz
+ 3ea6a50fbedf63d6b9205ab3f743c7d9d86915a8af3511bd658a505936cc44c8713563b64e82db459baaba2622867373c3d33a6fd9e6a90a15d1e319e4cdab09             7270 main/binary-amd64/Packages
+ 7c2ad626b78c3f0dc6516818101ec57a79a571924f42747738290c0121c20f35b166c98678154e34a4f5156e87ccabe728fdb889a0d9b195daa0dd077f6b1fa7             1772 main/binary-amd64/Packages.gz
+ 8df6e84b235a09a1febbd7ceb883ed6e568902985afcf0171400a06f0159de8224017c7471125b3deb2cc075f90b7c70f3de099fba490018c7b52350de22aeab             7270 main/binary-arm64/Packages
+ dc7d8428ddfbd6940f1c71acc36605b439c98381d62112f3ccf63971015f283c7ff1385e54cf339986ba76bfe0ea184ce040936e18cf5925237289dae0263699             1761 main/binary-arm64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYKAB0WIQT1SwcWokCyLpR7jcbkEHU7/jOp8AUCawWIKwAKCRDkEHU7/jOp
-8KdbAP4uG70jzFRC1htP84J0aI8p5Kbxxm6/B1LONckohwBvyAD/akF4lt/RwnYl
-rPIQ6LhkWp0b/fZ1fRdbYkEo8xiEFA0=
-=LvQc
+iHUEARYKAB0WIQT1SwcWokCyLpR7jcbkEHU7/jOp8AUCawWJ3QAKCRDkEHU7/jOp
+8Bh1AP96C/FaKgx3SyMrFqLPWT5jrq5j2PEpEjiSTgSHhRrxFAD/Uv+31fImny5O
+SO7Vno6HxxGlLBWaxYJl5EE2bIPj1AA=
+=mROp
 -----END PGP SIGNATURE-----
