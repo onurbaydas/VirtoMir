@@ -154,3 +154,12 @@ jobs:
           git add -A
           git commit -m "chore(release): ${TAG} in the README and its translations; pin the ${TAG} checksums in the PKGBUILD"
           git push origin HEAD:main
+
+  aur:
+    permissions:
+      contents: write
+    needs: pins
+    if: ${{ !contains(github.ref_name, '-') }}
+    uses: ./.github/workflows/aur-package.yml
+    with:
+      tag: ${{ github.ref_name }}
