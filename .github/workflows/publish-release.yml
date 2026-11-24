@@ -67,7 +67,6 @@ jobs:
           pre=false; [[ "$TAG" == *-* ]] && pre=true
           if [ -n "$OLD" ] && gh release view "$OLD" >/dev/null 2>&1; then
             gh release edit "$OLD" --tag "$TAG" --prerelease="$pre" "${args[@]}"
-            git push origin ":refs/tags/$OLD" || true
           elif gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --prerelease="$pre" "${args[@]}"
           else
@@ -78,6 +77,10 @@ jobs:
             body=$(gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" -q .body)
             printf '%s\n' "$body" >notes.md
             gh release edit "$TAG" --notes-file notes.md
+          fi
+          # The wrong tag goes, whether or not a release still points at it.
+          if [ -n "$OLD" ] && [ "$OLD" != "$TAG" ] && git ls-remote --exit-code --tags origin "refs/tags/$OLD" >/dev/null; then
+            git push origin ":refs/tags/$OLD"
           fi
 
       # Only for a tag made here: a tag pushed with the workflow token starts nothing by itself.

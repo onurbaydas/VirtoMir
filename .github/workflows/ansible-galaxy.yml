@@ -26,6 +26,10 @@ jobs:
       - name: Build collection artifact
         run: |
           mkdir -p dist
+          # On a v* tag the collection takes the tag's version (v1.2.3 -> 1.2.3).
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            sed -i "s/^version: .*/version: ${GITHUB_REF_NAME#v}/" integrations/ansible/galaxy.yml
+          fi
           ansible-galaxy collection build integrations/ansible --output-path dist/
 
       - name: Upload artifact
