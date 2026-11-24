@@ -117,3 +117,40 @@ jobs:
     with:
       tag: ${{ github.ref_name }}
     secrets: inherit
+
+  # After a stable release: the README (and its translations), the AUR PKGBUILD with the new
+  # checksums and the Ansible collection name the new version on main, with nothing left to do by hand.
+  pins:
+    permissions:
+      contents: write
+    needs: publish
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/download-artifact@v8
+        with:
+          path: out
+          merge-multiple: true
+      - name: Pin the new version on main
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          new="${TAG#v}"
+          old=$(sed -n 's/^pkgver=//p' packaging/aur/PKGBUILD)
+          if [ "$old" = "$new" ]; then echo "main already names $new"; exit 0; fi
+          amd=$(cut -d' ' -f1 "out/virtomir_${TAG}_linux_amd64.tar.gz.sha256")
+          arm=$(cut -d' ' -f1 "out/virtomir_${TAG}_linux_arm64.tar.gz.sha256")
+          oldre="${old//./\\.}"
+          sed -i "s/${oldre}/${new}/g" README.md scripts/readme-i18n/gen.py packaging/aur/PKGBUILD packaging/aur/.SRCINFO
+          sed -i "s/^version: .*/version: ${new}/" integrations/ansible/galaxy.yml
+          sed -i -E "s/^(sha256sums_x86_64=\(')[^']*/\1${amd}/; s/^(sha256sums_aarch64=\(')[^']*/\1${arm}/" packaging/aur/PKGBUILD
+          sed -i -E "s/^(\tsha256sums_x86_64 = ).*/\1${amd}/; s/^(\tsha256sums_aarch64 = ).*/\1${arm}/" packaging/aur/.SRCINFO
+          python3 scripts/readme-i18n/gen.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(release): ${TAG} in the README and its translations; pin the ${TAG} checksums in the PKGBUILD"
+          git push origin HEAD:main
