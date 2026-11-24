@@ -1,0 +1,6 @@
+typescript/dist/
+java/target/
+dotnet/**/bin/
+dotnet/**/obj/
+dotnet/out/
+ruby/*.gem

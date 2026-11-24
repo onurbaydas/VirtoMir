@@ -1,0 +1,215 @@
+name: Packages
+
+# GitHub Packages for every v* tag:
+#   Containers  ghcr.io/onurbaydas/virtomir-csi, ghcr.io/onurbaydas/virtomir-operator (amd64 + arm64)
+#   npm         @onurbaydas/virtomir            (sdk/typescript)
+#   Maven       io.github.onurbaydas:virtomir-client (sdk/java)
+#   NuGet       VirtoMir.Client                 (sdk/dotnet)
+#   RubyGems    virtomir                        (sdk/ruby)
+# Pushes to main and pull requests that touch them only build and test; nothing is published.
+# New packages start private: make each one public once under the repository's Packages.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'sdk/**'
+      - 'integrations/virtomir-csi/**'
+      - 'integrations/virtomir-operator/**'
+      - '.github/workflows/packages.yml'
+  pull_request:
+    paths:
+      - 'sdk/**'
+      - 'integrations/virtomir-csi/**'
+      - 'integrations/virtomir-operator/**'
+      - '.github/workflows/packages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      semver: ${{ steps.v.outputs.semver }}
+      gem: ${{ steps.v.outputs.gem }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            semver="${GITHUB_REF_NAME#v}"
+          else
+            semver="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+          fi
+          # RubyGems spells a prerelease 1.2.0.pre.rc1, not 1.2.0-rc1.
+          gem="${semver/-/.pre.}"
+          gem="${gem//-/.}"
+          prerelease=false
+          [[ "$semver" == *-* ]] && prerelease=true
+          echo "semver=$semver" >>"$GITHUB_OUTPUT"
+          echo "gem=$gem" >>"$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >>"$GITHUB_OUTPUT"
+          echo "version $semver (gem $gem)"
+
+  containers:
+    needs: version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [virtomir-csi, virtomir-operator]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Emulate arm64 (only the final stage's RUN lines; Go cross-compiles)
+        run: docker run --privileged --rm tonistiigi/binfmt --install arm64
+
+      - name: Builder
+        run: docker buildx create --use --name multi
+
+      - name: Sign in to ghcr.io
+        if: env.PUBLISH == 'true'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Build${{ env.PUBLISH == 'true' && ' and push' || '' }}
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          VERSION: ${{ needs.version.outputs.semver }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          IMAGE="${IMAGE,,}"
+          tags=(-t "$IMAGE:$VERSION")
+          [[ "$PRERELEASE" == false ]] && tags+=(-t "$IMAGE:latest")
+          out=(--output type=cacheonly)
+          [[ "$PUBLISH" == true ]] && out=(--push)
+          docker buildx build "integrations/${{ matrix.image }}" \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg "VERSION=$VERSION" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            "${tags[@]}" "${out[@]}"
+
+  npm:
+    needs: version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        working-directory: sdk/typescript
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@onurbaydas'
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - name: Publish
+        if: env.PUBLISH == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.semver }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          if [[ "$PRERELEASE" == true ]]; then npm publish --tag next; else npm publish; fi
+
+  maven:
+    needs: version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        working-directory: sdk/java
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test
+        run: mvn -B -ntp verify
+      - name: Publish
+        if: env.PUBLISH == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.semver }}
+        run: |
+          mkdir -p ~/.m2
+          cat >~/.m2/settings.xml <<'XML'
+          <settings>
+            <servers>
+              <server>
+                <id>github</id>
+                <username>${env.GITHUB_ACTOR}</username>
+                <password>${env.GITHUB_TOKEN}</password>
+              </server>
+            </servers>
+          </settings>
+          XML
+          mvn -B -ntp versions:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
+          mvn -B -ntp deploy -DskipTests
+
+  nuget:
+    needs: version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        working-directory: sdk/dotnet
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test
+        run: dotnet test test/VirtoMir.Client.Tests
+      - name: Pack
+        env:
+          VERSION: ${{ needs.version.outputs.semver }}
+        run: dotnet pack src/VirtoMir.Client -c Release -p:Version="$VERSION" -o out
+      - name: Publish
+        if: env.PUBLISH == 'true'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          dotnet nuget push "out/*.nupkg" \
+            --source "https://nuget.pkg.github.com/${GITHUB_REPOSITORY_OWNER}/index.json" \
+            --api-key "$TOKEN" --skip-duplicate
+
+  rubygems:
+    needs: version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        working-directory: sdk/ruby
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test
+        run: ruby -Ilib test/client_test.rb
+      - name: Build
+        env:
+          VIRTOMIR_GEM_VERSION: ${{ needs.version.outputs.gem }}
+        run: gem build virtomir.gemspec
+      - name: Publish
+        if: env.PUBLISH == 'true'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p ~/.gem
+          printf -- '---\n:github: Bearer %s\n' "$TOKEN" >~/.gem/credentials
+          chmod 600 ~/.gem/credentials
+          gem push --key github --host "https://rubygems.pkg.github.com/${GITHUB_REPOSITORY_OWNER}" virtomir-*.gem

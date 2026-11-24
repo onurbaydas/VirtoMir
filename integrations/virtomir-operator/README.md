@@ -21,7 +21,7 @@ kubectl apply -f config/samples/samples.yaml
 kubectl get virtomirmachines
 ```
 
-There is no published image yet. Build it with `docker build -t ghcr.io/onurbaydas/virtomir-operator:latest .`, or run the operator outside the cluster:
+The image is published for amd64 and arm64 with every release: `ghcr.io/onurbaydas/virtomir-operator:<version>` and `:latest` (the manifest uses `:latest`; pin a version for production). Build it yourself with `docker build -t ghcr.io/onurbaydas/virtomir-operator:dev .`, or run the operator outside the cluster:
 
 ```sh
 VIRTOMIR_URL=https://hv1:8420 VIRTOMIR_TOKEN=vmt_... VIRTOMIR_INSECURE=true go run . --kubeconfig ~/.kube/config

@@ -9,10 +9,10 @@ The access modes are ReadWriteOnce and ReadWriteOncePod, as filesystem or raw bl
 
 ## Install
 
-Build the image (there is no published image yet):
+The image is published for amd64 and arm64 with every release: `ghcr.io/onurbaydas/virtomir-csi:<version>` and `:latest` (the manifest below uses `:latest`; pin a version for production). To build it yourself:
 
 ```sh
-docker build -t ghcr.io/onurbaydas/virtomir-csi:latest integrations/virtomir-csi
+docker build -t ghcr.io/onurbaydas/virtomir-csi:dev integrations/virtomir-csi
 ```
 
 Create the namespace and the secret, then apply the driver and a StorageClass:
