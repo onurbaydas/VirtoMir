@@ -213,3 +213,29 @@ jobs:
           printf -- '---\n:github: Bearer %s\n' "$TOKEN" >~/.gem/credentials
           chmod 600 ~/.gem/credentials
           gem push --key github --host "https://rubygems.pkg.github.com/${GITHUB_REPOSITORY_OWNER}" virtomir-*.gem
+
+  # Reports whether each package is public. New packages can start private, and GitHub has no API to
+  # change that: a private one gets a warning naming the settings page.
+  visibility:
+    needs: [containers, npm, maven, nuget, rubygems]
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: read
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          for p in container/virtomir-csi container/virtomir-operator npm/virtomir \
+                   maven/io.github.onurbaydas.virtomir-client nuget/VirtoMir.Client rubygems/virtomir; do
+            type="${p%%/*}"; name="${p#*/}"
+            if v=$(gh api "/users/$OWNER/packages/$type/$name" --jq .visibility 2>/dev/null); then
+              echo "$type $name: $v"
+              if [ "$v" != public ]; then
+                echo "::warning::$type package $name is $v: https://github.com/users/$OWNER/packages/$type/$name/settings"
+              fi
+            else
+              echo "$type $name: not published yet (or not readable with this token)"
+            fi
+          done
