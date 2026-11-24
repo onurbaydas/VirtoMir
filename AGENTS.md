@@ -66,6 +66,8 @@ internal/history/    ← metric history rings, saved to -state-dir/history.gob (
 packaging/           ← /etc/pam.d/virtomir, systemd unit
 .github/workflows/   ← CI (tests, race, PAM build, shellcheck) and releases on v* tags
 scripts/install.sh   ← installer shipped in release tarballs; build-release.sh builds them
+sdk/                 ← API client libraries (TypeScript, Java, .NET, Ruby) published to GitHub Packages with the CSI and
+                       operator images by .github/workflows/packages.yml on v* tags
 docs/features.md     ← the full feature list (the README keeps the short version and links here)
 docs/i18n/           ← README.<lang>.md: the README front page in 15 languages, generated: edit the template and
                        texts in scripts/readme-i18n/ (gen.py, <lang>.py, extra.py) and run `python3 scripts/readme-i18n/gen.py`;

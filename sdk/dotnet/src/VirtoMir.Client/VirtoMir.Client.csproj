@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>VirtoMir.Client</PackageId>
+    <Version>0.0.0-dev</Version>
+    <Authors>VirtoMir contributors</Authors>
+    <Description>Client for the VirtoMir API (/api/v1): machines, power, autostart and snapshots.</Description>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/onurbaydas/VirtoMir</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/onurbaydas/VirtoMir</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>virtomir;kvm;qemu;libvirt;virtualization</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

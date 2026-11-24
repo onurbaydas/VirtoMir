@@ -125,6 +125,7 @@ What you use every day on one host is always in front: **Overview, Machines, Sto
 - The whole **REST API**, described by OpenAPI, with API tokens
 - An **Ansible collection** (machines, networks, storage pools, projects, placement rules, snapshots; check mode and idempotent) in [`integrations/ansible`](../integrations/ansible)
 - A **Terraform provider** (machines, networks, pools, projects, placement rules) on the [Terraform Registry](https://registry.terraform.io/providers/onurbaydas/virtomir/latest) (`source = "onurbaydas/virtomir"`), developed in [`integrations/terraform-provider-virtomir`](../integrations/terraform-provider-virtomir)
+- **Client libraries** for TypeScript (npm), Java (Maven), .NET (NuGet) and Ruby (gem) on GitHub Packages, in [`sdk`](../sdk); the Kubernetes **CSI driver** and **operator** images on ghcr.io
 
 ### Languages
 
