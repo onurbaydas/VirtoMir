@@ -6,7 +6,7 @@ require (
 	github.com/ProtonMail/go-crypto v1.5.2
 	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-oidc/v3 v3.21.0
-	github.com/digitalocean/go-libvirt v0.0.0-20260814190004-1a83157e1858
+	github.com/digitalocean/go-libvirt v0.0.0-20261013170128-efbbdf578ac8
 	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/go-ldap/ldap/v3 v3.4.15
 	github.com/kdomanski/iso9660 v0.4.0
@@ -22,7 +22,7 @@ require (
 
 require (
 	github.com/Azure/go-ntlmssp v0.1.1 // indirect
-	github.com/cloudflare/circl v1.6.3 // indirect
+	github.com/cloudflare/circl v1.6.5 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.8 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	golang.org/x/net v0.63.0 // indirect
