@@ -79,8 +79,8 @@ Web UI を内蔵した単一のバイナリです。専用ディストリビュ�
 |---|---|
 | **見るだけ** | [オンラインデモ](https://onurbaydas.github.io/VirtoMir/demo/) を触ってみてください。架空のホストで、インストールは不要です。 |
 | **使い捨てホスト** | コマンド一つで VirtoMir 入りのテスト VM が手に入ります: [サーバーに触れずに VirtoMir を試す](../try-in-a-vm.md)。 |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.2_amd64.deb` — [最新リリース](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.2-1.x86_64.rpm` — [最新リリース](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.3_amd64.deb` — [最新リリース](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.3-1.x86_64.rpm` — [最新リリース](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 パッケージは libvirt と QEMU/KVM が無ければ導入し、ポート 8420 を開けてサービスを起動します。ほかに入力するものはありません。
 

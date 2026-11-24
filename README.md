@@ -78,8 +78,8 @@ It is a single binary with the web UI built in: no dedicated distribution, no da
 |---|---|
 | **Just look** | Click through the [online demo](https://onurbaydas.github.io/VirtoMir/demo/): made-up hosts, nothing to install. |
 | **Throwaway host** | One command gives you a test VM with VirtoMir inside: [Try VirtoMir without touching your servers](docs/try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.2_amd64.deb` from the [latest release](https://github.com/onurbaydas/VirtoMir/releases/latest), or the [signed repository](#signed-package-repository-apt--dnf). |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.2-1.x86_64.rpm`, or the [signed repository](#signed-package-repository-apt--dnf). |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.3_amd64.deb` from the [latest release](https://github.com/onurbaydas/VirtoMir/releases/latest), or the [signed repository](#signed-package-repository-apt--dnf). |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.3-1.x86_64.rpm`, or the [signed repository](#signed-package-repository-apt--dnf). |
 
 The package pulls in libvirt and QEMU/KVM if they are missing, opens port 8420 and starts the service. Nothing else is left to type.
 
@@ -200,7 +200,7 @@ Then open `https://<host>:8420/` and sign in as `root` or as an administrator (g
 <summary><b>Debian / Ubuntu package</b></summary>
 
 ```sh
-sudo apt install ./virtomir_1.2.2_amd64.deb   # or _arm64.deb; pulls libvirt and QEMU if missing
+sudo apt install ./virtomir_1.2.3_amd64.deb   # or _arm64.deb; pulls libvirt and QEMU if missing
 ```
 
 Every package does the host setup itself: it pulls in libvirt and QEMU/KVM, starts libvirt and its `default` NAT network, opens port 8420 in ufw or firewalld when one is on, and starts `virtomird` (self-signed HTTPS). Members of `virtomir-operator` and `virtomir-viewer` get fewer rights than admins. Flags (listen address, own certificate) go in `/etc/default/virtomird`, then `sudo systemctl restart virtomird`. `sudo apt purge virtomir` also deletes `/var/lib/virtomir`; your machines are never touched. Build the package yourself with `scripts/build-deb.sh <version>` on Debian/Ubuntu (Go, Node, gcc, libpam0g-dev).
@@ -210,7 +210,7 @@ Every package does the host setup itself: it pulls in libvirt and QEMU/KVM, star
 <summary><b>Fedora / RHEL package (experimental)</b></summary>
 
 ```sh
-sudo dnf install ./virtomir-1.2.2-1.x86_64.rpm   # or .aarch64.rpm; Fedora 40+ / RHEL 10
+sudo dnf install ./virtomir-1.2.3-1.x86_64.rpm   # or .aarch64.rpm; Fedora 40+ / RHEL 10
 ```
 
 Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf` or from the UI. Built with `scripts/build-rpm.sh <version>`. With SELinux on, the package (and `install.sh`) loads a small policy module, `virtomir`: without it libvirt refuses virtomird ("Cannot find start time for pid") and QEMU cannot write backups. Storage pool folders and backup locations outside the usual places are given the label for VM images by VirtoMir itself.
@@ -222,8 +222,8 @@ Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf`
 If libvirt and QEMU/KVM are missing, the installer adds them with apt or dnf.
 
 ```sh
-tar xzf virtomir_v1.2.2_linux_amd64.tar.gz
-sudo ./virtomir_v1.2.2_linux_amd64/install.sh
+tar xzf virtomir_v1.2.3_linux_amd64.tar.gz
+sudo ./virtomir_v1.2.3_linux_amd64/install.sh
 ```
 
 The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pam.d/virtomir`) and a systemd unit, opens the port in ufw or firewalld, starts it and prints the address.

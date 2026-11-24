@@ -79,8 +79,8 @@ Web arayüzü içine gömülü tek bir ikili dosyadır: ayrı bir dağıtım, ve
 |---|---|
 | **Sadece bak** | [Çevrimiçi demoya](https://onurbaydas.github.io/VirtoMir/demo/) tıkla: uydurma hostlar, kurulacak bir şey yok. |
 | **Tek kullanımlık host** | Tek komutla içinde VirtoMir olan bir test VM'i: [Sunucularına dokunmadan VirtoMir'i dene](../try-in-a-vm.md). |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.2_amd64.deb` — [son sürüm](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.2-1.x86_64.rpm` — [son sürüm](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.3_amd64.deb` — [son sürüm](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.3-1.x86_64.rpm` — [son sürüm](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 Paket eksikse libvirt ve QEMU/KVM'i kendisi kurar, 8420 portunu açar ve servisi başlatır. Elle yazılacak başka bir şey kalmaz.
 

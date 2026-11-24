@@ -99,8 +99,8 @@ TEMPLATE = '''<p align="center"><img src="../brand/logo.svg" alt="VirtoMir logo"
 |---|---|
 | **{try_look_t}** | {try_look_d} |
 | **{try_vm_t}** | {try_vm_d} |
-| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.2_amd64.deb` — [{latest_release}](https://github.com/onurbaydas/VirtoMir/releases/latest) |
-| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.2-1.x86_64.rpm` — [{latest_release}](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Debian / Ubuntu** | `sudo apt install ./virtomir_1.2.3_amd64.deb` — [{latest_release}](https://github.com/onurbaydas/VirtoMir/releases/latest) |
+| **Fedora / RHEL** | `sudo dnf install ./virtomir-1.2.3-1.x86_64.rpm` — [{latest_release}](https://github.com/onurbaydas/VirtoMir/releases/latest) |
 
 {try_pkg_note}
 
