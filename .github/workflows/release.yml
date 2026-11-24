@@ -2,9 +2,11 @@ name: Release
 
 # Push a tag like v0.1.0 to build and publish a release: a tarball and a .deb for amd64 and
 # arm64 (each built natively, PAM needs cgo), plus an experimental .rpm for each.
+# workflow_dispatch on a tag ref does the same (publish-release.yml starts it that way).
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read

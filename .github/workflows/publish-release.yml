@@ -1,0 +1,88 @@
+name: Publish release
+
+# Makes a release from the browser: tags main (or moves an existing release onto the tag), sets the title
+# and notes, and starts every workflow a pushed v* tag would start. A tag pushed with the workflow token
+# starts no workflows by itself, so they are dispatched here on the tag.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag, e.g. v1.2.3"
+        required: true
+      title:
+        description: "Release title (default: the tag)"
+        required: false
+      notes:
+        description: "Release notes (Markdown; empty: generated from the commits)"
+        required: false
+      replace:
+        description: "A release with a wrong tag to move onto this one (e.g. 1.2.3); its tag is deleted"
+        required: false
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: publish-release
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+      TITLE: ${{ inputs.title || inputs.tag }}
+      NOTES: ${{ inputs.notes }}
+      OLD: ${{ inputs.replace }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Check the tag
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::The tag must look like v1.2.3 (or v1.2.3-rc1), not '$TAG'"
+            exit 1
+          fi
+
+      - name: Tag main
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists; it is left where it is"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "VirtoMir $TAG"
+            git push origin "refs/tags/$TAG"
+          fi
+
+      - name: Release
+        run: |
+          args=(--title "$TITLE")
+          if [ -n "$NOTES" ]; then printf '%s\n' "$NOTES" >notes.md; args+=(--notes-file notes.md); fi
+          pre=false; [[ "$TAG" == *-* ]] && pre=true
+          if [ -n "$OLD" ] && gh release view "$OLD" >/dev/null 2>&1; then
+            gh release edit "$OLD" --tag "$TAG" --prerelease="$pre" "${args[@]}"
+            git push origin ":refs/tags/$OLD" || true
+          elif gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --prerelease="$pre" "${args[@]}"
+          else
+            [ -n "$NOTES" ] || args+=(--generate-notes)
+            gh release create "$TAG" --verify-tag --prerelease="$pre" "${args[@]}"
+          fi
+          if [ -z "$NOTES" ] && [ -z "$(gh release view "$TAG" --json body -q .body)" ]; then
+            body=$(gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" -q .body)
+            printf '%s\n' "$body" >notes.md
+            gh release edit "$TAG" --notes-file notes.md
+          fi
+
+      - name: Start the release workflows on the tag
+        run: |
+          gh workflow run release.yml --ref "$TAG"
+          gh workflow run packages.yml --ref "$TAG"
+          gh workflow run ansible-galaxy.yml --ref "$TAG"
+          gh workflow run mirror.yml --ref main
+          gh workflow run sync-terraform-provider.yml --ref main -f tag="$TAG"
