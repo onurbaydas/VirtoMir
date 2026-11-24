@@ -51,12 +51,13 @@ jobs:
       - name: Tag main
         run: |
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
-            echo "$TAG already exists; it is left where it is"
+            echo "$TAG already exists; it is left where it is, and its push already started the release workflows"
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git tag -a "$TAG" -m "VirtoMir $TAG"
             git push origin "refs/tags/$TAG"
+            echo "CREATED=1" >>"$GITHUB_ENV"
           fi
 
       - name: Release
@@ -79,7 +80,9 @@ jobs:
             gh release edit "$TAG" --notes-file notes.md
           fi
 
+      # Only for a tag made here: a tag pushed with the workflow token starts nothing by itself.
       - name: Start the release workflows on the tag
+        if: env.CREATED == '1'
         run: |
           gh workflow run release.yml --ref "$TAG"
           gh workflow run packages.yml --ref "$TAG"
