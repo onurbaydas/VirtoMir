@@ -1,0 +1,46 @@
+name: AUR
+
+# Pushes packaging/aur (PKGBUILD + .SRCINFO) from main to the AUR package virtomir-bin.
+# Runs after every stable release (release.yml) and by hand. Needs the secret AUR_SSH_PRIVATE_KEY:
+# the private half of an SSH key whose public half is on the AUR account (My Account -> SSH Public Key).
+# Without the secret it only says so and succeeds.
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aur
+
+jobs:
+  push:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Push to the AUR
+        env:
+          KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEY" ]; then
+            echo "::notice::AUR_SSH_PRIVATE_KEY is not set; the AUR package is not updated."
+            exit 0
+          fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" | tr -d '\r' >~/.ssh/aur && chmod 600 ~/.ssh/aur
+          ssh-keyscan -t ed25519,rsa aur.archlinux.org >>~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
+          git clone ssh://aur@aur.archlinux.org/virtomir-bin.git aur
+          cp packaging/aur/PKGBUILD packaging/aur/.SRCINFO aur/
+          cd aur
+          git config user.name "Onur Baydas"
+          git config user.email "41346713+onurbaydas@users.noreply.github.com"
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then echo "The AUR already has this PKGBUILD."; exit 0; fi
+          ver=$(sed -n 's/^pkgver=//p' PKGBUILD)
+          git commit -m "Update to $ver"
+          git push origin HEAD:master
