@@ -55,11 +55,14 @@ export function plural(n: number, one: string, many = one + 's'): string {
   return `${n} ${n === 1 ? one : many}`
 }
 
-/** "5 s ago", "3 min ago" for connection-loss messages. */
+/** "5 s ago", "3 min ago", "2 h ago", "7 days ago". */
 export function ago(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))
   if (s < 60) return t('{s} s ago', { s })
   const m = Math.round(s / 60)
   if (m < 60) return t('{m} min ago', { m })
-  return t('{h} h ago', { h: Math.round(m / 60) })
+  const h = Math.round(m / 60)
+  if (h < 24) return t('{h} h ago', { h })
+  const d = Math.round(h / 24)
+  return d === 1 ? t('1 day ago') : t('{d} days ago', { d })
 }

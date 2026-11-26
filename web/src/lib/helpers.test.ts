@@ -69,8 +69,10 @@ describe('format', () => {
     [3_569_000, '59 min ago'],
     [3_570_000, '1 h ago'],
     [7_200_000, '2 h ago'],
-    [86_400_000, '24 h ago'],
-    [7 * 86_400_000, '168 h ago'],
+    [82_800_000, '23 h ago'],
+    [86_400_000, '1 day ago'],
+    [3 * 86_400_000, '3 days ago'],
+    [7 * 86_400_000, '7 days ago'],
     [-60_000, '0 s ago'],
   ])('formats an elapsed time of %s ms as %s', (input, expected) => {
     expect(ago(input)).toBe(expected)
