@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -31,8 +32,12 @@ type Authenticator interface {
 const (
 	CookieName = "virtomir_session"
 	// IdleTimeout ends a session nobody used for a while; MaxAge ends any session.
+	// These are the defaults; -session-idle and -session-max change them (SetSessionLimits).
 	IdleTimeout = 2 * time.Hour
 	MaxAge      = 24 * time.Hour
+	// MinSessionLimit is the shortest idle or maximum lifetime accepted: anything shorter
+	// signs people out while they read a page.
+	MinSessionLimit = time.Minute
 )
 
 type session struct {
@@ -49,6 +54,8 @@ type Manager struct {
 	authn  Authenticator
 	roleOf func(user string) Role
 	now    func() time.Time
+	// idle and maxAge end sessions (IdleTimeout and MaxAge unless SetSessionLimits changed them).
+	idle, maxAge time.Duration
 	// ext: LDAP and OpenID Connect (nil: local accounts only).
 	ext *External
 	// twofa: one-time codes after the password (nil: off for everyone).
@@ -81,9 +88,36 @@ const (
 // New returns a manager. roleOf decides each user's role at sign-in (NoAccess refuses).
 func New(authn Authenticator, roleOf func(string) Role) *Manager {
 	return &Manager{
-		authn: authn, roleOf: roleOf, now: time.Now,
+		authn: authn, roleOf: roleOf, now: time.Now, idle: IdleTimeout, maxAge: MaxAge,
 		sessions: map[string]*session{}, failures: map[string][]time.Time{}, pending: map[string]*pendingLogin{},
 	}
+}
+
+// SetSessionLimits sets how long an unused session lasts (idle) and how long any session
+// lasts (max). Both must be at least MinSessionLimit, and idle cannot exceed max.
+func (m *Manager) SetSessionLimits(idle, max time.Duration) error {
+	switch {
+	case idle < MinSessionLimit || max < MinSessionLimit:
+		return fmt.Errorf("session lifetimes must be at least %s (idle %s, maximum %s)", MinSessionLimit, idle, max)
+	case idle > max:
+		return fmt.Errorf("the idle session lifetime (%s) cannot be longer than the maximum (%s)", idle, max)
+	}
+	m.mu.Lock()
+	m.idle, m.maxAge = idle, max
+	m.mu.Unlock()
+	return nil
+}
+
+// SessionLimits returns the idle and maximum session lifetimes in force.
+func (m *Manager) SessionLimits() (idle, max time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.idle, m.maxAge
+}
+
+// expired reports whether s has run out at now (caller holds m.mu).
+func (m *Manager) expired(s *session, now time.Time) bool {
+	return now.Sub(s.lastSeen) > m.idle || now.Sub(s.created) > m.maxAge
 }
 
 // SetTwoFactor enables one-time codes for the accounts that turned them on.
@@ -225,7 +259,7 @@ func (m *Manager) User(token string) (Identity, bool) {
 		return Identity{}, false
 	}
 	now := m.now()
-	if now.Sub(s.lastSeen) > IdleTimeout || now.Sub(s.created) > MaxAge {
+	if m.expired(s, now) {
 		delete(m.sessions, token)
 		m.mu.Unlock()
 		return Identity{}, false
@@ -278,7 +312,7 @@ func (m *Manager) Valid(token string) bool {
 		return false
 	}
 	now := m.now()
-	return now.Sub(s.lastSeen) <= IdleTimeout && now.Sub(s.created) <= MaxAge
+	return !m.expired(s, now)
 }
 
 func (m *Manager) Logout(token string) {
@@ -311,7 +345,7 @@ func (m *Manager) fail(ip string) {
 // otherwise only dropped when its token is used again, and a closed browser never does.
 func (m *Manager) sweepSessions(now time.Time) {
 	for token, s := range m.sessions {
-		if now.Sub(s.lastSeen) > IdleTimeout || now.Sub(s.created) > MaxAge {
+		if m.expired(s, now) {
 			delete(m.sessions, token)
 		}
 	}
@@ -343,11 +377,13 @@ func SessionToken(r *http.Request) string {
 }
 
 // SetCookie stores the session in the browser: HttpOnly (no script access) and
-// SameSite=Strict (not sent with cross-site requests, which blocks CSRF).
-func SetCookie(w http.ResponseWriter, r *http.Request, token string) {
+// SameSite=Strict (not sent with cross-site requests, which blocks CSRF). The browser
+// forgets it when the session's maximum lifetime is over.
+func (m *Manager) SetCookie(w http.ResponseWriter, r *http.Request, token string) {
+	_, max := m.SessionLimits()
 	http.SetCookie(w, &http.Cookie{
 		Name: CookieName, Value: token, Path: "/", HttpOnly: true,
-		SameSite: http.SameSiteStrictMode, Secure: isHTTPS(r), MaxAge: int(MaxAge / time.Second),
+		SameSite: http.SameSiteStrictMode, Secure: isHTTPS(r), MaxAge: int(max / time.Second),
 	})
 }
 

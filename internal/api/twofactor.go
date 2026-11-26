@@ -80,7 +80,7 @@ func (s *Server) loginCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.recordSignIn(id.Name, r.RemoteAddr, http.StatusOK, "")
-	auth.SetCookie(w, r, token)
+	s.auth.SetCookie(w, r, token)
 	s.writeJSON(w, http.StatusOK, sessionInfo{Mode: s.mode(), User: id.Name, Role: id.Role})
 }
 

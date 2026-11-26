@@ -65,6 +65,53 @@ func TestIdleTimeout(t *testing.T) {
 	}
 }
 
+func TestSessionLimits(t *testing.T) {
+	m, now := newTestManager()
+	if err := m.SetSessionLimits(15*time.Minute, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	tok, _ := m.Login(context.Background(), "1.2.3.4:1", "onur", "secret")
+	*now = now.Add(14 * time.Minute)
+	if !m.Valid(tok) {
+		t.Fatal("session ended before the idle limit")
+	}
+	*now = now.Add(16 * time.Minute)
+	if m.Valid(tok) {
+		t.Error("session outlived the 15 min idle limit")
+	}
+	// Kept in use, it still ends at the maximum.
+	tok, _ = m.Login(context.Background(), "1.2.3.4:1", "onur", "secret")
+	for range 4 {
+		*now = now.Add(14 * time.Minute)
+		if _, ok := m.User(tok); !ok {
+			t.Fatal("active session ended early")
+		}
+	}
+	*now = now.Add(5 * time.Minute)
+	if _, ok := m.User(tok); ok {
+		t.Error("session outlived the 1 h maximum")
+	}
+	rec := httptest.NewRecorder()
+	m.SetCookie(rec, httptest.NewRequest("POST", "https://h/api", nil), "tok")
+	if c := rec.Result().Cookies()[0]; c.MaxAge != 3600 {
+		t.Errorf("cookie MaxAge = %d, want 3600", c.MaxAge)
+	}
+}
+
+func TestSessionLimitsRefuseUnsafeValues(t *testing.T) {
+	m, _ := newTestManager()
+	for _, c := range []struct{ idle, max time.Duration }{
+		{0, time.Hour}, {time.Hour, 0}, {30 * time.Second, time.Hour}, {2 * time.Hour, time.Hour}, {-time.Minute, time.Hour},
+	} {
+		if err := m.SetSessionLimits(c.idle, c.max); err == nil {
+			t.Errorf("idle %s, max %s accepted", c.idle, c.max)
+		}
+	}
+	if idle, max := m.SessionLimits(); idle != IdleTimeout || max != MaxAge {
+		t.Errorf("a refused change altered the limits: %s %s", idle, max)
+	}
+}
+
 func TestLoginFailures(t *testing.T) {
 	m, now := newTestManager()
 	ctx := context.Background()
@@ -107,7 +154,8 @@ func TestLogout(t *testing.T) {
 
 func TestCookie(t *testing.T) {
 	rec := httptest.NewRecorder()
-	SetCookie(rec, httptest.NewRequest("POST", "https://h/api", nil), "tok")
+	m, _ := newTestManager()
+	m.SetCookie(rec, httptest.NewRequest("POST", "https://h/api", nil), "tok")
 	c := rec.Result().Cookies()[0]
 	if c.Name != CookieName || !c.HttpOnly || !c.Secure || c.SameSite != 3 /* Strict */ {
 		t.Errorf("cookie = %+v", c)

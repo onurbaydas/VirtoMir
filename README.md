@@ -245,6 +245,8 @@ The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pa
 | `-auth-group` | `libvirt,wheel,sudo` | besides root, who may sign in as admin (comma-separated groups) |
 | `-operator-group` | `virtomir-operator` | members may run machines but not change them |
 | `-viewer-group` | `virtomir-viewer` | members may look but change nothing |
+| `-session-idle` | `2h` | sign a browser out after it was unused this long (at least `1m`) |
+| `-session-max` | `24h` | sign a browser out this long after it signed in, used or not (at least `-session-idle`) |
 | `-tls` | `auto` | `auto` (self-signed in `-state-dir`), `files` (`-tls-cert`, `-tls-key`), `off` (behind a TLS proxy) |
 | `-state-dir` | `/var/lib/virtomir` | certificate, metric history, alerts, schedules, activity log, tokens, cluster membership, configuration history, machine timelines, quotas, LDAP/OIDC settings; default backup location (`backups/`) |
 | `-name` | hostname | how this host is called in a cluster |

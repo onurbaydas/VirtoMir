@@ -69,6 +69,7 @@ type config struct {
 	operatorGroup            string
 	viewerGroup              string
 	pamService               string
+	sessionIdle, sessionMax  time.Duration
 	tlsMode, tlsCert, tlsKey string
 	fipsMode                 string
 	stateDir                 string
@@ -89,6 +90,8 @@ func main() {
 	flag.StringVar(&c.operatorGroup, "operator-group", "virtomir-operator", "members may run machines (power, console, snapshots) but not change them")
 	flag.StringVar(&c.viewerGroup, "viewer-group", "virtomir-viewer", "members may look at everything but change nothing")
 	flag.StringVar(&c.pamService, "pam-service", "virtomir", "PAM service name (/etc/pam.d/<name>)")
+	flag.DurationVar(&c.sessionIdle, "session-idle", auth.IdleTimeout, `sign a browser out after it was unused this long (e.g. "15m"; at least 1m)`)
+	flag.DurationVar(&c.sessionMax, "session-max", auth.MaxAge, `sign a browser out this long after it signed in, used or not (e.g. "12h"; at least -session-idle)`)
 	flag.StringVar(&c.tlsMode, "tls", "auto", `"auto" (self-signed certificate in -state-dir), "files" (-tls-cert/-tls-key) or "off"`)
 	flag.StringVar(&c.tlsCert, "tls-cert", "", "certificate file for -tls=files")
 	flag.StringVar(&c.tlsKey, "tls-key", "", "private key file for -tls=files")
@@ -629,6 +632,9 @@ func setupAuth(c config, pj *project.Store, log *slog.Logger) (*auth.Manager, er
 		groups := auth.Groups{Admin: c.authGroup, Operator: c.operatorGroup, Viewer: c.viewerGroup}
 		roleOf := api.RoleOfWithProjects(groups.RoleOf, pj, auth.UserGroups)
 		m := auth.New(auth.PAM{Service: c.pamService}, roleOf)
+		if err := m.SetSessionLimits(c.sessionIdle, c.sessionMax); err != nil {
+			return nil, fmt.Errorf("-session-idle / -session-max: %w", err)
+		}
 		// LDAP and OpenID Connect, configured by admins in the UI (ADR-0023).
 		ext, err := auth.OpenExternal(filepath.Join(c.stateDir, "signin.json"))
 		if err != nil {

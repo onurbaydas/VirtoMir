@@ -230,7 +230,7 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		signinError(w, r, user+" has no VirtoMir role: none of their groups is mapped to one")
 		return
 	}
-	auth.SetCookie(w, r, token)
+	s.auth.SetCookie(w, r, token)
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
