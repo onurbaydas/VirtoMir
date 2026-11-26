@@ -91,6 +91,8 @@
     hostdev: { label: t('SR-IOV'), hint: t('Each machine gets its own virtual function of an SR-IOV network card, passed through (Physical network page).') },
   }
 
+  // VXLAN carries guest frames between hosts as plain UDP (#33 tracks encrypting it); say so where it is chosen and shown.
+  const VXLAN_PLAIN = "Guest traffic crosses the hosts' network unencrypted. Use it on a network you trust, or run the hosts over a VPN."
   const modeLabel = (m: string) => MODE[m]?.label ?? m
   const netLine = (n: VNetwork) =>
     [
@@ -336,7 +338,7 @@
         <button class="head" aria-expanded={open === n.name} onclick={() => toggle(n)}>
           <span class="icon" class:on={n.active}><Network size={17} /></span>
           <span class="titles">
-            <span class="name">{n.name} <span class="mode" title={MODE[n.mode]?.hint}>{modeLabel(n.mode)}</span></span>
+            <span class="name">{n.name} <span class="mode" title={MODE[n.mode]?.hint}>{modeLabel(n.mode)}</span>{#if n.mode === 'vxlan'} <span class="mode unenc" title={t(VXLAN_PLAIN)}>{t('unencrypted')}</span>{/if}</span>
             <span class="sub mono">{netLine(n)}</span>
           </span>
           <span class="state" class:on={n.active}>{n.active ? t('active') : t('stopped')}</span>
@@ -543,6 +545,7 @@
         <span class="hint">{t('VLANs on a plain Linux bridge: create a bridge on the VLAN interface (e.g. br0.10) and use that.')}</span>
       {/if}
     {:else if spec.mode === 'vxlan'}
+      <p class="warn-note">{t(VXLAN_PLAIN)}</p>
       <label class="ui-field">
         <span class="label">{t('VXLAN network identifier (VNI)')}</span>
         <input class="ui-input mono" type="number" min="1" max="16777215" bind:value={spec.vni} placeholder="100" required />
@@ -668,6 +671,19 @@
     color: var(--text-2);
     font-size: 11.5px;
     font-weight: 500;
+  }
+  .mode.unenc {
+    background: color-mix(in srgb, var(--warn) 14%, transparent);
+    color: var(--text);
+  }
+  .warn-note {
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
+    color: var(--text);
+    font-size: 12.5px;
   }
   .sub {
     color: var(--text-3);
