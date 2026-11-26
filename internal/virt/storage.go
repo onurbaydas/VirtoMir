@@ -459,6 +459,9 @@ func (c *Client) UploadVolume(ctx context.Context, pool, name string, size int64
 		return Volume{}, err
 	}
 	br := bufio.NewReader(r)
+	if kind := peekCompression(br); kind != "" {
+		return c.uploadCompressed(ctx, l, pool, name, kind, io.LimitReader(br, size))
+	}
 	format := "raw"
 	if magic, _ := br.Peek(4); bytes.Equal(magic, qcow2Magic) {
 		format = "qcow2"
