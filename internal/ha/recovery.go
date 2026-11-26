@@ -147,9 +147,10 @@ func (m *Manager) fenced(ctx context.Context, cfg Config, n Node, rc *recovery, 
 }
 
 // othersMayHaveQuorum reports whether the members this one cannot see, together with the
-// witness, could hold quorum on their side of a split. The witness answers everyone who
+// witness, could hold quorum on their side of a split. A TCP witness answers everyone who
 // reaches it, so in an even split both sides count it; an armed watchdog on the other side
-// then keeps being petted and never resets that host.
+// then keeps being petted and never resets that host. A lease witness whose lease this
+// member holds gives the other side nothing until this member stops renewing it.
 func (m *Manager) othersMayHaveQuorum(cfg Config, now time.Time) bool {
 	members := m.transport.Members()
 	self := m.transport.SelfID()
@@ -165,11 +166,14 @@ func (m *Manager) othersMayHaveQuorum(cfg Config, now time.Time) bool {
 			unseen++
 		}
 	}
+	weHoldLease := IsLeaseWitness(cfg.Witness) && m.quorum.WitnessReachable
 	m.mu.Unlock()
 	total, theirs := len(members), unseen
 	if cfg.Witness != "" && len(members) > 1 {
 		total++
-		theirs++
+		if !weHoldLease {
+			theirs++
+		}
 	}
 	return theirs >= total/2+1
 }

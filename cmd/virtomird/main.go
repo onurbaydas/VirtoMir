@@ -102,6 +102,7 @@ func main() {
 	flag.BoolVar(&c.drExperimental, "dr-experimental", false, "turn on disaster recovery (protection groups, recovery plans, failover); not tested on real hosts yet")
 	flag.StringVar(&c.ovnNorthbound, "ovn-nb", "", `OVN northbound database for the SDN, e.g. "tcp:10.0.0.11:6641" (default: the local one); the SDN is experimental`)
 	debug := flag.Bool("debug", false, "verbose logging")
+	witness := flag.String("witness", "", `run only as the HA lease witness of a two-member cluster, listening on this address (e.g. ":8421"); members name it "lease://<this host>:8421"`)
 	flag.Parse()
 
 	level := slog.LevelInfo
@@ -110,6 +111,14 @@ func main() {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(log) // helpers without a logger of their own log the same way
+
+	if *witness != "" {
+		if err := runWitness(*witness, log); err != nil {
+			log.Error("witness", "err", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if flag.Arg(0) == "join" {
 		if err := runJoin(c, flag.Arg(1), log); err != nil {
@@ -799,4 +808,11 @@ func watchConfig(ctx context.Context, client *virt.Client, ch *confighist.Store,
 		case <-time.After(5 * time.Second):
 		}
 	}
+}
+
+// runWitness serves the HA lease witness (#22) and nothing else: no libvirt, no UI.
+func runWitness(addr string, log *slog.Logger) error {
+	srv := &http.Server{Addr: addr, Handler: ha.NewLeaseWitness(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
+	log.Info("HA lease witness listening", "addr", addr, "version", version)
+	return srv.ListenAndServe()
 }

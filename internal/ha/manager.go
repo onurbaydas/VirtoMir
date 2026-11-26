@@ -153,7 +153,9 @@ type Manager struct {
 	dir       string
 	now       func() time.Time
 	dial      func(ctx context.Context, addr string) error
-	watchdog  Watchdog
+	// lease asks a lease witness for its vote (acquireLease; tests replace it).
+	lease    func(ctx context.Context, addr, group, holder string, ttl time.Duration) (bool, error)
+	watchdog Watchdog
 	// Notify, if set, receives warnings and errors (to send them through alert channels).
 	Notify func(subject, message string)
 	// FilterTargets, if set, filters and orders candidate nodes for restarting a protected
@@ -205,6 +207,7 @@ func NewManager(store *Store, t Transport, hv Hypervisor, dir string, log *slog.
 			}
 			return err
 		},
+		lease:      acquireLease,
 		watchdog:   NewWatchdog(),
 		seen:       map[string]time.Time{},
 		reports:    map[string]Report{},
@@ -341,7 +344,7 @@ func (m *Manager) Tick(ctx context.Context) {
 	witnessOK := false
 	if cfg.Witness != "" && clustered {
 		c, cancel := context.WithTimeout(ctx, max(interval, time.Second))
-		witnessOK = m.dial(c, cfg.Witness) == nil
+		witnessOK = m.witnessVote(c, cfg.Witness, self, interval)
 		cancel()
 	}
 	wg.Wait()
@@ -462,6 +465,20 @@ func (m *Manager) report(cfg Config) Report {
 		r.MemTotalKiB, r.MemFreeKiB = st.MemTotalKiB, st.MemTotalKiB-min(st.MemUsedKiB, st.MemTotalKiB)
 	}
 	return r
+}
+
+// witnessVote reports whether the witness gives this member its vote now: a TCP witness
+// does whenever it answers; a lease witness only while this member holds its lease.
+func (m *Manager) witnessVote(ctx context.Context, witness, self string, interval time.Duration) bool {
+	kind, addr, group := witnessTarget(witness)
+	if kind != "lease" {
+		return m.dial(ctx, addr) == nil
+	}
+	ok, err := m.lease(ctx, addr, group, self, leaseTTL(interval))
+	if err != nil {
+		m.log.Debug("lease witness", "witness", addr, "err", err)
+	}
+	return ok
 }
 
 // countVotes: every member that answered within the timeout is a vote, so is this one and a

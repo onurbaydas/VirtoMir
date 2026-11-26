@@ -146,12 +146,15 @@
 
   // What would go wrong if a host died now, worked out from the saved settings (P3: say it
   // where it matters instead of explaining HA in general).
+  const isLease = (w?: string) => !!w?.trim().startsWith('lease://')
   let risks = $derived.by(() => {
     if (!status?.clustered) return []
     const c = status.config
     const out: string[] = []
     if (status.nodes.length === 2 && !c.witness)
       out.push( t('Two hosts and no witness: when one dies, the other has no quorum and restarts nothing. Add a witness below.'))
+    else if (status.nodes.length === 2 && !isLease(c.witness))
+      out.push(t('A TCP witness answers both hosts: if they lose sight of each other but not of it, both may start the same machines. Use a lease witness (lease://host:port) instead.'))
     for (const n of status.nodes) {
       const d = c.fenceAgents[n.id]?.driver ?? ''
       if (n.machines && (d === '' || d === 'manual') && !c.watchdog)
@@ -178,7 +181,7 @@
         <strong>{t('Quorum: {votes} of {totalVotes} votes', { votes: q.votes, totalVotes: q.totalVotes })}</strong>
         <span>
           {t('{required} needed · coordinator {coordinator}', { required: q.required, coordinator: nameOf(q.coordinator) })}
-          {#if q.witness}· witness {q.witness} {q.witnessReachable ? 'reachable' : t('NOT reachable')}{/if}
+          {#if q.witness}· {t('witness {w}', { w: q.witness })} {isLease(q.witness) ? (q.witnessReachable ? t('(lease held by this host)') : t('(lease held elsewhere or not reachable)')) : q.witnessReachable ? t('reachable') : t('NOT reachable')}{/if}
           {status.config.autoFailover ? t('· automatic failover on') : t('· automatic failover off')}
         </span>
       {:else}
@@ -255,9 +258,9 @@
       <label class="ui-field"><span class="label">{t('Dead after silence of (s)')}</span>
         <input class="ui-input" type="number" min="10" bind:value={form.failoverTimeoutSec} oninput={() => (dirty = true)} disabled={!admin} />
         <span class="hint">{t('Shorter also fails over on a network hiccup.')}</span></label>
-      <label class="ui-field"><span class="label">{t('Witness (host:port)')}</span>
-        <input class="ui-input mono" placeholder="10.0.0.9:22" bind:value={form.witness} oninput={() => (dirty = true)} disabled={!admin} />
-        <span class="hint">{t('An extra vote: any machine that accepts TCP on that port.')}</span></label>
+      <label class="ui-field"><span class="label">{t('Witness')}</span>
+        <input class="ui-input mono" placeholder="lease://10.0.0.9:8421" bind:value={form.witness} oninput={() => (dirty = true)} disabled={!admin} />
+        <span class="hint">{t('An extra vote. lease://host:port is a third machine running virtomird -witness :8421: it votes for one host at a time, so it is safe when the hosts lose sight of each other. host:port (any TCP port, e.g. 22) votes for whoever reaches it.')}</span></label>
     </div>
     <label class="ui-switch"><input type="checkbox" bind:checked={form.watchdog} onchange={() => (dirty = true)} disabled={!admin} /> {t('Arm the hardware watchdog on hosts with protected machines')}</label>
     {#if form.watchdog}

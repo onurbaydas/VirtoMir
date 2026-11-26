@@ -38,8 +38,10 @@ type Config struct {
 	HeartbeatIntervalSec int  `json:"heartbeatIntervalSec"`
 	// FailoverTimeoutSec is how long a member may be silent before it counts as dead.
 	FailoverTimeoutSec int `json:"failoverTimeoutSec"`
-	// Witness is "host:port" of a third machine that only has to accept TCP connections
-	// (e.g. its SSH port). It is one extra vote, so two members can keep quorum when one dies.
+	// Witness is one extra vote, so two members can keep quorum when one dies: "host:port"
+	// of a third machine that only has to accept TCP connections (e.g. its SSH port), or
+	// "lease://host:port" of `virtomird -witness`, which gives its vote to one member at a
+	// time and so is safe when the members lose sight of each other but not of it (#22).
 	Witness string `json:"witness,omitempty"`
 	// Watchdog arms the hardware watchdog (/dev/watchdog) on members that run protected
 	// machines: if virtomird hangs or loses quorum and cannot stop them, the host resets
@@ -220,8 +222,10 @@ func (st Settings) Validate() error {
 	if st.WatchdogTimeoutSec != 0 && (st.WatchdogTimeoutSec < 10 || st.WatchdogTimeoutSec > 600) {
 		return errors.New("the watchdog timeout must be 10–600 seconds")
 	}
-	if w := strings.TrimSpace(st.Witness); w != "" && !strings.Contains(w, ":") {
-		return errors.New(`the witness must be "host:port" (any TCP port it answers on, e.g. 22)`)
+	if w := strings.TrimSpace(st.Witness); w != "" {
+		if err := validWitness(w); err != nil {
+			return err
+		}
 	}
 	for id, a := range st.FenceAgents {
 		switch a.Driver {
