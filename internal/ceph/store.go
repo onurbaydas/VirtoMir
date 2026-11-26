@@ -11,6 +11,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/syncver"
 )
 
 // ClusterConfig is what VirtoMir knows of the Ceph cluster it bootstrapped or joined.
@@ -289,7 +291,7 @@ func (s *Store) Shared() PoliciesShared {
 func (s *Store) Adopt(sh PoliciesShared) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if sh.Version <= s.d.PoliciesVersion {
+	if !syncver.Take("storage policies", sh.Version, s.d.PoliciesVersion, sh, PoliciesShared{Version: s.d.PoliciesVersion, Policies: s.d.Policies}) {
 		return false, nil
 	}
 	for _, p := range sh.Policies {

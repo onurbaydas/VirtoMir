@@ -26,6 +26,7 @@ import (
 
 	"github.com/onurbaydas/virtomir/internal/atomicfile"
 	"github.com/onurbaydas/virtomir/internal/placement"
+	"github.com/onurbaydas/virtomir/internal/syncver"
 )
 
 // DRSMode represents the operational automation level of DRS.
@@ -211,7 +212,8 @@ func (e *Engine) SetConfig(cfg Config) error {
 func (e *Engine) Adopt(cfg Config) (bool, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if cfg.Version <= e.cfg.Version {
+	shared := func(c Config) []any { return []any{c.Version, c.Enabled, c.Mode, c.ThresholdStdDev} }
+	if !syncver.Take("drs", cfg.Version, e.cfg.Version, shared(cfg), shared(e.cfg)) {
 		return false, nil
 	}
 	if cfg.Mode != ModeManual && cfg.Mode != ModePartiallyAutomated && cfg.Mode != ModeFullyAutomated {

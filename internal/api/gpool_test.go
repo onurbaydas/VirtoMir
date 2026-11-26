@@ -147,3 +147,31 @@ func TestGPUPoolsCatchUp(t *testing.T) {
 		t.Error("not caught up")
 	}
 }
+
+// Two members that change the pools at the same moment both reach the same version with
+// different contents; the next sync makes them agree instead of each refusing the other's
+// copy until the next change (#47).
+func TestGPUPoolsConvergeAfterConcurrentChanges(t *testing.T) {
+	a, b := gpoolNodes(t)
+	if _, err := a.api.gpools.Create(gpool.Pool{ID: "t4-2q", Name: "T4 2Q", Kind: gpool.KindMDev, Profile: "nvidia-222"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.api.gpools.Create(gpool.Pool{ID: "a10-4q", Name: "A10 4Q", Kind: gpool.KindMDev, Profile: "nvidia-555"}); err != nil {
+		t.Fatal(err)
+	}
+	if va, vb := a.api.gpools.Shared().Version, b.api.gpools.Shared().Version; va != vb {
+		t.Fatalf("set-up: versions %d and %d", va, vb)
+	}
+	a.api.SyncMembers(t.Context())
+	b.api.SyncMembers(t.Context())
+	sa, sb := a.api.gpools.Shared(), b.api.gpools.Shared()
+	if sa.Version != sb.Version || len(sa.Pools) != 1 || len(sb.Pools) != 1 || sa.Pools[0].ID != sb.Pools[0].ID {
+		t.Errorf("members disagree after sync: %+v / %+v", sa, sb)
+	}
+	// And they stay agreed: syncing again changes nothing.
+	a.api.SyncMembers(t.Context())
+	b.api.SyncMembers(t.Context())
+	if a2, b2 := a.api.gpools.Shared(), b.api.gpools.Shared(); a2.Pools[0].ID != sa.Pools[0].ID || b2.Pools[0].ID != sa.Pools[0].ID {
+		t.Error("the members swapped copies on the next sync")
+	}
+}

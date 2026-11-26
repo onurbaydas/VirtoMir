@@ -11,6 +11,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/syncver"
 )
 
 // errUnchanged ends a change that needs no new version.
@@ -268,7 +270,7 @@ func (s *Store) Adopt(sh Shared) (bool, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if sh.Version <= s.st.Version {
+	if !syncver.Take("physical networks", sh.Version, s.st.Version, sh, s.st.Shared) {
 		return false, nil
 	}
 	old := s.st.Shared

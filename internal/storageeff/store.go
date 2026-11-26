@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"slices"
 	"sync"
+
+	"github.com/onurbaydas/virtomir/internal/syncver"
 )
 
 // Tiers are labels for pools by speed; disks move to a tier by moving to its pool.
@@ -132,7 +134,7 @@ func (s *Store) Adopt(sh TiersShared) (bool, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if sh.Version <= s.d.Version {
+	if !syncver.Take("storage tiers", sh.Version, s.d.Version, sh, s.d.TiersShared) {
 		return false, nil
 	}
 	old := s.d.TiersShared

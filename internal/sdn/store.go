@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/syncver"
 )
 
 // Errors for the API.
@@ -475,7 +477,8 @@ func (s *Store) Adopt(sh Shared) (bool, error) {
 	next.fill()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if next.Version <= s.st.Version {
+	ours, _ := json.Marshal(s.st)
+	if !syncver.Take("sdn", next.Version, s.st.Version, sh.Raw, json.RawMessage(ours)) {
 		return false, nil
 	}
 	prev := s.st

@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/onurbaydas/virtomir/internal/atomicfile"
+	"github.com/onurbaydas/virtomir/internal/syncver"
 )
 
 // Kind defines the type of placement constraint.
@@ -383,7 +384,8 @@ func (s *Store) Shared() Shared {
 func (s *Store) Adopt(sh Shared) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if sh.Version <= s.version {
+	v := s.viewLocked()
+	if !syncver.Take("placement", sh.Version, s.version, sh, Shared{Version: s.version, Rules: v.Rules, Labels: v.Labels}) {
 		return false, nil
 	}
 	prevV, prevR, prevL := s.version, s.rules, s.labels

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/onurbaydas/virtomir/internal/syncver"
 )
 
 // Kind is how a pool's GPUs reach a machine.
@@ -233,7 +235,7 @@ func (s *Store) Shared() Shared {
 func (s *Store) Adopt(sh Shared) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if sh.Version <= s.version {
+	if !syncver.Take("gpu pools", sh.Version, s.version, sh, Shared{Version: s.version, Pools: s.listLocked()}) {
 		return false, nil
 	}
 	prevV, prev := s.version, s.pools

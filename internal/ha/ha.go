@@ -25,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/onurbaydas/virtomir/internal/atomicfile"
+	"github.com/onurbaydas/virtomir/internal/syncver"
 )
 
 // Config is the cluster-wide HA configuration. Every member keeps a copy; the highest
@@ -305,7 +306,7 @@ func (s *Store) DeletePolicy(uuid string) (Config, error) {
 func (s *Store) Adopt(c Config) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if c.Version <= s.cfg.Version {
+	if !syncver.Take("ha", c.Version, s.cfg.Version, c, s.cfg) {
 		return false, nil
 	}
 	c.normalize()
