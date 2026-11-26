@@ -241,10 +241,11 @@ func (s *Server) sdnStatus(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, st)
 }
 
-// ReconcileResult names what OVN refused.
+// ReconcileResult names what OVN refused, and what OVN has that VirtoMir does not (orphans).
 type ReconcileResult struct {
-	Applied int      `json:"applied"`
-	Errors  []string `json:"errors"`
+	Applied int          `json:"applied"`
+	Errors  []string     `json:"errors"`
+	Orphans []sdn.Orphan `json:"orphans"`
 }
 
 func (s *Server) sdnReconcile(w http.ResponseWriter, r *http.Request) {
@@ -258,11 +259,12 @@ func (s *Server) sdnReconcile(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, res)
 }
 
-// reconcileAll applies the whole state to OVN: routers, subnets, routes, gateways, floating
-// IPs, security groups and load balancers. Machine ports are made when machines plug in.
+// reconcileAll applies the whole state to OVN: routers, subnets, routes, gateways, machine
+// ports, floating IPs, security groups and load balancers, then lists OVN objects named like
+// VirtoMir's that it no longer has.
 func (s *Server) reconcileAll(ctx context.Context) ReconcileResult {
 	nb := s.nb()
-	res := ReconcileResult{Errors: []string{}}
+	res := ReconcileResult{Errors: []string{}, Orphans: []sdn.Orphan{}}
 	note := func(what string, err error) {
 		if err != nil {
 			res.Errors = append(res.Errors, what+": "+ovnError(err))
@@ -282,6 +284,12 @@ func (s *Server) reconcileAll(ctx context.Context) ReconcileResult {
 			note("gateway of "+v.ID, sdn.ReconcileExternalGateway(ctx, nb, gw, s.sdn.ListSubnets(v.ID)))
 		}
 	}
+	// Ports after their subnets (their switch and DHCP options) and before the security
+	// groups, whose port groups list them.
+	for _, p := range s.sdn.ListPorts("") {
+		sub, _ := s.sdn.GetSubnet(p.SubnetID)
+		note("port "+p.ID, sdn.ReconcilePort(ctx, nb, p, sub))
+	}
 	for _, f := range s.sdn.ListFloatingIPs("", "") {
 		note("floating IP "+f.ExternalIP, sdn.ReconcileFloatingIP(ctx, nb, f, s.portMAC(f.PortID)))
 	}
@@ -291,6 +299,11 @@ func (s *Server) reconcileAll(ctx context.Context) ReconcileResult {
 	for _, lb := range s.sdn.ListLoadBalancers("", "") {
 		note("load balancer "+lb.Name, sdn.ReconcileLoadBalancer(ctx, nb, lb, s.memberPort))
 	}
+	orphans, err := sdn.FindOrphans(ctx, nb, s.sdn)
+	if err != nil {
+		res.Errors = append(res.Errors, "looking for leftovers in OVN: "+ovnError(err))
+	}
+	res.Orphans = orphans
 	return res
 }
 

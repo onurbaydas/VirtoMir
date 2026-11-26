@@ -10,6 +10,7 @@
   import Link from '@lucide/svelte/icons/link'
   import Unlink from '@lucide/svelte/icons/unlink'
   import { errorText } from '../api'
+  import { list } from '../reply'
   import { ent } from '../enterprise'
   import { live } from '../live.svelte'
   import { projects } from '../projects.svelte'
@@ -230,8 +231,16 @@
     reconciling = true
     try {
       const r = await sdn.reconcile()
-      if (r.errors.length) toasts.push({ kind: 'error', title: t('{n} changes not applied', { n: r.errors.length }), detail: r.errors.join('\n') })
+      const errors = list(r.errors)
+      const orphans = list(r.orphans)
+      if (errors.length) toasts.push({ kind: 'error', title: t('{n} changes not applied', { n: errors.length }), detail: errors.join('\n') })
       else toasts.push({ kind: 'info', title: t('{n} objects applied to OVN', { n: r.applied }) })
+      if (orphans.length)
+        toasts.push({
+          kind: 'info',
+          title: t('{n} objects in OVN that VirtoMir no longer has', { n: orphans.length }),
+          detail: t('Left by a failed delete or made by hand; VirtoMir does not remove them. {list}', { list: orphans.map((o) => `${o.table} ${o.name}`).join(', ') }),
+        })
     } catch (e) {
       toasts.push({ kind: 'error', title: t('Reconcile failed'), detail: errorText(e) })
     } finally {

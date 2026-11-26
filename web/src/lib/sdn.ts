@@ -176,6 +176,8 @@ export interface SDNStatus {
 export interface ReconcileResult {
   applied: number
   errors: string[]
+  /** OVN objects named like VirtoMir's that it no longer has (reported, never deleted). */
+  orphans?: { table: string; name: string }[]
 }
 
 const q = (params: Record<string, string | undefined>) => {

@@ -1049,7 +1049,7 @@ function sdnDemo(method: string, parts: string[], q: URLSearchParams, body: any)
     case 'GET status':
       return json(w.sdnStatus)
     case 'POST reconcile':
-      return json({ applied: w.sdnVPCs.length + w.sdnSubnets.length + w.sdnGroups.length + w.sdnLBs.length + w.sdnFloatingIPs.length, errors: [] })
+      return json({ applied: w.sdnVPCs.length + w.sdnSubnets.length + w.sdnPorts.length + w.sdnGroups.length + w.sdnLBs.length + w.sdnFloatingIPs.length, errors: [], orphans: [] })
     case 'GET vpcs':
       return json({ vpcs: w.sdnVPCs.filter((v) => !q.get('project') || v.projectId === q.get('project')).map(({ router: _r, gateway: _g, ...v }) => v) })
     case 'POST vpcs': {

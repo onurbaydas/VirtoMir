@@ -195,6 +195,16 @@ func TestSDNMachineAdapters(t *testing.T) {
 	if !ovn.called("lsp-set-port-security " + port + " 52:54:00:aa:bb:cc 10.0.1.5") {
 		t.Errorf("ovn %v", ovn.calls)
 	}
+	// A port lost in OVN (a rebuilt database, lsp-del by hand) comes back with the same
+	// address on reconcile, without asking OVN's IPAM again.
+	ovn.mu.Lock()
+	ovn.calls = nil
+	ovn.mu.Unlock()
+	resp, body = admin.req("POST", "/api/v1/sdn/reconcile", "")
+	if resp.StatusCode != http.StatusOK || !ovn.called("--may-exist lsp-add ls-prod-web "+port) ||
+		!ovn.called("lsp-set-addresses "+port+" 52:54:00:aa:bb:cc 10.0.1.5") || ovn.called("dynamic_addresses") {
+		t.Errorf("reconcile %d %s: %v", resp.StatusCode, body, ovn.calls)
+	}
 	// Taking the adapter off frees the port; deleting the machine frees the rest.
 	if resp, _ := admin.req("POST", "/api/v1/domains/u-new/devices/detach", `{"kind":"interface","mac":"52:54:00:AA:BB:CC"}`); resp.StatusCode != http.StatusOK {
 		t.Fatalf("detach %d", resp.StatusCode)
