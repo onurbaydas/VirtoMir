@@ -329,7 +329,7 @@
       : ovnSubnet ? { ovnSubnet: ovnSubnet.id, securityGroups: ovnGroups.length ? ovnGroups : undefined, ipAddress: ovnIP.trim() || undefined }
       : netChoice === 'bridge' ? { bridge } : undefined,
   )
-  let netLabel = $derived(netChoice.startsWith('network:') ? netChoice.slice(8) : ovnSubnet ? `${vpcLabel(ovnSubnet.vpcId)} / ${ovnSubnet.name}` : netChoice === 'bridge' ? bridge : 'None')
+  let netLabel = $derived(netChoice.startsWith('network:') ? netChoice.slice(8) : ovnSubnet ? `${vpcLabel(ovnSubnet.vpcId)} / ${ovnSubnet.name}` : netChoice === 'bridge' ? bridge : t('None'))
   // The request exactly as sent (also shown as code next to the form).
   let spec = $derived<CreateSpec>(kind === 'container' ? {
     name,
@@ -691,7 +691,7 @@
         <span class="label">{t('Connect to')}</span>
         <select class="ui-input" bind:value={netChoice}>
           {#each projNets as n (n.name)}
-            <option value="network:{n.name}">{n.name} ({n.mode === 'nat' ? 'NAT, internet through the host' : n.mode})</option>
+            <option value="network:{n.name}">{n.name} ({n.mode === 'nat' ? t('NAT, internet through the host') : n.mode})</option>
           {/each}
           {#if kind === 'vm'}
             {#each projSubnets as sn (sn.id)}
@@ -794,7 +794,7 @@
       <dt>{t('System')}</dt><dd>{OSES.find((o) => o.key === os)?.label}</dd>
       <dt>{t('Source')}</dt><dd class="mono small">{(source === 'iso' ? iso : source === 'cloud' ? baseImage : existingDisk).split('/').pop() || (source === 'iso' && withDisk ? 'Empty disk' : '—')}</dd>
       <dt>{t('CPU / RAM')}</dt><dd>{t('{vcpus} vCPU · {memGiB} GiB', { vcpus: vcpus, memGiB: memGiB })}</dd>
-      <dt>{t('Disk')}</dt><dd>{source === 'disk' ? 'Existing image' : source === 'cloud' ? t('{v} GiB copy in {pool}', { v: Math.max(diskGiB, baseCapGiB), pool: pool }) : withDisk ? `${diskGiB} GiB in ${pool}` : 'None'}</dd>
+      <dt>{t('Disk')}</dt><dd>{source === 'disk' ? t('Existing image') : source === 'cloud' ? t('{v} GiB copy in {pool}', { v: Math.max(diskGiB, baseCapGiB), pool: pool }) : withDisk ? t('{diskGiB} GiB in {pool}', { diskGiB, pool }) : t('None')}</dd>
       {#if source === 'cloud'}<dt>{t('Sign-in')}</dt><dd class="mono small">{ciUser}{ciPassword ? ' · password' : ''}{keys.length ? ` · ${keys.length} key${keys.length > 1 ? 's' : ''}` : ''}</dd>{/if}
       <dt>{t('Network')}</dt><dd>{netLabel}</dd>
       <dt>{t('Firmware')}</dt><dd>{firmware === 'uefi' ? 'UEFI' : 'BIOS'}{secureBoot && firmware === 'uefi' ? ', Secure Boot' : ''}{tpm ? ', TPM' : ''}</dd>

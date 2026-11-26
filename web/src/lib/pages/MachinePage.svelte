@@ -580,7 +580,7 @@
         <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'nic')}><Plus size={14} /> {t('Add network adapter')}</button>
         <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => (dlg = 'hostdev')}><Plus size={14} /> {t('Add host device')}</button>
         <button class="ui-btn sm" disabled={!session.can('admin')} title={session.why('admin')} onclick={() => ((addKind = null), (addOpen = true))}><Plus size={14} /> {t('Add other device…')}</button>
-        <span class="hw-hint">{active ? 'Hot-plugged where the hardware allows; the rest from the next start.' : t('Anything else: the XML tab.')}</span>
+        <span class="hw-hint">{active ? t('Hot-plugged where the hardware allows; the rest from the next start.') : t('Anything else: the XML tab.')}</span>
       </div>
       <SDNPortsPanel uuid={detail.uuid} project={detail.project ?? ''} />
       {#each grouped as g (g.key)}
