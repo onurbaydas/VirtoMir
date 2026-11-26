@@ -375,7 +375,8 @@
   let diskTotal = $derived(disks.reduce((n, d) => n + (d.capacityBytes ?? 0), 0))
   let nics = $derived((detail?.devices ?? []).filter((d: Device) => d.kind === 'interface'))
   let addresses = $derived(nics.flatMap((n) => n.addresses ?? []))
-  let ipv4 = $derived(addresses.filter((a) => !a.includes(':')))
+  // IPv4 first (the address people type), then IPv6: an IPv6-only machine shows its address too.
+  let nicAddrs = $derived([...addresses.filter((a) => !a.includes(':')), ...addresses.filter((a) => a.includes(':'))])
 
   let memCurrent = $derived(liveDom?.memoryKiB ?? detail?.memory.currentKiB ?? 0)
   let memMax = $derived(liveDom?.maxMemoryKiB ?? detail?.memory.maxKiB ?? 0)
@@ -489,14 +490,16 @@
     <StatCard
       label={t('Network')}
       icon={EthernetPort}
-      value={ipv4[0]?.split('/')[0] ?? (nics.length ? String(nics.length) : 'None')}
-      unit={ipv4[0] ? '' : nics.length ? (nics.length === 1 ? 'adapter' : 'adapters') : ''}
-      sub={ipv4.length > 1
-        ? `+${ipv4.length - 1} more address${ipv4.length > 2 ? 'es' : ''}`
-        : ipv4.length
+      value={nicAddrs[0]?.split('/')[0] ?? (nics.length ? String(nics.length) : t('None'))}
+      unit={nicAddrs[0] ? '' : nics.length ? (nics.length === 1 ? t('adapter') : t('adapters')) : ''}
+      sub={nicAddrs.length > 1
+        ? nicAddrs.length === 2
+          ? t('+1 more address')
+          : t('+{n} more addresses', { n: nicAddrs.length - 1 })
+        : nicAddrs.length
           ? nics[0]?.summary
           : active
-            ? 'No address reported yet'
+            ? t('No address reported yet')
             : t('Addresses appear while running')}
     />
   </section>

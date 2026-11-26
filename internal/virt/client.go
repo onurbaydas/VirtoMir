@@ -4,6 +4,7 @@
 package virt
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -339,7 +340,8 @@ func (c *Client) DomainDetail(uuid string) (DomainDetail, error) {
 }
 
 // guestAddresses maps MAC → "addr/prefix" from DHCP leases, falling back to the host ARP table
-// (bridged guests). The guest agent is not asked: it can stall when the agent is missing.
+// (bridged guests), and adds the IPv6 addresses the host's neighbour table knows (SLAAC guests;
+// those carry no prefix). The guest agent is not asked: it can stall when the agent is missing.
 func (c *Client) guestAddresses(l *libvirt.Libvirt, d libvirt.Domain) map[string][]string {
 	out := map[string][]string{}
 	for _, src := range []libvirt.DomainInterfaceAddressesSource{libvirt.DomainInterfaceAddressesSrcLease, libvirt.DomainInterfaceAddressesSrcArp} {
@@ -359,6 +361,16 @@ func (c *Client) guestAddresses(l *libvirt.Libvirt, d libvirt.Domain) map[string
 		}
 		if len(out) > 0 {
 			break
+		}
+	}
+	return mergeNeighbors(out, neighbors6(context.Background()))
+}
+
+// mergeNeighbors adds the neighbour table's addresses to the ones libvirt reported.
+func mergeNeighbors(out, nb map[string][]string) map[string][]string {
+	for mac, addrs := range nb {
+		for _, a := range addrs {
+			out[mac] = appendNew(out[mac], a)
 		}
 	}
 	return out
