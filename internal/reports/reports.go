@@ -376,6 +376,9 @@ func (s *Store) PutSchedule(sc Schedule) (Schedule, error) {
 	defer s.mu.Unlock()
 	if sc.ID == "" {
 		sc.ID = fmt.Sprintf("rs-%d", s.now().UnixNano())
+		for n := 2; slices.ContainsFunc(s.schedules, func(o Schedule) bool { return o.ID == sc.ID }); n++ {
+			sc.ID = fmt.Sprintf("rs-%d-%d", s.now().UnixNano(), n) // two saved in the same instant
+		}
 		s.schedules = append(s.schedules, sc)
 	} else {
 		found := false
