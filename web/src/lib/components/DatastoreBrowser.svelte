@@ -11,8 +11,12 @@
   import Copy from '@lucide/svelte/icons/copy'
   import Trash from '@lucide/svelte/icons/trash'
   import ChevronRight from '@lucide/svelte/icons/chevron-right'
+  import ClipboardCopy from '@lucide/svelte/icons/clipboard-copy'
+  import ArrowUp from '@lucide/svelte/icons/arrow-up'
+  import ArrowDown from '@lucide/svelte/icons/arrow-down'
   import { api, errorText, type FileEntry, type Pool } from '../api'
   import { formatBytes } from '../format'
+  import { hostPath, nameMatches, nextSort, sortEntries, type FileSort, type FileSortKey } from '../files'
   import { t } from '../i18n.svelte'
   import { track } from '../jobs'
   import { session } from '../session.svelte'
@@ -42,6 +46,48 @@
     void dir
     void load()
   })
+
+  // ---- Sort and filter --------------------------------------------------------------------
+  // The sort is kept per browser; the filter is for the folder that is open.
+  const SORT_KEY = 'virtomir.files.sort'
+  function savedSort(): FileSort {
+    try {
+      const v = JSON.parse(localStorage.getItem(SORT_KEY) ?? '')
+      if (['name', 'size', 'modified'].includes(v?.key)) return { key: v.key, desc: !!v.desc }
+    } catch {
+      // nothing saved, or no storage
+    }
+    return { key: 'name', desc: false }
+  }
+  let sort = $state<FileSort>(savedSort())
+  function sortBy(key: FileSortKey) {
+    sort = nextSort(sort, key)
+    try {
+      localStorage.setItem(SORT_KEY, JSON.stringify(sort))
+    } catch {
+      // the sort just is not remembered
+    }
+  }
+  let filter = $state('')
+  $effect(() => {
+    void dir
+    void pool.name
+    filter = ''
+  })
+  let shown = $derived(sortEntries((entries ?? []).filter((e) => nameMatches(e.name, filter)), sort))
+  const when = (iso: string) => (iso && !iso.startsWith('0001') ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '')
+
+  // ---- Copy path --------------------------------------------------------------------------
+  async function copyPath(e: FileEntry) {
+    if (!pool.path) return
+    const p = hostPath(pool.path, dir, e.name)
+    try {
+      await navigator.clipboard.writeText(p)
+      toasts.push({ kind: 'info', title: t('Copied'), detail: p })
+    } catch (err) {
+      toasts.push({ kind: 'error', title: t('Could not copy'), detail: errorText(err) })
+    }
+  }
   function changed() {
     void load()
     onchange()
@@ -65,20 +111,42 @@
   // ---- Upload ---------------------------------------------------------------------------
   let picker = $state<HTMLInputElement>()
   let uploading = $state<{ name: string; pct: number } | null>(null)
-  async function uploadPicked() {
-    const f = picker?.files?.[0]
-    if (!f) return
-    uploading = { name: f.name, pct: 0 }
-    try {
-      await api.uploadFile(pool.name, join(dir, f.name), f, (x) => uploading && (uploading.pct = Math.round(x * 100)))
-      toasts.push({ kind: 'info', title: t('{name} uploaded', { name: f.name }) })
-      changed()
-    } catch (err) {
-      toasts.push({ kind: 'error', title: t('Upload failed'), detail: errorText(err) })
-    } finally {
-      uploading = null
-      if (picker) picker.value = ''
+  // uploadFiles uploads into the open folder, one file after the other (the button and drops).
+  async function uploadFiles(files: File[]) {
+    if (!admin || uploading) return
+    const into = dir
+    for (const f of files) {
+      uploading = { name: f.name, pct: 0 }
+      try {
+        await api.uploadFile(pool.name, join(into, f.name), f, (x) => uploading && (uploading.pct = Math.round(x * 100)))
+        toasts.push({ kind: 'info', title: t('{name} uploaded', { name: f.name }) })
+      } catch (err) {
+        toasts.push({ kind: 'error', title: t('Upload failed'), detail: errorText(err) })
+      }
     }
+    uploading = null
+    changed()
+  }
+  async function uploadPicked() {
+    const files = [...(picker?.files ?? [])]
+    if (picker) picker.value = ''
+    if (files.length) await uploadFiles(files)
+  }
+  // Files dropped from the desktop onto the list.
+  let dragging = $state(false)
+  const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files')
+  function dragOver(e: DragEvent) {
+    if (!admin || !hasFiles(e)) return
+    e.preventDefault()
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+    dragging = true
+  }
+  function drop(e: DragEvent) {
+    if (!admin || !hasFiles(e)) return
+    e.preventDefault()
+    dragging = false
+    const files = [...(e.dataTransfer?.files ?? [])]
+    if (files.length) void uploadFiles(files)
   }
 
   // ---- Rename ---------------------------------------------------------------------------
@@ -137,7 +205,7 @@
     <span class="tools">
       <button class="ui-btn sm" onclick={() => ((folderOpen = !folderOpen), (folderName = ''))}><FolderPlus size={14} /> {t('New folder')}</button>
       <button class="ui-btn sm" disabled={!!uploading} onclick={() => picker?.click()}><Upload size={14} /> {t('Upload here')}</button>
-      <input type="file" bind:this={picker} onchange={uploadPicked} hidden />
+      <input type="file" multiple bind:this={picker} onchange={uploadPicked} hidden />
     </span>
   {/if}
 </div>
@@ -154,12 +222,32 @@
   </div>
 {/if}
 {#if error}<div class="ui-error-box">{error}</div>{/if}
+{#if (entries ?? []).length > 0}
+  <input class="ui-input filter" type="search" bind:value={filter} placeholder={t('Filter by name')} aria-label={t('Filter by name')} />
+{/if}
 
-<div class="table" role="table" aria-label={t('Files in {name}', { name: pool.name })}>
+{#snippet sortHead(key: FileSortKey, label: string)}
+  <button class="sort" role="columnheader" aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : 'none'} onclick={() => sortBy(key)}>
+    {label}
+    {#if sort.key === key}{#if sort.desc}<ArrowDown size={12} />{:else}<ArrowUp size={12} />{/if}{/if}
+  </button>
+{/snippet}
+
+<div
+  class="table"
+  class:drop={dragging}
+  role="table"
+  tabindex="-1"
+  aria-label={t('Files in {name}', { name: pool.name })}
+  ondragover={dragOver}
+  ondragleave={() => (dragging = false)}
+  ondrop={drop}
+>
   <div class="row head" role="row">
-    <span role="columnheader">{t('Name')}</span>
+    {@render sortHead('name', t('Name'))}
     <span role="columnheader">{t('Format')}</span>
-    <span role="columnheader">{t('Size')}</span>
+    {@render sortHead('size', t('Size'))}
+    {@render sortHead('modified', t('Modified'))}
     <span role="columnheader">{t('Used by')}</span>
     <span role="columnheader"></span>
   </div>
@@ -168,7 +256,7 @@
       <button class="name" role="cell" onclick={() => (dir = crumbs.slice(0, -1).join('/'))}><Folder size={14} /> ..</button>
     </div>
   {/if}
-  {#each entries ?? [] as e (e.name)}
+  {#each shown as e (e.name)}
     {@const used = (e.usedBy ?? []).length > 0}
     <div class="row" role="row">
       {#if e.dir}
@@ -180,10 +268,14 @@
       <span role="cell" class="num" title={t('Allocated on disk / virtual size')}>
         {#if !e.dir}{e.allocatedBytes < e.sizeBytes ? `${formatBytes(e.allocatedBytes)} / ` : ''}{formatBytes(e.sizeBytes)}{/if}
       </span>
+      <span role="cell" class="muted when">{e.dir ? '' : when(e.modified)}</span>
       <span role="cell" class="used">{(e.usedBy ?? []).join(', ')}</span>
       <span role="cell" class="act">
         {#if admin}
           {#if !e.dir}
+            {#if pool.path}
+              <button class="ui-btn sm ghost" title={t('Copy the path on the host')} aria-label={t('Copy the path on the host')} onclick={() => copyPath(e)}><ClipboardCopy size={14} /></button>
+            {/if}
             <a class="ui-btn sm ghost" href={api.fileDownloadURL(pool.name, join(dir, e.name))} download title={t('Download to this computer')}><Download size={14} /></a>
             <button class="ui-btn sm ghost" disabled={used} title={used ? t('In use by a machine') : t('Copy or move')} onclick={() => openCopy(e)}><Copy size={14} /></button>
           {/if}
@@ -205,7 +297,9 @@
     </div>
   {/each}
   {#if entries && entries.length === 0 && !error}
-    <p class="muted empty">{t('This folder is empty.')}</p>
+    <p class="muted empty">{admin ? t('This folder is empty. Drop files here to upload them.') : t('This folder is empty.')}</p>
+  {:else if entries && shown.length === 0 && !error}
+    <p class="muted empty">{t('No file matches')}</p>
   {/if}
 </div>
 
@@ -301,12 +395,39 @@
   }
   .row {
     display: grid;
-    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 150px;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.5fr) minmax(0, 1.4fr) 180px;
     align-items: center;
     gap: 10px;
     padding: 6px 4px;
     border-bottom: 1px solid var(--border);
     font-size: 13px;
+  }
+  .sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .sort:hover {
+    color: var(--text-1);
+  }
+  .filter {
+    max-width: 280px;
+    margin-bottom: 8px;
+  }
+  .when {
+    font-size: 12px;
+  }
+  .table.drop {
+    outline: 2px dashed var(--accent);
+    outline-offset: 2px;
+    background: var(--accent-soft);
   }
   .row.head {
     font-size: 12px;
@@ -355,11 +476,12 @@
   }
   @media (max-width: 640px) {
     .row {
-      grid-template-columns: minmax(0, 1fr) 150px;
+      grid-template-columns: minmax(0, 1fr) 180px;
     }
     .row > :nth-child(2),
     .row > :nth-child(3),
-    .row > :nth-child(4) {
+    .row > :nth-child(4),
+    .row > :nth-child(5) {
       display: none;
     }
   }
