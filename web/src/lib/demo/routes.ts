@@ -744,8 +744,14 @@ function act(m: w.DemoMachine, action: string): Reply {
 }
 
 let macSeq = 0x40
-const newUUID = () =>
-  'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16))
+// getRandomValues, not randomUUID: the latter exists only in secure contexts (a demo served over plain http has none).
+const newUUID = () => {
+  const b = crypto.getRandomValues(new Uint8Array(16))
+  b[6] = (b[6] & 0x0f) | 0x40
+  b[8] = (b[8] & 0x3f) | 0x80
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
 
 function addMachine(host: string, from: Partial<w.DemoMachine> & { name: string }): w.DemoMachine {
   const m: w.DemoMachine = {
@@ -1037,7 +1043,7 @@ function advanceLCM(plan: LCMPlan): LCMPlan {
 
 // ---- SDN on OVN (ADR-0072) --------------------------------------------------------------------
 
-const hex16 = () => Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
+const hex16 = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('')
 
 /** /api/v1/sdn/<parts…> in the demo: the world's VPCs, groups and load balancers. */
 function sdnDemo(method: string, parts: string[], q: URLSearchParams, body: any): Reply {

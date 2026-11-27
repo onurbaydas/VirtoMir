@@ -3,7 +3,7 @@
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-const TOKEN = /(<!--[\s\S]*?-->)|(<\/?)([\w:.-]+)((?:\s+[\w:.-]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?>)|([^<]+)/g
+const TOKEN = /(<!--[\s\S]*?--!?>)|(<\/?)([\w:.-]+)((?:\s+[\w:.-]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?>)|([^<]+)/g
 const ATTR = /([\w:.-]+)(\s*=\s*)("[^"]*"|'[^']*')/g
 
 export function highlightXML(xml: string): string[] {
