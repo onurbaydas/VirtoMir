@@ -3,9 +3,12 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/onurbaydas/virtomir/internal/hostinfo"
 	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
@@ -62,5 +65,52 @@ func TestMetrics(t *testing.T) {
 		if name != current {
 			t.Errorf("sample %q outside its family %q", line, current)
 		}
+	}
+}
+
+func TestMetricsSensors(t *testing.T) {
+	root := t.TempDir()
+	for name, v := range map[string]string{
+		"sys/class/hwmon/hwmon0/name":           "coretemp",
+		"sys/class/hwmon/hwmon0/temp1_input":    "45000",
+		"sys/class/hwmon/hwmon0/temp1_label":    "Package id 0",
+		"sys/class/hwmon/hwmon1/name":           "nct6775",
+		"sys/class/hwmon/hwmon1/fan1_input":     "1200",
+		"sys/class/hwmon/hwmon1/power1_average": "152000000",
+		"sys/class/hwmon/hwmon1/in0_input":      "1200",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(v), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := hostinfo.New()
+	h.Root = root
+	s := newTestServer(&metricsBackend{}, &fakeLive{})
+	s.hostinfo = h
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/metrics", nil))
+	body := rec.Body.String()
+	for _, want := range []string{
+		"# TYPE virtomir_host_temperature_celsius gauge",
+		`virtomir_host_temperature_celsius{chip="coretemp",label="Package id 0"} 45`,
+		`virtomir_host_fan_rpm{chip="nct6775",label="fan1"} 1200`,
+		`virtomir_host_power_watts{chip="nct6775",label="power1"} 152`,
+	} {
+		if !strings.Contains(body, want+"\n") {
+			t.Errorf("missing %s in\n%s", want, body)
+		}
+	}
+
+	// Without sensors (a VM) no sensor family appears.
+	s.hostinfo = hostinfo.New()
+	s.hostinfo.Root = t.TempDir()
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/metrics", nil))
+	if strings.Contains(rec.Body.String(), "virtomir_host_temperature") {
+		t.Error("sensor lines without sensors")
 	}
 }

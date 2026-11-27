@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/onurbaydas/virtomir/internal/hostinfo"
 	"github.com/onurbaydas/virtomir/internal/live"
 )
 
@@ -106,6 +107,10 @@ func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 
+	if s.hostinfo != nil {
+		writeSensorMetrics(m, s.hostinfo.Sensors())
+	}
+
 	if s.alerts != nil {
 		open := map[string]int{"warning": 0, "critical": 0}
 		for _, a := range s.alerts.List() {
@@ -115,6 +120,23 @@ func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
 		}
 		for _, sev := range []string{"critical", "warning"} {
 			m.gauge("virtomir_alerts_open", "Alerts that have not resolved yet.", float64(open[sev]), "severity", sev)
+		}
+	}
+}
+
+// sensorFamilies: the hardware sensor kinds hostinfo reads, as Prometheus families.
+var sensorFamilies = map[string]struct{ name, help string }{
+	"temperature": {"virtomir_host_temperature_celsius", "Host hardware temperature sensor."},
+	"fan":         {"virtomir_host_fan_rpm", "Host fan speed."},
+	"power":       {"virtomir_host_power_watts", "Host power sensor."},
+	"voltage":     {"virtomir_host_voltage_volts", "Host voltage sensor."},
+}
+
+// writeSensorMetrics adds the host's hardware sensors (none inside a VM: nothing is added).
+func writeSensorMetrics(m *metricWriter, sensors []hostinfo.Sensor) {
+	for _, sn := range sensors {
+		if f, ok := sensorFamilies[sn.Kind]; ok {
+			m.gauge(f.name, f.help, sn.Value, "chip", sn.Chip, "label", sn.Label)
 		}
 	}
 }
