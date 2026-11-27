@@ -916,7 +916,8 @@ function domainRoute(host: w.DemoHost, method: string, rest: string[], q: URLSea
       m.qemuArgs = body
       return json({ appliesOnNextBoot: m.state === 'running' })
     case op === 'GET console/info':
-      return json({ running: m.state === 'running' || m.state === 'paused', serial: m.state === 'running' || m.state === 'paused' ? ['pty'] : [], display: m.display, heads: 1 })
+      // The Screen console shows a still picture (demo/vnc.ts), whatever the protocol.
+      return json({ running: m.state === 'running' || m.state === 'paused', serial: m.state === 'running' || m.state === 'paused' ? ['pty'] : [], display: m.display, heads: 1, vnc: m.state === 'running' || m.state === 'paused' ? {} : undefined })
     case op === 'PUT display':
       m.display = body?.protocol === 'spice' ? 'spice' : 'vnc'
       return none()

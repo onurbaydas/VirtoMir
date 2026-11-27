@@ -5,7 +5,7 @@
 import { handle, type Reply } from './routes'
 import * as w from './world'
 import { serialShell } from './shell'
-
+import { vncServer } from './vnc'
 const isAPI = (u: URL) => u.origin === location.origin && u.pathname.startsWith('/api/')
 
 /** Network-ish delay so spinners and transitions look like the real thing. */
@@ -112,6 +112,7 @@ class DemoSocket extends EventTarget {
   onerror: ((e: Event) => void) | null = null
   #write: ((s: string) => void) | null = null
   #input: ((s: string) => void) | null = null
+  #binary: ((b: Uint8Array) => void) | null = null
 
   constructor(url: string) {
     super()
@@ -120,8 +121,16 @@ class DemoSocket extends EventTarget {
     const m = /\/domains\/([0-9a-f-]{36})\/console\/(\w+)/.exec(u.pathname)
     const machine = m ? w.byUUID(m[1]) : undefined
     setTimeout(() => {
+      if (machine && m![2] === 'vnc') {
+        // The Screen console: a pretend VNC server with a still picture.
+        // Answers arrive later, like from a network: never inside the client's own send().
+        const out = (b: Uint8Array) => setTimeout(() => this.#fire('message', new MessageEvent('message', { data: b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) })))
+        this.readyState = 1
+        this.#fire('open', new Event('open'))
+        this.#binary = vncServer(machine, out)
+        return
+      }
       if (!machine || m![2] !== 'serial') {
-        // Screen consoles speak VNC/SPICE to a real QEMU; there is none in the demo.
         return this.#close(1011, 'The screen console needs a real host; try the Serial console in the demo.')
       }
       const enc = new TextEncoder()
@@ -145,6 +154,11 @@ class DemoSocket extends EventTarget {
 
   send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
     if (this.readyState !== 1) return
+    if (this.#binary) {
+      const b = typeof data === 'string' ? new TextEncoder().encode(data) : ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : data instanceof Blob ? null : new Uint8Array(data)
+      if (b) this.#binary(b)
+      return
+    }
     const s = typeof data === 'string' ? data : new TextDecoder().decode(data as ArrayBuffer)
     this.#input?.(s)
   }
