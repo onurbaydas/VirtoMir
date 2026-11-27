@@ -32,7 +32,7 @@ SRC="$TOP/files"
 mkdir -p "$SRC" "$OUT"
 (cd "$ROOT" && CGO_ENABLED=1 go build -tags pam -trimpath \
 	-ldflags "-s -w -X main.version=$VERSION" -o "$SRC/virtomird" ./cmd/virtomird)
-
+sh "$ROOT/scripts/manpage.sh" "$SRC/virtomird" "$VERSION" | gzip -9n >"$SRC/virtomird.8.gz"
 # Fedora/RHEL PAM stack: system-auth instead of Debian's common-auth.
 cat >"$SRC/virtomir.pam" <<'EOF'
 #%PAM-1.0
@@ -75,7 +75,7 @@ install -Dm0644 $SRC/virtomird.sysconfig %{buildroot}/etc/sysconfig/virtomird
 install -Dm0644 $SRC/README.md %{buildroot}/usr/share/doc/virtomir/README.md
 install -Dm0644 $SRC/LICENSE %{buildroot}/usr/share/licenses/virtomir/LICENSE
 install -Dm0644 $SRC/virtomir.cil %{buildroot}/usr/share/virtomir/virtomir.cil
-
+install -Dm0644 $SRC/virtomird.8.gz %{buildroot}/usr/share/man/man8/virtomird.8.gz
 %files
 /usr/bin/virtomird
 /usr/lib/systemd/system/virtomird.service
@@ -84,6 +84,7 @@ install -Dm0644 $SRC/virtomir.cil %{buildroot}/usr/share/virtomir/virtomir.cil
 /usr/share/doc/virtomir/README.md
 /usr/share/licenses/virtomir/LICENSE
 /usr/share/virtomir/virtomir.cil
+/usr/share/man/man8/virtomird.8.gz
 
 %post
 for g in virtomir-operator virtomir-viewer; do getent group \$g >/dev/null || groupadd -r \$g; done

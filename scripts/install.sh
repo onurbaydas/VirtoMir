@@ -12,6 +12,7 @@ set -eu
 
 REPO=onurbaydas/VirtoMir
 BIN=/usr/local/bin/virtomird
+MANPAGE=/usr/local/share/man/man8/virtomird.8
 UNIT=/etc/systemd/system/virtomird.service
 PAMFILE=/etc/pam.d/virtomir
 STATE=/var/lib/virtomir
@@ -47,7 +48,7 @@ command -v systemctl >/dev/null || die "systemd is required"
 if [ "$UNINSTALL" = 1 ]; then
 	say "Removing VirtoMir"
 	systemctl disable --now virtomird.service 2>/dev/null || true
-	rm -f "$UNIT" "$BIN" "$PAMFILE"
+	rm -f "$UNIT" "$BIN" "$PAMFILE" "$MANPAGE"
 	systemctl daemon-reload
 	if command -v semodule >/dev/null && semodule -l 2>/dev/null | grep -qx virtomir; then
 		semodule -r virtomir >/dev/null 2>&1 || true
@@ -153,7 +154,9 @@ UPGRADE=0
 say "Installing $BIN"
 install -m 0755 "$SRC/virtomird" "$BIN.new"
 mv -f "$BIN.new" "$BIN"
-
+if [ -f "$SRC/virtomird.8" ]; then # tarballs from before the manual page have none
+	install -D -m 0644 "$SRC/virtomird.8" "$MANPAGE"
+fi
 say "Installing PAM service $PAMFILE"
 if [ -f /etc/pam.d/common-auth ]; then
 	install -m 0644 "$SRC/virtomir.pam" "$PAMFILE" # Debian / Ubuntu

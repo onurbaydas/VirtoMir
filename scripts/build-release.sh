@@ -19,7 +19,7 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 (cd "$ROOT" && CGO_ENABLED=1 go build -tags pam -trimpath \
 	-ldflags "-s -w -X main.version=$VERSION" -o "$STAGE/virtomird" ./cmd/virtomird)
-
+sh "$ROOT/scripts/manpage.sh" "$STAGE/virtomird" "$VERSION" >"$STAGE/virtomird.8"
 echo "==> package"
 cp "$ROOT/packaging/virtomird.service" "$ROOT/packaging/virtomir.pam" "$ROOT/packaging/virtomir.cil" "$STAGE/"
 cp "$ROOT/scripts/install.sh" "$STAGE/"

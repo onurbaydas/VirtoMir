@@ -30,7 +30,8 @@ rm -rf "$PKG"
 mkdir -p "$OUT" "$PKG/DEBIAN" "$PKG/usr/bin" "$PKG/lib/systemd/system" "$PKG/etc/pam.d" "$PKG/etc/default" "$PKG/usr/share/doc/virtomir"
 (cd "$ROOT" && CGO_ENABLED=1 go build -tags pam -trimpath \
 	-ldflags "-s -w -X main.version=$VERSION" -o "$PKG/usr/bin/virtomird" ./cmd/virtomird)
-
+mkdir -p "$PKG/usr/share/man/man8"
+sh "$ROOT/scripts/manpage.sh" "$PKG/usr/bin/virtomird" "$VERSION" | gzip -9n >"$PKG/usr/share/man/man8/virtomird.8.gz"
 cp "$ROOT/packaging/virtomir.pam" "$PKG/etc/pam.d/virtomir"
 cat >"$PKG/etc/default/virtomird" <<'EOF'
 # Flags for virtomird (see "virtomird -h"). Restart after changing:
