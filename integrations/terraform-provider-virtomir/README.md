@@ -40,6 +40,10 @@ This provider is developed in [VirtoMir](https://github.com/onurbaydas/VirtoMir/
 | `virtomir_network` | NAT, routed, isolated (IPv4 and/or IPv6) or bridged network |
 | `virtomir_pool` | directory, NFS, iSCSI, LVM or ZFS storage pool (destroy only forgets it) |
 | `data.virtomir_host` | host name, libvirt/QEMU version, CPUs, memory |
+| `data.virtomir_machine` | a machine or template by name or UUID: state, size, project, IP addresses |
+| `data.virtomir_network` | a network by name: mode, bridge, IPv4 network |
+| `data.virtomir_pool` | a storage pool by name: type, path, capacity and free space |
+| `data.virtomir_project` | a project by ID: pools, networks, machines and limits |
 
 The provider reads `VIRTOMIR_URL`, `VIRTOMIR_TOKEN` and `VIRTOMIR_INSECURE=1` when the provider block leaves them out. In a cluster, `host = "<member>"` manages that member through `url`.
 
@@ -56,6 +60,8 @@ provider_installation {
 EOF
 ```
 
-`go test ./...` runs the client tests. Publishing to the Terraform Registry needs this directory in a repository of its own named `terraform-provider-virtomir` with GPG-signed releases (goreleaser); until then use the build above.
+`go test ./...` runs the unit tests. `TF_ACC=1 go test ./internal/provider -run TestAcc` runs Terraform itself
+against a fake host, and with `VIRTOMIR_URL`, `VIRTOMIR_TOKEN` (and `VIRTOMIR_INSECURE=1`) against a real one
+(`VIRTOMIR_ACC_MACHINE` and `VIRTOMIR_ACC_PROJECT` name a machine and a project to read too). Publishing to the Terraform Registry needs this directory in a repository of its own named `terraform-provider-virtomir` with GPG-signed releases (goreleaser); until then use the build above.
 
 License: MPL-2.0 (see [LICENSE](LICENSE)); VirtoMir itself is AGPL-3.0-or-later.

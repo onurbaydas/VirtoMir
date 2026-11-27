@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	dschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -29,6 +30,8 @@ type machineDataModel struct {
 	MemoryMB  types.Int64  `tfsdk:"memory_mb"`
 	Autostart types.Bool   `tfsdk:"autostart"`
 	Template  types.Bool   `tfsdk:"template"`
+	Project   types.String `tfsdk:"project"`
+	Addresses types.List   `tfsdk:"addresses"`
 }
 
 func (d *machineData) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -46,6 +49,9 @@ func (d *machineData) Schema(_ context.Context, _ datasource.SchemaRequest, resp
 			"memory_mb": dschema.Int64Attribute{Computed: true},
 			"autostart": dschema.BoolAttribute{Computed: true},
 			"template":  dschema.BoolAttribute{Computed: true},
+			"project":   dschema.StringAttribute{Computed: true, Description: "Its project's ID (empty: global)."},
+			"addresses": dschema.ListAttribute{Computed: true, ElementType: types.StringType,
+				Description: "IP addresses of its network adapters with prefix (from the guest agent or DHCP leases; empty while it is off)."},
 		},
 	}
 }
@@ -69,9 +75,18 @@ func readMachine(ctx context.Context, c *client.Client, id, name string) (machin
 	if err != nil {
 		return machineDataModel{}, err
 	}
+	addrs, err := c.Addresses(ctx, m.UUID)
+	if err != nil {
+		return machineDataModel{}, fmt.Errorf("addresses of %s: %w", m.Name, err)
+	}
+	list, diags := types.ListValueFrom(ctx, types.StringType, addrs)
+	if diags.HasError() {
+		return machineDataModel{}, fmt.Errorf("addresses of %s not read", m.Name)
+	}
 	return machineDataModel{ID: types.StringValue(m.UUID), Name: types.StringValue(m.Name), State: types.StringValue(m.State),
 		VCPUs: types.Int64Value(int64(m.VCPUs)), MemoryMB: types.Int64Value(int64(m.MaxMemoryKiB >> 10)),
-		Autostart: types.BoolValue(m.Autostart), Template: types.BoolValue(m.Template)}, nil
+		Autostart: types.BoolValue(m.Autostart), Template: types.BoolValue(m.Template),
+		Project: types.StringValue(m.Project), Addresses: list}, nil
 }
 
 func (d *machineData) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -95,12 +110,13 @@ type networkData struct{ c *client.Client }
 func newNetworkData() datasource.DataSource { return &networkData{} }
 
 type networkDataModel struct {
-	Name    types.String `tfsdk:"name"`
-	Mode    types.String `tfsdk:"mode"`
-	Bridge  types.String `tfsdk:"bridge"`
-	Subnet  types.String `tfsdk:"subnet"`
-	Subnet6 types.String `tfsdk:"subnet6"`
-	Active  types.Bool   `tfsdk:"active"`
+	Name     types.String `tfsdk:"name"`
+	Mode     types.String `tfsdk:"mode"`
+	Bridge   types.String `tfsdk:"bridge"`
+	Subnet   types.String `tfsdk:"subnet"`
+	Subnet6  types.String `tfsdk:"subnet6"`
+	IPv4CIDR types.String `tfsdk:"ipv4_cidr"`
+	Active   types.Bool   `tfsdk:"active"`
 }
 
 func (d *networkData) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -116,7 +132,9 @@ func (d *networkData) Schema(_ context.Context, _ datasource.SchemaRequest, resp
 			"bridge":  dschema.StringAttribute{Computed: true},
 			"subnet":  dschema.StringAttribute{Computed: true},
 			"subnet6": dschema.StringAttribute{Computed: true},
-			"active":  dschema.BoolAttribute{Computed: true},
+			"ipv4_cidr": dschema.StringAttribute{Computed: true,
+				Description: "The IPv4 network, e.g. 192.168.122.0/24 (subnet is the gateway with its prefix: 192.168.122.1/24)."},
+			"active": dschema.BoolAttribute{Computed: true},
 		},
 	}
 }
@@ -130,8 +148,12 @@ func readNetwork(ctx context.Context, c *client.Client, name string) (networkDat
 	if err != nil {
 		return networkDataModel{}, err
 	}
+	cidr := ""
+	if pfx, err := netip.ParsePrefix(n.Subnet); err == nil {
+		cidr = pfx.Masked().String()
+	}
 	return networkDataModel{Name: types.StringValue(n.Name), Mode: types.StringValue(n.Mode), Bridge: types.StringValue(n.Bridge),
-		Subnet: types.StringValue(n.Subnet), Subnet6: types.StringValue(n.Subnet6), Active: types.BoolValue(n.Active)}, nil
+		Subnet: types.StringValue(n.Subnet), Subnet6: types.StringValue(n.Subnet6), IPv4CIDR: types.StringValue(cidr), Active: types.BoolValue(n.Active)}, nil
 }
 
 func (d *networkData) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -155,10 +177,13 @@ type poolData struct{ c *client.Client }
 func newPoolData() datasource.DataSource { return &poolData{} }
 
 type poolDataModel struct {
-	Name   types.String `tfsdk:"name"`
-	Type   types.String `tfsdk:"type"`
-	Path   types.String `tfsdk:"path"`
-	Active types.Bool   `tfsdk:"active"`
+	Name           types.String `tfsdk:"name"`
+	Type           types.String `tfsdk:"type"`
+	Path           types.String `tfsdk:"path"`
+	Active         types.Bool   `tfsdk:"active"`
+	CapacityBytes  types.Int64  `tfsdk:"capacity_bytes"`
+	AllocatedBytes types.Int64  `tfsdk:"allocated_bytes"`
+	AvailableBytes types.Int64  `tfsdk:"available_bytes"`
 }
 
 func (d *poolData) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -169,10 +194,13 @@ func (d *poolData) Schema(_ context.Context, _ datasource.SchemaRequest, resp *d
 	resp.Schema = dschema.Schema{
 		Description: "A storage pool, by name.",
 		Attributes: map[string]dschema.Attribute{
-			"name":   dschema.StringAttribute{Required: true},
-			"type":   dschema.StringAttribute{Computed: true},
-			"path":   dschema.StringAttribute{Computed: true},
-			"active": dschema.BoolAttribute{Computed: true},
+			"name":            dschema.StringAttribute{Required: true},
+			"type":            dschema.StringAttribute{Computed: true},
+			"path":            dschema.StringAttribute{Computed: true},
+			"active":          dschema.BoolAttribute{Computed: true},
+			"capacity_bytes":  dschema.Int64Attribute{Computed: true},
+			"allocated_bytes": dschema.Int64Attribute{Computed: true, Description: "Space in use."},
+			"available_bytes": dschema.Int64Attribute{Computed: true, Description: "Free space."},
 		},
 	}
 }
@@ -186,7 +214,8 @@ func readPool(ctx context.Context, c *client.Client, name string) (poolDataModel
 	if err != nil {
 		return poolDataModel{}, err
 	}
-	return poolDataModel{Name: types.StringValue(p.Name), Type: types.StringValue(p.Type), Path: types.StringValue(p.Path), Active: types.BoolValue(p.Active)}, nil
+	return poolDataModel{Name: types.StringValue(p.Name), Type: types.StringValue(p.Type), Path: types.StringValue(p.Path), Active: types.BoolValue(p.Active),
+		CapacityBytes: types.Int64Value(p.CapacityBytes), AllocatedBytes: types.Int64Value(p.AllocationBytes), AvailableBytes: types.Int64Value(p.AvailableBytes)}, nil
 }
 
 func (d *poolData) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -210,12 +239,13 @@ type projectData struct{ c *client.Client }
 func newProjectData() datasource.DataSource { return &projectData{} }
 
 type projectDataModel struct {
-	ID           types.String `tfsdk:"id"`
-	Name         types.String `tfsdk:"name"`
-	Description  types.String `tfsdk:"description"`
-	StoragePools types.List   `tfsdk:"storage_pools"`
-	Networks     types.List   `tfsdk:"networks"`
-	Machines     types.Int64  `tfsdk:"machines"`
+	ID           types.String        `tfsdk:"id"`
+	Name         types.String        `tfsdk:"name"`
+	Description  types.String        `tfsdk:"description"`
+	StoragePools types.List          `tfsdk:"storage_pools"`
+	Networks     types.List          `tfsdk:"networks"`
+	Machines     types.Int64         `tfsdk:"machines"`
+	Limits       *projectLimitsModel `tfsdk:"limits"`
 }
 
 func (d *projectData) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -232,6 +262,16 @@ func (d *projectData) Schema(_ context.Context, _ datasource.SchemaRequest, resp
 			"storage_pools": dschema.ListAttribute{Computed: true, ElementType: types.StringType},
 			"networks":      dschema.ListAttribute{Computed: true, ElementType: types.StringType},
 			"machines":      dschema.Int64Attribute{Computed: true, Description: "How many machines it has now."},
+			"limits": dschema.SingleNestedAttribute{
+				Computed:    true,
+				Description: "Its resource limits (0: unlimited).",
+				Attributes: map[string]dschema.Attribute{
+					"machines":   dschema.Int64Attribute{Computed: true},
+					"vcpus":      dschema.Int64Attribute{Computed: true},
+					"memory_mib": dschema.Int64Attribute{Computed: true},
+					"disk_gib":   dschema.Int64Attribute{Computed: true},
+				},
+			},
 		},
 	}
 }
@@ -254,8 +294,14 @@ func readProject(ctx context.Context, c *client.Client, id string) (projectDataM
 	if p.Usage != nil {
 		machines = int64(p.Usage.Machines)
 	}
+	lim := client.ProjectLimits{}
+	if p.Limits != nil {
+		lim = *p.Limits
+	}
 	return projectDataModel{ID: types.StringValue(p.ID), Name: types.StringValue(p.Name), Description: types.StringValue(p.Description),
-		StoragePools: pools, Networks: nets, Machines: types.Int64Value(machines)}, nil
+		StoragePools: pools, Networks: nets, Machines: types.Int64Value(machines),
+		Limits: &projectLimitsModel{Machines: types.Int64Value(int64(lim.Machines)), VCPUs: types.Int64Value(int64(lim.VCPUs)),
+			MemoryMiB: types.Int64Value(lim.MemoryMiB), DiskGiB: types.Int64Value(lim.DiskGiB)}}, nil
 }
 
 func nonNil(s []string) []string {

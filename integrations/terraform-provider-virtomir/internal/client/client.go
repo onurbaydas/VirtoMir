@@ -115,6 +115,7 @@ type Domain struct {
 	MaxMemoryKiB uint64 `json:"maxMemoryKiB"`
 	Autostart    bool   `json:"autostart"`
 	Template     bool   `json:"template"`
+	Project      string `json:"project,omitempty"`
 }
 
 // Running reports whether the state counts as on (running, paused, …).
@@ -146,6 +147,27 @@ func (c *Client) Domain(ctx context.Context, uuid string) (Domain, error) {
 		}
 	}
 	return Domain{}, fmt.Errorf("machine %s: %w", uuid, ErrNotFound)
+}
+
+// Addresses are the IP addresses of a machine's network adapters (from its guest agent or
+// DHCP leases), as the machine page shows them.
+func (c *Client) Addresses(ctx context.Context, uuid string) ([]string, error) {
+	var d struct {
+		Devices []struct {
+			Group     string   `json:"group"`
+			Addresses []string `json:"addresses"`
+		} `json:"devices"`
+	}
+	if err := c.Do(ctx, http.MethodGet, "/api/v1/domains/"+url.PathEscape(uuid), nil, &d); err != nil {
+		return nil, err
+	}
+	out := []string{}
+	for _, dev := range d.Devices {
+		if dev.Group == "network" {
+			out = append(out, dev.Addresses...)
+		}
+	}
+	return out, nil
 }
 
 // DomainByName finds a machine by name or UUID.
@@ -386,10 +408,13 @@ func (c *Client) DeleteNetwork(ctx context.Context, name string) error {
 }
 
 type Pool struct {
-	Name   string `json:"name"`
-	Type   string `json:"type"`
-	Path   string `json:"path,omitempty"`
-	Active bool   `json:"active"`
+	Name            string `json:"name"`
+	Type            string `json:"type"`
+	Path            string `json:"path,omitempty"`
+	Active          bool   `json:"active"`
+	CapacityBytes   int64  `json:"capacityBytes"`
+	AllocationBytes int64  `json:"allocationBytes"`
+	AvailableBytes  int64  `json:"availableBytes"`
 }
 
 type PoolSpec struct {

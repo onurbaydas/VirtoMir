@@ -67,6 +67,15 @@ jobs:
           go test ./...
           go build -o /tmp/terraform-provider-virtomir .
 
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform provider acceptance (fake host)
+        working-directory: integrations/terraform-provider-virtomir
+        env:
+          TF_ACC: "1"
+        run: go test ./internal/provider -run TestAccDataSourcesFake -v
       - name: CSI driver
         working-directory: integrations/virtomir-csi
         run: |
