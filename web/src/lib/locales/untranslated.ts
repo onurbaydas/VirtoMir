@@ -80,7 +80,6 @@ export const untranslated = new Set<string>([
   "SCSI",
   "Secure Boot",
   "Skylake-Client, EPYC-Rome, Westmere…",
-  "Slack / Mattermost",
   "smtp.example.com",
   "spice-vdagent",
   "SR-IOV",

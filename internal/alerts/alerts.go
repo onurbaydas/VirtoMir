@@ -258,6 +258,9 @@ func (e *Engine) Config() Config {
 		if c.Channels[i].URL != "" {
 			c.Channels[i].URL = maskURL(c.Channels[i].URL)
 		}
+		if c.Channels[i].Secret != "" {
+			c.Channels[i].Secret = maskedSecret
+		}
 	}
 	return c
 }
@@ -280,6 +283,17 @@ func isMaskedURL(s string) bool { return strings.HasSuffix(s, maskedSecret) }
 // It fails when there is no stored channel to take it from (e.g. the same settings sent to
 // another cluster member that does not have this channel yet).
 func unmaskChannel(ch *Channel, stored []Channel) error {
+	if ch.Secret == maskedSecret {
+		ch.Secret = ""
+		for _, old := range stored {
+			if old.ID != "" && old.ID == ch.ID {
+				ch.Secret = old.Secret
+			}
+		}
+		if ch.Secret == "" {
+			return fmt.Errorf("channel %q: enter its key or token again (it is hidden, and this host does not have it yet)", ch.Name)
+		}
+	}
 	if !isMaskedURL(ch.URL) {
 		return nil
 	}
@@ -322,6 +336,7 @@ func (e *Engine) SetConfig(c Config) error {
 		if ch.ID == "" {
 			ch.ID = newID()
 		}
+		ch.normalize()
 		if err := ch.validate(); err != nil {
 			return fmt.Errorf("channel %q: %w", ch.Name, err)
 		}

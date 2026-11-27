@@ -182,12 +182,33 @@
       testing = false
     }
   }
-  const FORMATS = [
-    { key: 'json', label: t('Generic JSON'), hint: t('Any webhook receiver, n8n, Home Assistant…') },
-    { key: 'slack', label: t('Slack / Mattermost'), hint: t('Incoming webhook URL') },
-    { key: 'discord', label: t('Discord'), hint: t('Channel webhook URL') },
-    { key: 'ntfy', label: 'ntfy', hint: 'https://ntfy.sh/<topic> or your own server — push to your phone' },
+  // Every webhook format; url: the address VirtoMir uses when none is given (shown as the
+  // placeholder), secret/target: the labels of the extra fields the service needs.
+  type FormatKey = NonNullable<AlertChannel['format']>
+  const FORMATS: { key: FormatKey; label: string; group: 'chat' | 'push' | 'oncall' | 'other'; hint: string; url?: string; secret?: string; target?: string }[] = [
+    { key: 'slack', label: 'Slack', group: 'chat', hint: t('Incoming webhook URL') },
+    { key: 'mattermost', label: 'Mattermost', group: 'chat', hint: t('Incoming webhook URL') },
+    { key: 'rocketchat', label: 'Rocket.Chat', group: 'chat', hint: t('Incoming webhook URL') },
+    { key: 'discord', label: 'Discord', group: 'chat', hint: t('Channel webhook URL') },
+    { key: 'teams', label: 'Microsoft Teams', group: 'chat', hint: t('URL of a Teams workflow that posts webhook requests to a channel') },
+    { key: 'googlechat', label: 'Google Chat', group: 'chat', hint: t('Incoming webhook URL of the space') },
+    { key: 'telegram', label: 'Telegram', group: 'chat', hint: t('A bot made with @BotFather, and the chat it writes to'), url: 'https://api.telegram.org', secret: t('Bot token'), target: t('Chat ID') },
+    { key: 'matrix', label: 'Matrix', group: 'chat', hint: t('Your homeserver, an access token of the bot account and the room'), secret: t('Access token'), target: t('Room ID') },
+    { key: 'ntfy', label: 'ntfy', group: 'push', hint: 'https://ntfy.sh/<topic> or your own server — push to your phone' },
+    { key: 'gotify', label: 'Gotify', group: 'push', hint: t('Your Gotify server and an application token'), secret: t('Application token') },
+    { key: 'pushover', label: 'Pushover', group: 'push', hint: t('An application token and your user key'), url: 'https://api.pushover.net', secret: t('Application token'), target: t('User key') },
+    { key: 'pagerduty', label: 'PagerDuty', group: 'oncall', hint: t('Integration key of an Events API v2 integration; resolved alerts resolve the incident'), url: 'https://events.pagerduty.com', secret: t('Integration key') },
+    { key: 'opsgenie', label: 'Opsgenie', group: 'oncall', hint: t('API key of an API integration; EU accounts use https://api.eu.opsgenie.com'), url: 'https://api.opsgenie.com', secret: t('API key') },
+    { key: 'alertmanager', label: 'Alertmanager', group: 'oncall', hint: t('Address of your Prometheus Alertmanager') },
+    { key: 'json', label: t('Generic JSON'), group: 'other', hint: t('Any webhook receiver, n8n, Home Assistant…') },
+  ]
+  const GROUPS = [
+    { key: 'chat', label: t('Chat') },
+    { key: 'push', label: t('Phone push') },
+    { key: 'oncall', label: t('On-call') },
+    { key: 'other', label: t('Other') },
   ] as const
+  const fmt = $derived(FORMATS.find((f) => f.key === editing?.format) ?? FORMATS[FORMATS.length - 1])
 </script>
 
 <svelte:head><title>{t('Alerts · VirtoMir')}</title></svelte:head>
@@ -385,16 +406,23 @@
     <form id="ch-form" class="form" onsubmit={keepChannel}>
       <label class="ui-field"><span class="label">{t('Name')}</span><input class="ui-input" bind:value={editing.name} placeholder={editing.kind === 'email' ? t('Ops team') : t('My phone')} required /></label>
       {#if editing.kind === 'webhook'}
-        <div class="formats" role="radiogroup" aria-label={t('Format')}>
-          {#each FORMATS as f (f.key)}
-            <label class="fmt" class:on={editing.format === f.key}>
-              <input type="radio" name="fmt" value={f.key} bind:group={editing.format} />
-              <strong>{f.label}</strong>
-              <span>{f.hint}</span>
-            </label>
-          {/each}
-        </div>
-        <label class="ui-field"><span class="label">{t('URL')}</span><input class="ui-input mono" bind:value={editing.url} placeholder={editing.format === 'ntfy' ? 'https://ntfy.sh/my-virtomir-alerts' : 'https://…'} required /></label>
+        <label class="ui-field"><span class="label">{t('Service')}</span>
+          <select class="ui-input" bind:value={editing.format}>
+            {#each GROUPS as g (g.key)}
+              <optgroup label={g.label}>
+                {#each FORMATS.filter((f) => f.group === g.key) as f (f.key)}<option value={f.key}>{f.label}</option>{/each}
+              </optgroup>
+            {/each}
+          </select>
+          <span class="muted hint">{fmt.hint}</span>
+        </label>
+        <label class="ui-field"><span class="label">{fmt.url ? t('Address (optional)') : t('URL')}</span><input class="ui-input mono" bind:value={editing.url} placeholder={fmt.url ?? (editing.format === 'ntfy' ? 'https://ntfy.sh/my-virtomir-alerts' : 'https://…')} required={!fmt.url} /></label>
+        {#if fmt.secret}
+          <label class="ui-field"><span class="label">{fmt.secret}</span><input class="ui-input mono" type="password" autocomplete="off" bind:value={editing.secret} required /></label>
+        {/if}
+        {#if fmt.target}
+          <label class="ui-field"><span class="label">{fmt.target}</span><input class="ui-input mono" bind:value={editing.target} required /></label>
+        {/if}
       {:else}
         <label class="ui-field"><span class="label">{t('Recipients')}</span><input class="ui-input" bind:value={editing.to} placeholder={t('ops@example.com, me@example.com')} required /></label>
       {/if}
@@ -735,38 +763,9 @@
     flex-direction: column;
     gap: 14px;
   }
-  .formats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .fmt {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 9px 11px;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-  }
-  .fmt input {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-  }
-  .fmt.on {
-    border-color: var(--accent);
-    background: var(--accent-soft);
-  }
-  .fmt:focus-within {
-    outline: 2px solid var(--accent);
-  }
-  .fmt strong {
-    font-size: 13px;
-  }
-  .fmt span {
-    color: var(--text-3);
-    font-size: 11.5px;
+  .hint {
+    font-size: 12px;
+    margin-top: 4px;
   }
   .two {
     display: grid;
@@ -788,9 +787,6 @@
       grid-column: 2 / -1;
     }
     .smtp {
-      grid-template-columns: 1fr;
-    }
-    .formats {
       grid-template-columns: 1fr;
     }
   }

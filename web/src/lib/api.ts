@@ -402,7 +402,11 @@ export interface AlertChannel {
   enabled: boolean
   minSeverity: Severity
   url?: string
-  format?: 'json' | 'slack' | 'discord' | 'ntfy'
+  format?: 'json' | 'slack' | 'discord' | 'ntfy' | 'mattermost' | 'rocketchat' | 'googlechat' | 'teams' | 'telegram' | 'matrix' | 'gotify' | 'pushover' | 'pagerduty' | 'opsgenie' | 'alertmanager'
+  // A service's token or key; comes back masked.
+  secret?: string
+  // Where in the service the message goes (Telegram chat, Matrix room, Pushover user).
+  target?: string
   to?: string
   resolved: boolean
 }

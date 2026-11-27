@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"net/mail"
@@ -47,9 +48,15 @@ type Channel struct {
 	Enabled bool   `json:"enabled"`
 	// MinSeverity: "warning" sends everything, "critical" only critical alerts.
 	MinSeverity Severity `json:"minSeverity"`
-	// Webhook: URL and body format (json, slack, discord, ntfy).
+	// Webhook: URL and body format (see formatSpecs). For services with one public address
+	// (Telegram, Pushover, PagerDuty, Opsgenie) the URL may be left empty.
 	URL    string `json:"url,omitempty"`
 	Format string `json:"format,omitempty"`
+	// Secret is the token or key a service needs (Telegram bot token, PagerDuty routing key, …);
+	// like the URL it is never sent back to the browser.
+	Secret string `json:"secret,omitempty"`
+	// Target is where in the service the message goes (Telegram chat, Matrix room, Pushover user).
+	Target string `json:"target,omitempty"`
 	// Email: recipients, comma separated.
 	To string `json:"to,omitempty"`
 	// Resolved also notifies when the alert clears.
@@ -67,7 +74,34 @@ type SMTP struct {
 	TLS string `json:"tls"`
 }
 
-var formats = []string{"json", "slack", "discord", "ntfy"}
+// formatSpec is what a webhook format needs besides its URL.
+type formatSpec struct {
+	defaultURL string // used when the URL is left empty
+	secret     string // name of the secret it needs ("" for none)
+	target     string // name of the target it needs ("" for none)
+}
+
+var formatSpecs = map[string]formatSpec{
+	"json": {}, "slack": {}, "discord": {}, "ntfy": {},
+	"mattermost": {}, "rocketchat": {}, "googlechat": {}, "teams": {}, "alertmanager": {},
+	"telegram":  {defaultURL: "https://api.telegram.org", secret: "bot token", target: "chat ID"},
+	"matrix":    {secret: "access token", target: "room ID"},
+	"gotify":    {secret: "application token"},
+	"pushover":  {defaultURL: "https://api.pushover.net", secret: "application token", target: "user key"},
+	"pagerduty": {defaultURL: "https://events.pagerduty.com", secret: "integration key"},
+	"opsgenie":  {defaultURL: "https://api.opsgenie.com", secret: "API key"},
+}
+
+var formats = []string{"json", "slack", "discord", "ntfy", "mattermost", "rocketchat", "googlechat", "teams",
+	"telegram", "matrix", "gotify", "pushover", "pagerduty", "opsgenie", "alertmanager"}
+
+// normalize fills what VirtoMir knows itself: the address of a service that has only one.
+func (c *Channel) normalize() {
+	c.URL, c.Secret, c.Target = strings.TrimSpace(c.URL), strings.TrimSpace(c.Secret), strings.TrimSpace(c.Target)
+	if c.Kind == "webhook" && c.URL == "" {
+		c.URL = formatSpecs[c.Format].defaultURL
+	}
+}
 
 func (c Channel) validate() error {
 	if strings.TrimSpace(c.Name) == "" {
@@ -82,12 +116,15 @@ func (c Channel) validate() error {
 		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 			return errors.New("webhook URL must be an http(s) URL")
 		}
-		ok := false
-		for _, f := range formats {
-			ok = ok || f == c.Format
-		}
+		spec, ok := formatSpecs[c.Format]
 		if !ok {
 			return fmt.Errorf("format must be one of %s", strings.Join(formats, ", "))
+		}
+		if spec.secret != "" && c.Secret == "" {
+			return fmt.Errorf("give the %s", spec.secret)
+		}
+		if spec.target != "" && c.Target == "" {
+			return fmt.Errorf("give the %s", spec.target)
 		}
 	case "email":
 		if _, err := mail.ParseAddressList(c.To); err != nil {
@@ -142,6 +179,7 @@ func (e *Engine) Test(ch Channel) error {
 	if err := unmaskChannel(&ch, stored); err != nil {
 		return err
 	}
+	ch.normalize()
 	if err := ch.validate(); err != nil {
 		return err
 	}
@@ -190,14 +228,49 @@ func deliver(ch Channel, s SMTP, ev Event) error {
 }
 
 func webhook(ch Channel, ev Event) error {
-	var body []byte
-	contentType := "application/json"
-	headers := http.Header{}
+	method, target, contentType, body, headers := webhookRequest(ch, ev)
+	if !webhookURL.MatchString(target) {
+		return errors.New("webhook URL must be an http(s) URL")
+	}
+	req, err := http.NewRequestWithContext(context.Background(), method, target, bytes.NewReader(body))
+	if err != nil {
+		return redact(err, ch.Secret)
+	}
+	req.Header = headers
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("User-Agent", "VirtoMir")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return redact(err, ch.Secret) // Telegram's token is part of its URL
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("webhook answered %s", resp.Status)
+	}
+	return nil
+}
+
+// redact keeps a secret out of an error that may quote the request URL.
+func redact(err error, secret string) error {
+	if secret == "" || !strings.Contains(err.Error(), secret) {
+		return err
+	}
+	return errors.New(strings.ReplaceAll(err.Error(), secret, maskedSecret))
+}
+
+// webhookRequest builds the request each format expects.
+func webhookRequest(ch Channel, ev Event) (method, target, contentType string, body []byte, headers http.Header) {
+	method, target, contentType, headers = http.MethodPost, ch.URL, "application/json", http.Header{}
+	base := strings.TrimRight(ch.URL, "/")
+	host, _ := os.Hostname()
+	title := fmt.Sprintf("VirtoMir: %s %s", ev.Alert.Subject, ev.Type)
+	text := ev.Text()
+	critical := ev.Type == Firing && ev.Alert.Severity == Critical
 	switch ch.Format {
-	case "slack":
-		body, _ = json.Marshal(map[string]string{"text": ev.Text()})
+	case "slack", "mattermost", "rocketchat", "googlechat":
+		body, _ = json.Marshal(map[string]string{"text": text})
 	case "discord":
-		body, _ = json.Marshal(map[string]string{"content": ev.Text()})
+		body, _ = json.Marshal(map[string]string{"content": text})
 	case "ntfy":
 		// ntfy.sh: plain text body, metadata in headers.
 		msg := ev.Alert.Message
@@ -205,35 +278,101 @@ func webhook(ch Channel, ev Event) error {
 			msg = "Resolved — " + msg // the message still describes the firing value
 		}
 		body, contentType = []byte(msg), "text/plain; charset=utf-8"
-		headers.Set("Title", fmt.Sprintf("VirtoMir: %s %s", ev.Alert.Subject, ev.Type))
+		headers.Set("Title", title)
 		prio := map[Severity]string{Warning: "default", Critical: "urgent"}[ev.Alert.Severity]
 		if ev.Type != Firing {
 			prio = "low"
 		}
 		headers.Set("Priority", prio)
 		headers.Set("Tags", map[EventType]string{Firing: "rotating_light", ResolvedEvent: "white_check_mark", TestEvent: "bell", NoticeEvent: "information_source"}[ev.Type])
+	case "teams":
+		// A Teams workflow ("Post to a channel when a webhook request is received") takes an
+		// Adaptive Card.
+		body, _ = json.Marshal(map[string]any{"type": "message", "attachments": []any{map[string]any{
+			"contentType": "application/vnd.microsoft.card.adaptive",
+			"content": map[string]any{
+				"$schema": "http://adaptivecards.io/schemas/adaptive-card.json", "type": "AdaptiveCard", "version": "1.4",
+				"body": []any{
+					map[string]any{"type": "TextBlock", "text": title, "weight": "Bolder", "wrap": true},
+					map[string]any{"type": "TextBlock", "text": text, "wrap": true},
+				},
+			},
+		}}})
+	case "telegram":
+		target = base + "/bot" + ch.Secret + "/sendMessage"
+		body, _ = json.Marshal(map[string]string{"chat_id": ch.Target, "text": html.EscapeString(text), "parse_mode": "HTML"})
+	case "matrix":
+		method = http.MethodPut
+		target = base + "/_matrix/client/v3/rooms/" + url.PathEscape(ch.Target) + "/send/m.room.message/virtomir-" + newID()
+		headers.Set("Authorization", "Bearer "+ch.Secret)
+		body, _ = json.Marshal(map[string]string{"msgtype": "m.text", "body": text})
+	case "gotify":
+		target = base + "/message"
+		headers.Set("X-Gotify-Key", ch.Secret)
+		prio := 5
+		if critical {
+			prio = 8
+		} else if ev.Type != Firing {
+			prio = 2
+		}
+		body, _ = json.Marshal(map[string]any{"title": title, "message": text, "priority": prio})
+	case "pushover":
+		target = base + "/1/messages.json"
+		prio := 0
+		if critical {
+			prio = 1
+		} else if ev.Type != Firing {
+			prio = -1
+		}
+		body, _ = json.Marshal(map[string]any{"token": ch.Secret, "user": ch.Target, "title": title, "message": text, "priority": prio})
+	case "pagerduty":
+		// Events API v2: the alert's ID ties its resolve to its trigger.
+		target = base + "/v2/enqueue"
+		ev2 := map[string]any{"routing_key": ch.Secret, "event_action": "trigger", "dedup_key": "virtomir-" + host + "-" + ev.Alert.ID}
+		if ev.Type == ResolvedEvent {
+			ev2["event_action"] = "resolve"
+		} else {
+			sev := map[Severity]string{Warning: "warning", Critical: "critical"}[ev.Alert.Severity]
+			if ev.Type != Firing {
+				sev = "info"
+			}
+			ev2["payload"] = map[string]any{"summary": text, "source": host, "severity": sev, "component": ev.Alert.Subject, "class": ev.Alert.Kind}
+		}
+		body, _ = json.Marshal(ev2)
+	case "opsgenie":
+		headers.Set("Authorization", "GenieKey "+ch.Secret)
+		alias := "virtomir-" + host + "-" + ev.Alert.ID
+		if ev.Type == ResolvedEvent {
+			target = base + "/v2/alerts/" + url.PathEscape(alias) + "/close?identifierType=alias"
+			body, _ = json.Marshal(map[string]string{"source": "VirtoMir", "note": text})
+			break
+		}
+		prio := map[Severity]string{Warning: "P3", Critical: "P1"}[ev.Alert.Severity]
+		if ev.Type != Firing {
+			prio = "P5"
+		}
+		msg := title
+		if len(msg) > 130 { // Opsgenie's limit for the message
+			msg = msg[:130]
+		}
+		target = base + "/v2/alerts"
+		body, _ = json.Marshal(map[string]any{"message": msg, "alias": alias, "description": text, "priority": prio, "source": "VirtoMir", "entity": ev.Alert.Subject})
+	case "alertmanager":
+		target = base + "/api/v2/alerts"
+		a := map[string]any{
+			"labels": map[string]string{"alertname": "VirtoMir " + string(ev.Alert.Kind), "severity": string(ev.Alert.Severity),
+				"instance": host, "subject": ev.Alert.Subject, "alert_id": ev.Alert.ID},
+			"annotations": map[string]string{"summary": text, "description": ev.Alert.Message},
+			"startsAt":    ev.Alert.Started.UTC().Format(time.RFC3339),
+		}
+		if ev.Alert.Resolved != nil {
+			a["endsAt"] = ev.Alert.Resolved.UTC().Format(time.RFC3339)
+		}
+		body, _ = json.Marshal([]any{a})
 	default:
-		body, _ = json.Marshal(map[string]any{"event": ev.Type, "alert": ev.Alert, "text": ev.Text()})
+		body, _ = json.Marshal(map[string]any{"event": ev.Type, "alert": ev.Alert, "text": text})
 	}
-	if !webhookURL.MatchString(ch.URL) {
-		return errors.New("webhook URL must be an http(s) URL")
-	}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ch.URL, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header = headers
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("User-Agent", "VirtoMir")
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("webhook answered %s", resp.Status)
-	}
-	return nil
+	return
 }
 
 // toHeader is the To header for recipients: the parsed addresses, re-encoded, so a line
