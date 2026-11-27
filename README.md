@@ -219,14 +219,14 @@ Same service and port; flags go in `/etc/sysconfig/virtomird`. Update with `dnf`
 <details>
 <summary><b>Tarball (any Linux with systemd)</b></summary>
 
-If libvirt and QEMU/KVM are missing, the installer adds them with apt or dnf.
+If libvirt and QEMU/KVM are missing, the installer adds them with apt or dnf. On openSUSE Leap and Tumbleweed, it installs the `kvm_server` and `kvm_tools` patterns with zypper.
 
 ```sh
 tar xzf virtomir_v1.2.3_linux_amd64.tar.gz
 sudo ./virtomir_v1.2.3_linux_amd64/install.sh
 ```
 
-The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pam.d/virtomir`) and a systemd unit, opens the port in ufw or firewalld, starts it and prints the address.
+The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pam.d/virtomir`) and a systemd unit, opens the port in ufw or firewalld, starts it and prints the address. On openSUSE it uses firewalld when active; the SELinux policy is loaded only when SELinux is enabled, so the default AppArmor setup needs no SELinux module.
 
 - Only local access, behind your own reverse proxy: `sudo ./install.sh --listen 127.0.0.1:8420`
 - Upgrade: run the installer of the new release. Remove: `sudo ./install.sh --uninstall` (your VMs are not touched).

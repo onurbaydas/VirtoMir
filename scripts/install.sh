@@ -87,6 +87,8 @@ if [ "$SKIP_CHECKS" = 0 ]; then
 				die "could not install libvirt"
 		elif command -v dnf >/dev/null; then
 			dnf install -y @virtualization qemu-img edk2-ovmf swtpm || die "could not install libvirt"
+		elif command -v zypper >/dev/null; then
+			zypper --non-interactive install -t pattern kvm_server kvm_tools || die "could not install libvirt"
 		else
 			die "install libvirt and QEMU/KVM with your package manager, then run this again"
 		fi
