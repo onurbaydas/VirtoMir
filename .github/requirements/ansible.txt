@@ -1,0 +1,2 @@
+# ansible-galaxy.yml installs exactly these, hash-checked. Regenerate with:
+#   echo ansible-core > ansible.in && pip-compile --generate-hashes --strip-extras -o .github/requirements/ansible.txt ansible.in

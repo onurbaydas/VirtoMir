@@ -28,7 +28,7 @@ jobs:
       - name: Deploy key set?
         if: env.HAS_KEY != 'true'
         run: echo "::notice::TF_PROVIDER_DEPLOY_KEY is not set; the Terraform provider is not synced."
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.HAS_KEY == 'true'
         with:
           ref: ${{ inputs.ref || env.TAG }}

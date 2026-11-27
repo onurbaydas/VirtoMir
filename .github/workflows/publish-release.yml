@@ -20,8 +20,7 @@ on:
         required: false
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 concurrency:
   group: publish-release
@@ -29,6 +28,9 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: write
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ inputs.tag }}
@@ -36,7 +38,7 @@ jobs:
       NOTES: ${{ inputs.notes }}
       OLD: ${{ inputs.replace }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
