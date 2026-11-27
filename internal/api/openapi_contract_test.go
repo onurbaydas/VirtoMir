@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/onurbaydas/virtomir/internal/project"
+	"github.com/onurbaydas/virtomir/internal/virt"
 )
 
 // The OpenAPI document must be a well-formed OpenAPI 3.1 description, and what the server
@@ -375,5 +376,30 @@ func TestContractCheckerCatchesDrift(t *testing.T) {
 	}
 	if _, err := c.resolve(map[string]any{"$ref": "#/components/schemas/Nope"}); err == nil {
 		t.Error("a dangling $ref resolved")
+	}
+}
+
+// The machine, network and pool lists follow their schemas with real content in them.
+func TestListsFollowTheirSchemas(t *testing.T) {
+	b := &fakeBackend{
+		domains: []virt.Domain{{UUID: "4f1c2a7e-9b3d-4c21-8e5f-0a1b2c3d4e01", Name: "web-01", ID: 3, State: "running", VCPUs: 2, MemoryKiB: 4 << 20,
+			MaxMemoryKiB: 4 << 20, Persistent: true, Autostart: true, Owner: "onur", Project: "prod", Kind: "vm", GPUPool: "a100", GPUCount: 1}},
+		netList: []virt.VNetwork{{Name: "default", UUID: "u", Active: true, Mode: "nat", Bridge: "virbr0", Subnet: "192.168.122.1/24",
+			DHCPStart: "192.168.122.2", DHCPEnd: "192.168.122.254", UsedBy: []string{"web-01"}, DHCPHosts: []virt.DHCPHost{{MAC: "52:54:00:00:00:01", IP: "192.168.122.10", Name: "web-01"}},
+			VNI: 0, Peers: []string{"10.0.0.2"}}},
+		pools: []virt.Pool{{Name: "default", UUID: "p", Type: "dir", Path: "/var/lib/libvirt/images", Active: true, Autostart: true,
+			CapacityBytes: 100, AllocationBytes: 40, AvailableBytes: 60, Volumes: 2}},
+	}
+	doc := loadOpenAPI(t)
+	c := contractChecker{schemas: doc.Components.Schemas}
+	h := newTestServer(b, &fakeLive{}).Handler()
+	for _, path := range []string{"/api/v1/domains", "/api/v1/networks", "/api/v1/storage/pools"} {
+		op := doc.Paths[path]["get"]
+		if !strings.Contains(fmt.Sprint(op), "$ref") {
+			t.Errorf("%s has no answer schema", path)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		c.checkAnswer(t, "GET "+path, op, rec, false)
 	}
 }
