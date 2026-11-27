@@ -147,10 +147,16 @@ func (e *Engine) Test(ch Channel) error {
 	}
 	ch.Enabled = true
 	host, _ := os.Hostname()
-	return deliver(ch, smtp, Event{Type: TestEvent, Alert: Alert{
+	ev := Event{Type: TestEvent, Alert: Alert{
 		ID: "test", Kind: "test", Severity: Warning, Subject: host, Started: time.Now().UTC(),
 		Message: "Test notification from VirtoMir — if you can read this, the channel works.",
-	}})
+	}}
+	if ch.Kind == "email" {
+		// The addresses typed into an unsaved channel only receive the test mail; its To
+		// header names no one, so nothing typed in the form is written into the message.
+		return email(ch, smtp, ev, "undisclosed-recipients:;")
+	}
+	return webhook(ch, ev) // validate allows webhook or email only
 }
 
 // Text is the one-line summary used by chat formats and email subjects.
@@ -174,7 +180,11 @@ func deliver(ch Channel, s SMTP, ev Event) error {
 	case "webhook":
 		return webhook(ch, ev)
 	case "email":
-		return email(ch, s, ev)
+		to, err := toHeader(ch.To)
+		if err != nil {
+			return err
+		}
+		return email(ch, s, ev, to)
 	}
 	return fmt.Errorf("unknown channel kind %s", ch.Kind)
 }
@@ -226,7 +236,22 @@ func webhook(ch Channel, ev Event) error {
 	return nil
 }
 
-func email(ch Channel, s SMTP, ev Event) error {
+// toHeader is the To header for recipients: the parsed addresses, re-encoded, so a line
+// break typed into a recipient can never start a header of its own.
+func toHeader(recipients string) (string, error) {
+	to, err := mail.ParseAddressList(recipients)
+	if err != nil {
+		return "", err
+	}
+	out := make([]string, len(to))
+	for i, r := range to {
+		out[i] = r.String()
+	}
+	return strings.Join(out, ", "), nil
+}
+
+// email sends ev to the channel's recipients with toHdr as the message's To header.
+func email(ch Channel, s SMTP, ev Event, toHdr string) error {
 	if s.Host == "" || s.From == "" {
 		return errors.New("set up the mail server (SMTP) first")
 	}
@@ -243,15 +268,9 @@ func email(ch Channel, s SMTP, ev Event) error {
 	if err != nil {
 		return fmt.Errorf("sender: %w", err)
 	}
-	// The headers carry the parsed addresses, re-encoded: a line break typed into a
-	// recipient or sender can never start a header of its own.
-	rcpts := make([]string, len(to))
-	for i, r := range to {
-		rcpts[i] = r.String()
-	}
 	var msg bytes.Buffer
 	fmt.Fprintf(&msg, "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
-		from.String(), strings.Join(rcpts, ", "), mimeHeader(ev.Text()), time.Now().Format(time.RFC1123Z))
+		from.String(), toHdr, mimeHeader(ev.Text()), time.Now().Format(time.RFC1123Z))
 	fmt.Fprintf(&msg, "%s\r\n\r\nSubject: %s\r\nSeverity: %s\r\nSince: %s\r\n", ev.Alert.Message, ev.Alert.Subject, ev.Alert.Severity, ev.Alert.Started.Local().Format(time.RFC1123))
 	if ev.Alert.Resolved != nil {
 		fmt.Fprintf(&msg, "Resolved: %s\r\n", ev.Alert.Resolved.Local().Format(time.RFC1123))
