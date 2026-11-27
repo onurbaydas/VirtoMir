@@ -270,3 +270,28 @@ export function ruleText(r: SecurityRule, groupName: (id: string) => string = (i
   const what = proto + ports
   return r.direction === 'ingress' ? t('{what} from {peer}', { what, peer }) : t('{what} to {peer}', { what, peer })
 }
+
+/** What is wrong with a line of the static routes box. */
+export type RouteProblem = 'shape' | 'cidr' | 'hop' | 'twice'
+
+/**
+ * parseRoutes reads the static routes box: one route per line, `NET via HOP` or `NET HOP`.
+ * bad names the first wrong line (1-based) and why; routes are the lines read before it.
+ */
+export function parseRoutes(text: string): { routes: { destinationCidr: string; nextHopIp: string }[]; bad?: { line: number; text: string; why: RouteProblem } } {
+  const routes: { destinationCidr: string; nextHopIp: string }[] = []
+  const lines = text.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim()
+    if (!l) continue
+    const m = /^(\S+)\s+(?:via\s+)?(\S+)$/.exec(l)
+    const bad = (why: RouteProblem) => ({ routes, bad: { line: i + 1, text: l, why } })
+    if (!m || m[2] === 'via') return bad('shape')
+    const [, destinationCidr, nextHopIp] = m
+    if (!isCIDR(destinationCidr)) return bad('cidr')
+    if (!isIPv4(nextHopIp)) return bad('hop')
+    if (routes.some((r) => r.destinationCidr === destinationCidr)) return bad('twice')
+    routes.push({ destinationCidr, nextHopIp })
+  }
+  return { routes }
+}

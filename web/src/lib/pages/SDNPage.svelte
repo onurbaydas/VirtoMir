@@ -20,8 +20,8 @@
   import ConfirmButton from '../components/ConfirmButton.svelte'
   import Dialog from '../components/Dialog.svelte'
   import {
-    cidrContains, hostCount, isCIDR, isIPv4, ruleText, sdn,
-    type ExternalGateway, type FloatingIP, type IPsecConfig, type LoadBalancer, type SDNPort, type SDNStatus,
+    cidrContains, hostCount, isCIDR, isIPv4, parseRoutes, ruleText, sdn,
+    type ExternalGateway, type HealthCheckSpec, type FloatingIP, type IPsecConfig, type LoadBalancer, type SDNPort, type SDNStatus,
     type SecurityGroup, type SecurityRule, type Subnet, type VPC, type VPCDetail,
   } from '../sdn'
 
@@ -136,12 +136,21 @@
   }
 
   let routesFor = $state<{ vpc: string; text: string } | null>(null)
+  let routesRead = $derived(routesFor ? parseRoutes(routesFor.text) : null)
+  let routesProblem = $derived.by(() => {
+    const b = routesRead?.bad
+    if (!b) return ''
+    const why = {
+      shape: t('is not "network via next hop"'),
+      cidr: t('does not start with a network like 192.168.50.0/24 (host bits zero)'),
+      hop: t('has a next hop that is not an IPv4 address'),
+      twice: t('names a network that an earlier line routes already'),
+    }[b.why]
+    return t('Line {n} ({text}) {why}.', { n: b.line, text: b.text, why })
+  })
   async function saveRoutes() {
-    if (!routesFor) return
-    const routes = routesFor.text.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
-      const [destinationCidr, nextHopIp] = l.split(/\s+(?:via\s+)?/)
-      return { destinationCidr, nextHopIp }
-    })
+    if (!routesFor || !routesRead || routesProblem) return
+    const routes = routesRead.routes
     if (await act(() => sdn.setRoutes(routesFor!.vpc, routes), t('Routes saved'))) routesFor = null
   }
 
@@ -183,11 +192,18 @@
   const ACTION: Record<string, string> = { allow: t('allow'), 'allow-related': t('allow'), drop: t('drop'), reject: t('reject') }
 
   // ---- Load balancers ---------------------------------------------------------------------------
-  let lbForm = $state<(Partial<LoadBalancer> & { isNew: boolean; memberText: string; check: boolean }) | null>(null)
+  // The health check's settings as typed: empty port = the member's own, empty source = the
+  // subnet's last address.
+  type CheckForm = { intervalSeconds: number; timeoutSeconds: number; fall: number; rise: number; port: number | null; sourceIp: string }
+  const defaultCheck = (h?: HealthCheckSpec): CheckForm => ({
+    intervalSeconds: h?.intervalSeconds || 5, timeoutSeconds: h?.timeoutSeconds || 2, fall: h?.fall || 3, rise: h?.rise || 2,
+    port: h?.port || null, sourceIp: h?.sourceIp ?? '',
+  })
+  let lbForm = $state<(Partial<LoadBalancer> & { isNew: boolean; memberText: string; check: boolean; hc: CheckForm }) | null>(null)
   function openLB(lb?: LoadBalancer) {
     lbForm = lb
-      ? { ...lb, isNew: false, memberText: lb.members.join('\n'), check: !!lb.healthCheck }
-      : { isNew: true, vpcId: vpcs[0]?.id ?? '', name: '', vip: '', port: 80, protocol: 'tcp', memberText: '', check: true }
+      ? { ...lb, isNew: false, memberText: lb.members.join('\n'), check: !!lb.healthCheck, hc: defaultCheck(lb.healthCheck) }
+      : { isNew: true, vpcId: vpcs[0]?.id ?? '', name: '', vip: '', port: 80, protocol: 'tcp', memberText: '', check: true, hc: defaultCheck() }
   }
   let lbProblem = $derived.by(() => {
     if (!lbForm) return ''
@@ -195,15 +211,26 @@
     const members = lbForm.memberText.split(/\s+/).filter(Boolean)
     if (!members.length) return t('Name the members, one ip:port per line.')
     if (members.some((m) => !/^\d+\.\d+\.\d+\.\d+:\d{1,5}$/.test(m) || !isIPv4(m.split(':')[0]))) return t('Every member is ip:port, like 10.0.1.11:8080.')
+    if (lbForm.check) {
+      const h = lbForm.hc
+      const whole = (n: number) => Number.isInteger(n) && n > 0
+      if (![h.intervalSeconds, h.timeoutSeconds, h.fall, h.rise].every(whole)) return t('Interval, timeout, misses and answers are whole numbers above 0.')
+      if (h.timeoutSeconds >= h.intervalSeconds) return t('The timeout is shorter than the interval.')
+      if (h.port != null && (!Number.isInteger(h.port) || h.port < 1 || h.port > 65535)) return t('The check port is 1–65535, or empty for the member\'s own port.')
+      if (h.sourceIp.trim() && !isIPv4(h.sourceIp.trim())) return t('The source address is an IPv4 address, or empty.')
+    }
     return ''
   })
   async function saveLB() {
     if (!lbForm || lbProblem) return
-    const { isNew, memberText, check, ...lb } = lbForm
+    const { isNew, memberText, check, hc, ...lb } = lbForm
     const body: Partial<LoadBalancer> = {
       ...lb,
       members: memberText.split(/\s+/).filter(Boolean),
-      healthCheck: check ? (lb.healthCheck ?? { protocol: lb.protocol ?? 'tcp', port: 0, intervalSeconds: 5, timeoutSeconds: 2, fall: 3, rise: 2 }) : undefined,
+      // OVN checks with the load balancer's own protocol (TCP or UDP).
+      healthCheck: check
+        ? { protocol: lb.protocol ?? 'tcp', port: hc.port ?? 0, intervalSeconds: hc.intervalSeconds, timeoutSeconds: hc.timeoutSeconds, fall: hc.fall, rise: hc.rise, sourceIp: hc.sourceIp.trim() || undefined }
+        : undefined,
     }
     if (await act(() => (isNew ? sdn.createLoadBalancer(body) : sdn.updateLoadBalancer(lb.id!, body)), isNew ? t('Load balancer created') : t('Load balancer saved'))) lbForm = null
   }
@@ -539,11 +566,12 @@
         <textarea class="ui-input mono" rows="5" bind:value={routesFor.text} placeholder="192.168.50.0/24 via 10.0.1.254"></textarea>
       </label>
       <span class="hint">{t('The default route belongs to the external gateway.')}</span>
+      {#if routesProblem}<p class="problem">{routesProblem}</p>{/if}
     </form>
   {/if}
   {#snippet footer()}
     <button class="ui-btn ghost" onclick={() => (routesFor = null)}>{t('Cancel')}</button>
-    <button class="ui-btn primary" form="routes">{t('Save')}</button>
+    <button class="ui-btn primary" form="routes" disabled={!!routesProblem}>{t('Save')}</button>
   {/snippet}
 </Dialog>
 
@@ -653,6 +681,19 @@
       </div>
       <label class="ui-field"><span class="label">{t('Members (ip:port, one per line)')}</span><textarea class="ui-input mono" rows="4" bind:value={lbForm.memberText} placeholder="10.0.1.11:8080"></textarea></label>
       <label class="ui-switch"><input type="checkbox" bind:checked={lbForm.check} /> {t('Check the members and skip the ones that do not answer')}</label>
+      {#if lbForm.check}
+        <div class="row">
+          <label class="ui-field"><span class="label">{t('Every (s)')}</span><input class="ui-input" type="number" min="1" bind:value={lbForm.hc.intervalSeconds} /></label>
+          <label class="ui-field"><span class="label">{t('Timeout (s)')}</span><input class="ui-input" type="number" min="1" bind:value={lbForm.hc.timeoutSeconds} /></label>
+          <label class="ui-field"><span class="label">{t('Down after misses')}</span><input class="ui-input" type="number" min="1" bind:value={lbForm.hc.fall} /></label>
+          <label class="ui-field"><span class="label">{t('Up after answers')}</span><input class="ui-input" type="number" min="1" bind:value={lbForm.hc.rise} /></label>
+        </div>
+        <div class="row">
+          <label class="ui-field"><span class="label">{t('Check port')}</span><input class="ui-input" type="number" min="1" max="65535" bind:value={lbForm.hc.port} placeholder={t('the member\'s port')} /></label>
+          <label class="ui-field"><span class="label">{t('Source address')}</span><input class="ui-input mono" bind:value={lbForm.hc.sourceIp} placeholder={t('last address of the subnet')} /></label>
+        </div>
+        <span class="hint">{t('{p} checks, the load balancer\'s own protocol.', { p: (lbForm.protocol ?? 'tcp').toUpperCase() })}</span>
+      {/if}
       {#if lbProblem}<p class="problem">{lbProblem}</p>{/if}
     </form>
   {/if}
