@@ -10,6 +10,7 @@ import type {
   ContentItem,
   ContentVersion,
   CreateSpec,
+  NICSpec,
   FoundStorage,
   DeploySpec,
   DomainState,
@@ -869,6 +870,7 @@ function domainRoute(host: w.DemoHost, method: string, rest: string[], q: URLSea
       return none()
     case op === 'DELETE ': {
       w.machines.splice(w.machines.indexOf(m), 1)
+      unplugSDN(m.uuid)
       const removeStorage = q.get('storage') === 'remove'
       return json({ removedVolumes: removeStorage ? [`/var/lib/libvirt/images/${m.name}.qcow2`] : [], keptVolumes: [] })
     }
@@ -928,6 +930,9 @@ function domainRoute(host: w.DemoHost, method: string, rest: string[], q: URLSea
     case op === 'PUT project':
       m.project = body?.project || undefined
       return none()
+    case op === 'POST interfaces' && !!(body as NICSpec | undefined)?.ovnSubnet:
+      plugSDN(m.uuid, body as NICSpec)
+      return json({ appliesOnNextBoot: false, target: '', liveError: '' })
     case op === 'PUT media' || op === 'POST disks' || op === 'POST interfaces' || op === 'POST hostdevs' || op === 'POST devices' || op === 'POST devices/detach':
       return json({ appliesOnNextBoot: false, target: 'vdb', liveError: '' })
     case method === 'POST' && rest[1] === 'disks' && rest[3] === 'resize':
@@ -949,6 +954,43 @@ function domainRoute(host: w.DemoHost, method: string, rest: string[], q: URLSea
   return method === 'GET' ? notFound() : json({})
 }
 
+// ---- SDN ports of machines ------------------------------------------------------------------
+
+const ip4 = (s: string) => s.split('.').reduce((n, o) => n * 256 + Number(o), 0)
+const ip4s = (n: number) => [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.')
+
+/** plugSDN makes the OVN port a real host makes for an adapter on an SDN subnet. */
+function plugSDN(vmUuid: string, nic: NICSpec | undefined) {
+  const subnet = nic?.ovnSubnet ? w.sdnSubnets.find((x) => x.id === nic.ovnSubnet) : undefined
+  if (!subnet) return
+  const mac = `52:54:00:${[0, 0, 0].map(() => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join(':')}`
+  let ip = nic?.ipAddress
+  if (!ip) {
+    // The next free address of the subnet's pool (or of the subnet, after its gateway).
+    const [net, bits] = subnet.cidr.split('/')
+    const first = subnet.allocationPoolStart ? ip4(subnet.allocationPoolStart) : ip4(net) + 2
+    const last = subnet.allocationPoolEnd ? ip4(subnet.allocationPoolEnd) : ip4(net) + 2 ** (32 - Number(bits)) - 2
+    const used = new Set(w.sdnPorts.filter((p) => p.subnetId === subnet.id).map((p) => p.ip))
+    for (let n = first; n <= last; n++) {
+      if (!used.has(ip4s(n)) && ip4s(n) !== subnet.gatewayIp) {
+        ip = ip4s(n)
+        break
+      }
+    }
+  }
+  const id = `vm-port-${vmUuid.slice(0, 8)}-${mac.replaceAll(':', '')}`
+  const groups = (nic?.securityGroups ?? []).filter((g) => w.sdnGroups.some((x) => x.id === g))
+  w.sdnPorts.push({ id, subnetId: subnet.id, vmUuid, mac, ip, securityGroups: groups })
+  for (const g of w.sdnGroups) if (groups.includes(g.id)) g.memberPorts.push(id)
+}
+
+/** unplugSDN removes a deleted machine's ports. */
+function unplugSDN(vmUuid: string) {
+  const gone = new Set(w.sdnPorts.filter((p) => p.vmUuid === vmUuid).map((p) => p.id))
+  w.sdnPorts.splice(0, w.sdnPorts.length, ...w.sdnPorts.filter((p) => !gone.has(p.id)))
+  for (const g of w.sdnGroups) g.memberPorts = g.memberPorts.filter((id) => !gone.has(id))
+}
+
 function createMachine(host: w.DemoHost, spec: CreateSpec): Reply {
   if (w.machines.some((m) => m.host === host.id && m.name === spec.name)) return json({ error: `A machine named ${spec.name} already exists.` }, 409)
   const hostMiB = host.info.memoryKiB / 1024
@@ -968,6 +1010,7 @@ function createMachine(host: w.DemoHost, spec: CreateSpec): Reply {
       state: 'shutoff',
       profile: 'web',
     })
+    plugSDN(m.uuid, spec.network)
     if (spec.start) setTimeout(() => (m.state = 'running'), 1500)
     return m.uuid
   }), 202)
