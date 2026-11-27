@@ -12,6 +12,10 @@
   import { t } from '../i18n.svelte'
   import { session } from '../session.svelte'
   import Search from '@lucide/svelte/icons/search'
+  import Download from '@lucide/svelte/icons/download'
+  import { downloadCSV } from '../csv'
+  import { errorText } from '../reply'
+  import { toasts } from '../toast.svelte'
   import MonitorOff from '@lucide/svelte/icons/monitor-off'
   import Server from '@lucide/svelte/icons/server'
   import { isActive, live } from '../live.svelte'
@@ -144,6 +148,46 @@
   )
   let loading = $derived(live.snapshot === null)
 
+  // ---- Export ---------------------------------------------------------------------------
+  // The listed machines (after the filters) as CSV. Disk sizes and addresses are not in the
+  // live list, so each machine's details are read, a few at a time.
+  let exporting = $state(false)
+  async function exportCSV() {
+    exporting = true
+    const list = [...shown]
+    const selfId = cluster.current?.id
+    const rows = [['name', 'host', 'state', 'vcpus', 'memory_mib', 'disk_gib', 'addresses', 'project', 'kind', 'uuid']]
+    const extra = new Map<string, { disk: string; addrs: string }>()
+    let failed = 0
+    let next = 0
+    async function worker() {
+      while (next < list.length) {
+        const d = list[next++]
+        try {
+          const det = await api.domainOn(d.hostId && d.hostId !== selfId ? d.hostId : undefined, d.uuid)
+          const disk = det.devices.filter((x) => x.group === 'storage' && x.kind === 'disk').reduce((n, x) => n + (x.capacityBytes ?? 0), 0)
+          const addrs = det.devices.flatMap((x) => (x.group === 'network' ? (x.addresses ?? []) : []))
+          extra.set(d.uuid, { disk: disk ? (disk / 2 ** 30).toFixed(1) : '', addrs: addrs.join(' ') })
+        } catch {
+          failed++
+        }
+      }
+    }
+    try {
+      await Promise.all(Array.from({ length: Math.min(6, list.length) }, worker))
+      const projName = (id?: string) => (id ? (projects.list.find((p) => p.id === id)?.name ?? id) : '')
+      for (const d of list) {
+        const x = extra.get(d.uuid)
+        rows.push([d.name, d.hostName ?? '', d.state, String(d.vcpus), String(Math.round(d.memoryKiB / 1024)), x?.disk ?? '', x?.addrs ?? '', projName(d.project), d.kind ?? 'vm', d.uuid])
+      }
+      downloadCSV('virtomir-machines', rows)
+      if (failed) toasts.push({ kind: 'warn', title: t('Exported; {n} machines without disk sizes and addresses', { n: failed }) })
+    } catch (e) {
+      toasts.push({ kind: 'error', title: t('Export failed'), detail: errorText(e) })
+    } finally {
+      exporting = false
+    }
+  }
   // ---- Bulk actions ---------------------------------------------------------------------
   let selected = $state<Set<string>>(new Set())
   // Forget machines that disappeared.
@@ -223,6 +267,7 @@
         <Search size={15} />
         <input type="search" placeholder={t('Find by name or UUID')} bind:value={query} spellcheck="false" />
       </label>
+      <button class="ui-btn sm" disabled={exporting || !shown.length} onclick={exportCSV} title={t('Download the listed machines as a CSV file')}><Download size={14} /> {exporting ? t('Exporting…') : t('Export')}</button>
     {/if}
   </header>
 

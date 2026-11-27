@@ -1728,6 +1728,8 @@ export const api = {
 
   // Machines
   domain: (uuid: string) => request<DomainDetail>('GET', domainPath(uuid)),
+  /** A machine's details on a given member (cluster-wide lists); no host: the member shown. */
+  domainOn: (host: string | undefined, uuid: string) => request<DomainDetail>('GET', at(host, domainPath(uuid))),
   /** inactive: the persistent config used on next boot instead of the live one. */
   domainXML: async (uuid: string, inactive = false) =>
     (await send('GET', `${domainPath(uuid)}/xml${inactive ? '?inactive=true' : ''}`, { accept: 'application/xml' })).text(),

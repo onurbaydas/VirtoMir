@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { downloadCSV } from '../csv'
   import { t } from '../i18n.svelte'
   import History from '@lucide/svelte/icons/clock-arrow-up'
   import RefreshCw from '@lucide/svelte/icons/refresh-cw'
@@ -136,18 +137,12 @@
 
   // Audit export: what is listed (all hosts in a cluster), as CSV with a sentence per row.
   function exportCSV() {
-    const q = (s: string) => (/[",\n]/.test(s) ? '"' + s.replaceAll('"', '""') + '"' : s)
     const rows = [['time', 'host', 'user', 'token', 'what', 'method', 'path', 'status', 'error', 'remote']]
     for (const e of entries ?? []) {
       const d = describe(e, names)
       rows.push([e.time, e.hostName ?? '', e.user, e.token ?? '', d.before + (d.machineName ?? '') + d.after, e.method, e.path, String(e.status), e.error ?? '', e.remote ?? ''])
     }
-    const blob = new Blob([rows.map((r) => r.map(q).join(',')).join('\n') + '\n'], { type: 'text/csv' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `virtomir-activity-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(a.href)
+    downloadCSV('virtomir-activity', rows)
   }
 
   const when = (t: string) => new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' })
