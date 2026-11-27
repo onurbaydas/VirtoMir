@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"syscall"
 	"time"
@@ -102,8 +103,13 @@ func main() {
 	flag.BoolVar(&c.drExperimental, "dr-experimental", false, "turn on disaster recovery (protection groups, recovery plans, failover); not tested on real hosts yet")
 	flag.StringVar(&c.ovnNorthbound, "ovn-nb", "", `OVN northbound database for the SDN, e.g. "tcp:10.0.0.11:6641" (default: the local one); the SDN is experimental`)
 	debug := flag.Bool("debug", false, "verbose logging")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	witness := flag.String("witness", "", `run only as the HA lease witness of a two-member cluster, listening on this address (e.g. ":8421"); members name it "lease://<this host>:8421"`)
 	flag.Parse()
+	if *showVersion {
+		fmt.Printf("virtomird %s (%s)\n", version, runtime.Version())
+		return
+	}
 
 	level := slog.LevelInfo
 	if *debug {

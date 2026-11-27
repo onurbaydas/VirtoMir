@@ -245,13 +245,22 @@ The installer puts `virtomird` in `/usr/local/bin`, adds a PAM service (`/etc/pa
 | `-auth-group` | `libvirt,wheel,sudo` | besides root, who may sign in as admin (comma-separated groups) |
 | `-operator-group` | `virtomir-operator` | members may run machines but not change them |
 | `-viewer-group` | `virtomir-viewer` | members may look but change nothing |
+| `-pam-service` | `virtomir` | PAM service name (`/etc/pam.d/<name>`) |
 | `-session-idle` | `2h` | sign a browser out after it was unused this long (at least `1m`) |
 | `-session-max` | `24h` | sign a browser out this long after it signed in, used or not (at least `-session-idle`) |
 | `-witness` | — | run only as the HA lease witness of a two-host cluster on this address (e.g. `:8421`); the hosts name it `lease://<witness>:8421` |
 | `-tls` | `auto` | `auto` (self-signed in `-state-dir`), `files` (`-tls-cert`, `-tls-key`), `off` (behind a TLS proxy) |
+| `-tls-cert` | — | certificate file for `-tls files` |
+| `-tls-key` | — | private key file for `-tls files` |
+| `-fips` | `auto` | `auto` (follows the kernel's `/proc/sys/crypto/fips_enabled`), `on` or `off` (experimental) |
 | `-state-dir` | `/var/lib/virtomir` | certificate, metric history, alerts, schedules, activity log, tokens, cluster membership, configuration history, machine timelines, quotas, LDAP/OIDC settings; default backup location (`backups/`) |
 | `-name` | hostname | how this host is called in a cluster |
-| `-libvirt-socket` | `/var/run/libvirt/libvirt-sock` | |
+| `-libvirt-socket` | `/var/run/libvirt/libvirt-sock` | libvirt UNIX socket; left at this default, modular libvirt daemons are reached on their own sockets |
+| `-update-repo` | `onurbaydas/VirtoMir` | GitHub repository whose releases the Updates card offers (`""` turns the check off; a private one needs `VIRTOMIR_GITHUB_TOKEN`) |
+| `-ovn-nb` | the local one | OVN northbound database for the SDN, e.g. `tcp:10.0.0.11:6641` (the SDN is experimental) |
+| `-dr-experimental` | off | turns on disaster recovery (protection groups, recovery plans, failover); not tested on real hosts yet |
+| `-debug` | off | verbose logging |
+| `-version` | — | print the version and exit |
 </details>
 
 <details>
