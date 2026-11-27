@@ -115,7 +115,7 @@ Every version of a machine's definition is kept, also changes made with <code>vi
 <tr>
 <td valign="top">
 <h3>💾 Storage and networks</h3>
-Directory, LVM, ZFS, NFS, iSCSI and Ceph pools; NFS, SMB and iSCSI targets found on the LAN and connected in one click. NAT, bridged (also on Wi-Fi), VLAN and VXLAN networks, and changes to the host's own network that undo themselves if you lose the connection.
+Directory, LVM, ZFS, NFS, iSCSI and Ceph pools; NFS, SMB and iSCSI targets found on the LAN and connected in one click. NAT, bridged (also on Wi-Fi, see [how that works](docs/wifi-bridge.md)), VLAN and VXLAN networks, and changes to the host's own network that undo themselves if you lose the connection.
 <br><br><img src="docs/screenshots/storage.png" alt="Storage pools">
 </td>
 <td valign="top">
