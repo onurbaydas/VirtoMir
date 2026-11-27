@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { allFailed } from '../reply'
+  import { allFailed, list } from '../reply'
   import { t } from '../i18n.svelte'
   import ObjectXmlDialog from '../components/ObjectXmlDialog.svelte'
   import FileCode from '@lucide/svelte/icons/file-code'
@@ -12,7 +12,7 @@
   import Trash from '@lucide/svelte/icons/trash'
   import ChevronDown from '@lucide/svelte/icons/chevron-down'
   import Pin from '@lucide/svelte/icons/pin'
-  import { api, errorText, type Lease, type NetworkSpec, type VNetwork } from '../api'
+  import { api, errorText, type Lease, type NetworkSpec, type VNetwork, type WifiBridge } from '../api'
   import { cluster } from '../cluster.svelte'
   import { toasts } from '../toast.svelte'
   import Dialog from '../components/Dialog.svelte'
@@ -30,12 +30,19 @@
   let leases = $state<Record<string, Lease[] | string>>({})
   let snifferOpen = $state(false)
 
+  // Networks bridged to Wi-Fi, by name: their card and the machines their relay learned.
+  let wifi = $state<Record<string, WifiBridge>>({})
   async function load() {
     try {
       nets = await api.networks()
       error = ''
     } catch (e) {
       error = errorText(e)
+    }
+    try {
+      wifi = Object.fromEntries((await api.wifiBridges()).map((b) => [b.network, b]))
+    } catch {
+      wifi = {} // older host: no such list
     }
   }
   $effect(() => {
@@ -349,6 +356,17 @@
         {#if open === n.name}
           <div class="body">
             <p class="hint">{MODE[n.mode]?.hint ?? ''}</p>
+            {#if wifi[n.name]}
+              {@const wb = wifi[n.name]}
+              {@const seen = list(wb.machines)}
+              <p class="wifi">
+                {t('Bridged to the Wi-Fi card {card}', { card: wb.uplink })}
+                {#if !wb.running}— {t('its relay is not running')}
+                {:else if seen.length}— {t('machines seen:')} <span class="mono">{seen.map((m) => `${m.ip} (${m.mac})`).join(', ')}</span>
+                {:else}— {t('no machine has sent anything yet')}{/if}
+                · <a href="https://github.com/onurbaydas/VirtoMir/blob/main/docs/wifi-bridge.md" target="_blank" rel="noopener">{t('how it works')}</a>
+              </p>
+            {/if}
             <div class="controls" inert={!session.can('admin')} title={session.why('admin')}>
               <label class="ui-switch small">
                 <input type="checkbox" checked={n.autostart} disabled={!n.persistent} onchange={(e) => autostart(n, e.currentTarget.checked)} />
@@ -868,5 +886,10 @@
     .modes {
       grid-template-columns: 1fr;
     }
+  }
+  .wifi {
+    margin: 0 0 10px;
+    font-size: 13px;
+    overflow-wrap: anywhere;
   }
 </style>

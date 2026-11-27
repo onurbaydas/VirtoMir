@@ -7,6 +7,7 @@ func init() {
 	responseSchemas["GET /api/v1/domains"] = listOf("domains", "Domain")
 	responseSchemas["GET /api/v1/networks"] = listOf("networks", "VNetwork")
 	responseSchemas["GET /api/v1/storage/pools"] = listOf("pools", "Pool")
+	responseSchemas["GET /api/v1/networks/wifi"] = listOf("bridges", "WifiBridge")
 }
 
 func listSchemas() map[string]any {
@@ -44,6 +45,14 @@ func listSchemas() map[string]any {
 			"usedBy":    map[string]any{"type": "array", "items": str, "description": "names of the machines on it"},
 			"dhcpHosts": map[string]any{"type": "array", "items": obj(map[string]any{"mac": str, "ip": str, "name": str})},
 			"vni":       integer, "peers": strs, "clusterWide": boolean, "pf": str,
+		}),
+		"WifiBridge": obj(map[string]any{
+			"network": str,
+			"uplink":  map[string]any{"type": "string", "description": "the Wi-Fi card"},
+			"bridge":  str,
+			"running": map[string]any{"type": "boolean", "description": "its relay runs"},
+			"machines": map[string]any{"type": "array", "description": "addresses delivered to machines, with their own MACs",
+				"items": obj(map[string]any{"ip": str, "mac": str})},
 		}),
 		"Pool": obj(map[string]any{
 			"name": str, "uuid": str,

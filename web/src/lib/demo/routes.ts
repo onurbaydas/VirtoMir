@@ -1641,6 +1641,8 @@ export function handle(method: string, url: URL, body: any): Reply {
     case 'POST /api/v1/host/mdevs':
     case 'POST /api/v1/networks/wifi':
       return json({ error: DEMO_ONLY }, 422)
+    case 'GET /api/v1/networks/wifi':
+      return json({ bridges: [] }) // the demo hosts have no Wi-Fi card
     case 'GET /api/v1/signin-config':
       return json({ redirectUrl: oidcCallback(), config: settings.signin })
     case 'PUT /api/v1/signin-config':

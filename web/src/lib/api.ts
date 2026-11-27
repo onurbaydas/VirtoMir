@@ -605,6 +605,17 @@ export interface DiskSpec {
   format?: 'qcow2' | 'raw'
 }
 
+/** A network bridged to a Wi-Fi card (MAC translation, docs/wifi-bridge.md). */
+export interface WifiBridge {
+  network: string
+  uplink: string
+  bridge: string
+  /** Its relay runs. */
+  running: boolean
+  /** Addresses it delivers to machines, with their own MACs. */
+  machines: { ip: string; mac: string }[] | null
+}
+
 export interface NICSpec {
   network?: string
   bridge?: string
@@ -1902,6 +1913,8 @@ export const api = {
   networks: async () => list((await request<{ networks?: VNetwork[] | null }>('GET', '/api/v1/networks')).networks),
   /** A network bridged to a Wi-Fi card like VirtualBox does: the router's DHCP gives the machines their addresses. */
   wifiNetwork: (name: string, uplink: string) => request<{ name: string; bridge: string }>('POST', '/api/v1/networks/wifi', { name, uplink }),
+  /** The networks bridged to Wi-Fi, with the machines each relay has learned. */
+  wifiBridges: async () => list((await request<{ bridges?: WifiBridge[] | null }>('GET', '/api/v1/networks/wifi')).bridges),
   createNetwork: (spec: NetworkSpec) => request<void>('POST', '/api/v1/networks', spec),
   deleteNetwork: (name: string) => request<void>('DELETE', netPath(name)),
   networkAction: (name: string, action: 'start' | 'stop') => request<void>('POST', `${netPath(name)}/actions/${action}`),

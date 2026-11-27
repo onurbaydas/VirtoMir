@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -161,6 +162,29 @@ func (t *table) Learn(ip netip.Addr, mac MAC) {
 	}
 }
 
+// Learned is an address the relay delivers to a machine, and that machine's own MAC.
+type Learned struct {
+	IP  string `json:"ip"`
+	MAC string `json:"mac"`
+}
+
+// learned is what the table holds now, by address.
+func (t *table) learned() []Learned {
+	t.mu.Lock()
+	ips := make([]netip.Addr, 0, len(t.m))
+	for ip := range t.m {
+		ips = append(ips, ip)
+	}
+	slices.SortFunc(ips, func(a, b netip.Addr) int { return a.Compare(b) })
+	out := make([]Learned, len(ips))
+	for i, ip := range ips {
+		mac := t.m[ip]
+		out[i] = Learned{IP: ip.String(), MAC: net.HardwareAddr(mac[:]).String()}
+	}
+	t.mu.Unlock()
+	return out
+}
+
 // onLAN reports whether ip can be a machine's address on one of the card's networks: inside
 // it, and neither its network nor its broadcast address. A card without an IPv4 address
 // says nothing about the LAN, so everything passes.
@@ -233,6 +257,11 @@ func fromHost(f []byte, own []MAC) bool {
 
 // Relay moves frames between the card and the bridge until ctx ends.
 func Relay(ctx context.Context, r Runner, c Config, log *slog.Logger) error {
+	return relay(ctx, r, c, log, nil)
+}
+
+// relay is Relay; onTable gets the table of the addresses it learns, once it has one.
+func relay(ctx context.Context, r Runner, c Config, log *slog.Logger, onTable func(*table)) error {
 	upIf, err := net.InterfaceByName(c.Uplink)
 	if err != nil {
 		return err
@@ -265,6 +294,9 @@ func Relay(ctx context.Context, r Runner, c Config, log *slog.Logger) error {
 		_, _ = r.Run(context.Background(), "ip", "route", "replace", ip.String()+"/32", "dev", c.Bridge)
 		log.Info("wifi bridge: machine on the LAN", "bridge", c.Bridge, "ip", ip)
 	}}
+	if onTable != nil {
+		onTable(tab)
+	}
 	go func() { <-ctx.Done(); unix.Close(up); unix.Close(br) }()
 	errc := make(chan error, 2)
 	go func() { errc <- pump(up, br, func(f []byte) ([]byte, bool) { return Inbound(f, host, tab) }) }()
@@ -386,6 +418,38 @@ type Manager struct {
 	mu      sync.Mutex
 	bridges map[string]Config // by network
 	stop    map[string]context.CancelFunc
+	tables  map[string]*table // what each running relay learned, by network
+}
+
+// View is a Wi-Fi bridge as the Networks page shows it.
+type View struct {
+	Network string `json:"network"`
+	Uplink  string `json:"uplink"` // the Wi-Fi card
+	Bridge  string `json:"bridge"`
+	// Running: its relay runs (false right after a restart until it is up, or after a failure).
+	Running bool `json:"running"`
+	// Machines: the addresses it delivers to machines, and their own MACs.
+	Machines []Learned `json:"machines"`
+}
+
+// Views lists the bridges with what their relays learned, by network name.
+func (m *Manager) Views() []View {
+	m.mu.Lock()
+	out := make([]View, 0, len(m.bridges))
+	tabs := make([]*table, 0, len(m.bridges))
+	for n, c := range m.bridges {
+		out = append(out, View{Network: n, Uplink: c.Uplink, Bridge: c.Bridge})
+		tabs = append(tabs, m.tables[n])
+	}
+	m.mu.Unlock()
+	for i, t := range tabs {
+		out[i].Machines = []Learned{}
+		if t != nil {
+			out[i].Running, out[i].Machines = true, t.learned()
+		}
+	}
+	slices.SortFunc(out, func(a, b View) int { return strings.Compare(a.Network, b.Network) })
+	return out
 }
 
 // Load starts the bridges saved in File (after a restart or a reboot).
@@ -419,7 +483,7 @@ func (m *Manager) start(ctx context.Context, c Config) error {
 	}
 	m.mu.Lock()
 	if m.bridges == nil {
-		m.bridges, m.stop = map[string]Config{}, map[string]context.CancelFunc{}
+		m.bridges, m.stop, m.tables = map[string]Config{}, map[string]context.CancelFunc{}, map[string]*table{}
 	}
 	if stop := m.stop[c.Network]; stop != nil {
 		stop()
@@ -428,7 +492,18 @@ func (m *Manager) start(ctx context.Context, c Config) error {
 	m.bridges[c.Network], m.stop[c.Network] = c, cancel
 	m.mu.Unlock()
 	go func() {
-		err := Relay(rctx, m.Runner, c, m.Log)
+		err := relay(rctx, m.Runner, c, m.Log, func(t *table) {
+			m.mu.Lock()
+			if m.stop[c.Network] != nil && rctx.Err() == nil {
+				m.tables[c.Network] = t
+			}
+			m.mu.Unlock()
+		})
+		m.mu.Lock()
+		if m.tables[c.Network] != nil && rctx.Err() == nil {
+			delete(m.tables, c.Network) // this relay stopped
+		}
+		m.mu.Unlock()
 		if err == nil {
 			return
 		}
@@ -448,6 +523,7 @@ func (m *Manager) Remove(ctx context.Context, network string) {
 		m.stop[network]()
 		delete(m.bridges, network)
 		delete(m.stop, network)
+		delete(m.tables, network)
 	}
 	m.mu.Unlock()
 	if ok {

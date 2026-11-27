@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -120,5 +121,26 @@ func TestOnLAN(t *testing.T) {
 	}
 	if !onLAN(netip.MustParseAddr("203.0.113.9"), nil) {
 		t.Error("a card without an address says nothing about the LAN")
+	}
+}
+
+func TestViewsShowWhatTheRelayLearned(t *testing.T) {
+	tab := &table{m: map[netip.Addr]MAC{}, learn: func(netip.Addr) {}}
+	tab.Learn(netip.MustParseAddr("192.168.1.57"), MAC{0x52, 0x54, 0, 0x11, 0x22, 0x33})
+	tab.Learn(netip.MustParseAddr("192.168.1.9"), MAC{0x52, 0x54, 0, 0xaa, 0xbb, 0xcc})
+	m := &Manager{
+		bridges: map[string]Config{"lan": {Network: "lan", Bridge: "wbr0", Uplink: "wlp3s0"}, "cafe": {Network: "cafe", Bridge: "wbr1", Uplink: "wlan1"}},
+		tables:  map[string]*table{"lan": tab},
+	}
+	v := m.Views()
+	if len(v) != 2 || v[0].Network != "cafe" || v[1].Network != "lan" {
+		t.Fatalf("views = %+v", v)
+	}
+	if v[0].Running || len(v[0].Machines) != 0 || v[0].Machines == nil {
+		t.Errorf("a bridge whose relay is not up: %+v", v[0])
+	}
+	want := []Learned{{IP: "192.168.1.9", MAC: "52:54:00:aa:bb:cc"}, {IP: "192.168.1.57", MAC: "52:54:00:11:22:33"}}
+	if !v[1].Running || v[1].Uplink != "wlp3s0" || v[1].Bridge != "wbr0" || !slices.Equal(v[1].Machines, want) {
+		t.Errorf("lan = %+v", v[1])
 	}
 }

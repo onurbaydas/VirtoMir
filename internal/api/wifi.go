@@ -19,6 +19,7 @@ import (
 var uplinkRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,14}$`)
 
 func (s *Server) wifiRoutes(mux *routeMux) {
+	mux.HandleFunc("GET /api/v1/networks/wifi", s.wifiViews)
 	mux.HandleFunc("POST /api/v1/networks/wifi", s.wifiNetwork)
 }
 
@@ -37,6 +38,11 @@ func (s *Server) RunWifiBridges(ctx context.Context) {
 	for _, n := range m.Networks() {
 		_ = s.backend.NetworkAction(n, "start")
 	}
+}
+
+// wifiViews lists the networks bridged to Wi-Fi with the machines each relay learned.
+func (s *Server) wifiViews(w http.ResponseWriter, _ *http.Request) {
+	s.writeJSON(w, http.StatusOK, map[string]any{"bridges": s.wifiBridges().Views()})
 }
 
 // isWifi reports whether a host interface is a Wi-Fi card.
