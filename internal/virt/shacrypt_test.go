@@ -9,12 +9,20 @@ import (
 
 func TestSHA512Crypt(t *testing.T) {
 	// The test vectors of Drepper's specification (default rounds).
-	for _, c := range []struct{ key, salt, want string }{
-		{"Hello world!", "saltstring", "$6$saltstring$svn8UoSVapNtMuq1ukKS4tPQd8iKwSMHWjl/O817G3uBnIFNjnQJuesI68u4OTLiBFdcbYEdFCoEOfaS35inz1"},
+	for _, c := range []struct {
+		key, salt string
+		rounds    int
+		want      string
+	}{
+		{"Hello world!", "saltstring", 5000, "$6$saltstring$svn8UoSVapNtMuq1ukKS4tPQd8iKwSMHWjl/O817G3uBnIFNjnQJuesI68u4OTLiBFdcbYEdFCoEOfaS35inz1"},
 		// rounds=5000 spelled out in the spec; the salt is cut to 16 characters.
-		{"This is just a test", "toolongsaltstring", "$6$toolongsaltstrin$lQ8jolhgVRVhY4b5pZKaysCLi0QBxGoNeKQzQ3glMhwllF7oGDZxUhx1yxdYcz/e1JSbq3y6JMxxl8audkUEm0"},
+		{"This is just a test", "toolongsaltstring", 5000, "$6$toolongsaltstrin$lQ8jolhgVRVhY4b5pZKaysCLi0QBxGoNeKQzQ3glMhwllF7oGDZxUhx1yxdYcz/e1JSbq3y6JMxxl8audkUEm0"},
+		// The spec's rounds=10000 vector.
+		{"Hello world!", "saltstringsaltstring", 10000, "$6$rounds=10000$saltstringsaltst$OW1/O6BYHV6BcXZu8QVeXbDWra3Oeqh0sbHbbMCVNSnCM/UrjmM0Dp8vOuZeHBy/YTBmSK6H9qs/y3RnOaw5v."},
+		// What VirtoMir writes, checked against libxcrypt's crypt(3).
+		{"pw", "abcdefghijklmnop", cryptRounds, "$6$rounds=656000$abcdefghijklmnop$vlzqoGD.PPCRIAJoqyiLJycRN2d4gUQcXq8MV9X6K22FhTrqrthsvWGIA77qA1UOBLYAvaDQHTA5oE/Sa3kHT0"},
 	} {
-		if got := sha512Crypt([]byte(c.key), []byte(c.salt)); got != c.want {
+		if got := sha512Crypt([]byte(c.key), []byte(c.salt), c.rounds); got != c.want {
 			t.Errorf("sha512Crypt(%q, %q) = %s", c.key, c.salt, got)
 		}
 	}

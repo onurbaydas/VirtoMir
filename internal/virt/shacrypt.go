@@ -5,13 +5,20 @@ import (
 	"crypto/rand"
 	"crypto/sha512"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 )
 
+// cryptRounds is how often the $6$ hash repeats SHA-512. The format's default, 5000, is fast
+// to guess; 656000 makes every guess about 130 times dearer (in the range of bcrypt's
+// default cost) while every guest still reads it: glibc since 2.7, libxcrypt, musl (Alpine).
+const cryptRounds = 656000
+
 // sha512Crypt is glibc's "$6$" password hash (Ulrich Drepper, "Unix crypt using SHA-256 and
-// SHA-512", default 5000 rounds), the format /etc/shadow uses on Debian, Ubuntu and Alpine.
-func sha512Crypt(key, salt []byte) string {
+// SHA-512") with rounds rounds, the format /etc/shadow uses on Debian, Ubuntu, RHEL and Alpine.
+func sha512Crypt(key, salt []byte, rounds int) string {
+	rounds = min(max(rounds, 1000), 999999999) // the range the format allows
 	if len(salt) > 16 {
 		salt = salt[:16]
 	}
@@ -49,7 +56,7 @@ func sha512Crypt(key, salt []byte) string {
 	s := repeatTo(ds.Sum(nil), len(salt))
 
 	c := sumA
-	for i := range 5000 {
+	for i := range rounds {
 		h := sha512.New()
 		if i&1 != 0 {
 			h.Write(p)
@@ -72,6 +79,9 @@ func sha512Crypt(key, salt []byte) string {
 
 	var out strings.Builder
 	out.WriteString("$6$")
+	if rounds != 5000 {
+		fmt.Fprintf(&out, "rounds=%d$", rounds)
+	}
 	out.Write(salt)
 	out.WriteByte('$')
 	order := [][3]int{{0, 21, 42}, {22, 43, 1}, {44, 2, 23}, {3, 24, 45}, {25, 46, 4}, {47, 5, 26}, {6, 27, 48},
@@ -115,7 +125,7 @@ func HashPassword(password string) (string, error) {
 	for i := range salt {
 		salt[i] = cryptAlphabet[int(salt[i])%len(cryptAlphabet)]
 	}
-	return sha512Crypt([]byte(password), salt), nil
+	return sha512Crypt([]byte(password), salt, cryptRounds), nil
 }
 
 // IsCryptHash reports whether s looks like a glibc crypt password hash
@@ -133,7 +143,7 @@ func setRootPassword(root *os.Root, password string) error {
 	for i := range salt {
 		salt[i] = cryptAlphabet[int(salt[i])%len(cryptAlphabet)]
 	}
-	hash := sha512Crypt([]byte(password), salt)
+	hash := sha512Crypt([]byte(password), salt, cryptRounds)
 
 	const path = "etc/shadow"
 	raw, err := root.ReadFile(path)
