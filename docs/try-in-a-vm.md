@@ -49,7 +49,7 @@ VirtoMir is forwarded to **https://localhost:8420/**, user `virtomir`. `vagrant 
 
 ## 4. Any other VM
 
-A fresh Debian 13 or Ubuntu 24.04 VM (help us test on these distributions — see [issue #1](https://github.com/onurbaydas/VirtoMir/issues/1)) with nested virtualization (see below), then inside it:
+A fresh Debian 13, Ubuntu 24.04, Fedora or RHEL 10 (Rocky, Alma) VM (help us test on these distributions — see [issue #1](https://github.com/onurbaydas/VirtoMir/issues/1)) with nested virtualization (see below), then inside it:
 
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/onurbaydas/VirtoMir/main/dev/try/provision.sh

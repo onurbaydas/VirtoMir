@@ -1,7 +1,8 @@
 #!/bin/sh
-# Turns a fresh, throwaway Debian 13 / Ubuntu 24.04 VM into a VirtoMir test host:
-# KVM/libvirt, VirtoMir from the signed apt repository (or the latest GitHub release), a
-# sign-in user with a random password, a storage pool and network, and a tiny test image.
+# Turns a fresh, throwaway Debian 13 / Ubuntu 24.04 or Fedora / RHEL 10 (Rocky, Alma) VM into a
+# VirtoMir test host: KVM/libvirt, VirtoMir from the signed apt or dnf repository (or the latest
+# GitHub release), a sign-in user with a random password, a storage pool and network, and a
+# tiny test image.
 #
 #   sudo sh provision.sh
 #
@@ -13,6 +14,7 @@
 #   TRY_USER      sign-in user to create (default: virtomir)
 #   TRY_IMAGE     1 (default) downloads a small CirrOS test image into the default pool; 0 skips it
 #   VIRTOMIR_DEB  install this .deb instead of downloading one (path inside the VM)
+#   VIRTOMIR_RPM  the same for an .rpm on Fedora / RHEL
 set -eu
 
 REPO=onurbaydas/VirtoMir
@@ -28,15 +30,22 @@ warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" = 0 ] || die "run as root: sudo sh $0"
-[ -r /etc/os-release ] || die "no /etc/os-release: use Debian 13 or Ubuntu 24.04"
+[ -r /etc/os-release ] || die "no /etc/os-release: use Debian 13, Ubuntu 24.04, Fedora or RHEL 10"
 # shellcheck disable=SC1091
 . /etc/os-release
-case "${ID:-}" in
-debian | ubuntu) ;;
-*) die "this script knows Debian and Ubuntu (found ${PRETTY_NAME:-unknown}); on Fedora install the .rpm by hand" ;;
+# FAMILY: deb (apt) or rpm (dnf); the rest of the script is the same for both.
+case " ${ID:-} ${ID_LIKE:-} " in
+*" debian "* | *" ubuntu "*) FAMILY=deb ;;
+*" fedora "* | *" rhel "* | *" centos "*) FAMILY=rpm ;;
+*) die "this script knows Debian, Ubuntu, Fedora and RHEL-like systems (found ${PRETTY_NAME:-unknown})" ;;
 esac
-ARCH=$(dpkg --print-architecture)
-export DEBIAN_FRONTEND=noninteractive
+if [ "$FAMILY" = deb ]; then
+	ARCH=$(dpkg --print-architecture)
+	export DEBIAN_FRONTEND=noninteractive
+else
+	ARCH=$(uname -m) # x86_64, aarch64: the .rpm names
+	command -v dnf >/dev/null || die "dnf is missing"
+fi
 
 # ---- 1. KVM -------------------------------------------------------------------------------
 if [ -e /dev/kvm ]; then
@@ -49,14 +58,47 @@ fi
 
 # ---- 2. Packages --------------------------------------------------------------------------
 say "Installing KVM, QEMU and libvirt"
-apt-get update -qq
-apt-get install -y -qq --no-install-recommends \
-	ca-certificates curl gnupg openssl \
-	qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients ovmf swtpm swtpm-tools dnsmasq-base \
-	>/dev/null
+if [ "$FAMILY" = deb ]; then
+	apt-get update -qq
+	apt-get install -y -qq --no-install-recommends \
+		ca-certificates curl gnupg openssl \
+		qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients ovmf swtpm swtpm-tools dnsmasq-base \
+		>/dev/null
+else
+	# The virtualization group of Fedora and RHEL: QEMU/KVM, the modular libvirt daemons, virsh.
+	dnf install -y -q ca-certificates curl openssl iproute qemu-kvm qemu-img libvirt libvirt-client \
+		edk2-ovmf swtpm swtpm-tools dnsmasq >/dev/null
+fi
 
 # ---- 3. VirtoMir --------------------------------------------------------------------------
-if [ -n "${VIRTOMIR_DEB:-}" ]; then
+# The .rpm's own scripts start libvirt's sockets, open port 8420 in firewalld and load the
+# SELinux module where SELinux is on.
+if [ "$FAMILY" = rpm ]; then
+	if [ -n "${VIRTOMIR_RPM:-}" ]; then
+		say "Installing $VIRTOMIR_RPM"
+		dnf install -y -q "$VIRTOMIR_RPM" >/dev/null
+	elif curl -fsSL -o /etc/yum.repos.d/virtomir.repo "$REPO_URL/virtomir.repo" 2>/dev/null; then
+		say "Installing VirtoMir from the signed dnf repository"
+		dnf install -y -q virtomir >/dev/null
+	else
+		say "No dnf repository reachable; installing the latest release's .rpm from GitHub"
+		urls=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep -o "https://[^\"]*\.${ARCH}\.rpm[^\"]*") ||
+			die "no release with an .rpm for $ARCH found"
+		rpm=$(echo "$urls" | grep '\.rpm$' | head -n1)
+		sum=$(echo "$urls" | grep '\.rpm\.sha256$' | head -n1)
+		work=$(mktemp -d)
+		curl -fsSL -o "$work/$(basename "$rpm")" "$rpm"
+		if [ -n "$sum" ]; then
+			curl -fsSL -o "$work/sum" "$sum"
+			(cd "$work" && sha256sum -c sum >/dev/null) || die "checksum of $(basename "$rpm") does not match the release"
+			say "Checksum verified"
+		else
+			warn "the release has no .sha256 for $(basename "$rpm"); installing unverified"
+		fi
+		dnf install -y -q "$work/$(basename "$rpm")" >/dev/null
+		rm -rf "$work"
+	fi
+elif [ -n "${VIRTOMIR_DEB:-}" ]; then
 	say "Installing $VIRTOMIR_DEB"
 	apt-get install -y -qq "$VIRTOMIR_DEB" >/dev/null
 elif curl -fsSL -o /tmp/virtomir.asc "$REPO_URL/virtomir.asc" 2>/dev/null; then
