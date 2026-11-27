@@ -30,6 +30,13 @@ jobs:
           name: scorecard
           path: results.sarif
           retention-days: 5
+      # Code-Review, Maintained and Branch-Protection judge how the repository is run (a single
+      # maintainer pushing to main, its age), not the code: they stay in the published score but
+      # open no code scanning alerts.
+      - name: Leave the process checks out of code scanning
+        run: |
+          jq '.runs[].results |= map(select(.ruleId as $r | ["CodeReviewID", "MaintainedID", "BranchProtectionID"] | index($r) | not))' \
+            results.sarif > filtered.sarif
       - uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
         with:
-          sarif_file: results.sarif
+          sarif_file: filtered.sarif
