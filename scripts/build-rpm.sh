@@ -40,6 +40,7 @@ cat >"$SRC/virtomir.pam" <<'EOF'
 auth       include      system-auth
 account    include      system-auth
 EOF
+# shellcheck disable=SC2016 # $VIRTOMIRD_ARGS is for systemd to expand, not this shell
 sed 's|ExecStart=/usr/local/bin/virtomird -listen 0.0.0.0:8420|EnvironmentFile=-/etc/sysconfig/virtomird\nExecStart=/usr/bin/virtomird $VIRTOMIRD_ARGS|' \
 	"$ROOT/packaging/virtomird.service" >"$SRC/virtomird.service"
 cat >"$SRC/virtomird.sysconfig" <<'EOF'
