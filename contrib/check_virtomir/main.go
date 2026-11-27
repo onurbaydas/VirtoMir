@@ -349,8 +349,8 @@ func perf(label string, v float64, unit string, warn, crit, min, max float64) st
 	return fmt.Sprintf("'%s'=%.1f%s;%s;%s;%g;%g", label, v, unit, f(warn), f(crit), min, max)
 }
 
-// pinned trusts exactly the certificate with this SHA-256 fingerprint (hex, colons allowed).
-func pinned(fingerprint string) (*tls.Config, error) {
+// pinnedTrust trusts exactly the certificate with this SHA-256 fingerprint (hex, colons allowed).
+func pinnedTrust(fingerprint string) (*tls.Config, error) {
 	want, err := hex.DecodeString(strings.ReplaceAll(strings.ToLower(fingerprint), ":", ""))
 	if err != nil || len(want) != sha256.Size {
 		return nil, errors.New("--fingerprint is the certificate's SHA-256 in hex")
@@ -393,7 +393,7 @@ func run(args []string, stdout io.Writer) int {
 	tr := &http.Transport{Proxy: http.ProxyFromEnvironment, TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}}
 	switch {
 	case *fingerprint != "":
-		cfg, err := pinned(*fingerprint)
+		cfg, err := pinnedTrust(*fingerprint)
 		if err != nil {
 			fmt.Fprintln(stdout, "UNKNOWN - "+err.Error())
 			return Unknown
