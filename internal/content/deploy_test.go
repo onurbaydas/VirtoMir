@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1089,4 +1090,33 @@ func TestDeploy_LocalTemplate_StaleSeedStripped(t *testing.T) {
 			t.Errorf("stale seed ISO %s was NOT stripped from template definition", d.Source.File.File)
 		}
 	}
+}
+
+// copyArtifactFile copies src to dst through a temporary file (the cloneVolume hook of the tests).
+func copyArtifactFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+
+	tmpDst := dst + ".tmp"
+	out, err := os.Create(tmpDst)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		_ = os.Remove(tmpDst)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		_ = os.Remove(tmpDst)
+		return err
+	}
+	return os.Rename(tmpDst, dst)
 }

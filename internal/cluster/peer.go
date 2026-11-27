@@ -69,7 +69,6 @@ func Fingerprint(der []byte) string {
 // whatever its name or issuer. That is how members recognize each other's self-signed
 // certificates without a CA.
 func PinnedClient(fingerprint string, timeout time.Duration) *http.Client {
-	want, _ := hex.DecodeString(fingerprint)
 	tr := &http.Transport{
 		Proxy:               nil, // peers talk directly
 		DialContext:         (&net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
@@ -77,22 +76,31 @@ func PinnedClient(fingerprint string, timeout time.Duration) *http.Client {
 		ForceAttemptHTTP2:   false, // HTTP/1.1: console WebSockets are proxied through it
 		MaxIdleConnsPerHost: 4,
 		IdleConnTimeout:     90 * time.Second,
-		TLSClientConfig: &tls.Config{
-			MinVersion:         tls.VersionTLS12,
-			InsecureSkipVerify: true, // replaced by the pin below
-			VerifyConnection: func(cs tls.ConnectionState) error {
-				if len(cs.PeerCertificates) == 0 {
-					return errors.New("peer sent no certificate")
-				}
-				got := sha256.Sum256(cs.PeerCertificates[0].Raw)
-				if len(want) != len(got) || subtle.ConstantTimeCompare(got[:], want) != 1 {
-					return fmt.Errorf("certificate fingerprint %s does not match the expected %s", hex.EncodeToString(got[:]), fingerprint)
-				}
-				return nil
-			},
-		},
+		TLSClientConfig:     pinnedTrustConfig(fingerprint),
 	}
 	return &http.Client{Transport: tr, Timeout: timeout}
+}
+
+// pinnedTrustConfig trusts the one certificate whose SHA-256 is fingerprint. Go's chain and
+// name check is off because a member's certificate is self-signed for an address, not a name;
+// VerifyConnection takes its place on every handshake, resumed ones included, and fails
+// closed when the fingerprint is not valid hex.
+func pinnedTrustConfig(fingerprint string) *tls.Config {
+	want, _ := hex.DecodeString(fingerprint)
+	return &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: true, // replaced by the pin below
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) == 0 {
+				return errors.New("peer sent no certificate")
+			}
+			got := sha256.Sum256(cs.PeerCertificates[0].Raw)
+			if len(want) != len(got) || subtle.ConstantTimeCompare(got[:], want) != 1 {
+				return fmt.Errorf("certificate fingerprint %s does not match the expected %s", hex.EncodeToString(got[:]), fingerprint)
+			}
+			return nil
+		},
+	}
 }
 
 // Peer calls another member's API.

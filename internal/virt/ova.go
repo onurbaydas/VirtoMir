@@ -184,7 +184,7 @@ func unpackOVA(ctx context.Context, r io.Reader, dir string) ([]byte, error) {
 			continue
 		}
 		base := path.Base(h.Name)
-		if base == "." || base == "/" || strings.HasPrefix(base, ".") {
+		if !filepath.IsLocal(base) || strings.HasPrefix(base, ".") {
 			continue
 		}
 		if strings.HasSuffix(strings.ToLower(base), ".ovf") {
@@ -272,7 +272,12 @@ func (c *Client) ImportOVA(ctx context.Context, pool, name string, r io.Reader, 
 		_ = l.StoragePoolRefresh(sp, 0)
 	}
 	for i, d := range ovf.Disks {
-		src := filepath.Join(tmp, path.Base(d))
+		base := path.Base(d)
+		if !filepath.IsLocal(base) || strings.HasPrefix(base, ".") {
+			cleanup()
+			return CreateResult{}, invalidf("The OVF names disk %s, which is not a file of the OVA.", d)
+		}
+		src := filepath.Join(tmp, base)
 		if _, err := os.Stat(src); err != nil {
 			cleanup()
 			return CreateResult{}, invalidf("The OVF names disk %s, but the OVA does not contain it.", d)

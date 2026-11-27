@@ -48,6 +48,13 @@ func (r *Reader) readInt(p string) (int64, bool) {
 	return v, err == nil
 }
 
+// readInt32 is readInt for values that fit 32 bits (MTU, speed, IDs, counts): what is larger
+// is not read, so converting it to int or uint never truncates.
+func (r *Reader) readInt32(p string) (int64, bool) {
+	v, err := strconv.ParseInt(r.read(p), 10, 32)
+	return v, err == nil
+}
+
 func (r *Reader) run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	if r.Command != nil {
 		return r.Command(ctx, name, args...)

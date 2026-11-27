@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"path"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -108,7 +110,13 @@ var downloadClient = &http.Client{Transport: &http.Transport{
 	TLSHandshakeTimeout:   15 * time.Second,
 }}
 
+// downloadURL is an http(s) URL with a host and no spaces or control characters.
+var downloadURL = regexp.MustCompile(`^https?://[^\s/?#]+(?:[/?#][^\s]*)?$`)
+
 func (s *Server) fetchInto(ctx context.Context, src, pool, name, want string, report func(string)) (string, error) {
+	if !downloadURL.MatchString(src) {
+		return "", errors.New("give an http:// or https:// address")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
 	if err != nil {
 		return "", err

@@ -346,7 +346,12 @@ func (s *Server) importVMware(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "VMware converter is not available"})
 		return
 	}
-	if body.Name == "" {
+	if body.Name != "" {
+		if err := virt.CheckName("Machine", body.Name); err != nil {
+			s.writeError(w, err)
+			return
+		}
+	} else {
 		body.Name = body.VMID
 	}
 

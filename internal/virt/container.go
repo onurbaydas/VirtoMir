@@ -199,14 +199,21 @@ func prepareRootfs(ctx context.Context, tarball, rootfs, hostname, password stri
 	if out, err := exec.CommandContext(ctx, "tar", "-xJf", tarball, "-C", rootfs, "--numeric-owner", "--xattrs", "--xattrs-include=*").CombinedOutput(); err != nil {
 		return fmt.Errorf("unpack the image: %v: %s", err, strings.TrimSpace(string(out)))
 	}
-	if err := os.WriteFile(filepath.Join(rootfs, "etc", "hostname"), []byte(hostname+"\n"), 0o644); err != nil {
+	// The image is someone else's archive: its etc/hostname, etc/inittab or etc/shadow may be a
+	// symlink out of the rootfs. os.Root keeps every file this function writes inside it.
+	root, err := os.OpenRoot(rootfs)
+	if err != nil {
 		return err
 	}
-	if err := consoleOnly(filepath.Join(rootfs, "etc", "inittab")); err != nil {
+	defer root.Close()
+	if err := root.WriteFile("etc/hostname", []byte(hostname+"\n"), 0o644); err != nil {
+		return err
+	}
+	if err := consoleOnly(root, "etc/inittab"); err != nil {
 		return err
 	}
 	if password != "" {
-		if err := setRootPassword(rootfs, password); err != nil {
+		if err := setRootPassword(root, password); err != nil {
 			return fmt.Errorf("set the root password: %w", err)
 		}
 	}
@@ -216,8 +223,8 @@ func prepareRootfs(ctx context.Context, tarball, rootfs, hostname, password stri
 // consoleOnly turns off the gettys a busybox inittab (Alpine) starts on tty1 – tty4: a
 // libvirt container has only /dev/console, and the respawning gettys would fill it with
 // errors. Other systems (systemd) have no inittab.
-func consoleOnly(inittab string) error {
-	raw, err := os.ReadFile(inittab)
+func consoleOnly(root *os.Root, inittab string) error {
+	raw, err := root.ReadFile(inittab)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
@@ -230,7 +237,7 @@ func consoleOnly(inittab string) error {
 			lines[i] = "#" + l + " # VirtoMir: no ttys in a container; the console has a getty"
 		}
 	}
-	return os.WriteFile(inittab, []byte(strings.Join(lines, "\n")), 0o644)
+	return root.WriteFile(inittab, []byte(strings.Join(lines, "\n")), 0o644)
 }
 
 // containerXML is the libvirt-lxc definition of a container on rootfs: unprivileged (user
@@ -302,6 +309,10 @@ func (c *Client) CreateContainer(ctx context.Context, spec CreateSpec, report fu
 	}
 	if q, err := c.conn(); err == nil && c.nameTaken(q, spec.Name) {
 		return CreateResult{}, refusedf("A machine named %s already exists.", spec.Name)
+	}
+	// normalize checked the name; the folder is made from it only as one plain file name.
+	if !nameRE.MatchString(spec.Name) {
+		return CreateResult{}, invalidf("Machine name %q is not allowed.", spec.Name)
 	}
 	home := filepath.Join(c.containerDir(), spec.Name)
 	if _, err := os.Stat(home); err == nil {

@@ -549,7 +549,7 @@ func (c *Client) DeleteNetwork(name string) error {
 // hostIfExists reports whether the host has a network interface (bridge, OVS bridge, port)
 // of that name; tests replace it.
 var hostIfExists = func(name string) bool {
-	if name == "" || strings.ContainsRune(name, '/') {
+	if !ifaceNameRE.MatchString(name) {
 		return false
 	}
 	_, err := os.Stat(filepath.Join("/sys/class/net", name))

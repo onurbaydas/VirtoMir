@@ -13,6 +13,7 @@ import (
 	"net/smtp"
 	"net/url"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -165,6 +166,9 @@ func (ev Event) Text() string {
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
+// webhookURL is an http(s) URL with a host and no spaces or control characters.
+var webhookURL = regexp.MustCompile(`^https?://[^\s/?#]+(?:[/?#][^\s]*)?$`)
+
 func deliver(ch Channel, s SMTP, ev Event) error {
 	switch ch.Kind {
 	case "webhook":
@@ -201,6 +205,9 @@ func webhook(ch Channel, ev Event) error {
 	default:
 		body, _ = json.Marshal(map[string]any{"event": ev.Type, "alert": ev.Alert, "text": ev.Text()})
 	}
+	if !webhookURL.MatchString(ch.URL) {
+		return errors.New("webhook URL must be an http(s) URL")
+	}
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, ch.URL, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -232,9 +239,19 @@ func email(ch Channel, s SMTP, ev Event) error {
 		port = map[string]int{"tls": 465, "starttls": 587, "none": 25}[s.TLS]
 	}
 	addr := net.JoinHostPort(s.Host, fmt.Sprint(port))
+	from, err := mail.ParseAddress(s.From)
+	if err != nil {
+		return fmt.Errorf("sender: %w", err)
+	}
+	// The headers carry the parsed addresses, re-encoded: a line break typed into a
+	// recipient or sender can never start a header of its own.
+	rcpts := make([]string, len(to))
+	for i, r := range to {
+		rcpts[i] = r.String()
+	}
 	var msg bytes.Buffer
 	fmt.Fprintf(&msg, "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n",
-		s.From, ch.To, mimeHeader(ev.Text()), time.Now().Format(time.RFC1123Z))
+		from.String(), strings.Join(rcpts, ", "), mimeHeader(ev.Text()), time.Now().Format(time.RFC1123Z))
 	fmt.Fprintf(&msg, "%s\r\n\r\nSubject: %s\r\nSeverity: %s\r\nSince: %s\r\n", ev.Alert.Message, ev.Alert.Subject, ev.Alert.Severity, ev.Alert.Started.Local().Format(time.RFC1123))
 	if ev.Alert.Resolved != nil {
 		fmt.Fprintf(&msg, "Resolved: %s\r\n", ev.Alert.Resolved.Local().Format(time.RFC1123))
@@ -272,10 +289,6 @@ func email(ch Channel, s SMTP, ev Event) error {
 		if err := c.Auth(smtp.PlainAuth("", s.Username, s.Password, s.Host)); err != nil {
 			return err
 		}
-	}
-	from, err := mail.ParseAddress(s.From)
-	if err != nil {
-		return fmt.Errorf("sender: %w", err)
 	}
 	if err := c.Mail(from.Address); err != nil {
 		return err

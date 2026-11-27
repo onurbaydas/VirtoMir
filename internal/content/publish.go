@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -126,31 +125,8 @@ func defaultLookupDomain(ctx context.Context, client *virt.Client, uuid string) 
 }
 
 func defaultListVolumes(ctx context.Context, client *virt.Client, pool string) ([]virt.Volume, error) {
+	// Volumes come from libvirt only: a request never names a folder of the host directly.
 	if client == nil {
-		if st, err := os.Stat(pool); err == nil && st.IsDir() {
-			entries, err := os.ReadDir(pool)
-			if err != nil {
-				return nil, err
-			}
-			var vols []virt.Volume
-			for _, e := range entries {
-				if e.IsDir() {
-					continue
-				}
-				info, err := e.Info()
-				if err != nil {
-					continue
-				}
-				vols = append(vols, virt.Volume{
-					Name:            e.Name(),
-					Path:            filepath.Join(pool, e.Name()),
-					CapacityBytes:   uint64(info.Size()),
-					AllocationBytes: uint64(info.Size()),
-					Format:          DetectDiskFormat(filepath.Join(pool, e.Name()), ""),
-				})
-			}
-			return vols, nil
-		}
 		return nil, notFoundf("no libvirt client available")
 	}
 	return client.ListVolumes(pool)

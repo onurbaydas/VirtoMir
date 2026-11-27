@@ -341,7 +341,11 @@ func (r *Registry) run(ctx context.Context, w *Wave, indices []int, conv OneConv
 		return snap, nil
 	}
 
-	sem := make(chan struct{}, parallel)
+	workers := 1 // Start clamps Parallel to 1..4; the semaphore never trusts a stored value beyond that
+	if parallel > 1 && parallel <= 4 {
+		workers = parallel
+	}
+	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 
 	for _, idx := range indices {

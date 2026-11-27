@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -276,6 +277,9 @@ func (s *Store) CreateItem(item Item) (Item, error) {
 	default:
 		return Item{}, invalidf("invalid item type %q (must be template, iso, or image)", item.Type)
 	}
+	if err := checkFiles(item.Name, item.Versions); err != nil {
+		return Item{}, err
+	}
 
 	for _, existing := range s.items {
 		if strings.EqualFold(existing.Name, item.Name) {
@@ -386,6 +390,10 @@ func (s *Store) UpdateItem(item Item) (Item, error) {
 	}
 	if syncPolicy.Hosts == nil {
 		syncPolicy.Hosts = []string{}
+	}
+
+	if err := checkFiles(name, append(slices.Clone(cur.Versions), item.Versions...)); err != nil {
+		return Item{}, err
 	}
 
 	prev := cur.clone()
@@ -525,6 +533,9 @@ func (s *Store) AddVersion(itemID string, v ItemVersion) (Item, []string, error)
 	v.Version = strings.TrimSpace(v.Version)
 	if v.Version == "" {
 		return Item{}, nil, invalidf("version is required")
+	}
+	if err := checkFiles(cur.Name, []ItemVersion{v}); err != nil {
+		return Item{}, nil, err
 	}
 
 	v.SHA256 = strings.TrimSpace(v.SHA256)

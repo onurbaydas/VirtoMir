@@ -67,10 +67,10 @@ func (r *Reader) Topology(ctx context.Context) Topology {
 		}
 		rel := "sys/devices/system/cpu/" + filepath.Base(dir)
 		c := CPU{ID: id, Node: nodeOf[id], Online: r.read(rel+"/online") != "0"}
-		if v, ok := r.readInt(rel + "/topology/physical_package_id"); ok {
+		if v, ok := r.readInt32(rel + "/topology/physical_package_id"); ok {
 			c.Socket = int(v)
 		}
-		if v, ok := r.readInt(rel + "/topology/core_id"); ok {
+		if v, ok := r.readInt32(rel + "/topology/core_id"); ok {
 			c.Core = int(v)
 		}
 		c.Siblings = parseCPUList(r.read(rel + "/topology/thread_siblings_list"))

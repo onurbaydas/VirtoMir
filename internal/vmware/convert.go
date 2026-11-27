@@ -475,8 +475,12 @@ func (p *v2vProgress) line(line string) {
 // findDefinition reads the definition virt-v2v wrote: <vm>.xml, or the one new .xml
 // file in the pool when virt-v2v had to sanitize the guest's name.
 func findDefinition(pool string, before map[string]bool, vmName string) ([]byte, string, error) {
-	if doc, err := os.ReadFile(filepath.Join(pool, vmName+".xml")); err == nil {
-		return doc, vmName + ".xml", nil
+	// The guest's name comes from VMware: it is a file name in the pool only if it has no
+	// directory part ('/', "..").
+	if own := vmName + ".xml"; filepath.IsLocal(own) && filepath.Base(own) == own {
+		if doc, err := os.ReadFile(filepath.Join(pool, own)); err == nil {
+			return doc, own, nil
+		}
 	}
 	var news []string
 	ents, err := os.ReadDir(pool)

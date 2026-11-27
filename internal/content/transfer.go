@@ -228,8 +228,14 @@ func Pull(ctx context.Context, peer *cluster.Peer, item Item, version ItemVersio
 		return "", errors.New("expected SHA-256 checksum cannot be empty")
 	}
 
-	tmpFile := fmt.Sprintf(".virtomir-content-%s-%s.tmp", item.ID, version.ID)
-	finalFile := fmt.Sprintf("content-%s-v%s.%s", item.Name, version.Version, version.Format)
+	tmpFile, err := poolFile(fmt.Sprintf(".virtomir-content-%s-%s.tmp", item.ID, version.ID))
+	if err != nil {
+		return "", err
+	}
+	finalFile, err := FileName(item.Name, version.Version, version.Format)
+	if err != nil {
+		return "", err
+	}
 	tmpPath := filepath.Join(targetPoolPath, tmpFile)
 	finalPath := filepath.Join(targetPoolPath, finalFile)
 
@@ -393,7 +399,11 @@ func PruneLocalFile(targetPoolPath, itemName, versionStr, format string) error {
 	if err := validatePathComponent("format", format); err != nil {
 		return err
 	}
-	path := filepath.Join(targetPoolPath, fmt.Sprintf("content-%s-v%s.%s", itemName, versionStr, format))
+	file, err := FileName(itemName, versionStr, format)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(targetPoolPath, file)
 	if filepath.Dir(path) != filepath.Clean(targetPoolPath) {
 		return errors.New("path traversal detected: target path escapes directory")
 	}

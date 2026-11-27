@@ -6,7 +6,6 @@ import (
 	"crypto/sha512"
 	"errors"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -125,8 +124,8 @@ func IsCryptHash(s string) bool {
 	return strings.HasPrefix(s, "$1$") || strings.HasPrefix(s, "$5$") || strings.HasPrefix(s, "$6$")
 }
 
-// setRootPassword writes root's password hash into rootfs/etc/shadow.
-func setRootPassword(rootfs, password string) error {
+// setRootPassword writes root's password hash into etc/shadow under root.
+func setRootPassword(root *os.Root, password string) error {
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
 		return err
@@ -136,8 +135,8 @@ func setRootPassword(rootfs, password string) error {
 	}
 	hash := sha512Crypt([]byte(password), salt)
 
-	path := filepath.Join(rootfs, "etc", "shadow")
-	raw, err := os.ReadFile(path)
+	const path = "etc/shadow"
+	raw, err := root.ReadFile(path)
 	if err != nil {
 		return err
 	}
@@ -153,9 +152,9 @@ func setRootPassword(rootfs, password string) error {
 	if !found {
 		return errors.New("the image's /etc/shadow has no root entry")
 	}
-	info, err := os.Stat(path)
+	info, err := root.Stat(path)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, bytes.Join(lines, []byte("\n")), info.Mode().Perm())
+	return root.WriteFile(path, bytes.Join(lines, []byte("\n")), info.Mode().Perm())
 }

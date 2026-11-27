@@ -252,7 +252,11 @@ func (m *SyncManager) OnItemUpdated(ctx context.Context, item Item, selfID strin
 		return
 	}
 
-	finalFile := fmt.Sprintf("content-%s-v%s.%s", item.Name, latestVersion.Version, latestVersion.Format)
+	finalFile, err := FileName(item.Name, latestVersion.Version, latestVersion.Format)
+	if err != nil {
+		m.logger().Warn("cannot sync content", "item", item.Name, "err", err)
+		return
+	}
 	finalPath := filepath.Join(poolPath, finalFile)
 	if st, err := os.Stat(finalPath); err == nil && !st.IsDir() {
 		if latestVersion.Size <= 0 || st.Size() == latestVersion.Size {

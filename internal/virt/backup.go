@@ -112,7 +112,11 @@ func writeManifest(dest string, b Backup) error {
 
 // backupPath resolves a backup ID inside dir, refusing anything that escapes it.
 func backupPath(dir BackupDir, id string) (string, error) {
-	p := filepath.Join(string(dir), filepath.FromSlash(id))
+	local := filepath.FromSlash(id)
+	if !filepath.IsLocal(local) {
+		return "", fmt.Errorf("%w: no backup %s", ErrNotFound, id)
+	}
+	p := filepath.Join(string(dir), local)
 	rel, err := filepath.Rel(string(dir), p)
 	if err != nil || strings.HasPrefix(rel, "..") || strings.Count(filepath.ToSlash(rel), "/") != 1 || strings.HasSuffix(rel, partialSuffix) {
 		return "", fmt.Errorf("%w: no backup %s", ErrNotFound, id)

@@ -13,9 +13,11 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -284,14 +286,30 @@ func (s *Store) Delete(id string) error {
 	return os.ErrNotExist
 }
 
+// known returns the element of allowed that equals v.
+func known[T comparable](v T, allowed []T) (T, bool) {
+	for _, a := range allowed {
+		if a == v {
+			return a, true
+		}
+	}
+	var zero T
+	return zero, false
+}
+
 // Generate writes a report from facts and stores it.
 func (s *Store) Generate(kind Kind, format Format, f Facts, by, scheduleID string) (Meta, error) {
-	if _, ok := kindTitles[kind]; !ok {
+	// The report's file is named after its kind and format: take them from the known ones,
+	// never the caller's strings.
+	k, ok := known(kind, slices.Collect(maps.Keys(kindTitles)))
+	if !ok {
 		return Meta{}, fmt.Errorf("unknown report %q", kind)
 	}
-	if !formats[format] {
+	ft, ok := known(format, slices.Collect(maps.Keys(formats)))
+	if !ok {
 		return Meta{}, fmt.Errorf("unknown format %q", format)
 	}
+	kind, format = k, ft
 	now := s.now()
 	m := Meta{Kind: kind, Format: format, GeneratedAt: now.UTC(), By: by, ScheduleID: scheduleID,
 		ID: fmt.Sprintf("%s-%s-%s", strings.ReplaceAll(string(kind), "_", "-"), now.Format("20060102-150405"), randomHex(3))}

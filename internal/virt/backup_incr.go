@@ -113,6 +113,9 @@ func chainInside(folder string, chain []imageInfo) error {
 // dependents are the backups in the same machine folder that build on id.
 func dependents(dir BackupDir, id string) []string {
 	folder, _, _ := strings.Cut(id, "/")
+	if !filepath.IsLocal(folder) {
+		return nil
+	}
 	matches, _ := filepath.Glob(filepath.Join(string(dir), folder, "*", manifestName))
 	var out []string
 	for _, m := range matches {

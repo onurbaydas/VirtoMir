@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -45,7 +46,7 @@ func (r *Reader) Interfaces(addrs func(name string) []string) []Interface {
 		name := filepath.Base(d)
 		rel := "sys/class/net/" + name
 		it := Interface{Name: name, MAC: r.read(rel + "/address"), State: r.read(rel + "/operstate")}
-		if v, ok := r.readInt(rel + "/mtu"); ok {
+		if v, ok := r.readInt32(rel + "/mtu"); ok {
 			it.MTU = int(v)
 		}
 		if v, ok := r.readInt(rel + "/statistics/rx_bytes"); ok {
@@ -87,7 +88,7 @@ func (r *Reader) Interfaces(addrs func(name string) []string) []Interface {
 			it.Kind = "virtual"
 		}
 		if it.Kind == "physical" || it.Kind == "bond" {
-			if v, ok := r.readInt(rel + "/speed"); ok && v > 0 {
+			if v, ok := r.readInt32(rel + "/speed"); ok && v > 0 {
 				it.SpeedMbps = int(v)
 			}
 		}
@@ -157,13 +158,11 @@ func hostAddrs(name string) []string {
 // ValidInterface reports whether name is an existing interface with a harmless name, so it
 // can be handed to tools like tcpdump.
 func (r *Reader) ValidInterface(name string) bool {
-	if name == "" || len(name) > 15 || name[0] == '-' || name[0] == '.' {
+	if !harmlessIface.MatchString(name) {
 		return false
-	}
-	for _, c := range name {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == '_' || c == '@') {
-			return false
-		}
 	}
 	return exists(r.path("sys/class/net/" + name))
 }
+
+// harmlessIface: at most 15 letters, digits and . - _ @, not starting with '-' or '.'.
+var harmlessIface = regexp.MustCompile(`^[A-Za-z0-9_@][A-Za-z0-9._@-]{0,14}$`)

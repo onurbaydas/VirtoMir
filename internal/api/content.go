@@ -68,9 +68,7 @@ func (s *Server) hostTargetPool() string {
 }
 
 func (s *Server) resolvePoolPath(poolName string) (string, error) {
-	if st, err := os.Stat(poolName); err == nil && st.IsDir() {
-		return poolName, nil
-	}
+	// By name only: an item (from a request or another host) never names a folder directly.
 	if s.backend != nil {
 		pools, err := s.backend.ListPools()
 		if err == nil {
@@ -85,6 +83,24 @@ func (s *Server) resolvePoolPath(poolName string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("storage pool %q not found", poolName)
+}
+
+// isPoolVolume reports whether file lies directly in the folder of one of this host's pools.
+func (s *Server) isPoolVolume(file string) bool {
+	if s.backend == nil || !strings.HasPrefix(file, "/") {
+		return false
+	}
+	pools, err := s.backend.ListPools()
+	if err != nil {
+		return false
+	}
+	dir := filepath.Dir(filepath.Clean(file))
+	for _, p := range pools {
+		if p.Path != "" && filepath.Clean(p.Path) == dir {
+			return true
+		}
+	}
+	return false
 }
 
 func artifactFileMatches(path string, size int64, sha256Hex string) bool {
@@ -121,10 +137,12 @@ func (s *Server) evaluateSyncStatus(it content.Item, v *content.ItemVersion, tar
 	if err != nil {
 		return "missing"
 	}
-	finalFile := fmt.Sprintf("content-%s-v%s.%s", it.Name, v.Version, v.Format)
-	candidates := []string{filepath.Join(poolPath, finalFile)}
-	if v.SourceVol != "" {
-		candidates = append(candidates, filepath.Join(poolPath, v.SourceVol))
+	var candidates []string
+	if f, err := content.FileName(it.Name, v.Version, v.Format); err == nil {
+		candidates = append(candidates, filepath.Join(poolPath, f))
+	}
+	if f, err := content.VolFile(v.SourceVol); err == nil {
+		candidates = append(candidates, filepath.Join(poolPath, f))
 	}
 	for _, p := range candidates {
 		if artifactFileMatches(p, v.Size, v.SHA256) {
@@ -137,22 +155,25 @@ func (s *Server) evaluateSyncStatus(it content.Item, v *content.ItemVersion, tar
 func (s *Server) findLocalArtifactFile(it content.Item, v content.ItemVersion) (string, error) {
 	targetPool := s.hostTargetPool()
 	poolPath, _ := s.resolvePoolPath(targetPool)
-	expectedName := fmt.Sprintf("content-%s-v%s.%s", it.Name, v.Version, v.Format)
+	expectedName, nameErr := content.FileName(it.Name, v.Version, v.Format)
+	srcVol, volErr := content.VolFile(v.SourceVol)
 
 	var candidates []string
-	if poolPath != "" {
-		candidates = append(candidates, filepath.Join(poolPath, expectedName))
-		if v.SourceVol != "" {
-			candidates = append(candidates, filepath.Join(poolPath, v.SourceVol))
+	add := func(dir string) {
+		if nameErr == nil {
+			candidates = append(candidates, filepath.Join(dir, expectedName))
 		}
+		if volErr == nil {
+			candidates = append(candidates, filepath.Join(dir, srcVol))
+		}
+	}
+	if poolPath != "" {
+		add(poolPath)
 	}
 
 	if v.SourcePool != "" && v.SourcePool != targetPool {
 		if srcPath, err := s.resolvePoolPath(v.SourcePool); err == nil && srcPath != "" {
-			candidates = append(candidates, filepath.Join(srcPath, expectedName))
-			if v.SourceVol != "" {
-				candidates = append(candidates, filepath.Join(srcPath, v.SourceVol))
-			}
+			add(srcPath)
 		}
 	}
 
@@ -161,7 +182,11 @@ func (s *Server) findLocalArtifactFile(it content.Item, v content.ItemVersion) (
 		if err := x.Unmarshal(v.TemplateXML); err == nil {
 			disks := virt.TemplateDisks(&x)
 			if len(disks) > 0 && disks[0].Source != nil && disks[0].Source.File != nil && disks[0].Source.File.File != "" {
-				candidates = append(candidates, disks[0].Source.File.File)
+				// The definition came with the item: its disk counts only if it is a volume of
+				// one of this host's pools.
+				if f := disks[0].Source.File.File; s.isPoolVolume(f) {
+					candidates = append(candidates, f)
+				}
 			}
 		}
 	}
@@ -910,7 +935,10 @@ func (s *Server) syncContentItem(w http.ResponseWriter, r *http.Request) {
 			return "", err
 		}
 		if targetVer.SourceHost == "" || targetVer.SourceHost == selfID {
-			finalFile := fmt.Sprintf("content-%s-v%s.%s", it.Name, targetVer.Version, targetVer.Format)
+			finalFile, err := content.FileName(it.Name, targetVer.Version, targetVer.Format)
+			if err != nil {
+				return "", err
+			}
 			finalPath := filepath.Join(poolPath, finalFile)
 			if artifactFileMatches(finalPath, targetVer.Size, targetVer.SHA256) {
 				if s.content != nil {

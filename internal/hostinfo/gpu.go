@@ -118,7 +118,7 @@ func (r *Reader) mdevTypes(rel string) []MDevTypeInfo {
 	for _, d := range dirs {
 		t := rel + "/mdev_supported_types/" + filepath.Base(d)
 		m := MDevTypeInfo{ID: filepath.Base(d), Name: r.read(t + "/name"), API: r.read(t + "/device_api")}
-		if v, ok := r.readInt(t + "/available_instances"); ok && v > 0 {
+		if v, ok := r.readInt32(t + "/available_instances"); ok && v > 0 {
 			m.Available = uint(v)
 		}
 		out = append(out, m)

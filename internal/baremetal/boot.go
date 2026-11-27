@@ -333,7 +333,11 @@ func (b *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		text(http.StatusOK, string(b.RepoKey))
 		return
 	case r.Method == http.MethodGet && (path == "files/debian13/linux" || path == "files/debian13/initrd.gz"):
-		http.ServeFile(w, r, filepath.Join(b.Dir, "debian13", filepath.Base(path)))
+		name := "linux"
+		if path == "files/debian13/initrd.gz" {
+			name = "initrd.gz"
+		}
+		http.ServeFile(w, r, filepath.Join(b.Dir, "debian13", name))
 		return
 	}
 	token, what, _ := strings.Cut(path, "/")

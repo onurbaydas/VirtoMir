@@ -56,7 +56,7 @@ func setupContentServer(t *testing.T) *contentServerBundle {
 	}
 	_ = store.SetHostConfig(content.HostConfig{
 		HostID:     "test-host",
-		TargetPool: poolDir,
+		TargetPool: "lib",
 		AutoSync:   true,
 	})
 
@@ -65,7 +65,7 @@ func setupContentServer(t *testing.T) *contentServerBundle {
 	})
 	tokens, _ := auth.OpenTokens("")
 	acts, _ := activity.Open(filepath.Join(dir, "activity.jsonl"))
-	backend := &fakeBackend{domains: []virt.Domain{}}
+	backend := &fakeBackend{domains: []virt.Domain{}, pools: []virt.Pool{{Name: "lib", Path: poolDir, Active: true}}}
 	jobMgr := jobs.New(t.Context())
 
 	s := NewServer(Options{
@@ -615,8 +615,8 @@ func TestContentConfig(t *testing.T) {
 	if cfg.HostID != "test-host" {
 		t.Errorf("HostID = %q, want 'test-host'", cfg.HostID)
 	}
-	if cfg.TargetPool != b.poolDir {
-		t.Errorf("TargetPool = %q, want %q", cfg.TargetPool, b.poolDir)
+	if cfg.TargetPool != "lib" {
+		t.Errorf("TargetPool = %q, want lib", cfg.TargetPool)
 	}
 	if !cfg.AutoSync {
 		t.Errorf("AutoSync = %v, want true", cfg.AutoSync)
@@ -713,9 +713,10 @@ func TestContentDownloadPeerAuth(t *testing.T) {
 	joinNodes(t, sub, pub)
 
 	poolDir := t.TempDir()
+	pub.backend.pools = []virt.Pool{{Name: "lib", Path: poolDir, Active: true}}
 	if err := pubStore.SetHostConfig(content.HostConfig{
 		HostID:     pub.store.SelfID(),
-		TargetPool: poolDir,
+		TargetPool: "lib",
 		AutoSync:   true,
 	}); err != nil {
 		t.Fatal(err)
@@ -830,7 +831,7 @@ func TestContentEvaluateSyncStatusValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	status := b.server.evaluateSyncStatus(itemReady, &itemReady.Versions[0], b.poolDir)
+	status := b.server.evaluateSyncStatus(itemReady, &itemReady.Versions[0], "lib")
 	if status != "ready" {
 		t.Errorf("expected 'ready' when SHA256 matches and Size <= 0, got %q", status)
 	}
@@ -853,7 +854,7 @@ func TestContentEvaluateSyncStatusValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	statusMismatch := b.server.evaluateSyncStatus(itemMismatch, &itemMismatch.Versions[0], b.poolDir)
+	statusMismatch := b.server.evaluateSyncStatus(itemMismatch, &itemMismatch.Versions[0], "lib")
 	if statusMismatch != "missing" {
 		t.Errorf("expected 'missing' when SHA256 mismatches, got %q", statusMismatch)
 	}
@@ -871,7 +872,7 @@ func TestContentEvaluateSyncStatusValidation(t *testing.T) {
 		Type: content.TypeISO,
 	}
 	debVer := content.ItemVersion{ID: "v1", Version: "1.0", Format: "iso"}
-	debStatus := b.server.evaluateSyncStatus(itemDeb, &debVer, b.poolDir)
+	debStatus := b.server.evaluateSyncStatus(itemDeb, &debVer, "lib")
 	if debStatus == "syncing" {
 		t.Errorf("expected 'deb' NOT to match 'Sync debian (v1.0)' job, but got %q", debStatus)
 	}

@@ -3,8 +3,13 @@ package sdn
 import (
 	"context"
 	"fmt"
-	"strings"
+	"path/filepath"
+	"regexp"
 )
+
+// ipsecFile is an absolute path with no characters ovs-vsctl would read as syntax
+// (quotes, commas, spaces, '=') and no '..'.
+var ipsecFile = regexp.MustCompile(`^/[A-Za-z0-9._+@/-]+$`)
 
 // IPsec for the overlay tunnels (#33). Experimental: not tested on hardware. OVN encrypts
 // the Geneve tunnels between chassis when NB_Global ipsec=true and every chassis has a
@@ -26,9 +31,12 @@ func ValidateIPsec(c IPsecConfig) (IPsecConfig, error) {
 	if c.Mode != "cert" {
 		return c, invalidf("the mode is cert")
 	}
-	for name, f := range map[string]string{"certificate": c.CertFile, "key": c.KeyFile, "CA certificate": c.CACertFile} {
-		if !strings.HasPrefix(f, "/") {
-			return c, invalidf("the %s is an absolute path on every host", name)
+	for _, f := range []struct {
+		name string
+		path *string
+	}{{"certificate", &c.CertFile}, {"key", &c.KeyFile}, {"CA certificate", &c.CACertFile}} {
+		if !ipsecFile.MatchString(*f.path) || filepath.Clean(*f.path) != *f.path {
+			return c, invalidf("the %s is an absolute path on every host, of letters, digits and . _ + @ - /", f.name)
 		}
 	}
 	c.PSK = ""
@@ -37,19 +45,24 @@ func ValidateIPsec(c IPsecConfig) (IPsecConfig, error) {
 
 // ReconcileIPsec switches tunnel encryption on this chassis (and, central, in OVN).
 func ReconcileIPsec(ctx context.Context, r Runner, nb NB, central bool, c IPsecConfig) error {
-	steps := [][]string{}
+	// The program is always a constant; only arguments come from the configuration.
+	type step struct {
+		cmd  string
+		args []string
+	}
+	var steps []step
 	if c.Enabled {
 		steps = append(steps,
-			[]string{"ovs-vsctl", "set", "Open_vSwitch", ".", "other_config:certificate=" + c.CertFile,
-				"other_config:private_key=" + c.KeyFile, "other_config:ca_cert=" + c.CACertFile},
-			[]string{"systemctl", "enable", "--now", "openvswitch-ipsec"})
+			step{"ovs-vsctl", []string{"set", "Open_vSwitch", ".", "other_config:certificate=" + c.CertFile,
+				"other_config:private_key=" + c.KeyFile, "other_config:ca_cert=" + c.CACertFile}},
+			step{"systemctl", []string{"enable", "--now", "openvswitch-ipsec"}})
 	} else {
 		steps = append(steps,
-			[]string{"systemctl", "disable", "--now", "openvswitch-ipsec"},
-			[]string{"ovs-vsctl", "remove", "Open_vSwitch", ".", "other_config", "certificate", "private_key", "ca_cert"})
+			step{"systemctl", []string{"disable", "--now", "openvswitch-ipsec"}},
+			step{"ovs-vsctl", []string{"remove", "Open_vSwitch", ".", "other_config", "certificate", "private_key", "ca_cert"}})
 	}
 	for _, s := range steps {
-		if _, err := r.Run(ctx, s[0], s[1:]...); err != nil {
+		if _, err := r.Run(ctx, s.cmd, s.args...); err != nil {
 			return fmt.Errorf("ipsec: %w", err)
 		}
 	}

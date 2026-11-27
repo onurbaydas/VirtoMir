@@ -145,6 +145,11 @@ func (c *Client) CheckPaths(paths []string) ([]PathCheck, error) {
 	out := make([]PathCheck, len(paths))
 	for i, p := range paths {
 		pc := PathCheck{Path: p}
+		// Only absolute, clean paths are looked at: the asking host names its disks that way.
+		if !strings.HasPrefix(p, "/") || filepath.Clean(p) != p {
+			out[i] = pc
+			continue
+		}
 		if _, err := os.Stat(p); err == nil {
 			pc.Exists, pc.Network = true, onNetworkFS(p)
 		}

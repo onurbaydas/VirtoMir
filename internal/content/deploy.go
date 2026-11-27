@@ -8,7 +8,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,21 +78,20 @@ func resolvePool(ctx context.Context, client *virt.Client, poolName string) (str
 	if h := deployHooksFromContext(ctx); h != nil && h.resolvePoolPath != nil {
 		return h.resolvePoolPath(ctx, client, poolName)
 	}
-	if st, err := os.Stat(poolName); err == nil && st.IsDir() {
-		return poolName, nil
+	// A pool is looked up by name only: a request never names a folder of the host directly.
+	if client == nil {
+		return "", fmt.Errorf("libvirt client is required to find storage pool %q", poolName)
 	}
-	if client != nil {
-		pools, err := client.ListPools()
-		if err != nil {
-			return "", fmt.Errorf("list storage pools: %w", err)
-		}
-		for _, p := range pools {
-			if p.Name == poolName {
-				if p.Path != "" {
-					return p.Path, nil
-				}
-				return "", fmt.Errorf("storage pool %q has no filesystem path", poolName)
+	pools, err := client.ListPools()
+	if err != nil {
+		return "", fmt.Errorf("list storage pools: %w", err)
+	}
+	for _, p := range pools {
+		if p.Name == poolName {
+			if p.Path != "" {
+				return p.Path, nil
 			}
+			return "", fmt.Errorf("storage pool %q has no filesystem path", poolName)
 		}
 	}
 	return "", fmt.Errorf("storage pool %q not found", poolName)
@@ -109,47 +107,11 @@ func refreshPoolFn(ctx context.Context, client *virt.Client, poolName string) er
 	return nil
 }
 
-func copyArtifactFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return err
-	}
-
-	tmpDst := dst + ".tmp"
-	out, err := os.Create(tmpDst)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		_ = out.Close()
-		_ = os.Remove(tmpDst)
-		return err
-	}
-	if err := out.Close(); err != nil {
-		_ = os.Remove(tmpDst)
-		return err
-	}
-	return os.Rename(tmpDst, dst)
-}
-
 func cloneVol(ctx context.Context, client *virt.Client, srcPath, poolName, dstName, format string, minBytes uint64) (string, func(), error) {
 	if h := deployHooksFromContext(ctx); h != nil && h.cloneVolume != nil {
 		return h.cloneVolume(ctx, client, srcPath, poolName, dstName, format, minBytes)
 	}
 	if client == nil {
-		if st, err := os.Stat(poolName); err == nil && st.IsDir() {
-			dstPath := filepath.Join(poolName, dstName)
-			if err := copyArtifactFile(srcPath, dstPath); err != nil {
-				return "", nil, err
-			}
-			cleanup := func() { _ = os.Remove(dstPath) }
-			return dstPath, cleanup, nil
-		}
 		return "", nil, errors.New("libvirt client is required to clone storage volumes")
 	}
 	vol, path, err := client.CopyVolumeInto(srcPath, poolName, dstName, format, minBytes)
@@ -168,16 +130,6 @@ func createEmptyVol(ctx context.Context, client *virt.Client, poolName, volName 
 		return h.createVolume(ctx, client, poolName, volName, sizeBytes, format)
 	}
 	if client == nil {
-		if st, err := os.Stat(poolName); err == nil && st.IsDir() {
-			dstPath := filepath.Join(poolName, volName)
-			f, err := os.OpenFile(dstPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-			if err != nil {
-				return "", nil, err
-			}
-			_ = f.Close()
-			cleanup := func() { _ = os.Remove(dstPath) }
-			return dstPath, cleanup, nil
-		}
 		return "", nil, errors.New("libvirt client is required to create storage volumes")
 	}
 	vol, path, err := client.CreateVolumeFile(poolName, volName, sizeBytes, format)
@@ -196,14 +148,6 @@ func uploadSeed(ctx context.Context, client *virt.Client, poolName, isoName stri
 		return h.uploadSeedISO(ctx, client, poolName, isoName, data)
 	}
 	if client == nil {
-		if st, err := os.Stat(poolName); err == nil && st.IsDir() {
-			dstPath := filepath.Join(poolName, isoName)
-			if err := os.WriteFile(dstPath, data, 0644); err != nil {
-				return "", nil, err
-			}
-			cleanup := func() { _ = os.Remove(dstPath) }
-			return dstPath, cleanup, nil
-		}
 		return "", nil, errors.New("libvirt client is required to upload cloud-init seed ISO")
 	}
 	vol, path, err := client.UploadBytes(poolName, isoName, data)
@@ -407,7 +351,10 @@ func Deploy(
 		libPoolPath, _ = resolvePool(ctx, client, libPoolName)
 	}
 
-	volFileName := fmt.Sprintf("content-%s-v%s.%s", item.Name, version.Version, version.Format)
+	volFileName, err := FileName(item.Name, version.Version, version.Format)
+	if err != nil {
+		return "", err
+	}
 	var libraryVolumePath string
 
 	candidates := []string{
@@ -416,10 +363,10 @@ func Deploy(
 	if libPoolPath != "" && libPoolPath != targetPoolPath {
 		candidates = append(candidates, filepath.Join(libPoolPath, volFileName))
 	}
-	if version.SourceVol != "" {
-		candidates = append(candidates, filepath.Join(targetPoolPath, version.SourceVol))
+	if srcVol, err := VolFile(version.SourceVol); err == nil {
+		candidates = append(candidates, filepath.Join(targetPoolPath, srcVol))
 		if libPoolPath != "" && libPoolPath != targetPoolPath {
-			candidates = append(candidates, filepath.Join(libPoolPath, version.SourceVol))
+			candidates = append(candidates, filepath.Join(libPoolPath, srcVol))
 		}
 	}
 

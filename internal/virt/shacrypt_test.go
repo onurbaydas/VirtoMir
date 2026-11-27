@@ -25,7 +25,12 @@ func TestSetRootPassword(t *testing.T) {
 	os.MkdirAll(filepath.Join(root, "etc"), 0o755)
 	shadow := filepath.Join(root, "etc", "shadow")
 	os.WriteFile(shadow, []byte("root:*:19000:0:99999:7:::\ndaemon:*:19000:0:99999:7:::\n"), 0o640)
-	if err := setRootPassword(root, "virtomir-test"); err != nil {
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if err := setRootPassword(r, "virtomir-test"); err != nil {
 		t.Fatal(err)
 	}
 	raw, _ := os.ReadFile(shadow)
@@ -36,9 +41,15 @@ func TestSetRootPassword(t *testing.T) {
 }
 
 func TestConsoleOnlyInittab(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "inittab")
+	dir := t.TempDir()
+	r, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	p := filepath.Join(dir, "inittab")
 	os.WriteFile(p, []byte("::respawn:/sbin/getty 38400 console\ntty1::respawn:/sbin/getty 38400 tty1\n::shutdown:/sbin/openrc shutdown\n"), 0o644)
-	if err := consoleOnly(p); err != nil {
+	if err := consoleOnly(r, "inittab"); err != nil {
 		t.Fatal(err)
 	}
 	raw, _ := os.ReadFile(p)
@@ -46,7 +57,29 @@ func TestConsoleOnlyInittab(t *testing.T) {
 	if l[0] != "::respawn:/sbin/getty 38400 console" || !strings.HasPrefix(l[1], "#tty1::") || l[2] != "::shutdown:/sbin/openrc shutdown" {
 		t.Errorf("inittab = %q", raw)
 	}
-	if err := consoleOnly(filepath.Join(t.TempDir(), "missing")); err != nil {
+	if err := consoleOnly(r, "missing"); err != nil {
 		t.Error(err)
+	}
+}
+
+// An image whose etc/shadow is a symlink out of its rootfs must not reach the host's file.
+func TestSetRootPasswordStaysInRootfs(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "shadow")
+	os.WriteFile(outside, []byte("root:*:19000:0:99999:7:::\n"), 0o640)
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "etc"), 0o755)
+	if err := os.Symlink(outside, filepath.Join(root, "etc", "shadow")); err != nil {
+		t.Skip(err)
+	}
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if err := setRootPassword(r, "x"); err == nil {
+		t.Error("followed a symlink out of the rootfs")
+	}
+	if raw, _ := os.ReadFile(outside); string(raw) != "root:*:19000:0:99999:7:::\n" {
+		t.Errorf("the file outside changed: %q", raw)
 	}
 }
