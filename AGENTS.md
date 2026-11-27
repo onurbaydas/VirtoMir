@@ -88,7 +88,7 @@ docs/i18n/           ← README.<lang>.md: the README front page in 15 languages
 web/src/lib/feedback.ts ← the 30-second feedback: the sidebar button and the demo strip open the Tally form
                        (no account; hidden fields setup + source, never host names, addresses or serials); the same
                        questions for GitHub users in .github/ISSUE_TEMPLATE/quick_feedback.yml
-docs/screenshots/    ← README images, taken from the demo UI (cd web && npm run dev:demo) at 1440×900, demo strip
+docs/screenshots/    ← README images, made from the demo UI by `cd web && npm run screenshots` (scripts/screenshots.mjs) at 1440×900, demo strip
                        and toasts hidden; tour.gif is a crossfade of eight of them (ffmpeg xfade)
 web/                 ← Svelte 5 + Vite + TS UI (ADR-0007); `web/dist` is embedded into virtomird
   src/app.css        ← design tokens (colors, radii, motion) — use these, never hard-coded colors
