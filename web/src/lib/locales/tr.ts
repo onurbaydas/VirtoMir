@@ -3353,6 +3353,7 @@ export const tr: Record<string, string> = {
   "What this change did": "Bu değişikliğin yaptığı",
   "What this size would show in Cost & Showback every month": "Bu boyutun Maliyet ve Gösterim'de her ay göstereceği tutar",
   "What to add": "Ne eklenecek",
+  "What's new": "Neler değişti",
   "When": "Ne zaman",
   "When enabled, items published with cluster-wide replication policy are automatically fetched into the chosen pool.": "Etkinleştirildiğinde, küme genelinde replikasyon ilkesiyle yayınlanan öğeler seçilen havuza otomatik olarak çekilir.",
   "When the guest crashes": "Misafir çöktüğünde",

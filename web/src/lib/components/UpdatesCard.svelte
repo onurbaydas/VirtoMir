@@ -6,6 +6,7 @@
   import Download from '@lucide/svelte/icons/download'
   import ExternalLink from '@lucide/svelte/icons/external-link'
   import { api, errorText } from '../api'
+  import { compareURL } from '../versions'
   import { session } from '../session.svelte'
   import { track } from '../jobs'
 
@@ -34,6 +35,8 @@
   }
 
   let st = $state<UpdateStatus | null>(null)
+  // GitHub's page of the changes from the running version to the offered one.
+  let whatsNew = $derived(st ? compareURL(st.repo || 'onurbaydas/VirtoMir', st.current, st.latest?.tag ?? '') : '')
   let error = $state('')
   let checking = $state(false)
   let installing = $state(false)
@@ -133,7 +136,12 @@
       <div class="avail">
         <strong>{st.latest?.name || st.latest?.tag} is available.</strong>
         {#if st.latest?.notes}<pre class="notes">{st.latest.notes.slice(0, 1500)}</pre>{/if}
-        {#if st.latest?.url}<div class="acts"><a class="ui-btn ghost" href={st.latest.url} target="_blank" rel="noopener"><ExternalLink size={13} /> {t('Release notes')}</a></div>{/if}
+        {#if st.latest?.url || whatsNew}
+          <div class="acts">
+            {#if st.latest?.url}<a class="ui-btn ghost" href={st.latest.url} target="_blank" rel="noopener"><ExternalLink size={13} /> {t('Release notes')}</a>{/if}
+            {#if whatsNew}<a class="ui-btn ghost" href={whatsNew} target="_blank" rel="noopener"><ExternalLink size={13} /> {t("What's new")}</a>{/if}
+          </div>
+        {/if}
         {#if !st.installable}<div class="ui-error-box">{t('Cannot install from here: {reason}', { reason: st.reason })}</div>{/if}
         <p class="muted small">{t('In a cluster, update every host (switch host in the sidebar). The download is checked against the release\'s SHA-256; settings and machines are kept.')}</p>
       </div>
